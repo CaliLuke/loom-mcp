@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	openai "github.com/openai/openai-go"
-	"github.com/openai/openai-go/packages/ssestream"
-	"github.com/openai/openai-go/responses"
+	openai "github.com/openai/openai-go/v3"
+	"github.com/openai/openai-go/v3/packages/ssestream"
+	"github.com/openai/openai-go/v3/responses"
 	"github.com/stretchr/testify/require"
 
 	openaimodel "github.com/CaliLuke/loom-mcp/v2/features/model/openai"
@@ -55,7 +55,7 @@ func TestClientConformance(t *testing.T) {
 				Type:      "function_call",
 				Name:      "lookup",
 				CallID:    "call-1",
-				Arguments: "{",
+				Arguments: responses.ResponseOutputItemUnionArguments{OfString: "{"},
 			}}}}
 			response, err := newClient(t, mock).Complete(context.Background(), request())
 			require.Nil(t, response)
@@ -187,7 +187,7 @@ func TestClientConformance(t *testing.T) {
 		ToolNameRoundTrip: testutil.ProviderCapabilityConformance{Supported: func(t *testing.T) {
 			const canonical = "catalog.lookup"
 			mock := &mockResponsesClient{response: &responses.Response{Output: []responses.ResponseOutputItemUnion{{
-				Type: "function_call", Name: "catalog_lookup", CallID: "call-1", Arguments: `{"query":"docs"}`,
+				Type: "function_call", Name: "catalog_lookup", CallID: "call-1", Arguments: responses.ResponseOutputItemUnionArguments{OfString: `{"query":"docs"}`},
 			}}}}
 			req := request()
 			req.Tools = []*model.ToolDefinition{{Name: canonical, Description: "Search", InputSchema: map[string]any{"type": "object"}}}

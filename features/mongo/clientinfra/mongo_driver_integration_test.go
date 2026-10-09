@@ -663,7 +663,7 @@ func newMongoIntegrationClientFor(t *testing.T, deployment mongoDeployment) (cli
 	}
 
 	req := testcontainers.ContainerRequest{
-		Image:        "mongo:7",
+		Image:        "mongo:9.0.2",
 		Cmd:          command,
 		ExposedPorts: []string{"27017/tcp"},
 		WaitingFor:   wait.ForListeningPort("27017/tcp").WithStartupTimeout(time.Minute),

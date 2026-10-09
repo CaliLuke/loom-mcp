@@ -196,7 +196,7 @@ func newToolSpecBuilder(genpkg string, svc *service.Data) *toolSpecBuilder {
 		svcImports:               svcImports,
 		types:                    make(map[string]*typeData),
 		helperScope:              scope,
-		unions:                   make(map[string]*service.UnionTypeData),
+		unions:                   make(map[string]*toolUnionTypeData),
 		codecTransformHelperKeys: make(map[string]struct{}),
 	}
 }

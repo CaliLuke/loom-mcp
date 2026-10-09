@@ -197,7 +197,9 @@ func MarshalValidatePayload(v *ValidatePayload) ([]byte, error) {
 	out = &toolhttp.ValidatePayloadTransport{
 		Root: &in.Root,
 	}
-	out.Child = encodeLevel2ToToolhttpLevel2Transport(in.Child)
+	if in.Child != nil {
+		out.Child = encodeLevel2ToToolhttpLevel2Transport(in.Child)
+	}
 	return json.Marshal(out)
 }
 
@@ -236,7 +238,9 @@ func MarshalValidateResult(v *ValidateResult) ([]byte, error) {
 	out = &toolhttp.ValidateResultTransport{
 		Root: &in.Root,
 	}
-	out.Child = encodeLevel2ToToolhttpLevel2Transport(in.Child)
+	if in.Child != nil {
+		out.Child = encodeLevel2ToToolhttpLevel2Transport(in.Child)
+	}
 	return json.Marshal(out)
 }
 
@@ -290,7 +294,9 @@ func encodeLevel2ToToolhttpLevel2Transport(v *Level2) *toolhttp.Level2Transport 
 	res := &toolhttp.Level2Transport{
 		Mid: &v.Mid,
 	}
-	res.Child = encodeLevel3ToToolhttpLevel3Transport(v.Child)
+	if v.Child != nil {
+		res.Child = encodeLevel3ToToolhttpLevel3Transport(v.Child)
+	}
 
 	return res
 }

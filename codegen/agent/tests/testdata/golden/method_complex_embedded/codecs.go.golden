@@ -196,7 +196,9 @@ func MarshalUpsertPayload(v *UpsertPayload) ([]byte, error) {
 	_ = in
 	var out *toolhttp.UpsertPayloadTransport
 	out = &toolhttp.UpsertPayloadTransport{}
-	out.Profile = encodeProfileToToolhttpProfileTransport(in.Profile)
+	if in.Profile != nil {
+		out.Profile = encodeProfileToToolhttpProfileTransport(in.Profile)
+	}
 	return json.Marshal(out)
 }
 
@@ -234,7 +236,9 @@ func MarshalUpsertResult(v *UpsertResult) ([]byte, error) {
 		ID:   &in.ID,
 		Name: in.Name,
 	}
-	out.Address = encodeAddressToToolhttpAddressTransport(in.Address)
+	if in.Address != nil {
+		out.Address = encodeAddressToToolhttpAddressTransport(in.Address)
+	}
 	return json.Marshal(out)
 }
 
@@ -292,7 +296,9 @@ func encodeProfileToToolhttpProfileTransport(v *Profile) *toolhttp.ProfileTransp
 		ID:   &v.ID,
 		Name: v.Name,
 	}
-	res.Address = encodeAddressToToolhttpAddressTransport(v.Address)
+	if v.Address != nil {
+		res.Address = encodeAddressToToolhttpAddressTransport(v.Address)
+	}
 
 	return res
 }

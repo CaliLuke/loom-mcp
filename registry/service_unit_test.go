@@ -16,6 +16,7 @@ import (
 	goa "github.com/CaliLuke/loom/pkg"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 )
 
 type (
@@ -39,18 +40,18 @@ func TestGeneratedCallToolRejectsMissingWireProtocolVersion(t *testing.T) {
 	t.Parallel()
 
 	request := &genregistrypb.CallToolRequest{
-		Toolset:     "test.toolset",
-		Tool:        "test.toolset.lookup",
+		Toolset:     proto.String("test.toolset"),
+		Tool:        proto.String("test.toolset.lookup"),
 		PayloadJson: []byte(`{}`),
 		Meta: &genregistrypb.ToolCallMeta{
-			RunId:      "run-1",
-			SessionId:  "session-1",
-			ToolCallId: "call-1",
+			RunId:      proto.String("run-1"),
+			SessionId:  proto.String("session-1"),
+			ToolCallId: proto.String("call-1"),
 		},
 	}
 	require.Error(t, genregistryserver.ValidateCallToolRequest(request))
 
-	request.WireProtocolVersion = int64(toolregistry.WireProtocolVersion)
+	request.WireProtocolVersion = proto.Int64(int64(toolregistry.WireProtocolVersion))
 	require.NoError(t, genregistryserver.ValidateCallToolRequest(request))
 }
 
@@ -58,19 +59,19 @@ func TestGeneratedRetryToolRequiresAdmissionFence(t *testing.T) {
 	t.Parallel()
 
 	request := &genregistrypb.RetryToolRequest{
-		Toolset:             "test.toolset",
-		Tool:                "test.toolset.lookup",
+		Toolset:             proto.String("test.toolset"),
+		Tool:                proto.String("test.toolset.lookup"),
 		PayloadJson:         []byte(`{}`),
-		WireProtocolVersion: int64(toolregistry.WireProtocolVersion),
+		WireProtocolVersion: proto.Int64(int64(toolregistry.WireProtocolVersion)),
 		Meta: &genregistrypb.ToolCallMeta{
-			RunId:      "run-1",
-			SessionId:  "session-1",
-			ToolCallId: "call-1",
+			RunId:      proto.String("run-1"),
+			SessionId:  proto.String("session-1"),
+			ToolCallId: proto.String("call-1"),
 		},
 	}
 	require.Error(t, genregistryserver.ValidateRetryToolRequest(request))
 
-	request.ExpectedRegistrationToken = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	request.ExpectedRegistrationToken = proto.String("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 	require.NoError(t, genregistryserver.ValidateRetryToolRequest(request))
 }
 

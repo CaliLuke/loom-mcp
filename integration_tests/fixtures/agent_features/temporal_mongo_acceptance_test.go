@@ -104,7 +104,7 @@ func startMongoReplicaSet(t *testing.T) string {
 	defer cancel()
 	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        "mongo:7",
+			Image:        "mongo:9.0.2",
 			Cmd:          []string{"mongod", "--replSet", "rs0", "--bind_ip_all"},
 			ExposedPorts: []string{"27017/tcp"},
 			WaitingFor:   wait.ForListeningPort("27017/tcp").WithStartupTimeout(time.Minute),

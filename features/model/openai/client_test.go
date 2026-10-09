@@ -15,10 +15,10 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 	"github.com/CaliLuke/loom-mcp/v2/testutil"
-	openai "github.com/openai/openai-go"
-	"github.com/openai/openai-go/option"
-	"github.com/openai/openai-go/packages/ssestream"
-	"github.com/openai/openai-go/responses"
+	openai "github.com/openai/openai-go/v3"
+	"github.com/openai/openai-go/v3/option"
+	"github.com/openai/openai-go/v3/packages/ssestream"
+	"github.com/openai/openai-go/v3/responses"
 )
 
 func TestClientComplete(t *testing.T) {
@@ -39,7 +39,7 @@ func TestClientComplete(t *testing.T) {
 			{
 				Type:      "function_call",
 				Name:      "lookup",
-				Arguments: `{"query":"docs"}`,
+				Arguments: responses.ResponseOutputItemUnionArguments{OfString: `{"query":"docs"}`},
 				CallID:    "call-1",
 			},
 		},
@@ -120,8 +120,8 @@ func TestClientComplete(t *testing.T) {
 
 	third := req.Input.OfInputItemList[2].OfFunctionCallOutput
 	require.NotNil(t, third)
-	require.Equal(t, "tool-1", third.CallID)
-	require.JSONEq(t, `{"hits":2}`, third.Output)
+	require.Equal(t, "tool-1", third.CallID.Value)
+	require.JSONEq(t, `{"hits":2}`, third.Output.OfString.Value)
 }
 
 func TestClientCompleteResolvesModelClass(t *testing.T) {
@@ -434,7 +434,7 @@ func TestClientCompleteCanonicalizesStrictToolPayload(t *testing.T) {
 		Output: []responses.ResponseOutputItemUnion{{
 			Type:      "function_call",
 			Name:      "lookup",
-			Arguments: `{"query":"docs","limit":null}`,
+			Arguments: responses.ResponseOutputItemUnionArguments{OfString: `{"query":"docs","limit":null}`},
 			CallID:    "call-1",
 		}},
 	}
@@ -878,7 +878,7 @@ func TestClientCompleteTranslatesDottedToolNames(t *testing.T) {
 		Output: []responses.ResponseOutputItemUnion{{
 			Type:      "function_call",
 			Name:      "toolset_lookup",
-			Arguments: `{"query":"docs"}`,
+			Arguments: responses.ResponseOutputItemUnionArguments{OfString: `{"query":"docs"}`},
 			CallID:    "call-1",
 		}},
 	}

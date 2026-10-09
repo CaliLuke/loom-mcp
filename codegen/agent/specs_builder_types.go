@@ -24,12 +24,12 @@ type (
 		tools []*toolEntry
 		// Unions contains the sum-type unions required by any generated tool types
 		// in this specs package.
-		Unions []*service.UnionTypeData
+		Unions []*toolUnionTypeData
 		// TransportUnions contains the sum-type unions required by any generated
 		// transport types in the toolset-local http package. These must be derived
 		// from the transport attribute graph (after localization) so they do not
 		// leak service `gen/types` references into tool JSON.
-		TransportUnions []*service.UnionTypeData
+		TransportUnions []*toolUnionTypeData
 		// CodecTransformHelpers contains helper functions produced by Goa's
 		// GoTransform when generating codec-local conversions (transport <-> public).
 		// These are emitted once per package to support recursive types without
@@ -235,10 +235,10 @@ type (
 		helperScope *codegen.NameScope
 		// unions accumulates all union sum types referenced by generated tool
 		// payload/result/sidecar types in this specs package, indexed by union hash.
-		unions map[string]*service.UnionTypeData
+		unions map[string]*toolUnionTypeData
 		// transportUnions accumulates all union sum types referenced by transport
 		// helper graphs emitted into the toolset-local http package.
-		transportUnions map[string]*service.UnionTypeData
+		transportUnions map[string]*toolUnionTypeData
 		// codecTransformHelpers accumulates unique GoTransform helper functions
 		// required by codec-local conversions (transport <-> public).
 		codecTransformHelpers    []*codegen.TransformFunctionData

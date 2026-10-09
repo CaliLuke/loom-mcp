@@ -189,20 +189,22 @@ func MarshalEchoPayload(v *EchoPayload) ([]byte, error) {
 	out = &toolhttp.EchoPayloadTransport{
 		ID: &in.ID,
 	}
+	if in.Value.Kind() != "" {
 
-	switch string(in.Value.Kind()) {
-	case "number":
-		actual, _ := in.Value.AsNumber()
-		obj := toolhttp.ValueNumberTransport(actual)
-		u := out.Value
-		u.SetNumber((toolhttp.ValueNumberTransport)(obj))
-		out.Value = u
-	case "text":
-		actual, _ := in.Value.AsText()
-		obj := toolhttp.ValueTextTransport(actual)
-		u := out.Value
-		u.SetText((toolhttp.ValueTextTransport)(obj))
-		out.Value = u
+		switch string(in.Value.Kind()) {
+		case "number":
+			actual, _ := in.Value.AsNumber()
+			obj := toolhttp.ValueNumberTransport(actual)
+			u := out.Value
+			u.SetNumber((toolhttp.ValueNumberTransport)(obj))
+			out.Value = u
+		case "text":
+			actual, _ := in.Value.AsText()
+			obj := toolhttp.ValueTextTransport(actual)
+			u := out.Value
+			u.SetText((toolhttp.ValueTextTransport)(obj))
+			out.Value = u
+		}
 	}
 	return json.Marshal(out)
 }
@@ -256,20 +258,22 @@ func MarshalEchoResult(v *EchoResult) ([]byte, error) {
 	out = &toolhttp.EchoResultTransport{
 		ID: &in.ID,
 	}
+	if in.Value.Kind() != "" {
 
-	switch string(in.Value.Kind()) {
-	case "number":
-		actual, _ := in.Value.AsNumber()
-		obj := toolhttp.ValueNumberTransport(actual)
-		u := out.Value
-		u.SetNumber((toolhttp.ValueNumberTransport)(obj))
-		out.Value = u
-	case "text":
-		actual, _ := in.Value.AsText()
-		obj := toolhttp.ValueTextTransport(actual)
-		u := out.Value
-		u.SetText((toolhttp.ValueTextTransport)(obj))
-		out.Value = u
+		switch string(in.Value.Kind()) {
+		case "number":
+			actual, _ := in.Value.AsNumber()
+			obj := toolhttp.ValueNumberTransport(actual)
+			u := out.Value
+			u.SetNumber((toolhttp.ValueNumberTransport)(obj))
+			out.Value = u
+		case "text":
+			actual, _ := in.Value.AsText()
+			obj := toolhttp.ValueTextTransport(actual)
+			u := out.Value
+			u.SetText((toolhttp.ValueTextTransport)(obj))
+			out.Value = u
+		}
 	}
 	return json.Marshal(out)
 }

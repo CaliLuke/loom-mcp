@@ -17,8 +17,8 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/gorilla/websocket"
-	openaisdk "github.com/openai/openai-go"
-	"github.com/openai/openai-go/option"
+	openaisdk "github.com/openai/openai-go/v3"
+	"github.com/openai/openai-go/v3/option"
 	"google.golang.org/genai"
 )
 

@@ -2,7 +2,6 @@ package codegen
 
 import (
 	"github.com/CaliLuke/loom/codegen"
-	"github.com/CaliLuke/loom/codegen/service"
 )
 
 type (
@@ -17,7 +16,7 @@ type (
 	}
 
 	toolUnionTypesFileData struct {
-		Unions []*service.UnionTypeData
+		Unions []*toolUnionTypeData
 	}
 
 	toolTransportTypesFileData struct {

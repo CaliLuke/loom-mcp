@@ -35,18 +35,20 @@ func NewClient(cc *grpc.ClientConn, opts ...grpc.CallOption) *Client {
 // interface.
 func (c *Client) Register() loom.Endpoint {
 	return func(ctx context.Context, v any) (any, error) {
-		inv := loomgrpc.NewInvoker(BuildRegisterFunc(c.grpccli, c.opts...), EncodeRegisterRequest, DecodeRegisterResponse)
-		res, err := inv.Invoke(ctx, v)
-		if err != nil {
-			resp := loomgrpc.DecodeError(err)
-			switch message := resp.(type) {
-			case *loompb.ErrorResponse:
-				return nil, loomgrpc.NewServiceError(message)
-			default:
-				return nil, loom.Fault("%s", err.Error())
+		inv := loomgrpc.NewInvoker(func(ctx context.Context, reqpb any, opts ...grpc.CallOption) (any, error) {
+			res, err := BuildRegisterFunc(c.grpccli, c.opts...)(ctx, reqpb, opts...)
+			if err != nil {
+				resp := loomgrpc.DecodeError(err)
+				switch message := resp.(type) {
+				case *loompb.ErrorResponse:
+					return nil, loomgrpc.NewServiceErrorWithCause(message, err)
+				default:
+					return nil, err
+				}
 			}
-		}
-		return res, nil
+			return res, nil
+		}, EncodeRegisterRequest, DecodeRegisterResponse)
+		return inv.Invoke(ctx, v)
 	}
 }
 
@@ -54,18 +56,20 @@ func (c *Client) Register() loom.Endpoint {
 // registrypb.RegistryClient interface.
 func (c *Client) ReleaseProvider() loom.Endpoint {
 	return func(ctx context.Context, v any) (any, error) {
-		inv := loomgrpc.NewInvoker(BuildReleaseProviderFunc(c.grpccli, c.opts...), EncodeReleaseProviderRequest, nil)
-		res, err := inv.Invoke(ctx, v)
-		if err != nil {
-			resp := loomgrpc.DecodeError(err)
-			switch message := resp.(type) {
-			case *loompb.ErrorResponse:
-				return nil, loomgrpc.NewServiceError(message)
-			default:
-				return nil, loom.Fault("%s", err.Error())
+		inv := loomgrpc.NewInvoker(func(ctx context.Context, reqpb any, opts ...grpc.CallOption) (any, error) {
+			res, err := BuildReleaseProviderFunc(c.grpccli, c.opts...)(ctx, reqpb, opts...)
+			if err != nil {
+				resp := loomgrpc.DecodeError(err)
+				switch message := resp.(type) {
+				case *loompb.ErrorResponse:
+					return nil, loomgrpc.NewServiceErrorWithCause(message, err)
+				default:
+					return nil, err
+				}
 			}
-		}
-		return res, nil
+			return res, nil
+		}, EncodeReleaseProviderRequest, nil)
+		return inv.Invoke(ctx, v)
 	}
 }
 
@@ -73,18 +77,20 @@ func (c *Client) ReleaseProvider() loom.Endpoint {
 // registrypb.RegistryClient interface.
 func (c *Client) DrainProvider() loom.Endpoint {
 	return func(ctx context.Context, v any) (any, error) {
-		inv := loomgrpc.NewInvoker(BuildDrainProviderFunc(c.grpccli, c.opts...), EncodeDrainProviderRequest, nil)
-		res, err := inv.Invoke(ctx, v)
-		if err != nil {
-			resp := loomgrpc.DecodeError(err)
-			switch message := resp.(type) {
-			case *loompb.ErrorResponse:
-				return nil, loomgrpc.NewServiceError(message)
-			default:
-				return nil, loom.Fault("%s", err.Error())
+		inv := loomgrpc.NewInvoker(func(ctx context.Context, reqpb any, opts ...grpc.CallOption) (any, error) {
+			res, err := BuildDrainProviderFunc(c.grpccli, c.opts...)(ctx, reqpb, opts...)
+			if err != nil {
+				resp := loomgrpc.DecodeError(err)
+				switch message := resp.(type) {
+				case *loompb.ErrorResponse:
+					return nil, loomgrpc.NewServiceErrorWithCause(message, err)
+				default:
+					return nil, err
+				}
 			}
-		}
-		return res, nil
+			return res, nil
+		}, EncodeDrainProviderRequest, nil)
+		return inv.Invoke(ctx, v)
 	}
 }
 
@@ -92,35 +98,40 @@ func (c *Client) DrainProvider() loom.Endpoint {
 // interface.
 func (c *Client) Unregister() loom.Endpoint {
 	return func(ctx context.Context, v any) (any, error) {
-		inv := loomgrpc.NewInvoker(BuildUnregisterFunc(c.grpccli, c.opts...), EncodeUnregisterRequest, nil)
-		res, err := inv.Invoke(ctx, v)
-		if err != nil {
-			resp := loomgrpc.DecodeError(err)
-			switch message := resp.(type) {
-			case *loompb.ErrorResponse:
-				return nil, loomgrpc.NewServiceError(message)
-			default:
-				return nil, loom.Fault("%s", err.Error())
+		inv := loomgrpc.NewInvoker(func(ctx context.Context, reqpb any, opts ...grpc.CallOption) (any, error) {
+			res, err := BuildUnregisterFunc(c.grpccli, c.opts...)(ctx, reqpb, opts...)
+			if err != nil {
+				resp := loomgrpc.DecodeError(err)
+				switch message := resp.(type) {
+				case *loompb.ErrorResponse:
+					return nil, loomgrpc.NewServiceErrorWithCause(message, err)
+				default:
+					return nil, err
+				}
 			}
-		}
-		return res, nil
+			return res, nil
+		}, EncodeUnregisterRequest, nil)
+		return inv.Invoke(ctx, v)
 	}
 }
 
 // Pong calls the "Pong" function in registrypb.RegistryClient interface.
 func (c *Client) Pong() loom.Endpoint {
 	return func(ctx context.Context, v any) (any, error) {
-		inv := loomgrpc.NewInvoker(BuildPongFunc(c.grpccli, c.opts...), EncodePongRequest, nil)
-		res, err := inv.Invoke(ctx, v)
-		if err != nil {
-			resp := loomgrpc.DecodeError(err)
-			// Try to decode a Loom error response detail before falling back to Fault.
-			if eresp, ok := resp.(*loompb.ErrorResponse); ok {
-				return nil, loomgrpc.NewServiceError(eresp)
+		inv := loomgrpc.NewInvoker(func(ctx context.Context, reqpb any, opts ...grpc.CallOption) (any, error) {
+			res, err := BuildPongFunc(c.grpccli, c.opts...)(ctx, reqpb, opts...)
+			if err != nil {
+				resp := loomgrpc.DecodeError(err)
+				switch message := resp.(type) {
+				case *loompb.ErrorResponse:
+					return nil, loomgrpc.NewServiceErrorWithCause(message, err)
+				default:
+					return nil, err
+				}
 			}
-			return nil, loom.Fault("%s", err.Error())
-		}
-		return res, nil
+			return res, nil
+		}, EncodePongRequest, nil)
+		return inv.Invoke(ctx, v)
 	}
 }
 
@@ -128,17 +139,20 @@ func (c *Client) Pong() loom.Endpoint {
 // interface.
 func (c *Client) ListToolsets() loom.Endpoint {
 	return func(ctx context.Context, v any) (any, error) {
-		inv := loomgrpc.NewInvoker(BuildListToolsetsFunc(c.grpccli, c.opts...), EncodeListToolsetsRequest, DecodeListToolsetsResponse)
-		res, err := inv.Invoke(ctx, v)
-		if err != nil {
-			resp := loomgrpc.DecodeError(err)
-			// Try to decode a Loom error response detail before falling back to Fault.
-			if eresp, ok := resp.(*loompb.ErrorResponse); ok {
-				return nil, loomgrpc.NewServiceError(eresp)
+		inv := loomgrpc.NewInvoker(func(ctx context.Context, reqpb any, opts ...grpc.CallOption) (any, error) {
+			res, err := BuildListToolsetsFunc(c.grpccli, c.opts...)(ctx, reqpb, opts...)
+			if err != nil {
+				resp := loomgrpc.DecodeError(err)
+				switch message := resp.(type) {
+				case *loompb.ErrorResponse:
+					return nil, loomgrpc.NewServiceErrorWithCause(message, err)
+				default:
+					return nil, err
+				}
 			}
-			return nil, loom.Fault("%s", err.Error())
-		}
-		return res, nil
+			return res, nil
+		}, EncodeListToolsetsRequest, DecodeListToolsetsResponse)
+		return inv.Invoke(ctx, v)
 	}
 }
 
@@ -146,35 +160,40 @@ func (c *Client) ListToolsets() loom.Endpoint {
 // interface.
 func (c *Client) GetToolset() loom.Endpoint {
 	return func(ctx context.Context, v any) (any, error) {
-		inv := loomgrpc.NewInvoker(BuildGetToolsetFunc(c.grpccli, c.opts...), EncodeGetToolsetRequest, DecodeGetToolsetResponse)
-		res, err := inv.Invoke(ctx, v)
-		if err != nil {
-			resp := loomgrpc.DecodeError(err)
-			switch message := resp.(type) {
-			case *loompb.ErrorResponse:
-				return nil, loomgrpc.NewServiceError(message)
-			default:
-				return nil, loom.Fault("%s", err.Error())
+		inv := loomgrpc.NewInvoker(func(ctx context.Context, reqpb any, opts ...grpc.CallOption) (any, error) {
+			res, err := BuildGetToolsetFunc(c.grpccli, c.opts...)(ctx, reqpb, opts...)
+			if err != nil {
+				resp := loomgrpc.DecodeError(err)
+				switch message := resp.(type) {
+				case *loompb.ErrorResponse:
+					return nil, loomgrpc.NewServiceErrorWithCause(message, err)
+				default:
+					return nil, err
+				}
 			}
-		}
-		return res, nil
+			return res, nil
+		}, EncodeGetToolsetRequest, DecodeGetToolsetResponse)
+		return inv.Invoke(ctx, v)
 	}
 }
 
 // Search calls the "Search" function in registrypb.RegistryClient interface.
 func (c *Client) Search() loom.Endpoint {
 	return func(ctx context.Context, v any) (any, error) {
-		inv := loomgrpc.NewInvoker(BuildSearchFunc(c.grpccli, c.opts...), EncodeSearchRequest, DecodeSearchResponse)
-		res, err := inv.Invoke(ctx, v)
-		if err != nil {
-			resp := loomgrpc.DecodeError(err)
-			// Try to decode a Loom error response detail before falling back to Fault.
-			if eresp, ok := resp.(*loompb.ErrorResponse); ok {
-				return nil, loomgrpc.NewServiceError(eresp)
+		inv := loomgrpc.NewInvoker(func(ctx context.Context, reqpb any, opts ...grpc.CallOption) (any, error) {
+			res, err := BuildSearchFunc(c.grpccli, c.opts...)(ctx, reqpb, opts...)
+			if err != nil {
+				resp := loomgrpc.DecodeError(err)
+				switch message := resp.(type) {
+				case *loompb.ErrorResponse:
+					return nil, loomgrpc.NewServiceErrorWithCause(message, err)
+				default:
+					return nil, err
+				}
 			}
-			return nil, loom.Fault("%s", err.Error())
-		}
-		return res, nil
+			return res, nil
+		}, EncodeSearchRequest, DecodeSearchResponse)
+		return inv.Invoke(ctx, v)
 	}
 }
 
@@ -182,18 +201,20 @@ func (c *Client) Search() loom.Endpoint {
 // interface.
 func (c *Client) CallTool() loom.Endpoint {
 	return func(ctx context.Context, v any) (any, error) {
-		inv := loomgrpc.NewInvoker(BuildCallToolFunc(c.grpccli, c.opts...), EncodeCallToolRequest, DecodeCallToolResponse)
-		res, err := inv.Invoke(ctx, v)
-		if err != nil {
-			resp := loomgrpc.DecodeError(err)
-			switch message := resp.(type) {
-			case *loompb.ErrorResponse:
-				return nil, loomgrpc.NewServiceError(message)
-			default:
-				return nil, loom.Fault("%s", err.Error())
+		inv := loomgrpc.NewInvoker(func(ctx context.Context, reqpb any, opts ...grpc.CallOption) (any, error) {
+			res, err := BuildCallToolFunc(c.grpccli, c.opts...)(ctx, reqpb, opts...)
+			if err != nil {
+				resp := loomgrpc.DecodeError(err)
+				switch message := resp.(type) {
+				case *loompb.ErrorResponse:
+					return nil, loomgrpc.NewServiceErrorWithCause(message, err)
+				default:
+					return nil, err
+				}
 			}
-		}
-		return res, nil
+			return res, nil
+		}, EncodeCallToolRequest, DecodeCallToolResponse)
+		return inv.Invoke(ctx, v)
 	}
 }
 
@@ -201,18 +222,20 @@ func (c *Client) CallTool() loom.Endpoint {
 // interface.
 func (c *Client) RetryTool() loom.Endpoint {
 	return func(ctx context.Context, v any) (any, error) {
-		inv := loomgrpc.NewInvoker(BuildRetryToolFunc(c.grpccli, c.opts...), EncodeRetryToolRequest, DecodeRetryToolResponse)
-		res, err := inv.Invoke(ctx, v)
-		if err != nil {
-			resp := loomgrpc.DecodeError(err)
-			switch message := resp.(type) {
-			case *loompb.ErrorResponse:
-				return nil, loomgrpc.NewServiceError(message)
-			default:
-				return nil, loom.Fault("%s", err.Error())
+		inv := loomgrpc.NewInvoker(func(ctx context.Context, reqpb any, opts ...grpc.CallOption) (any, error) {
+			res, err := BuildRetryToolFunc(c.grpccli, c.opts...)(ctx, reqpb, opts...)
+			if err != nil {
+				resp := loomgrpc.DecodeError(err)
+				switch message := resp.(type) {
+				case *loompb.ErrorResponse:
+					return nil, loomgrpc.NewServiceErrorWithCause(message, err)
+				default:
+					return nil, err
+				}
 			}
-		}
-		return res, nil
+			return res, nil
+		}, EncodeRetryToolRequest, DecodeRetryToolResponse)
+		return inv.Invoke(ctx, v)
 	}
 }
 
@@ -220,18 +243,20 @@ func (c *Client) RetryTool() loom.Endpoint {
 // registrypb.RegistryClient interface.
 func (c *Client) CompleteToolCall() loom.Endpoint {
 	return func(ctx context.Context, v any) (any, error) {
-		inv := loomgrpc.NewInvoker(BuildCompleteToolCallFunc(c.grpccli, c.opts...), EncodeCompleteToolCallRequest, nil)
-		res, err := inv.Invoke(ctx, v)
-		if err != nil {
-			resp := loomgrpc.DecodeError(err)
-			switch message := resp.(type) {
-			case *loompb.ErrorResponse:
-				return nil, loomgrpc.NewServiceError(message)
-			default:
-				return nil, loom.Fault("%s", err.Error())
+		inv := loomgrpc.NewInvoker(func(ctx context.Context, reqpb any, opts ...grpc.CallOption) (any, error) {
+			res, err := BuildCompleteToolCallFunc(c.grpccli, c.opts...)(ctx, reqpb, opts...)
+			if err != nil {
+				resp := loomgrpc.DecodeError(err)
+				switch message := resp.(type) {
+				case *loompb.ErrorResponse:
+					return nil, loomgrpc.NewServiceErrorWithCause(message, err)
+				default:
+					return nil, err
+				}
 			}
-		}
-		return res, nil
+			return res, nil
+		}, EncodeCompleteToolCallRequest, nil)
+		return inv.Invoke(ctx, v)
 	}
 }
 
@@ -239,18 +264,20 @@ func (c *Client) CompleteToolCall() loom.Endpoint {
 // registrypb.RegistryClient interface.
 func (c *Client) PublishToolOutputDelta() loom.Endpoint {
 	return func(ctx context.Context, v any) (any, error) {
-		inv := loomgrpc.NewInvoker(BuildPublishToolOutputDeltaFunc(c.grpccli, c.opts...), EncodePublishToolOutputDeltaRequest, nil)
-		res, err := inv.Invoke(ctx, v)
-		if err != nil {
-			resp := loomgrpc.DecodeError(err)
-			switch message := resp.(type) {
-			case *loompb.ErrorResponse:
-				return nil, loomgrpc.NewServiceError(message)
-			default:
-				return nil, loom.Fault("%s", err.Error())
+		inv := loomgrpc.NewInvoker(func(ctx context.Context, reqpb any, opts ...grpc.CallOption) (any, error) {
+			res, err := BuildPublishToolOutputDeltaFunc(c.grpccli, c.opts...)(ctx, reqpb, opts...)
+			if err != nil {
+				resp := loomgrpc.DecodeError(err)
+				switch message := resp.(type) {
+				case *loompb.ErrorResponse:
+					return nil, loomgrpc.NewServiceErrorWithCause(message, err)
+				default:
+					return nil, err
+				}
 			}
-		}
-		return res, nil
+			return res, nil
+		}, EncodePublishToolOutputDeltaRequest, nil)
+		return inv.Invoke(ctx, v)
 	}
 }
 
@@ -258,18 +285,20 @@ func (c *Client) PublishToolOutputDelta() loom.Endpoint {
 // registrypb.RegistryClient interface.
 func (c *Client) ReportToolCallOverload() loom.Endpoint {
 	return func(ctx context.Context, v any) (any, error) {
-		inv := loomgrpc.NewInvoker(BuildReportToolCallOverloadFunc(c.grpccli, c.opts...), EncodeReportToolCallOverloadRequest, nil)
-		res, err := inv.Invoke(ctx, v)
-		if err != nil {
-			resp := loomgrpc.DecodeError(err)
-			switch message := resp.(type) {
-			case *loompb.ErrorResponse:
-				return nil, loomgrpc.NewServiceError(message)
-			default:
-				return nil, loom.Fault("%s", err.Error())
+		inv := loomgrpc.NewInvoker(func(ctx context.Context, reqpb any, opts ...grpc.CallOption) (any, error) {
+			res, err := BuildReportToolCallOverloadFunc(c.grpccli, c.opts...)(ctx, reqpb, opts...)
+			if err != nil {
+				resp := loomgrpc.DecodeError(err)
+				switch message := resp.(type) {
+				case *loompb.ErrorResponse:
+					return nil, loomgrpc.NewServiceErrorWithCause(message, err)
+				default:
+					return nil, err
+				}
 			}
-		}
-		return res, nil
+			return res, nil
+		}, EncodeReportToolCallOverloadRequest, nil)
+		return inv.Invoke(ctx, v)
 	}
 }
 
@@ -277,17 +306,19 @@ func (c *Client) ReportToolCallOverload() loom.Endpoint {
 // registrypb.RegistryClient interface.
 func (c *Client) ClaimToolCall() loom.Endpoint {
 	return func(ctx context.Context, v any) (any, error) {
-		inv := loomgrpc.NewInvoker(BuildClaimToolCallFunc(c.grpccli, c.opts...), EncodeClaimToolCallRequest, DecodeClaimToolCallResponse)
-		res, err := inv.Invoke(ctx, v)
-		if err != nil {
-			resp := loomgrpc.DecodeError(err)
-			switch message := resp.(type) {
-			case *loompb.ErrorResponse:
-				return nil, loomgrpc.NewServiceError(message)
-			default:
-				return nil, loom.Fault("%s", err.Error())
+		inv := loomgrpc.NewInvoker(func(ctx context.Context, reqpb any, opts ...grpc.CallOption) (any, error) {
+			res, err := BuildClaimToolCallFunc(c.grpccli, c.opts...)(ctx, reqpb, opts...)
+			if err != nil {
+				resp := loomgrpc.DecodeError(err)
+				switch message := resp.(type) {
+				case *loompb.ErrorResponse:
+					return nil, loomgrpc.NewServiceErrorWithCause(message, err)
+				default:
+					return nil, err
+				}
 			}
-		}
-		return res, nil
+			return res, nil
+		}, EncodeClaimToolCallRequest, DecodeClaimToolCallResponse)
+		return inv.Invoke(ctx, v)
 	}
 }

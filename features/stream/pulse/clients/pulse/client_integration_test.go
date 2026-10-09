@@ -226,7 +226,7 @@ func startRedisContainer(t *testing.T, ctx context.Context) (*redis.Client, test
 		t.Skipf("set %s=1 to run Docker-backed Pulse contracts", runDockerIntegrationEnv)
 	}
 	req := testcontainers.ContainerRequest{
-		Image:        "redis:7-alpine",
+		Image:        "redis:8.10.2-alpine",
 		ExposedPorts: []string{"6379/tcp"},
 		WaitingFor:   wait.ForLog("Ready to accept connections"),
 	}

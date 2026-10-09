@@ -7,7 +7,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/openai/openai-go/responses"
+	"github.com/openai/openai-go/v3/responses"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"

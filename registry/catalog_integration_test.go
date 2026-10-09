@@ -1172,7 +1172,7 @@ func runRegistryTests(m *testing.M) (code int) {
 	var err error
 	testRedisContainer, err = testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        "redis:7-alpine",
+			Image:        "redis:8.10.2-alpine",
 			ExposedPorts: []string{"6379/tcp"},
 			WaitingFor: wait.ForAll(
 				wait.ForLog("Ready to accept connections"),

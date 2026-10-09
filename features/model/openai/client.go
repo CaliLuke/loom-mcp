@@ -13,12 +13,12 @@ import (
 	"net/http"
 	"strings"
 
-	openai "github.com/openai/openai-go"
-	"github.com/openai/openai-go/option"
-	"github.com/openai/openai-go/packages/param"
-	"github.com/openai/openai-go/packages/ssestream"
-	"github.com/openai/openai-go/responses"
-	"github.com/openai/openai-go/shared"
+	openai "github.com/openai/openai-go/v3"
+	"github.com/openai/openai-go/v3/option"
+	"github.com/openai/openai-go/v3/packages/param"
+	"github.com/openai/openai-go/v3/packages/ssestream"
+	"github.com/openai/openai-go/v3/responses"
+	"github.com/openai/openai-go/v3/shared"
 
 	"github.com/CaliLuke/loom-mcp/v2/features/model/internal/openaitoolname"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
@@ -324,19 +324,11 @@ func encodeMessageParts(msg *model.Message, codec *openAIToolCodec) ([]responses
 				},
 			})
 		case model.ToolResultPart:
-			if p.ToolUseID == "" {
-				return nil, errors.New("openai responses: tool result part requires tool use id")
-			}
-			output, err := marshalJSONValue(p.Content)
+			output, err := encodeToolResultPart(p)
 			if err != nil {
-				return nil, fmt.Errorf("openai responses: encode tool result %q: %w", p.ToolUseID, err)
+				return nil, err
 			}
-			items = append(items, responses.ResponseInputItemUnionParam{
-				OfFunctionCallOutput: &responses.ResponseInputItemFunctionCallOutputParam{
-					CallID: p.ToolUseID,
-					Output: string(output),
-				},
-			})
+			items = append(items, responses.ResponseInputItemUnionParam{OfFunctionCallOutput: output})
 		case model.TextPart, model.CitationsPart, model.ImagePart:
 			continue
 		case model.CacheCheckpointPart, model.ThinkingPart:
@@ -349,6 +341,21 @@ func encodeMessageParts(msg *model.Message, codec *openAIToolCodec) ([]responses
 		}
 	}
 	return items, nil
+}
+
+// encodeToolResultPart maps a validated tool-call identity and JSON output to the SDK union.
+func encodeToolResultPart(part model.ToolResultPart) (*responses.ResponseInputItemFunctionCallOutputParam, error) {
+	if part.ToolUseID == "" {
+		return nil, errors.New("openai responses: tool result part requires tool use id")
+	}
+	output, err := marshalJSONValue(part.Content)
+	if err != nil {
+		return nil, fmt.Errorf("openai responses: encode tool result %q: %w", part.ToolUseID, err)
+	}
+	return &responses.ResponseInputItemFunctionCallOutputParam{
+		CallID: openai.String(part.ToolUseID),
+		Output: responses.ResponseInputItemFunctionCallOutputOutputUnionParam{OfString: openai.String(string(output))},
+	}, nil
 }
 
 func buildOpenAIToolChoice(choice *model.ToolChoice, defs []*model.ToolDefinition, codec *openAIToolCodec) (responses.ResponseNewParamsToolChoiceUnion, error) {
@@ -583,7 +590,7 @@ func translateReasoningItem(item responses.ResponseOutputItemUnion) model.Messag
 }
 
 func translateFunctionCall(item responses.ResponseOutputItemUnion, codec *openAIToolCodec) (model.ToolCall, error) {
-	payload, err := parseToolArguments(item.Arguments)
+	payload, err := parseToolArguments(item.Arguments.OfString)
 	if err != nil {
 		return model.ToolCall{}, fmt.Errorf("openai responses: tool call %q payload: %w", item.CallID, err)
 	}

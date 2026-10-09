@@ -33,14 +33,14 @@ export DOCKER_HOST
 TESTCONTAINERS_RYUK_DISABLED ?= true
 
 GOPATH ?= $(shell go env GOPATH)
-GOLANGCI_LINT_VERSION ?= v2.13.2
+GOLANGCI_LINT_VERSION ?= v2.14.0
 GOLANGCI_LINT := $(shell command -v golangci-lint 2>/dev/null)
 # Cached diagnostics retain source paths. Sharing them across worktrees can
 # bypass anchored path exclusions by reporting files from a sibling checkout.
 GOLANGCI_LINT_CACHE ?= $(CURDIR)/.cache/golangci-lint
 export GOLANGCI_LINT_CACHE
 STATICCHECK_VERSION ?= v0.8.1
-STATICCHECK := $(shell command -v staticcheck 2>/dev/null)
+STATICCHECK_TOOLS_VERSION ?= v0.51.0
 STATICCHECK_CHECKS ?= all,-S*,-ST*,-QF*
 PROTOC := $(shell command -v protoc 2>/dev/null)
 PROTOC_VERSION ?= 36.2
@@ -210,7 +210,7 @@ ci: verify-generated
 tools: ensure-golangci ensure-staticcheck ensure-protoc-plugins protoc-check
 
 ensure-golangci:
-	@if [ -z "$(GOLANGCI_LINT)" ]; then \
+	@if [ -z "$(GOLANGCI_LINT)" ] || [ "$$(golangci-lint version --short)" != "$$(printf '%s' '$(GOLANGCI_LINT_VERSION)' | sed 's/^v//')" ]; then \
 		echo "Installing golangci-lint $(GOLANGCI_LINT_VERSION)..."; \
 		$(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION); \
 	else \
@@ -218,12 +218,7 @@ ensure-golangci:
 	fi
 
 ensure-staticcheck:
-	@if [ -z "$(STATICCHECK)" ]; then \
-		echo "Installing staticcheck $(STATICCHECK_VERSION)..."; \
-		$(GO) install honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION); \
-	else \
-		echo "staticcheck found: $(STATICCHECK)"; \
-	fi
+	@GO="$(GO)" bash ./scripts/install_staticcheck.sh "$(STATICCHECK_VERSION)" "$(STATICCHECK_TOOLS_VERSION)"
 
 ensure-protoc-plugins:
 	@want="$$(printf '%s' '$(PROTOC_GEN_GO_VERSION)' | sed 's/^v//')"; \

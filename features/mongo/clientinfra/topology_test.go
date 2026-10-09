@@ -15,7 +15,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
-// standaloneHello mirrors the reply of a standalone mongo:7 mongod.
+// standaloneHello mirrors the reply of a standalone mongo:9.0.2 mongod.
 func standaloneHello() bson.M {
 	return bson.M{
 		"isWritablePrimary": true,
@@ -25,7 +25,7 @@ func standaloneHello() bson.M {
 	}
 }
 
-// replicaSetHello mirrors the reply of a mongo:7 primary in replica set rs0.
+// replicaSetHello mirrors the reply of a mongo:9.0.2 primary in replica set rs0.
 func replicaSetHello() bson.M {
 	return bson.M{
 		"isWritablePrimary": true,
@@ -37,7 +37,7 @@ func replicaSetHello() bson.M {
 	}
 }
 
-// uninitiatedReplicaSetHello mirrors the reply of a mongo:7 started with
+// uninitiatedReplicaSetHello mirrors the reply of a mongo:9.0.2 started with
 // --replSet before rs.initiate() has run. It reports no set name at all.
 func uninitiatedReplicaSetHello() bson.M {
 	return bson.M{

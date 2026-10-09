@@ -7,6 +7,7 @@ import (
 
 	registrypb "github.com/CaliLuke/loom-mcp/v2/registry/gen/grpc/registry/pb"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
 )
 
 const testToolsetName = "test-toolset"
@@ -89,11 +90,11 @@ func TestGRPCClientAdapter_ListToolsets(t *testing.T) {
 			listToolsetsResp: &registrypb.ListToolsetsResponse{
 				Toolsets: []*registrypb.ToolsetInfo{
 					{
-						Name:        testToolsetName,
+						Name:        proto.String(testToolsetName),
 						Description: &desc,
 						Version:     &version,
 						Tags:        []string{"tag1", "tag2"},
-						ToolCount:   3,
+						ToolCount:   proto.Int64(3),
 					},
 				},
 			},
@@ -165,13 +166,13 @@ func TestGRPCClientAdapter_GetToolset(t *testing.T) {
 		toolDesc := "A test tool"
 		mock := &mockGRPCRegistryClient{
 			getToolsetResp: &registrypb.GetToolsetResponse{
-				Name:        testToolsetName,
+				Name:        proto.String(testToolsetName),
 				Description: &desc,
 				Version:     &version,
 				Tags:        []string{"tag1"},
 				Tools: []*registrypb.ToolSchema{
 					{
-						Name:          "test-tool",
+						Name:          proto.String("test-tool"),
 						Description:   &toolDesc,
 						PayloadSchema: []byte(`{"type":"object"}`),
 					},
@@ -228,7 +229,7 @@ func TestGRPCClientAdapter_Search(t *testing.T) {
 			searchResp: &registrypb.SearchResponse{
 				Toolsets: []*registrypb.ToolsetInfo{
 					{
-						Name:        "matching-toolset",
+						Name:        proto.String("matching-toolset"),
 						Description: &desc,
 						Tags:        []string{"search", "test"},
 					},
@@ -308,7 +309,7 @@ func TestGRPCClientAdapter_IntegrationWithManager(t *testing.T) {
 		listToolsetsResp: &registrypb.ListToolsetsResponse{
 			Toolsets: []*registrypb.ToolsetInfo{
 				{
-					Name:        "integration-toolset",
+					Name:        proto.String("integration-toolset"),
 					Description: &desc,
 					Version:     &version,
 					Tags:        []string{"integration"},
@@ -316,12 +317,12 @@ func TestGRPCClientAdapter_IntegrationWithManager(t *testing.T) {
 			},
 		},
 		getToolsetResp: &registrypb.GetToolsetResponse{
-			Name:        "integration-toolset",
+			Name:        proto.String("integration-toolset"),
 			Description: &desc,
 			Version:     &version,
 			Tools: []*registrypb.ToolSchema{
 				{
-					Name:          "integration-tool",
+					Name:          proto.String("integration-tool"),
 					Description:   &toolDesc,
 					PayloadSchema: []byte(`{"type":"string"}`),
 				},
@@ -330,7 +331,7 @@ func TestGRPCClientAdapter_IntegrationWithManager(t *testing.T) {
 		searchResp: &registrypb.SearchResponse{
 			Toolsets: []*registrypb.ToolsetInfo{
 				{
-					Name:        "integration-toolset",
+					Name:        proto.String("integration-toolset"),
 					Description: &desc,
 				},
 			},

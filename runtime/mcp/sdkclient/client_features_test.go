@@ -2,6 +2,7 @@ package sdkclient
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
@@ -60,14 +61,15 @@ func FuzzProtectedRequestState(f *testing.F) {
 	})
 }
 
-// sealRequestStateForFuzz uses a fixed nonce so every saved fuzz input produces
-// the same protected state. It is test-only and must not be used for real data.
+// sealRequestStateForFuzz derives its nonce from the input for reproducible fuzz
+// cases without reusing one nonce for different plaintexts. It is test-only.
 func sealRequestStateForFuzz(data, key, aad []byte) (string, error) {
 	aead, err := requestStateAEAD(key)
 	if err != nil {
 		return "", err
 	}
-	nonce := make([]byte, aead.NonceSize())
+	digest := sha256.Sum256(data)
+	nonce := digest[:aead.NonceSize()]
 	sealed := aead.Seal(nonce, nonce, data, aad)
 	return base64.RawURLEncoding.EncodeToString(sealed), nil
 }

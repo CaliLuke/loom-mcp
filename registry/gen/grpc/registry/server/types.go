@@ -20,12 +20,12 @@ import (
 // "registry" service from the gRPC request type.
 func NewRegisterPayload(message *registrypb.RegisterRequest) *registry.RegisterPayload {
 	v := &registry.RegisterPayload{
-		Name:                  message.Name,
+		Name:                  *message.Name,
 		Description:           message.Description,
-		ProviderID:            message.ProviderId,
-		AdmissionRevision:     message.AdmissionRevision,
-		ProviderIncarnationID: message.ProviderIncarnationId,
-		WireProtocolVersion:   int(message.WireProtocolVersion),
+		ProviderID:            *message.ProviderId,
+		AdmissionRevision:     *message.AdmissionRevision,
+		ProviderIncarnationID: *message.ProviderIncarnationId,
+		WireProtocolVersion:   int(*message.WireProtocolVersion),
 	}
 	if message.Version != nil {
 		version := registry.SemVer(*message.Version)
@@ -39,7 +39,7 @@ func NewRegisterPayload(message *registrypb.RegisterRequest) *registry.RegisterP
 		v.Tools = make([]*registry.ToolSchema, len(message.Tools))
 		for i, val := range message.Tools {
 			v.Tools[i] = &registry.ToolSchema{
-				Name:          val.Name,
+				Name:          *val.Name,
 				Description:   val.Description,
 				PayloadSchema: val.PayloadSchema,
 				ResultSchema:  val.ResultSchema,
@@ -58,9 +58,9 @@ func NewRegisterPayload(message *registrypb.RegisterRequest) *registry.RegisterP
 // the "Register" endpoint of the "registry" service.
 func NewProtoRegisterResponse(result *registry.RegisterResult) *registrypb.RegisterResponse {
 	message := &registrypb.RegisterResponse{
-		RegisteredAt:      result.RegisteredAt,
-		RegistrationToken: result.RegistrationToken,
-		LeaseDurationMs:   result.LeaseDurationMs,
+		RegisteredAt:      &result.RegisteredAt,
+		RegistrationToken: &result.RegistrationToken,
+		LeaseDurationMs:   &result.LeaseDurationMs,
 	}
 	return message
 }
@@ -69,10 +69,10 @@ func NewProtoRegisterResponse(result *registry.RegisterResult) *registrypb.Regis
 // endpoint of the "registry" service from the gRPC request type.
 func NewReleaseProviderPayload(message *registrypb.ReleaseProviderRequest) *registry.ReleaseProviderPayload {
 	v := &registry.ReleaseProviderPayload{
-		Name:                      message.Name,
-		ProviderID:                message.ProviderId,
-		ExpectedRegistrationToken: message.ExpectedRegistrationToken,
-		ProviderIncarnationID:     message.ProviderIncarnationId,
+		Name:                      *message.Name,
+		ProviderID:                *message.ProviderId,
+		ExpectedRegistrationToken: *message.ExpectedRegistrationToken,
+		ProviderIncarnationID:     *message.ProviderIncarnationId,
 	}
 	return v
 }
@@ -88,11 +88,11 @@ func NewProtoReleaseProviderResponse() *registrypb.ReleaseProviderResponse {
 // of the "registry" service from the gRPC request type.
 func NewDrainProviderPayload(message *registrypb.DrainProviderRequest) *registry.DrainProviderPayload {
 	v := &registry.DrainProviderPayload{
-		SettlementDurationMs:      message.SettlementDurationMs,
-		Name:                      message.Name,
-		ProviderID:                message.ProviderId,
-		ExpectedRegistrationToken: message.ExpectedRegistrationToken,
-		ProviderIncarnationID:     message.ProviderIncarnationId,
+		SettlementDurationMs:      *message.SettlementDurationMs,
+		Name:                      *message.Name,
+		ProviderID:                *message.ProviderId,
+		ExpectedRegistrationToken: *message.ExpectedRegistrationToken,
+		ProviderIncarnationID:     *message.ProviderIncarnationId,
 	}
 	return v
 }
@@ -108,8 +108,8 @@ func NewProtoDrainProviderResponse() *registrypb.DrainProviderResponse {
 // "registry" service from the gRPC request type.
 func NewUnregisterPayload(message *registrypb.UnregisterRequest) *registry.UnregisterPayload {
 	v := &registry.UnregisterPayload{
-		Name:                      message.Name,
-		ExpectedRegistrationToken: message.ExpectedRegistrationToken,
+		Name:                      *message.Name,
+		ExpectedRegistrationToken: *message.ExpectedRegistrationToken,
 	}
 	return v
 }
@@ -125,10 +125,10 @@ func NewProtoUnregisterResponse() *registrypb.UnregisterResponse {
 // service from the gRPC request type.
 func NewPongPayload(message *registrypb.PongRequest) *registry.PongPayload {
 	v := &registry.PongPayload{
-		PingID:                message.PingId,
-		Toolset:               message.Toolset,
-		ProviderID:            message.ProviderId,
-		ProviderIncarnationID: message.ProviderIncarnationId,
+		PingID:                *message.PingId,
+		Toolset:               *message.Toolset,
+		ProviderID:            *message.ProviderId,
+		ProviderIncarnationID: *message.ProviderIncarnationId,
 	}
 	return v
 }
@@ -159,15 +159,16 @@ func NewProtoListToolsetsResponse(result *registry.ListToolsetsResult) *registry
 		message.Toolsets = make([]*registrypb.ToolsetInfo, len(result.Toolsets))
 		for i, val := range result.Toolsets {
 			message.Toolsets[i] = &registrypb.ToolsetInfo{
-				Name:         val.Name,
+				Name:         &val.Name,
 				Description:  val.Description,
-				ToolCount:    int64(val.ToolCount),
-				RegisteredAt: val.RegisteredAt,
+				RegisteredAt: &val.RegisteredAt,
 			}
 			if val.Version != nil {
 				version := string(*val.Version)
 				message.Toolsets[i].Version = &version
 			}
+			toolCount := int64(val.ToolCount)
+			message.Toolsets[i].ToolCount = &toolCount
 			if val.Tags != nil {
 				message.Toolsets[i].Tags = make([]string, len(val.Tags))
 				copy(message.Toolsets[i].Tags, val.Tags)
@@ -181,7 +182,7 @@ func NewProtoListToolsetsResponse(result *registry.ListToolsetsResult) *registry
 // "registry" service from the gRPC request type.
 func NewGetToolsetPayload(message *registrypb.GetToolsetRequest) *registry.GetToolsetPayload {
 	v := &registry.GetToolsetPayload{
-		Name: message.Name,
+		Name: *message.Name,
 	}
 	return v
 }
@@ -190,9 +191,9 @@ func NewGetToolsetPayload(message *registrypb.GetToolsetRequest) *registry.GetTo
 // the "GetToolset" endpoint of the "registry" service.
 func NewProtoGetToolsetResponse(result *registry.Toolset) *registrypb.GetToolsetResponse {
 	message := &registrypb.GetToolsetResponse{
-		Name:         result.Name,
+		Name:         &result.Name,
 		Description:  result.Description,
-		RegisteredAt: result.RegisteredAt,
+		RegisteredAt: &result.RegisteredAt,
 	}
 	if result.Version != nil {
 		version := string(*result.Version)
@@ -206,7 +207,7 @@ func NewProtoGetToolsetResponse(result *registry.Toolset) *registrypb.GetToolset
 		message.Tools = make([]*registrypb.ToolSchema, len(result.Tools))
 		for i, val := range result.Tools {
 			message.Tools[i] = &registrypb.ToolSchema{
-				Name:          val.Name,
+				Name:          &val.Name,
 				Description:   val.Description,
 				PayloadSchema: val.PayloadSchema,
 				ResultSchema:  val.ResultSchema,
@@ -225,7 +226,7 @@ func NewProtoGetToolsetResponse(result *registry.Toolset) *registrypb.GetToolset
 // "registry" service from the gRPC request type.
 func NewSearchPayload(message *registrypb.SearchRequest) *registry.SearchPayload {
 	v := &registry.SearchPayload{
-		Query: message.Query,
+		Query: *message.Query,
 	}
 	return v
 }
@@ -238,15 +239,16 @@ func NewProtoSearchResponse(result *registry.SearchResult) *registrypb.SearchRes
 		message.Toolsets = make([]*registrypb.ToolsetInfo, len(result.Toolsets))
 		for i, val := range result.Toolsets {
 			message.Toolsets[i] = &registrypb.ToolsetInfo{
-				Name:         val.Name,
+				Name:         &val.Name,
 				Description:  val.Description,
-				ToolCount:    int64(val.ToolCount),
-				RegisteredAt: val.RegisteredAt,
+				RegisteredAt: &val.RegisteredAt,
 			}
 			if val.Version != nil {
 				version := string(*val.Version)
 				message.Toolsets[i].Version = &version
 			}
+			toolCount := int64(val.ToolCount)
+			message.Toolsets[i].ToolCount = &toolCount
 			if val.Tags != nil {
 				message.Toolsets[i].Tags = make([]string, len(val.Tags))
 				copy(message.Toolsets[i].Tags, val.Tags)
@@ -260,10 +262,10 @@ func NewProtoSearchResponse(result *registry.SearchResult) *registrypb.SearchRes
 // "registry" service from the gRPC request type.
 func NewCallToolPayload(message *registrypb.CallToolRequest) *registry.CallToolPayload {
 	v := &registry.CallToolPayload{
-		Toolset:             message.Toolset,
-		Tool:                message.Tool,
+		Toolset:             *message.Toolset,
+		Tool:                *message.Tool,
 		PayloadJSON:         message.PayloadJson,
-		WireProtocolVersion: int(message.WireProtocolVersion),
+		WireProtocolVersion: int(*message.WireProtocolVersion),
 	}
 	if message.Meta != nil {
 		v.Meta = protobufRegistrypbToolCallMetaToRegistryToolCallMeta(message.Meta)
@@ -275,10 +277,10 @@ func NewCallToolPayload(message *registrypb.CallToolRequest) *registry.CallToolP
 // the "CallTool" endpoint of the "registry" service.
 func NewProtoCallToolResponse(result *registry.CallToolResult) *registrypb.CallToolResponse {
 	message := &registrypb.CallToolResponse{
-		ToolUseId:             result.ToolUseID,
-		RegistrationToken:     result.RegistrationToken,
-		ExecutionDeadline:     result.ExecutionDeadline,
-		ResultStreamExpiresAt: result.ResultStreamExpiresAt,
+		ToolUseId:             &result.ToolUseID,
+		RegistrationToken:     &result.RegistrationToken,
+		ExecutionDeadline:     &result.ExecutionDeadline,
+		ResultStreamExpiresAt: &result.ResultStreamExpiresAt,
 	}
 	return message
 }
@@ -287,11 +289,11 @@ func NewProtoCallToolResponse(result *registry.CallToolResult) *registrypb.CallT
 // "registry" service from the gRPC request type.
 func NewRetryToolPayload(message *registrypb.RetryToolRequest) *registry.RetryToolPayload {
 	v := &registry.RetryToolPayload{
-		ExpectedRegistrationToken: message.ExpectedRegistrationToken,
-		Toolset:                   message.Toolset,
-		Tool:                      message.Tool,
+		ExpectedRegistrationToken: *message.ExpectedRegistrationToken,
+		Toolset:                   *message.Toolset,
+		Tool:                      *message.Tool,
 		PayloadJSON:               message.PayloadJson,
-		WireProtocolVersion:       int(message.WireProtocolVersion),
+		WireProtocolVersion:       int(*message.WireProtocolVersion),
 	}
 	if message.Meta != nil {
 		v.Meta = protobufRegistrypbToolCallMetaToRegistryToolCallMeta(message.Meta)
@@ -303,10 +305,10 @@ func NewRetryToolPayload(message *registrypb.RetryToolRequest) *registry.RetryTo
 // the "RetryTool" endpoint of the "registry" service.
 func NewProtoRetryToolResponse(result *registry.CallToolResult) *registrypb.RetryToolResponse {
 	message := &registrypb.RetryToolResponse{
-		ToolUseId:             result.ToolUseID,
-		RegistrationToken:     result.RegistrationToken,
-		ExecutionDeadline:     result.ExecutionDeadline,
-		ResultStreamExpiresAt: result.ResultStreamExpiresAt,
+		ToolUseId:             &result.ToolUseID,
+		RegistrationToken:     &result.RegistrationToken,
+		ExecutionDeadline:     &result.ExecutionDeadline,
+		ResultStreamExpiresAt: &result.ResultStreamExpiresAt,
 	}
 	return message
 }
@@ -315,14 +317,14 @@ func NewProtoRetryToolResponse(result *registry.CallToolResult) *registrypb.Retr
 // endpoint of the "registry" service from the gRPC request type.
 func NewCompleteToolCallPayload(message *registrypb.CompleteToolCallRequest) *registry.CompleteToolCallPayload {
 	v := &registry.CompleteToolCallPayload{
-		Toolset:                   message.Toolset,
-		ProviderID:                message.ProviderId,
-		ProviderIncarnationID:     message.ProviderIncarnationId,
-		RegistrationToken:         message.RegistrationToken,
-		ToolUseID:                 message.ToolUseId,
+		Toolset:                   *message.Toolset,
+		ProviderID:                *message.ProviderId,
+		ProviderIncarnationID:     *message.ProviderIncarnationId,
+		RegistrationToken:         *message.RegistrationToken,
+		ToolUseID:                 *message.ToolUseId,
 		ResultJSON:                message.ResultJson,
-		RequestEventID:            message.RequestEventId,
-		ProviderRegistrationToken: message.ProviderRegistrationToken,
+		RequestEventID:            *message.RequestEventId,
+		ProviderRegistrationToken: *message.ProviderRegistrationToken,
 	}
 	return v
 }
@@ -339,15 +341,15 @@ func NewProtoCompleteToolCallResponse() *registrypb.CompleteToolCallResponse {
 // request type.
 func NewPublishToolOutputDeltaPayload(message *registrypb.PublishToolOutputDeltaRequest) *registry.PublishToolOutputDeltaPayload {
 	v := &registry.PublishToolOutputDeltaPayload{
-		Stream:                    message.Stream,
-		Delta:                     message.Delta,
-		Toolset:                   message.Toolset,
-		ProviderID:                message.ProviderId,
-		ProviderIncarnationID:     message.ProviderIncarnationId,
-		ProviderRegistrationToken: message.ProviderRegistrationToken,
-		CallRegistrationToken:     message.CallRegistrationToken,
-		ToolUseID:                 message.ToolUseId,
-		RequestEventID:            message.RequestEventId,
+		Stream:                    *message.Stream,
+		Delta:                     *message.Delta,
+		Toolset:                   *message.Toolset,
+		ProviderID:                *message.ProviderId,
+		ProviderIncarnationID:     *message.ProviderIncarnationId,
+		ProviderRegistrationToken: *message.ProviderRegistrationToken,
+		CallRegistrationToken:     *message.CallRegistrationToken,
+		ToolUseID:                 *message.ToolUseId,
+		RequestEventID:            *message.RequestEventId,
 	}
 	return v
 }
@@ -365,13 +367,13 @@ func NewProtoPublishToolOutputDeltaResponse() *registrypb.PublishToolOutputDelta
 // request type.
 func NewReportToolCallOverloadPayload(message *registrypb.ReportToolCallOverloadRequest) *registry.ProviderToolCallClaimPayload {
 	v := &registry.ProviderToolCallClaimPayload{
-		Toolset:                   message.Toolset,
-		ProviderID:                message.ProviderId,
-		ProviderIncarnationID:     message.ProviderIncarnationId,
-		ProviderRegistrationToken: message.ProviderRegistrationToken,
-		CallRegistrationToken:     message.CallRegistrationToken,
-		ToolUseID:                 message.ToolUseId,
-		RequestEventID:            message.RequestEventId,
+		Toolset:                   *message.Toolset,
+		ProviderID:                *message.ProviderId,
+		ProviderIncarnationID:     *message.ProviderIncarnationId,
+		ProviderRegistrationToken: *message.ProviderRegistrationToken,
+		CallRegistrationToken:     *message.CallRegistrationToken,
+		ToolUseID:                 *message.ToolUseId,
+		RequestEventID:            *message.RequestEventId,
 	}
 	return v
 }
@@ -388,13 +390,13 @@ func NewProtoReportToolCallOverloadResponse() *registrypb.ReportToolCallOverload
 // of the "registry" service from the gRPC request type.
 func NewClaimToolCallPayload(message *registrypb.ClaimToolCallRequest) *registry.ProviderToolCallClaimPayload {
 	v := &registry.ProviderToolCallClaimPayload{
-		Toolset:                   message.Toolset,
-		ProviderID:                message.ProviderId,
-		ProviderIncarnationID:     message.ProviderIncarnationId,
-		ProviderRegistrationToken: message.ProviderRegistrationToken,
-		CallRegistrationToken:     message.CallRegistrationToken,
-		ToolUseID:                 message.ToolUseId,
-		RequestEventID:            message.RequestEventId,
+		Toolset:                   *message.Toolset,
+		ProviderID:                *message.ProviderId,
+		ProviderIncarnationID:     *message.ProviderIncarnationId,
+		ProviderRegistrationToken: *message.ProviderRegistrationToken,
+		CallRegistrationToken:     *message.CallRegistrationToken,
+		ToolUseID:                 *message.ToolUseId,
+		RequestEventID:            *message.RequestEventId,
 	}
 	return v
 }
@@ -403,29 +405,48 @@ func NewClaimToolCallPayload(message *registrypb.ClaimToolCallRequest) *registry
 // of the "ClaimToolCall" endpoint of the "registry" service.
 func NewProtoClaimToolCallResponse(result *registry.ClaimToolCallResult) *registrypb.ClaimToolCallResponse {
 	message := &registrypb.ClaimToolCallResponse{
-		Disposition: result.Disposition,
+		Disposition: &result.Disposition,
 	}
 	return message
 }
 
 // ValidateRegisterRequest runs the validations defined on RegisterRequest.
 func ValidateRegisterRequest(message *registrypb.RegisterRequest) (err error) {
+	if message.Name == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("name", "message"))
+	}
 	if message.Tools == nil {
 		err = loom.MergeErrors(err, loom.MissingFieldError("tools", "message"))
 	}
-	if utf8.RuneCountInString(message.Name) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.name", message.Name, utf8.RuneCountInString(message.Name), 1, true))
+	if message.ProviderId == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("provider_id", "message"))
 	}
-	if utf8.RuneCountInString(message.Name) > 256 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.name", message.Name, utf8.RuneCountInString(message.Name), 256, false))
+	if message.AdmissionRevision == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("admission_revision", "message"))
+	}
+	if message.ProviderIncarnationId == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("provider_incarnation_id", "message"))
+	}
+	if message.WireProtocolVersion == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("wire_protocol_version", "message"))
+	}
+	if message.Name != nil {
+		if utf8.RuneCountInString(*message.Name) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.name", utf8.RuneCountInString(*message.Name), 1, true))
+		}
+	}
+	if message.Name != nil {
+		if utf8.RuneCountInString(*message.Name) > 256 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.name", utf8.RuneCountInString(*message.Name), 256, false))
+		}
 	}
 	if message.Description != nil {
 		if utf8.RuneCountInString(*message.Description) > 4096 {
-			err = loom.MergeErrors(err, loom.InvalidLengthError("message.description", *message.Description, utf8.RuneCountInString(*message.Description), 4096, false))
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.description", utf8.RuneCountInString(*message.Description), 4096, false))
 		}
 	}
 	if message.Version != nil {
-		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.version", string(*message.Version), loomPatternTypes0))
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.version", *message.Version, loomPatternTypes0))
 	}
 	for i, e := range message.Tools {
 		if e == nil {
@@ -437,34 +458,63 @@ func ValidateRegisterRequest(message *registrypb.RegisterRequest) (err error) {
 			}
 		}
 	}
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_id", message.ProviderId, loomPatternTypes1))
-	if utf8.RuneCountInString(message.ProviderId) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", message.ProviderId, utf8.RuneCountInString(message.ProviderId), 1, true))
+	if message.ProviderId != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_id", *message.ProviderId, loomPatternTypes1))
 	}
-	if utf8.RuneCountInString(message.ProviderId) > 512 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", message.ProviderId, utf8.RuneCountInString(message.ProviderId), 512, false))
+	if message.ProviderId != nil {
+		if utf8.RuneCountInString(*message.ProviderId) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", utf8.RuneCountInString(*message.ProviderId), 1, true))
+		}
 	}
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.admission_revision", message.AdmissionRevision, loomPatternTypes2))
-	err = loom.MergeErrors(err, loom.ValidateFormat("message.provider_incarnation_id", message.ProviderIncarnationId, loom.FormatUUID))
-	if !(message.WireProtocolVersion == 8) {
-		err = loom.MergeErrors(err, loom.InvalidEnumValueError("message.wire_protocol_version", message.WireProtocolVersion, []any{8}))
+	if message.ProviderId != nil {
+		if utf8.RuneCountInString(*message.ProviderId) > 512 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", utf8.RuneCountInString(*message.ProviderId), 512, false))
+		}
+	}
+	if message.AdmissionRevision != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.admission_revision", *message.AdmissionRevision, loomPatternTypes2))
+	}
+	if message.ProviderIncarnationId != nil {
+		err = loom.MergeErrors(err, loom.ValidateFormat("message.provider_incarnation_id", *message.ProviderIncarnationId, loom.FormatUUID))
+	}
+	if message.WireProtocolVersion != nil {
+		if !(*message.WireProtocolVersion == 8) {
+			err = loom.MergeErrors(err, loom.InvalidEnumValueError("message.wire_protocol_version", *message.WireProtocolVersion, []any{8}))
+		}
 	}
 	return
 }
 
 // ValidateToolSchema runs the validations defined on ToolSchema.
 func ValidateToolSchema(elem *registrypb.ToolSchema) (err error) {
-	if utf8.RuneCountInString(elem.Name) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("elem.name", elem.Name, utf8.RuneCountInString(elem.Name), 1, true))
+	if elem.Name == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("name", "elem"))
 	}
-	if utf8.RuneCountInString(elem.Name) > 256 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("elem.name", elem.Name, utf8.RuneCountInString(elem.Name), 256, false))
+	if elem.PayloadSchema == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("payload_schema", "elem"))
 	}
-	if len(elem.PayloadSchema) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("elem.payload_schema", elem.PayloadSchema, len(elem.PayloadSchema), 1, true))
+	if elem.ResultSchema == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("result_schema", "elem"))
 	}
-	if len(elem.ResultSchema) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("elem.result_schema", elem.ResultSchema, len(elem.ResultSchema), 1, true))
+	if elem.Name != nil {
+		if utf8.RuneCountInString(*elem.Name) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("elem.name", utf8.RuneCountInString(*elem.Name), 1, true))
+		}
+	}
+	if elem.Name != nil {
+		if utf8.RuneCountInString(*elem.Name) > 256 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("elem.name", utf8.RuneCountInString(*elem.Name), 256, false))
+		}
+	}
+	if elem.PayloadSchema != nil {
+		if len(elem.PayloadSchema) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("elem.payload_schema", len(elem.PayloadSchema), 1, true))
+		}
+	}
+	if elem.ResultSchema != nil {
+		if len(elem.ResultSchema) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("elem.result_schema", len(elem.ResultSchema), 1, true))
+		}
 	}
 	return
 }
@@ -472,182 +522,342 @@ func ValidateToolSchema(elem *registrypb.ToolSchema) (err error) {
 // ValidateReleaseProviderRequest runs the validations defined on
 // ReleaseProviderRequest.
 func ValidateReleaseProviderRequest(message *registrypb.ReleaseProviderRequest) (err error) {
-	if utf8.RuneCountInString(message.Name) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.name", message.Name, utf8.RuneCountInString(message.Name), 1, true))
+	if message.Name == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("name", "message"))
 	}
-	if utf8.RuneCountInString(message.Name) > 256 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.name", message.Name, utf8.RuneCountInString(message.Name), 256, false))
+	if message.ProviderId == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("provider_id", "message"))
 	}
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_id", message.ProviderId, loomPatternTypes1))
-	if utf8.RuneCountInString(message.ProviderId) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", message.ProviderId, utf8.RuneCountInString(message.ProviderId), 1, true))
+	if message.ExpectedRegistrationToken == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("expected_registration_token", "message"))
 	}
-	if utf8.RuneCountInString(message.ProviderId) > 512 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", message.ProviderId, utf8.RuneCountInString(message.ProviderId), 512, false))
+	if message.ProviderIncarnationId == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("provider_incarnation_id", "message"))
 	}
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.expected_registration_token", message.ExpectedRegistrationToken, loomPatternTypes3))
-	err = loom.MergeErrors(err, loom.ValidateFormat("message.provider_incarnation_id", message.ProviderIncarnationId, loom.FormatUUID))
+	if message.Name != nil {
+		if utf8.RuneCountInString(*message.Name) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.name", utf8.RuneCountInString(*message.Name), 1, true))
+		}
+	}
+	if message.Name != nil {
+		if utf8.RuneCountInString(*message.Name) > 256 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.name", utf8.RuneCountInString(*message.Name), 256, false))
+		}
+	}
+	if message.ProviderId != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_id", *message.ProviderId, loomPatternTypes1))
+	}
+	if message.ProviderId != nil {
+		if utf8.RuneCountInString(*message.ProviderId) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", utf8.RuneCountInString(*message.ProviderId), 1, true))
+		}
+	}
+	if message.ProviderId != nil {
+		if utf8.RuneCountInString(*message.ProviderId) > 512 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", utf8.RuneCountInString(*message.ProviderId), 512, false))
+		}
+	}
+	if message.ExpectedRegistrationToken != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.expected_registration_token", *message.ExpectedRegistrationToken, loomPatternTypes3))
+	}
+	if message.ProviderIncarnationId != nil {
+		err = loom.MergeErrors(err, loom.ValidateFormat("message.provider_incarnation_id", *message.ProviderIncarnationId, loom.FormatUUID))
+	}
 	return
 }
 
 // ValidateDrainProviderRequest runs the validations defined on
 // DrainProviderRequest.
 func ValidateDrainProviderRequest(message *registrypb.DrainProviderRequest) (err error) {
-	if message.SettlementDurationMs < 1 {
-		err = loom.MergeErrors(err, loom.InvalidRangeError("message.settlement_duration_ms", message.SettlementDurationMs, 1, true))
+	if message.SettlementDurationMs == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("settlement_duration_ms", "message"))
 	}
-	if message.SettlementDurationMs > 8.64e+07 {
-		err = loom.MergeErrors(err, loom.InvalidRangeError("message.settlement_duration_ms", message.SettlementDurationMs, 8.64e+07, false))
+	if message.Name == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("name", "message"))
 	}
-	if utf8.RuneCountInString(message.Name) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.name", message.Name, utf8.RuneCountInString(message.Name), 1, true))
+	if message.ProviderId == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("provider_id", "message"))
 	}
-	if utf8.RuneCountInString(message.Name) > 256 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.name", message.Name, utf8.RuneCountInString(message.Name), 256, false))
+	if message.ExpectedRegistrationToken == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("expected_registration_token", "message"))
 	}
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_id", message.ProviderId, loomPatternTypes1))
-	if utf8.RuneCountInString(message.ProviderId) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", message.ProviderId, utf8.RuneCountInString(message.ProviderId), 1, true))
+	if message.ProviderIncarnationId == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("provider_incarnation_id", "message"))
 	}
-	if utf8.RuneCountInString(message.ProviderId) > 512 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", message.ProviderId, utf8.RuneCountInString(message.ProviderId), 512, false))
+	if message.SettlementDurationMs != nil {
+		if *message.SettlementDurationMs < 1 {
+			err = loom.MergeErrors(err, loom.InvalidRangeError("message.settlement_duration_ms", *message.SettlementDurationMs, 1, true))
+		}
 	}
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.expected_registration_token", message.ExpectedRegistrationToken, loomPatternTypes3))
-	err = loom.MergeErrors(err, loom.ValidateFormat("message.provider_incarnation_id", message.ProviderIncarnationId, loom.FormatUUID))
+	if message.SettlementDurationMs != nil {
+		if *message.SettlementDurationMs > 8.64e+07 {
+			err = loom.MergeErrors(err, loom.InvalidRangeError("message.settlement_duration_ms", *message.SettlementDurationMs, 8.64e+07, false))
+		}
+	}
+	if message.Name != nil {
+		if utf8.RuneCountInString(*message.Name) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.name", utf8.RuneCountInString(*message.Name), 1, true))
+		}
+	}
+	if message.Name != nil {
+		if utf8.RuneCountInString(*message.Name) > 256 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.name", utf8.RuneCountInString(*message.Name), 256, false))
+		}
+	}
+	if message.ProviderId != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_id", *message.ProviderId, loomPatternTypes1))
+	}
+	if message.ProviderId != nil {
+		if utf8.RuneCountInString(*message.ProviderId) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", utf8.RuneCountInString(*message.ProviderId), 1, true))
+		}
+	}
+	if message.ProviderId != nil {
+		if utf8.RuneCountInString(*message.ProviderId) > 512 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", utf8.RuneCountInString(*message.ProviderId), 512, false))
+		}
+	}
+	if message.ExpectedRegistrationToken != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.expected_registration_token", *message.ExpectedRegistrationToken, loomPatternTypes3))
+	}
+	if message.ProviderIncarnationId != nil {
+		err = loom.MergeErrors(err, loom.ValidateFormat("message.provider_incarnation_id", *message.ProviderIncarnationId, loom.FormatUUID))
+	}
 	return
 }
 
 // ValidateUnregisterRequest runs the validations defined on UnregisterRequest.
 func ValidateUnregisterRequest(message *registrypb.UnregisterRequest) (err error) {
-	if utf8.RuneCountInString(message.Name) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.name", message.Name, utf8.RuneCountInString(message.Name), 1, true))
+	if message.Name == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("name", "message"))
 	}
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.expected_registration_token", message.ExpectedRegistrationToken, loomPatternTypes3))
+	if message.ExpectedRegistrationToken == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("expected_registration_token", "message"))
+	}
+	if message.Name != nil {
+		if utf8.RuneCountInString(*message.Name) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.name", utf8.RuneCountInString(*message.Name), 1, true))
+		}
+	}
+	if message.ExpectedRegistrationToken != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.expected_registration_token", *message.ExpectedRegistrationToken, loomPatternTypes3))
+	}
 	return
 }
 
 // ValidatePongRequest runs the validations defined on PongRequest.
 func ValidatePongRequest(message *registrypb.PongRequest) (err error) {
-	if utf8.RuneCountInString(message.PingId) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.ping_id", message.PingId, utf8.RuneCountInString(message.PingId), 1, true))
+	if message.PingId == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("ping_id", "message"))
 	}
-	if utf8.RuneCountInString(message.PingId) > 256 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.ping_id", message.PingId, utf8.RuneCountInString(message.PingId), 256, false))
+	if message.Toolset == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("toolset", "message"))
 	}
-	if utf8.RuneCountInString(message.Toolset) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", message.Toolset, utf8.RuneCountInString(message.Toolset), 1, true))
+	if message.ProviderId == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("provider_id", "message"))
 	}
-	if utf8.RuneCountInString(message.Toolset) > 256 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", message.Toolset, utf8.RuneCountInString(message.Toolset), 256, false))
+	if message.ProviderIncarnationId == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("provider_incarnation_id", "message"))
 	}
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_id", message.ProviderId, loomPatternTypes1))
-	if utf8.RuneCountInString(message.ProviderId) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", message.ProviderId, utf8.RuneCountInString(message.ProviderId), 1, true))
+	if message.PingId != nil {
+		if utf8.RuneCountInString(*message.PingId) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.ping_id", utf8.RuneCountInString(*message.PingId), 1, true))
+		}
 	}
-	if utf8.RuneCountInString(message.ProviderId) > 512 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", message.ProviderId, utf8.RuneCountInString(message.ProviderId), 512, false))
+	if message.PingId != nil {
+		if utf8.RuneCountInString(*message.PingId) > 256 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.ping_id", utf8.RuneCountInString(*message.PingId), 256, false))
+		}
 	}
-	err = loom.MergeErrors(err, loom.ValidateFormat("message.provider_incarnation_id", message.ProviderIncarnationId, loom.FormatUUID))
+	if message.Toolset != nil {
+		if utf8.RuneCountInString(*message.Toolset) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", utf8.RuneCountInString(*message.Toolset), 1, true))
+		}
+	}
+	if message.Toolset != nil {
+		if utf8.RuneCountInString(*message.Toolset) > 256 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", utf8.RuneCountInString(*message.Toolset), 256, false))
+		}
+	}
+	if message.ProviderId != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_id", *message.ProviderId, loomPatternTypes1))
+	}
+	if message.ProviderId != nil {
+		if utf8.RuneCountInString(*message.ProviderId) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", utf8.RuneCountInString(*message.ProviderId), 1, true))
+		}
+	}
+	if message.ProviderId != nil {
+		if utf8.RuneCountInString(*message.ProviderId) > 512 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", utf8.RuneCountInString(*message.ProviderId), 512, false))
+		}
+	}
+	if message.ProviderIncarnationId != nil {
+		err = loom.MergeErrors(err, loom.ValidateFormat("message.provider_incarnation_id", *message.ProviderIncarnationId, loom.FormatUUID))
+	}
 	return
 }
 
 // ValidateGetToolsetRequest runs the validations defined on GetToolsetRequest.
 func ValidateGetToolsetRequest(message *registrypb.GetToolsetRequest) (err error) {
-	if utf8.RuneCountInString(message.Name) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.name", message.Name, utf8.RuneCountInString(message.Name), 1, true))
+	if message.Name == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("name", "message"))
+	}
+	if message.Name != nil {
+		if utf8.RuneCountInString(*message.Name) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.name", utf8.RuneCountInString(*message.Name), 1, true))
+		}
 	}
 	return
 }
 
 // ValidateSearchRequest runs the validations defined on SearchRequest.
 func ValidateSearchRequest(message *registrypb.SearchRequest) (err error) {
-	if utf8.RuneCountInString(message.Query) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.query", message.Query, utf8.RuneCountInString(message.Query), 1, true))
+	if message.Query == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("query", "message"))
 	}
-	if utf8.RuneCountInString(message.Query) > 1024 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.query", message.Query, utf8.RuneCountInString(message.Query), 1024, false))
+	if message.Query != nil {
+		if utf8.RuneCountInString(*message.Query) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.query", utf8.RuneCountInString(*message.Query), 1, true))
+		}
+	}
+	if message.Query != nil {
+		if utf8.RuneCountInString(*message.Query) > 1024 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.query", utf8.RuneCountInString(*message.Query), 1024, false))
+		}
 	}
 	return
 }
 
 // ValidateCallToolRequest runs the validations defined on CallToolRequest.
 func ValidateCallToolRequest(message *registrypb.CallToolRequest) (err error) {
+	if message.Toolset == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("toolset", "message"))
+	}
+	if message.Tool == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("tool", "message"))
+	}
+	if message.PayloadJson == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("payload_json", "message"))
+	}
 	if message.Meta == nil {
 		err = loom.MergeErrors(err, loom.MissingFieldError("meta", "message"))
 	}
-	if utf8.RuneCountInString(message.Toolset) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", message.Toolset, utf8.RuneCountInString(message.Toolset), 1, true))
+	if message.WireProtocolVersion == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("wire_protocol_version", "message"))
 	}
-	if utf8.RuneCountInString(message.Toolset) > 256 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", message.Toolset, utf8.RuneCountInString(message.Toolset), 256, false))
+	if message.Toolset != nil {
+		if utf8.RuneCountInString(*message.Toolset) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", utf8.RuneCountInString(*message.Toolset), 1, true))
+		}
 	}
-	if utf8.RuneCountInString(message.Tool) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.tool", message.Tool, utf8.RuneCountInString(message.Tool), 1, true))
+	if message.Toolset != nil {
+		if utf8.RuneCountInString(*message.Toolset) > 256 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", utf8.RuneCountInString(*message.Toolset), 256, false))
+		}
 	}
-	if utf8.RuneCountInString(message.Tool) > 256 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.tool", message.Tool, utf8.RuneCountInString(message.Tool), 256, false))
+	if message.Tool != nil {
+		if utf8.RuneCountInString(*message.Tool) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.tool", utf8.RuneCountInString(*message.Tool), 1, true))
+		}
 	}
-	if len(message.PayloadJson) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.payload_json", message.PayloadJson, len(message.PayloadJson), 1, true))
+	if message.Tool != nil {
+		if utf8.RuneCountInString(*message.Tool) > 256 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.tool", utf8.RuneCountInString(*message.Tool), 256, false))
+		}
+	}
+	if message.PayloadJson != nil {
+		if len(message.PayloadJson) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.payload_json", len(message.PayloadJson), 1, true))
+		}
 	}
 	if message.Meta != nil {
 		if err2 := ValidateToolCallMeta(message.Meta); err2 != nil {
 			err = loom.MergeErrors(err, err2)
 		}
 	}
-	if !(message.WireProtocolVersion == 8) {
-		err = loom.MergeErrors(err, loom.InvalidEnumValueError("message.wire_protocol_version", message.WireProtocolVersion, []any{8}))
+	if message.WireProtocolVersion != nil {
+		if !(*message.WireProtocolVersion == 8) {
+			err = loom.MergeErrors(err, loom.InvalidEnumValueError("message.wire_protocol_version", *message.WireProtocolVersion, []any{8}))
+		}
 	}
 	return
 }
 
 // ValidateToolCallMeta runs the validations defined on ToolCallMeta.
 func ValidateToolCallMeta(meta *registrypb.ToolCallMeta) (err error) {
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("meta.run_id", meta.RunId, loomPatternTypes1))
-	if utf8.RuneCountInString(meta.RunId) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("meta.run_id", meta.RunId, utf8.RuneCountInString(meta.RunId), 1, true))
+	if meta.RunId == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("run_id", "meta"))
 	}
-	if utf8.RuneCountInString(meta.RunId) > 256 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("meta.run_id", meta.RunId, utf8.RuneCountInString(meta.RunId), 256, false))
+	if meta.SessionId == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("session_id", "meta"))
 	}
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("meta.session_id", meta.SessionId, loomPatternTypes1))
-	if utf8.RuneCountInString(meta.SessionId) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("meta.session_id", meta.SessionId, utf8.RuneCountInString(meta.SessionId), 1, true))
+	if meta.ToolCallId == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("tool_call_id", "meta"))
 	}
-	if utf8.RuneCountInString(meta.SessionId) > 256 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("meta.session_id", meta.SessionId, utf8.RuneCountInString(meta.SessionId), 256, false))
+	if meta.RunId != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("meta.run_id", *meta.RunId, loomPatternTypes1))
+	}
+	if meta.RunId != nil {
+		if utf8.RuneCountInString(*meta.RunId) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("meta.run_id", utf8.RuneCountInString(*meta.RunId), 1, true))
+		}
+	}
+	if meta.RunId != nil {
+		if utf8.RuneCountInString(*meta.RunId) > 256 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("meta.run_id", utf8.RuneCountInString(*meta.RunId), 256, false))
+		}
+	}
+	if meta.SessionId != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("meta.session_id", *meta.SessionId, loomPatternTypes1))
+	}
+	if meta.SessionId != nil {
+		if utf8.RuneCountInString(*meta.SessionId) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("meta.session_id", utf8.RuneCountInString(*meta.SessionId), 1, true))
+		}
+	}
+	if meta.SessionId != nil {
+		if utf8.RuneCountInString(*meta.SessionId) > 256 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("meta.session_id", utf8.RuneCountInString(*meta.SessionId), 256, false))
+		}
 	}
 	if meta.TurnId != nil {
 		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("meta.turn_id", *meta.TurnId, loomPatternTypes1))
 	}
 	if meta.TurnId != nil {
 		if utf8.RuneCountInString(*meta.TurnId) < 1 {
-			err = loom.MergeErrors(err, loom.InvalidLengthError("meta.turn_id", *meta.TurnId, utf8.RuneCountInString(*meta.TurnId), 1, true))
+			err = loom.MergeErrors(err, loom.InvalidLengthError("meta.turn_id", utf8.RuneCountInString(*meta.TurnId), 1, true))
 		}
 	}
 	if meta.TurnId != nil {
 		if utf8.RuneCountInString(*meta.TurnId) > 256 {
-			err = loom.MergeErrors(err, loom.InvalidLengthError("meta.turn_id", *meta.TurnId, utf8.RuneCountInString(*meta.TurnId), 256, false))
+			err = loom.MergeErrors(err, loom.InvalidLengthError("meta.turn_id", utf8.RuneCountInString(*meta.TurnId), 256, false))
 		}
 	}
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("meta.tool_call_id", meta.ToolCallId, loomPatternTypes1))
-	if utf8.RuneCountInString(meta.ToolCallId) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("meta.tool_call_id", meta.ToolCallId, utf8.RuneCountInString(meta.ToolCallId), 1, true))
+	if meta.ToolCallId != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("meta.tool_call_id", *meta.ToolCallId, loomPatternTypes1))
 	}
-	if utf8.RuneCountInString(meta.ToolCallId) > 256 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("meta.tool_call_id", meta.ToolCallId, utf8.RuneCountInString(meta.ToolCallId), 256, false))
+	if meta.ToolCallId != nil {
+		if utf8.RuneCountInString(*meta.ToolCallId) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("meta.tool_call_id", utf8.RuneCountInString(*meta.ToolCallId), 1, true))
+		}
+	}
+	if meta.ToolCallId != nil {
+		if utf8.RuneCountInString(*meta.ToolCallId) > 256 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("meta.tool_call_id", utf8.RuneCountInString(*meta.ToolCallId), 256, false))
+		}
 	}
 	if meta.ParentToolCallId != nil {
 		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("meta.parent_tool_call_id", *meta.ParentToolCallId, loomPatternTypes1))
 	}
 	if meta.ParentToolCallId != nil {
 		if utf8.RuneCountInString(*meta.ParentToolCallId) < 1 {
-			err = loom.MergeErrors(err, loom.InvalidLengthError("meta.parent_tool_call_id", *meta.ParentToolCallId, utf8.RuneCountInString(*meta.ParentToolCallId), 1, true))
+			err = loom.MergeErrors(err, loom.InvalidLengthError("meta.parent_tool_call_id", utf8.RuneCountInString(*meta.ParentToolCallId), 1, true))
 		}
 	}
 	if meta.ParentToolCallId != nil {
 		if utf8.RuneCountInString(*meta.ParentToolCallId) > 256 {
-			err = loom.MergeErrors(err, loom.InvalidLengthError("meta.parent_tool_call_id", *meta.ParentToolCallId, utf8.RuneCountInString(*meta.ParentToolCallId), 256, false))
+			err = loom.MergeErrors(err, loom.InvalidLengthError("meta.parent_tool_call_id", utf8.RuneCountInString(*meta.ParentToolCallId), 256, false))
 		}
 	}
 	return
@@ -655,32 +865,61 @@ func ValidateToolCallMeta(meta *registrypb.ToolCallMeta) (err error) {
 
 // ValidateRetryToolRequest runs the validations defined on RetryToolRequest.
 func ValidateRetryToolRequest(message *registrypb.RetryToolRequest) (err error) {
+	if message.ExpectedRegistrationToken == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("expected_registration_token", "message"))
+	}
+	if message.Toolset == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("toolset", "message"))
+	}
+	if message.Tool == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("tool", "message"))
+	}
+	if message.PayloadJson == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("payload_json", "message"))
+	}
 	if message.Meta == nil {
 		err = loom.MergeErrors(err, loom.MissingFieldError("meta", "message"))
 	}
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.expected_registration_token", message.ExpectedRegistrationToken, loomPatternTypes3))
-	if utf8.RuneCountInString(message.Toolset) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", message.Toolset, utf8.RuneCountInString(message.Toolset), 1, true))
+	if message.WireProtocolVersion == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("wire_protocol_version", "message"))
 	}
-	if utf8.RuneCountInString(message.Toolset) > 256 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", message.Toolset, utf8.RuneCountInString(message.Toolset), 256, false))
+	if message.ExpectedRegistrationToken != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.expected_registration_token", *message.ExpectedRegistrationToken, loomPatternTypes3))
 	}
-	if utf8.RuneCountInString(message.Tool) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.tool", message.Tool, utf8.RuneCountInString(message.Tool), 1, true))
+	if message.Toolset != nil {
+		if utf8.RuneCountInString(*message.Toolset) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", utf8.RuneCountInString(*message.Toolset), 1, true))
+		}
 	}
-	if utf8.RuneCountInString(message.Tool) > 256 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.tool", message.Tool, utf8.RuneCountInString(message.Tool), 256, false))
+	if message.Toolset != nil {
+		if utf8.RuneCountInString(*message.Toolset) > 256 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", utf8.RuneCountInString(*message.Toolset), 256, false))
+		}
 	}
-	if len(message.PayloadJson) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.payload_json", message.PayloadJson, len(message.PayloadJson), 1, true))
+	if message.Tool != nil {
+		if utf8.RuneCountInString(*message.Tool) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.tool", utf8.RuneCountInString(*message.Tool), 1, true))
+		}
+	}
+	if message.Tool != nil {
+		if utf8.RuneCountInString(*message.Tool) > 256 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.tool", utf8.RuneCountInString(*message.Tool), 256, false))
+		}
+	}
+	if message.PayloadJson != nil {
+		if len(message.PayloadJson) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.payload_json", len(message.PayloadJson), 1, true))
+		}
 	}
 	if message.Meta != nil {
 		if err2 := ValidateToolCallMeta(message.Meta); err2 != nil {
 			err = loom.MergeErrors(err, err2)
 		}
 	}
-	if !(message.WireProtocolVersion == 8) {
-		err = loom.MergeErrors(err, loom.InvalidEnumValueError("message.wire_protocol_version", message.WireProtocolVersion, []any{8}))
+	if message.WireProtocolVersion != nil {
+		if !(*message.WireProtocolVersion == 8) {
+			err = loom.MergeErrors(err, loom.InvalidEnumValueError("message.wire_protocol_version", *message.WireProtocolVersion, []any{8}))
+		}
 	}
 	return
 }
@@ -688,115 +927,300 @@ func ValidateRetryToolRequest(message *registrypb.RetryToolRequest) (err error) 
 // ValidateCompleteToolCallRequest runs the validations defined on
 // CompleteToolCallRequest.
 func ValidateCompleteToolCallRequest(message *registrypb.CompleteToolCallRequest) (err error) {
-	if utf8.RuneCountInString(message.Toolset) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", message.Toolset, utf8.RuneCountInString(message.Toolset), 1, true))
+	if message.Toolset == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("toolset", "message"))
 	}
-	if utf8.RuneCountInString(message.Toolset) > 256 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", message.Toolset, utf8.RuneCountInString(message.Toolset), 256, false))
+	if message.ProviderId == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("provider_id", "message"))
 	}
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_id", message.ProviderId, loomPatternTypes1))
-	if utf8.RuneCountInString(message.ProviderId) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", message.ProviderId, utf8.RuneCountInString(message.ProviderId), 1, true))
+	if message.ProviderIncarnationId == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("provider_incarnation_id", "message"))
 	}
-	if utf8.RuneCountInString(message.ProviderId) > 512 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", message.ProviderId, utf8.RuneCountInString(message.ProviderId), 512, false))
+	if message.RegistrationToken == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("registration_token", "message"))
 	}
-	err = loom.MergeErrors(err, loom.ValidateFormat("message.provider_incarnation_id", message.ProviderIncarnationId, loom.FormatUUID))
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.registration_token", message.RegistrationToken, loomPatternTypes3))
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.tool_use_id", message.ToolUseId, loomPatternTypes4))
-	if len(message.ResultJson) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.result_json", message.ResultJson, len(message.ResultJson), 1, true))
+	if message.ToolUseId == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("tool_use_id", "message"))
 	}
-	if len(message.ResultJson) > 1048576 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.result_json", message.ResultJson, len(message.ResultJson), 1048576, false))
+	if message.ResultJson == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("result_json", "message"))
 	}
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.request_event_id", message.RequestEventId, loomPatternTypes5))
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_registration_token", message.ProviderRegistrationToken, loomPatternTypes3))
+	if message.RequestEventId == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("request_event_id", "message"))
+	}
+	if message.ProviderRegistrationToken == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("provider_registration_token", "message"))
+	}
+	if message.Toolset != nil {
+		if utf8.RuneCountInString(*message.Toolset) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", utf8.RuneCountInString(*message.Toolset), 1, true))
+		}
+	}
+	if message.Toolset != nil {
+		if utf8.RuneCountInString(*message.Toolset) > 256 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", utf8.RuneCountInString(*message.Toolset), 256, false))
+		}
+	}
+	if message.ProviderId != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_id", *message.ProviderId, loomPatternTypes1))
+	}
+	if message.ProviderId != nil {
+		if utf8.RuneCountInString(*message.ProviderId) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", utf8.RuneCountInString(*message.ProviderId), 1, true))
+		}
+	}
+	if message.ProviderId != nil {
+		if utf8.RuneCountInString(*message.ProviderId) > 512 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", utf8.RuneCountInString(*message.ProviderId), 512, false))
+		}
+	}
+	if message.ProviderIncarnationId != nil {
+		err = loom.MergeErrors(err, loom.ValidateFormat("message.provider_incarnation_id", *message.ProviderIncarnationId, loom.FormatUUID))
+	}
+	if message.RegistrationToken != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.registration_token", *message.RegistrationToken, loomPatternTypes3))
+	}
+	if message.ToolUseId != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.tool_use_id", *message.ToolUseId, loomPatternTypes4))
+	}
+	if message.ResultJson != nil {
+		if len(message.ResultJson) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.result_json", len(message.ResultJson), 1, true))
+		}
+		if len(message.ResultJson) > 1048576 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.result_json", len(message.ResultJson), 1048576, false))
+		}
+	}
+	if message.RequestEventId != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.request_event_id", *message.RequestEventId, loomPatternTypes5))
+	}
+	if message.ProviderRegistrationToken != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_registration_token", *message.ProviderRegistrationToken, loomPatternTypes3))
+	}
 	return
 }
 
 // ValidatePublishToolOutputDeltaRequest runs the validations defined on
 // PublishToolOutputDeltaRequest.
 func ValidatePublishToolOutputDeltaRequest(message *registrypb.PublishToolOutputDeltaRequest) (err error) {
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.stream", message.Stream, loomPatternTypes1))
-	if utf8.RuneCountInString(message.Stream) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.stream", message.Stream, utf8.RuneCountInString(message.Stream), 1, true))
+	if message.Stream == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("stream", "message"))
 	}
-	if utf8.RuneCountInString(message.Stream) > 128 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.stream", message.Stream, utf8.RuneCountInString(message.Stream), 128, false))
+	if message.Delta == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("delta", "message"))
 	}
-	if utf8.RuneCountInString(message.Delta) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.delta", message.Delta, utf8.RuneCountInString(message.Delta), 1, true))
+	if message.Toolset == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("toolset", "message"))
 	}
-	if utf8.RuneCountInString(message.Delta) > 65536 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.delta", message.Delta, utf8.RuneCountInString(message.Delta), 65536, false))
+	if message.ProviderId == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("provider_id", "message"))
 	}
-	if utf8.RuneCountInString(message.Toolset) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", message.Toolset, utf8.RuneCountInString(message.Toolset), 1, true))
+	if message.ProviderIncarnationId == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("provider_incarnation_id", "message"))
 	}
-	if utf8.RuneCountInString(message.Toolset) > 256 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", message.Toolset, utf8.RuneCountInString(message.Toolset), 256, false))
+	if message.ProviderRegistrationToken == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("provider_registration_token", "message"))
 	}
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_id", message.ProviderId, loomPatternTypes1))
-	if utf8.RuneCountInString(message.ProviderId) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", message.ProviderId, utf8.RuneCountInString(message.ProviderId), 1, true))
+	if message.CallRegistrationToken == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("call_registration_token", "message"))
 	}
-	if utf8.RuneCountInString(message.ProviderId) > 512 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", message.ProviderId, utf8.RuneCountInString(message.ProviderId), 512, false))
+	if message.ToolUseId == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("tool_use_id", "message"))
 	}
-	err = loom.MergeErrors(err, loom.ValidateFormat("message.provider_incarnation_id", message.ProviderIncarnationId, loom.FormatUUID))
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_registration_token", message.ProviderRegistrationToken, loomPatternTypes3))
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.call_registration_token", message.CallRegistrationToken, loomPatternTypes3))
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.tool_use_id", message.ToolUseId, loomPatternTypes4))
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.request_event_id", message.RequestEventId, loomPatternTypes5))
+	if message.RequestEventId == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("request_event_id", "message"))
+	}
+	if message.Stream != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.stream", *message.Stream, loomPatternTypes1))
+	}
+	if message.Stream != nil {
+		if utf8.RuneCountInString(*message.Stream) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.stream", utf8.RuneCountInString(*message.Stream), 1, true))
+		}
+	}
+	if message.Stream != nil {
+		if utf8.RuneCountInString(*message.Stream) > 128 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.stream", utf8.RuneCountInString(*message.Stream), 128, false))
+		}
+	}
+	if message.Delta != nil {
+		if utf8.RuneCountInString(*message.Delta) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.delta", utf8.RuneCountInString(*message.Delta), 1, true))
+		}
+	}
+	if message.Delta != nil {
+		if utf8.RuneCountInString(*message.Delta) > 65536 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.delta", utf8.RuneCountInString(*message.Delta), 65536, false))
+		}
+	}
+	if message.Toolset != nil {
+		if utf8.RuneCountInString(*message.Toolset) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", utf8.RuneCountInString(*message.Toolset), 1, true))
+		}
+	}
+	if message.Toolset != nil {
+		if utf8.RuneCountInString(*message.Toolset) > 256 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", utf8.RuneCountInString(*message.Toolset), 256, false))
+		}
+	}
+	if message.ProviderId != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_id", *message.ProviderId, loomPatternTypes1))
+	}
+	if message.ProviderId != nil {
+		if utf8.RuneCountInString(*message.ProviderId) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", utf8.RuneCountInString(*message.ProviderId), 1, true))
+		}
+	}
+	if message.ProviderId != nil {
+		if utf8.RuneCountInString(*message.ProviderId) > 512 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", utf8.RuneCountInString(*message.ProviderId), 512, false))
+		}
+	}
+	if message.ProviderIncarnationId != nil {
+		err = loom.MergeErrors(err, loom.ValidateFormat("message.provider_incarnation_id", *message.ProviderIncarnationId, loom.FormatUUID))
+	}
+	if message.ProviderRegistrationToken != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_registration_token", *message.ProviderRegistrationToken, loomPatternTypes3))
+	}
+	if message.CallRegistrationToken != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.call_registration_token", *message.CallRegistrationToken, loomPatternTypes3))
+	}
+	if message.ToolUseId != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.tool_use_id", *message.ToolUseId, loomPatternTypes4))
+	}
+	if message.RequestEventId != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.request_event_id", *message.RequestEventId, loomPatternTypes5))
+	}
 	return
 }
 
 // ValidateReportToolCallOverloadRequest runs the validations defined on
 // ReportToolCallOverloadRequest.
 func ValidateReportToolCallOverloadRequest(message *registrypb.ReportToolCallOverloadRequest) (err error) {
-	if utf8.RuneCountInString(message.Toolset) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", message.Toolset, utf8.RuneCountInString(message.Toolset), 1, true))
+	if message.Toolset == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("toolset", "message"))
 	}
-	if utf8.RuneCountInString(message.Toolset) > 256 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", message.Toolset, utf8.RuneCountInString(message.Toolset), 256, false))
+	if message.ProviderId == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("provider_id", "message"))
 	}
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_id", message.ProviderId, loomPatternTypes1))
-	if utf8.RuneCountInString(message.ProviderId) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", message.ProviderId, utf8.RuneCountInString(message.ProviderId), 1, true))
+	if message.ProviderIncarnationId == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("provider_incarnation_id", "message"))
 	}
-	if utf8.RuneCountInString(message.ProviderId) > 512 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", message.ProviderId, utf8.RuneCountInString(message.ProviderId), 512, false))
+	if message.ProviderRegistrationToken == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("provider_registration_token", "message"))
 	}
-	err = loom.MergeErrors(err, loom.ValidateFormat("message.provider_incarnation_id", message.ProviderIncarnationId, loom.FormatUUID))
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_registration_token", message.ProviderRegistrationToken, loomPatternTypes3))
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.call_registration_token", message.CallRegistrationToken, loomPatternTypes3))
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.tool_use_id", message.ToolUseId, loomPatternTypes4))
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.request_event_id", message.RequestEventId, loomPatternTypes5))
+	if message.CallRegistrationToken == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("call_registration_token", "message"))
+	}
+	if message.ToolUseId == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("tool_use_id", "message"))
+	}
+	if message.RequestEventId == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("request_event_id", "message"))
+	}
+	if message.Toolset != nil {
+		if utf8.RuneCountInString(*message.Toolset) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", utf8.RuneCountInString(*message.Toolset), 1, true))
+		}
+	}
+	if message.Toolset != nil {
+		if utf8.RuneCountInString(*message.Toolset) > 256 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", utf8.RuneCountInString(*message.Toolset), 256, false))
+		}
+	}
+	if message.ProviderId != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_id", *message.ProviderId, loomPatternTypes1))
+	}
+	if message.ProviderId != nil {
+		if utf8.RuneCountInString(*message.ProviderId) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", utf8.RuneCountInString(*message.ProviderId), 1, true))
+		}
+	}
+	if message.ProviderId != nil {
+		if utf8.RuneCountInString(*message.ProviderId) > 512 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", utf8.RuneCountInString(*message.ProviderId), 512, false))
+		}
+	}
+	if message.ProviderIncarnationId != nil {
+		err = loom.MergeErrors(err, loom.ValidateFormat("message.provider_incarnation_id", *message.ProviderIncarnationId, loom.FormatUUID))
+	}
+	if message.ProviderRegistrationToken != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_registration_token", *message.ProviderRegistrationToken, loomPatternTypes3))
+	}
+	if message.CallRegistrationToken != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.call_registration_token", *message.CallRegistrationToken, loomPatternTypes3))
+	}
+	if message.ToolUseId != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.tool_use_id", *message.ToolUseId, loomPatternTypes4))
+	}
+	if message.RequestEventId != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.request_event_id", *message.RequestEventId, loomPatternTypes5))
+	}
 	return
 }
 
 // ValidateClaimToolCallRequest runs the validations defined on
 // ClaimToolCallRequest.
 func ValidateClaimToolCallRequest(message *registrypb.ClaimToolCallRequest) (err error) {
-	if utf8.RuneCountInString(message.Toolset) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", message.Toolset, utf8.RuneCountInString(message.Toolset), 1, true))
+	if message.Toolset == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("toolset", "message"))
 	}
-	if utf8.RuneCountInString(message.Toolset) > 256 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", message.Toolset, utf8.RuneCountInString(message.Toolset), 256, false))
+	if message.ProviderId == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("provider_id", "message"))
 	}
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_id", message.ProviderId, loomPatternTypes1))
-	if utf8.RuneCountInString(message.ProviderId) < 1 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", message.ProviderId, utf8.RuneCountInString(message.ProviderId), 1, true))
+	if message.ProviderIncarnationId == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("provider_incarnation_id", "message"))
 	}
-	if utf8.RuneCountInString(message.ProviderId) > 512 {
-		err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", message.ProviderId, utf8.RuneCountInString(message.ProviderId), 512, false))
+	if message.ProviderRegistrationToken == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("provider_registration_token", "message"))
 	}
-	err = loom.MergeErrors(err, loom.ValidateFormat("message.provider_incarnation_id", message.ProviderIncarnationId, loom.FormatUUID))
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_registration_token", message.ProviderRegistrationToken, loomPatternTypes3))
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.call_registration_token", message.CallRegistrationToken, loomPatternTypes3))
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.tool_use_id", message.ToolUseId, loomPatternTypes4))
-	err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.request_event_id", message.RequestEventId, loomPatternTypes5))
+	if message.CallRegistrationToken == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("call_registration_token", "message"))
+	}
+	if message.ToolUseId == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("tool_use_id", "message"))
+	}
+	if message.RequestEventId == nil {
+		err = loom.MergeErrors(err, loom.MissingFieldError("request_event_id", "message"))
+	}
+	if message.Toolset != nil {
+		if utf8.RuneCountInString(*message.Toolset) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", utf8.RuneCountInString(*message.Toolset), 1, true))
+		}
+	}
+	if message.Toolset != nil {
+		if utf8.RuneCountInString(*message.Toolset) > 256 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.toolset", utf8.RuneCountInString(*message.Toolset), 256, false))
+		}
+	}
+	if message.ProviderId != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_id", *message.ProviderId, loomPatternTypes1))
+	}
+	if message.ProviderId != nil {
+		if utf8.RuneCountInString(*message.ProviderId) < 1 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", utf8.RuneCountInString(*message.ProviderId), 1, true))
+		}
+	}
+	if message.ProviderId != nil {
+		if utf8.RuneCountInString(*message.ProviderId) > 512 {
+			err = loom.MergeErrors(err, loom.InvalidLengthError("message.provider_id", utf8.RuneCountInString(*message.ProviderId), 512, false))
+		}
+	}
+	if message.ProviderIncarnationId != nil {
+		err = loom.MergeErrors(err, loom.ValidateFormat("message.provider_incarnation_id", *message.ProviderIncarnationId, loom.FormatUUID))
+	}
+	if message.ProviderRegistrationToken != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.provider_registration_token", *message.ProviderRegistrationToken, loomPatternTypes3))
+	}
+	if message.CallRegistrationToken != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.call_registration_token", *message.CallRegistrationToken, loomPatternTypes3))
+	}
+	if message.ToolUseId != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.tool_use_id", *message.ToolUseId, loomPatternTypes4))
+	}
+	if message.RequestEventId != nil {
+		err = loom.MergeErrors(err, loom.ValidatePatternCompiled("message.request_event_id", *message.RequestEventId, loomPatternTypes5))
+	}
 	return
 }
 
@@ -804,10 +1228,10 @@ func ValidateClaimToolCallRequest(message *registrypb.ClaimToolCallRequest) (err
 // *registry.ToolCallMeta from a value of type *registrypb.ToolCallMeta.
 func protobufRegistrypbToolCallMetaToRegistryToolCallMeta(v *registrypb.ToolCallMeta) *registry.ToolCallMeta {
 	res := &registry.ToolCallMeta{
-		RunID:            v.RunId,
-		SessionID:        v.SessionId,
+		RunID:            *v.RunId,
+		SessionID:        *v.SessionId,
 		TurnID:           v.TurnId,
-		ToolCallID:       v.ToolCallId,
+		ToolCallID:       *v.ToolCallId,
 		ParentToolCallID: v.ParentToolCallId,
 	}
 

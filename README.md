@@ -39,9 +39,14 @@ the same endpoint must share that key. There is no v1 compatibility shim.
 
 This repo currently targets:
 
-- `github.com/CaliLuke/loom v1.10.0-alpha.3`
+- `github.com/CaliLuke/loom v1.10.0-alpha.5`
 - `github.com/modelcontextprotocol/go-sdk v1.8.1-0.20260922085944-8075fb3cf313`
-- Go `1.27.0` or later
+- Go `1.27.2` or later
+
+The dependency baseline uses current stable releases, including MongoDB `9.0.2`,
+Redis `8.10.2`, the MongoDB Go driver `v2.9.2`, Redis Go client `v9.23.0`,
+and OpenAI Go SDK `v3.74.0`. See [dependency policy](docs/dependencies.md) for
+version verification and the explicit unreleased pins.
 
 The workspace-level `go.work` file centralizes local multi-module overrides for dependencies that must stay in sync across the root module and integration fixtures.
 Use `make update-mcp-go-sdk MCP_GO_SDK_VERSION=vX.Y.Z` when bumping the MCP Go SDK.
@@ -51,7 +56,7 @@ request-summary API awaits a tagged SDK release.
 The standard CLI for generation is:
 
 ```bash
-go install github.com/CaliLuke/loom/cmd/loom@v1.10.0-alpha.3
+go install github.com/CaliLuke/loom/cmd/loom@v1.10.0-alpha.5
 ```
 
 ## Working in this repo

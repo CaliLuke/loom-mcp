@@ -25,10 +25,10 @@ func TestLoomGen_DynamicOnlyPromptCompiles(t *testing.T) {
 
 	goMod := `module example.com/dynamicprompt
 
-go 1.27.0
+go 1.27.2
 
 require (
-	github.com/CaliLuke/loom v1.10.0-alpha.3
+	github.com/CaliLuke/loom v1.10.0-alpha.5
 	github.com/CaliLuke/loom-mcp/v2 v2.0.0
 )
 

@@ -375,9 +375,11 @@ func MarshalProjectedBoundedLookupToolResult(v *ProjectedBoundedLookupToolResult
 	_ = in
 	var out *toolhttp.ProjectedBoundedLookupToolResultTransport
 	out = &toolhttp.ProjectedBoundedLookupToolResultTransport{}
-	out.Hits = make([]string, len(in.Hits))
-	for i, val := range in.Hits {
-		out.Hits[i] = val
+	if in.Hits != nil {
+		out.Hits = make([]string, len(in.Hits))
+		for i, val := range in.Hits {
+			out.Hits[i] = val
+		}
 	}
 	return json.Marshal(out)
 }
