@@ -83,8 +83,11 @@ local shim or bypassed check.
 
 ## 2. Publish and pin the Loom release
 
-Only after the local ladder is green, complete the Loom release using Loom's
-release process. The GitHub Release prerelease state must match the tag: true
+Only after the local ladder is green, commit and push the Loom candidate and
+dispatch `make release SOURCE=<full-loom-commit-sha>` from `../loom`. Follow the
+trusted workflow through completion and verify its exact-source CI evidence.
+The workflow allocates an alpha; stable publication explicitly promotes an
+existing alpha with `make release-promote ALPHA=vX.Y.Z-alpha.N VERSION=vX.Y.Z`. The GitHub Release prerelease state must match the tag: true
 for a hyphenated semantic prerelease and false for a stable tag. Confirm that
 both the tag and GitHub Release exist:
 ```bash

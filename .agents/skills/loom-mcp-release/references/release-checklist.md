@@ -1,18 +1,19 @@
 # loom-mcp Release Checklist
 
-- Clean committed `main`; normal hooks, review, and local gates completed.
-- Published Loom pin selected; required generated output and docs current.
-- Version chosen from actual remote tags/releases; same version for recovery.
-- Run `make release VERSION=<version>` directly on main. The command pushes,
-  waits for exact-commit main CI, and publishes. No release branch or PR.
-- If CI fails, diagnose it and fix or rerun it. If the command is interrupted,
-  rerun with the same version. Never move an existing tag.
-- Verify the remote annotated tag, successful CI on its commit, ancestry on
-  remote main, and non-draft GitHub Release with correct prerelease metadata.
+- Implementation committed and pushed; required review, hooks and local checks passed.
+- Published Loom pin and required generated output/docs current.
+- Select exact remote-main source for alpha, or published eligible alpha for promotion.
+- Dispatch `make release SOURCE=<sha>` or
+  `make release-promote ALPHA=v2.X.Y-alpha.N VERSION=v2.X.Y`.
+- Follow the workflow: successful dispatch alone is not publication.
+- Require the latest exact-source main-push `ci.yml` run, all jobs successful,
+  including Release eligibility. Do not bypass missing or failed evidence.
+- On interruption, retry the same source/alpha. Never move tags or create release commits.
+- Verify annotated remote tag source, non-draft Release, prerelease/latest policy,
+  substantive notes and matching `release-evidence.json`.
 - Report the release URL; Go module proxy visibility can lag.
 
-For release-workflow changes, run `make release-test` and
+For workflow changes, run `make release-test` and
 `make release-model-test TLA2TOOLS_JAR=/absolute/path/to/tla2tools.jar`.
-The latter checks the fixed model and requires counterexamples for the old
-pre-push-CI and non-resumable policies. See `docs/releases.md` for the model's
-bounds and assumptions.
+The model checks selected-source identity and requires an unsafe moving-main
+counterexample. See `internal/release/tla/README.md` for bounds and assumptions.

@@ -54,16 +54,20 @@ as an upstream issue.
 
 ## 3. Publish Loom only after local compatibility is green
 
-From `../loom`, ensure clean `main` exactly matches `origin/main`, prepare
-substantive release notes, and run:
+From `../loom`, commit and push the verified candidate, select its full SHA on
+canonical `origin/main`, and dispatch the immutable-source publisher:
 
 ```bash
-make release VERSION=vX.Y.Z
+make release SOURCE=<full-loom-commit-sha>
 ```
 
-Do not treat Loom as released until the tag and matching non-draft GitHub
-Release exist. Its `isPrerelease` state must be true for a hyphenated semantic
-prerelease tag and false for a stable tag. Confirm both before changing
+The workflow allocates the alpha from the selected source's release train.
+For stable publication, explicitly promote an eligible existing alpha with
+`make release-promote ALPHA=vX.Y.Z-alpha.N VERSION=vX.Y.Z`. Follow the workflow
+and verify its exact-source CI evidence. Do not treat Loom as released until
+the tag and matching non-draft GitHub Release exist. Its `isPrerelease` state
+must be true for a hyphenated semantic prerelease tag and false for a stable tag.
+Confirm both before changing
 loom-mcp's pin:
 
 ```bash
@@ -100,12 +104,13 @@ Inspect the final diff and verify each module resolves the released tag with
 
 ## 5. Release loom-mcp
 
-Only now use `loom-mcp-release` to commit on main and run `make release` directly.
-It pushes main, waits for exact-commit CI, and publishes or resumes the release;
-no loom-mcp release branch or PR is required. Verify `origin/main`, the annotated
-tag, and the release object. Keep remote
-Loom mode enabled throughout this release. Report that Go module proxy visibility
-may lag after publication.
+Only now use `loom-mcp-release`: commit and push the verified compatibility
+change, then dispatch `make release SOURCE=<full-loom-mcp-commit-sha>`. The trusted
+workflow reuses exact-source main-push CI, allocates an alpha, and publishes
+without changing source or main. Stable publication explicitly promotes an
+existing alpha with `make release-promote`. Follow the workflow and verify the
+annotated tag, Release and evidence asset. Keep remote Loom mode enabled. Go
+module proxy visibility may lag publication.
 
 ## Release gates and continued work
 
@@ -119,5 +124,6 @@ may lag after publication.
   Bound investigation to evidence needed for a fix or actionable handoff, rather
   than unrelated rabbit holes. Escalate only when further progress needs
   unavailable access, a user decision, or an action outside the authorized scope.
-- A pushed tag with no GitHub Release: backfill the release object for that tag;
-  do not cut another version.
+- A pushed tag with incomplete publication: retry the same source or alpha
+  through the owning release workflow; do not cut another version or manually
+  bypass its evidence checks.

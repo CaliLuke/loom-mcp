@@ -54,12 +54,15 @@ PROTOC_INSTALL_DIR ?= $(GOPATH)
 
 all: build lint test
 
-.PHONY: release release-test release-model-test
+.PHONY: release release-promote release-test release-model-test
 release:
-	bash ./scripts/release.sh "$(VERSION)"
+	$(GO) run ./internal/cmd/release --mode alpha --source "$$SOURCE" --version "$$VERSION"
+
+release-promote:
+	$(GO) run ./internal/cmd/release --mode promote --alpha "$$ALPHA" --version "$$VERSION"
 
 release-test:
-	bash ./scripts/release_test.sh
+	$(GO) test -race -count=1 ./internal/release ./internal/cmd/release
 
 # TLC is a development-only tool; supply the downloaded tla2tools.jar path.
 release-model-test:

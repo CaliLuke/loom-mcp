@@ -1,82 +1,71 @@
 ---
 name: loom-mcp-release
-description: Prepare, publish, or verify loom-mcp releases directly from main, including safe retries after interrupted publication.
+description: Publish loom-mcp alphas or promote an existing alpha to stable through the CI-verified GitHub workflow.
 ---
 # loom-mcp-release
 
-Release `github.com/CaliLuke/loom-mcp/v2` directly from committed `main`.
-This is primarily a single-maintainer repository. Do not create a release branch
-or PR solely to satisfy the release workflow.
+Use `internal/release` through `.github/workflows/release.yml`. Local commands
+dispatch trusted main; they do not create release commits, push main, or publish
+tags directly. Do not create release-only branches or PRs.
 
-## Publication contract
+## Selection and dispatch
 
-- Use `make release VERSION=v2.MINOR.PATCH` (or a semantic prerelease version).
-  The command pushes committed main, waits for its exact-commit CI push run,
-  then publishes an annotated tag and a non-draft GitHub Release.
-- Start from clean `main`. Never bypass commit or push hooks.
-- Keep remote Loom mode enabled. Use `make loom-remote` before verification
-  when necessary; do not introduce dependency changes merely to publish.
-- Existing tags are immutable recovery checkpoints. Retry the same command
-  and version after interruption, including when main has advanced.
-- Conflicting tags or release metadata are errors. Never move a published tag
-  or force-push main. Do not silently choose a different version to evade a
-  partially published release.
-- Stable releases are latest; semantic prereleases are not latest and have
-  `isPrerelease=true`.
-- A release is complete only when its tag and non-draft GitHub Release exist
-  remotely and its CI-verified commit remains on remote main.
+- Complete implementation review, mandatory hooks and local checks, then commit
+  and push normally. Preserve remote Loom mode and the published Loom pin.
+- Select a full SHA from canonical `origin/main`. Run
+  `make release SOURCE=<sha>` for an alpha. Optional `VERSION=v2.X.Y-alpha.N`
+  asserts allocation; it cannot override the next version or duplicate a source.
+- Daily publication runs at 23:47 America/Los_Angeles using the scheduled run's
+  captured `GITHUB_SHA`. Scheduling can be delayed or dropped. No new source means
+  no new alpha; never fall back to an older green commit.
+- `internal/release/train.json` at the selected source owns the v2 release train.
+  After stable promotion, daily publication waits for a reviewed train update.
+- Promote explicitly with
+  `make release-promote ALPHA=v2.X.Y-alpha.N VERSION=v2.X.Y`. Stable must use the
+  alpha's exact source; preserve the alpha tag and release. Historical alphas
+  without the train marker and CI eligibility gate cannot be promoted.
+- All publication modes share one workflow concurrency group. Keep inputs in
+  environment variables and credentials out of untrusted PR jobs.
 
-## Workflow
+## Evidence and publication
 
-1. Inspect `git status --short --branch`, `make loom-status`, actual remote tags,
-   and `gh release list`. Choose the next unused version for a new release;
-   choose the same version when resuming. Never use web search for tag existence.
-2. Finish authorized code and documentation work, then get the required
-   independent review and commit it on main. Do not invent a release-only
-   code change. Retain the repository's normal local verification requirements.
-3. Regenerate only affected surfaces. For a Loom dependency bump, regenerate
-   registry, quickstart, assistant, progressive-discovery, and agent-feature
-   fixtures. Regenerate the SDK bridge consumer when its compatibility version
-   increments. Never edit generated output by hand.
-4. Review docs and relevant skills when DSL, runtime, codegen, dependency,
-   or release behavior changes. Keep `sdkbridge.CompatibilityVersion` for
-   additive compatible changes; increment it for incompatible generated contracts.
-5. Run required local gates for the change. The complete `make ci` contract
-   includes generation, release-script tests, build, lint, unit/coverage tests,
-   integration fixtures, and Docker tests. `make itest` already includes
-   `make verify-mcp-local`; do not repeat it without a new reason.
-6. Run `make release VERSION=<version>`. Let it push main and wait for CI.
-   Missing or pending CI is handled by the command. Failed/canceled CI needs
-   diagnosis; fix or rerun it, then retry the same release command.
-7. Verify with `git ls-remote --tags origin refs/tags/<version>`,
-   `git ls-remote origin main`, and
-   `gh release view <version> --json tagName,isDraft,isPrerelease,url,publishedAt`.
-   Confirm the tag commit is on remote main. If main advanced, fetch and
-   fast-forward the local checkout when possible; do not reset it.
-8. Report the release URL. Check Go module visibility only when requested;
-   proxy propagation may lag publication.
+Require successful main-push `ci.yml` for the selected SHA, including every job
+and the aggregate Release eligibility job. Inspect the latest run and attempt.
+Missing, skipped, canceled, failed, or wrong-source evidence is not green.
+Pending CI waits up to 45 minutes. Never substitute local tests for hosted CI.
 
-Do not stop after preparation when the user has authorized publication.
-For a preparation-only request, leave a verified, committed candidate and
-state that publication has not been run.
+Keep the normal full verification requirements for code changes. To publish an
+unchanged green source, reuse its CI instead of rerunning local suites or adding
+a version-only commit. CI owns the full `make ci` contract. Regenerate only when
+implementation/design changes require it; never edit generated output by hand.
 
-## Failure handling
+The publisher creates an immutable annotated tag, draft Release, deterministic
+`release-evidence.json`, and substantive notes, then publishes and verifies them.
+Alphas are prereleases and not latest; stable promotions are latest. Notes name
+source changes and migration guidance; do not add routine CI command lists.
 
-- A dirty/behind/diverged new-release checkout fails before tag publication.
-  Reconcile changes without discarding work, then retry.
-- A local tag or a remote tag without a release is resumed automatically.
-  A completed release is verified and returned without duplicate creation.
-- Wrong draft/prerelease metadata requires a deliberate correction; the command
-  does not overwrite it. Inspect the actual release before editing anything.
-- Never compensate for upstream Loom regressions in loom-mcp. Return exact
-  failing scenarios to the owning repository.
-- Branch protection prohibits force pushes and deletion, including for admins.
-  CI is enforced at release publication rather than before main accepts a push.
-  Do not restore a required pre-push check or PR requirement for this workflow.
+## Recovery and completion
 
-## References
+A dispatch is not a completed release. Follow the workflow and verify the remote
+tag source, non-draft Release, correct prerelease state, notes and evidence asset.
+Report the release URL only after those checks pass. Go proxy visibility may lag.
 
-- `docs/releases.md`: user-facing command, recovery, repository policy, and model scope
-- `scripts/release_test.sh`: executable publication regression scenarios
-- `docs/formal/Release.tla`: safety and progress model
-- `references/release-checklist.md`: concise completion checklist
+Retry the same source/alpha after interruption. Reuse existing tags and repair
+incomplete draft publication. Completed matching releases are no-ops. Never move
+published tags, bypass CI, or choose another version to hide a partial release.
+Investigate the actual failed check and continue independent authorized work.
+
+The publisher never changes main. Keep direct normal pushes permitted while
+prohibiting force pushes and branch deletion; do not require a main-push CI check
+before accepting the push that triggers it.
+
+## Maintainer references
+
+- `docs/releases.md`: commands, scheduling, evidence, recovery and limitations.
+- `internal/release`: publisher and executable regression tests.
+- `internal/release/tla/README.md`: model assumptions and reproduction.
+- `references/release-checklist.md`: completion checks.
+
+For publisher changes, run `make release-test` and
+`make release-model-test TLA2TOOLS_JAR=/absolute/path/to/tla2tools.jar`, the required
+repository gates, and independent frozen-diff review before committing.

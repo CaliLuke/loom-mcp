@@ -10,29 +10,26 @@ jar="$(cd "$(dirname "${jar}")" && pwd)/$(basename "${jar}")"
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 work="$(mktemp -d)"
 trap 'rm -rf "${work}"' EXIT
-# Keep TLC trace artifacts out of the source tree, including expected failures.
-cp "${root}"/docs/formal/Release*.tla "${root}"/docs/formal/Release*.cfg "${work}/"
+# Keep TLC traces outside the checkout, including expected counterexamples.
+cp "${root}"/internal/release/tla/Publication.tla "${root}"/internal/release/tla/*.cfg "${work}/"
 cd "${work}"
-for model in Release ReleaseFailures ReleasePrePushCI ReleaseNoResume; do
+for model in Publication Unsafe; do
   result=0
   java -XX:+UseParallelGC -cp "${jar}" tlc2.TLC -workers 1 \
-    -metadir "${work}/states-${model}" -config "${model}.cfg" Release.tla >"${model}.log" 2>&1 || result=$?
-  case "${model}" in
-    Release|ReleaseFailures)
-      if [[ "${result}" != 0 ]]; then
-        cat "${model}.log" >&2
-        exit 1
-      fi
-      grep 'distinct states found' "${model}.log"
-      printf '%s: configured checks passed\n' "${model}"
-      ;;
-    *)
-      if [[ "${result}" != 13 ]] || ! grep -q 'Temporal properties were violated' "${model}.log"; then
-        cat "${model}.log" >&2
-        echo "${model}: expected the old workflow to violate progress" >&2
-        exit 1
-      fi
-      printf '%s: reproduced expected progress failure\n' "${model}"
-      ;;
-  esac
+    -metadir "${work}/states-${model}" -config "${model}.cfg" Publication.tla >"${model}.log" 2>&1 || result=$?
+  if [[ "${model}" == Publication ]]; then
+    if [[ "${result}" != 0 ]]; then
+      cat "${model}.log" >&2
+      exit 1
+    fi
+    grep 'distinct states found' "${model}.log"
+    echo 'Publication: selected-source invariants passed'
+  else
+    if [[ "${result}" != 12 ]] || ! grep -Eq 'Invariant (TestedSource|PinnedSource) is violated' "${model}.log"; then
+      cat "${model}.log" >&2
+      echo 'Unsafe: expected moving-main source counterexample' >&2
+      exit 1
+    fi
+    echo 'Unsafe: reproduced expected moving-main source failure'
+  fi
 done

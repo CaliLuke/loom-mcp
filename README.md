@@ -61,9 +61,10 @@ go install github.com/CaliLuke/loom/cmd/loom@v1.10.0-alpha.5
 
 ## Working in this repo
 
-Commit on `main`, then run `make release VERSION=v2.MINOR.PATCH`. It pushes
-main, waits for CI, and publishes; repeat the same command to resume after an
-interruption. No release branch or PR is needed. See [releases](docs/releases.md).
+Commit and push on `main`, then run `make release SOURCE=<full-commit-sha>`
+to dispatch a CI-verified alpha. Daily alphas use the same publisher. Promote an
+existing alpha without changing its source with `make release-promote`. See
+[releases](docs/releases.md) for inputs, CI evidence, and recovery.
 
 Common commands:
 

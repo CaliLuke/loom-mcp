@@ -67,3 +67,14 @@ jobs:
             docker-cover.out
           if-no-files-found: warn
           retention-days: 14
+
+  release-ready:
+    name: Release eligibility
+    if: always()
+    needs: [verify]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every validation job to succeed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: jq -e 'length > 0 and all(.[]; .result == "success")' <<< "$RESULTS"

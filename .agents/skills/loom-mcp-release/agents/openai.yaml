@@ -1,4 +1,4 @@
 interface:
   display_name: "loom-mcp Release"
-  short_description: "Cut, tag, publish, and verify a loom-mcp release."
-  default_prompt: "Use this skill to take loom-mcp from verified code to a fully published GitHub release, including remote Loom parity, mandatory verification, tag push, GitHub Release creation or backfill, and post-publish checks."
+  short_description: "Publish verified alphas and promote immutable releases."
+  default_prompt: "Use this skill to dispatch and verify a loom-mcp alpha or stable promotion through the trusted GitHub workflow, preserving exact-source CI evidence and immutable tags."
