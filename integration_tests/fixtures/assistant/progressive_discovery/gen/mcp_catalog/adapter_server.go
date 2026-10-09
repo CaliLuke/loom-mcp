@@ -1582,6 +1582,9 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		if len(args) == 0 {
 			args = jsontext.Value("{}")
 		}
+		if err := sdkbridge.ValidateToolArguments(args, string(projected.SpecProjectedLookup.Payload.Schema)); err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", projectedLookupInputRecovery(err, args)))
+		}
 		meta := &agentruntime.ToolCallMeta{}
 		toolResult, err := projected.DispatchProjectedLookupMethod(ctx, meta, args, nil, projected.ProjectedLookupDispatchOptions{Call: func(ctx context.Context, args any) (any, error) {
 			return a.service.ProjectedLookup(ctx, args.(*catalog.ProjectedLookupPayload))

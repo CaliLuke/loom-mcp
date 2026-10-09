@@ -1651,6 +1651,15 @@ func emitProjectedToolCase(g *jen.Group, tool *ToolAdapter) {
 	g.If(jen.Len(jen.Id("args")).Op("==").Lit(0)).Block(
 		jen.Id("args").Op("=").Id("jsontext").Dot("Value").Call(jen.Lit("{}")),
 	)
+	recovery := jen.Lit("Provide valid tool arguments.")
+	if tool.HasPayload {
+		recovery = jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("err"), jen.Id("args"))
+	}
+	g.If(jen.Id("err").Op(":=").Id("sdkbridge").Dot("ValidateToolArguments").Call(
+		jen.Id("args"), jen.String().Call(jen.Id(projected.SpecsPackageName).Dot(projected.SpecName).Dot("Payload").Dot("Schema")),
+	), jen.Id("err").Op("!=").Nil()).Block(
+		jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("err"), jen.Lit("invalid_params"), recovery))),
+	)
 	g.Id("meta").Op(":=").Op("&").Id("agentruntime").Dot("ToolCallMeta").Values()
 	if len(projected.InjectedFields) > 0 {
 		g.List(jen.Id("verifiedMeta"), jen.Id("ok")).Op(":=").Id("mcpruntime").Dot("ProjectedToolCallMetaFromContext").Call(jen.Id("ctx"))

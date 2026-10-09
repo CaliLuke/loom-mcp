@@ -5,6 +5,11 @@ the customization hooks exposed through `SDKServerOptions`, and the runtime
 contract guarantees Loom-MCP makes for context propagation and per-call
 request metadata.
 
+Projected tool calls validate arguments against the generated toolset payload
+schema before invoking the service, through both direct calls and the discovery
+proxy. This enforces the same schema advertised by `tools/list`, including
+unknown-field restrictions. Omitted arguments are validated as an empty object.
+
 ## Migration from native MCP transport
 
 Version `v2.1.0-alpha.5` removes Loom's native MCP JSON-RPC client and server.

@@ -260,6 +260,8 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - Projected MCP tools use generated toolset specs for MCP `ToolInfo` schemas
   and generated `Dispatch<Tool>Method(...)` for execution. Do not duplicate
   `BindTo(...)` transforms in MCP adapters.
+  Validate normalized arguments against that same generated payload schema
+  before dispatch, for both direct calls and the discovery proxy.
 - Registry-routed generated providers publish only explicit Loom error remedy
   safe messages. Unremedied service failures and result-encoding failures use
   `tool execution failed`; never place raw `err.Error()` text in
