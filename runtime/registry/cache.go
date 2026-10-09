@@ -2,6 +2,7 @@ package registry
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"time"
 )
@@ -24,6 +25,7 @@ type RefreshFunc func(ctx context.Context, key string) (*ToolsetSchema, error)
 // MemoryCache is an in-memory cache implementation with TTL support
 // and optional background refresh.
 // Concurrent Set, Delete, and Clear operations supersede in-flight refreshes.
+// Stored and returned schemas have independent ownership, including nested tools.
 type MemoryCache struct {
 	mu                 sync.RWMutex
 	refreshLifecycleMu sync.Mutex
@@ -103,7 +105,7 @@ func (c *MemoryCache) Get(_ context.Context, key string) (*ToolsetSchema, error)
 		}
 	}
 
-	return entry.schema, nil
+	return cloneToolsetSchema(entry.schema), nil
 }
 
 // triggerRefresh sends a key to the refresh channel for background processing.
@@ -133,7 +135,7 @@ func (c *MemoryCache) Set(_ context.Context, key string, schema *ToolsetSchema, 
 	defer c.mu.Unlock()
 
 	c.entries[key] = &cacheEntry{
-		schema:    schema,
+		schema:    cloneToolsetSchema(schema),
 		expiresAt: time.Now().Add(ttl),
 		ttl:       ttl,
 	}
@@ -250,6 +252,27 @@ func (c *MemoryCache) refreshLoop(ctx context.Context) {
 	}
 }
 
+// cloneToolsetSchema copies the complete mutable schema graph at cache boundaries.
+func cloneToolsetSchema(schema *ToolsetSchema) *ToolsetSchema {
+	if schema == nil {
+		return nil
+	}
+	cloned := *schema
+	cloned.Tools = slices.Clone(schema.Tools)
+	for i, tool := range cloned.Tools {
+		if tool == nil {
+			continue
+		}
+		copied := *tool
+		copied.Tags = slices.Clone(tool.Tags)
+		copied.PayloadSchema = slices.Clone(tool.PayloadSchema)
+		copied.ResultSchema = slices.Clone(tool.ResultSchema)
+		copied.SidecarSchema = slices.Clone(tool.SidecarSchema)
+		cloned.Tools[i] = &copied
+	}
+	return &cloned
+}
+
 func (c *MemoryCache) shouldSkipRefresh(refreshed map[string]time.Time, key string) bool {
 	lastRefresh, ok := refreshed[key]
 	return ok && time.Since(lastRefresh) < c.refreshCooldown
@@ -270,7 +293,7 @@ func (c *MemoryCache) storeRefreshedEntry(key string, entry *cacheEntry, schema 
 		return
 	}
 	c.entries[key] = &cacheEntry{
-		schema:    schema,
+		schema:    cloneToolsetSchema(schema),
 		expiresAt: time.Now().Add(entry.ttl),
 		ttl:       entry.ttl,
 	}

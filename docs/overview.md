@@ -539,6 +539,9 @@ tools for the replacement turn.
 `runtime/registry.MemoryCache` supports optional background schema refresh.
 An in-flight refresh cannot overwrite a later `Set` or restore an entry removed
 by `Delete` or `Clear`.
+The cache copies schemas on insertion, refresh, and retrieval. Callers may
+mutate their own tool objects, tags, and schema bytes without changing later
+cache reads.
 
 | Function                     | Purpose                                             |
 | ---------------------------- | --------------------------------------------------- |
