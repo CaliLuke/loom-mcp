@@ -206,14 +206,14 @@ func (e *eng) StartWorkflow(ctx context.Context, req engine.WorkflowStartRequest
 // startWorkflow separates acceptance cancellation from the accepted run lifetime.
 func (e *eng) startWorkflow(acceptanceCtx, workflowParent context.Context, req engine.WorkflowStartRequest) (engine.WorkflowHandle, error) {
 	if err := acceptanceCtx.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", engine.ErrWorkflowStartRejected, err)
 	}
 	def, err := e.lookupWorkflow(req.Workflow)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", engine.ErrWorkflowStartRejected, err)
 	}
 	if err := validateWorkflowStartRequest(req); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", engine.ErrWorkflowStartRejected, err)
 	}
 	runCtx, cancel := workflowRunContext(workflowParent, req.RunTimeout)
 	wctx := e.newWorkflowContext(runCtx, req.ID)
@@ -295,7 +295,7 @@ func (e *eng) reserveWorkflowRun(acceptanceCtx context.Context, id string, h *ha
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if err := acceptanceCtx.Err(); err != nil {
-		return err
+		return fmt.Errorf("%w: %w", engine.ErrWorkflowStartRejected, err)
 	}
 	if e.statuses == nil {
 		e.statuses = make(map[string]engine.RunStatus)

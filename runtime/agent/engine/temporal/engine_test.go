@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	workflowservice "go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
@@ -252,6 +253,7 @@ type testWorkflowService struct {
 
 	mu       sync.Mutex
 	startReq *workflowservice.StartWorkflowExecutionRequest
+	startErr error
 }
 
 func (s *testWorkflowService) GetSystemInfo(context.Context, *workflowservice.GetSystemInfoRequest) (*workflowservice.GetSystemInfoResponse, error) {
@@ -265,7 +267,11 @@ func (s *testWorkflowService) GetSystemInfo(context.Context, *workflowservice.Ge
 func (s *testWorkflowService) StartWorkflowExecution(ctx context.Context, req *workflowservice.StartWorkflowExecutionRequest) (*workflowservice.StartWorkflowExecutionResponse, error) {
 	s.mu.Lock()
 	s.startReq = req
+	startErr := s.startErr
 	s.mu.Unlock()
+	if startErr != nil {
+		return nil, serviceerror.ToStatus(startErr).Err()
+	}
 	return &workflowservice.StartWorkflowExecutionResponse{RunId: "temporal-run-123"}, nil
 }
 

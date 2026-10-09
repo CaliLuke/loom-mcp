@@ -361,6 +361,21 @@ Start ──► PlanStart ──► Tool Calls? ──► Execute Tools ──�
 ### Workflow Contracts
 
 - **SessionID is required.** `Start` fails fast if `SessionID` is empty.
+- **Run IDs have one owner.** Sessionful starts reserve their run ID before asking
+  the engine to start. Another start cannot overwrite an existing run's metadata.
+  A failed admission retains that ID; submit a new run ID for a new attempt.
+- **Start errors preserve acceptance uncertainty.** An engine error matching
+  `engine.ErrWorkflowStartRejected` settles only the owning pending reservation
+  as failed. Unknown transport outcomes, unclassified deadlines, and
+  existing-execution conflicts remain pending for reconciliation. Custom engines should wrap this
+  sentinel only when they can prove rejection before acceptance.
+- **Custom session stores must implement atomic admission.** Implement
+  `ReserveRun` and conditional `RejectRun` alongside existing metadata operations.
+- **Child admission is replay-safe.** A child reservation and its parent link
+  commit atomically before submission. An immediate, definite start rejection
+  fails that pending child while retaining its link. A failure after acceptance
+  follows ordinary run completion. Temporal asynchronous child-start failures
+  are not classified as immediate rejections.
 - **Agents must register before runs start.** Registration closes after the first
   run to maintain worker determinism.
 - **Tool results flow through codecs.** The runtime decodes results centrally and

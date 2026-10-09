@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
-	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
@@ -19,7 +18,7 @@ func defaultAgentToolExecute(rt *Runtime, cfg AgentToolConfig) func(context.Cont
 		if wfCtx == nil {
 			return nil, fmt.Errorf("workflow context not found")
 		}
-		if cfg.Route.ID == "" {
+		if cfg.Route.ID == "" || cfg.Route.WorkflowName == "" || cfg.Route.DefaultTaskQueue == "" {
 			return nil, fmt.Errorf("agent tool route is required")
 		}
 		parentRun := &run.Context{
@@ -35,22 +34,10 @@ func defaultAgentToolExecute(rt *Runtime, cfg AgentToolConfig) func(context.Cont
 			}
 			return Executed(result), nil
 		}
-		if err := rt.publishHook(
-			wfCtx.Context(),
-			hooks.NewChildRunLinkedEvent(
-				call.RunID,
-				call.AgentID,
-				call.SessionID,
-				call.Name,
-				call.ToolCallID,
-				nestedRunCtx.RunID,
-				cfg.AgentID,
-			),
-			"",
-		); err != nil {
+		if err := rt.admitAgentChild(wfCtx, *call, nestedRunCtx, cfg.AgentID); err != nil {
 			return nil, err
 		}
-		outPtr, err := rt.ExecuteAgentChildWithRoute(wfCtx, cfg.Route, messages, nestedRunCtx)
+		outPtr, err := rt.executeReservedAgentChild(wfCtx, cfg.Route, messages, nestedRunCtx)
 		if err != nil {
 			return nil, fmt.Errorf("execute agent: %w", err)
 		}

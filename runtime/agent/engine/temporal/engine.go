@@ -7,10 +7,12 @@ package temporal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	temporalotel "go.temporal.io/sdk/contrib/opentelemetry"
@@ -406,11 +408,11 @@ func (e *Engine) RegisterExecuteToolActivity(_ context.Context, name string, opt
 //nolint:unparam // engine.Engine requires returning a workflow handle.
 func (e *Engine) StartWorkflow(ctx context.Context, req engine.WorkflowStartRequest) (engine.WorkflowHandle, error) {
 	if req.Workflow == "" {
-		return nil, fmt.Errorf("temporal engine: workflow name is required")
+		return nil, definiteStartRejection(fmt.Errorf("temporal engine: workflow name is required"))
 	}
 	def, err := e.workflowDefinition(req.Workflow)
 	if err != nil {
-		return nil, err
+		return nil, definiteStartRejection(err)
 	}
 
 	queue := req.TaskQueue
@@ -431,7 +433,7 @@ func (e *Engine) StartWorkflow(ctx context.Context, req engine.WorkflowStartRequ
 	if len(req.SearchAttributes) > 0 {
 		typedSearchAttributes, err := convertSearchAttributes(req.SearchAttributes)
 		if err != nil {
-			return nil, err
+			return nil, definiteStartRejection(err)
 		}
 		opts.TypedSearchAttributes = typedSearchAttributes
 	}
@@ -446,7 +448,7 @@ func (e *Engine) StartWorkflow(ctx context.Context, req engine.WorkflowStartRequ
 
 	run, err := e.client.ExecuteWorkflow(ctx, opts, def.Name, req.Input)
 	if err != nil {
-		return nil, err
+		return nil, classifyTemporalStartError(err)
 	}
 
 	return &workflowHandle{
@@ -569,6 +571,23 @@ func classifyTemporalCancellation(err error) error {
 		)
 	}
 	return err
+}
+
+// classifyTemporalStartError marks only direct, definitive server rejections.
+func classifyTemporalStartError(err error) error {
+	var invalidArgument *serviceerror.InvalidArgument
+	if errors.As(err, &invalidArgument) && cancellation.Exact(err, invalidArgument) {
+		return definiteStartRejection(err)
+	}
+	var namespaceNotFound *serviceerror.NamespaceNotFound
+	if errors.As(err, &namespaceNotFound) && cancellation.Exact(err, namespaceNotFound) {
+		return definiteStartRejection(err)
+	}
+	return err
+}
+
+func definiteStartRejection(err error) error {
+	return fmt.Errorf("%w: %w", engine.ErrWorkflowStartRejected, err)
 }
 
 // applyActivityClassDefaults overlays Temporal-owned queue-wait and liveness

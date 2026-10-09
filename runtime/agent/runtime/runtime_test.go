@@ -1093,6 +1093,7 @@ func TestAgentAsToolNestedUpdates(t *testing.T) {
 
 	// Parent run requests a single agent-tool invocation
 	parentInput := &RunInput{AgentID: "parent.agent", RunID: "run-parent", SessionID: "session-1", TurnID: "turn-1"}
+	seedParentRun(t, rt.SessionStore, parentInput.RunID, parentInput.SessionID)
 	base := &planner.PlanInput{RunContext: run.Context{RunID: parentInput.RunID, SessionID: parentInput.SessionID, TurnID: parentInput.TurnID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: parentInput.AgentID, runID: parentInput.RunID})}
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: tools.Ident("invoke")}}}
 

@@ -108,6 +108,75 @@ func TestUpsertAndLoad(t *testing.T) {
 	require.True(t, updated.UpdatedAt.After(updated.StartedAt) || updated.UpdatedAt.Equal(updated.StartedAt))
 }
 
+func TestReserveRunOwnershipAndReject(t *testing.T) {
+	client := mustNewTestClientWithSessions(t, testSessionID)
+	ctx := context.Background()
+	run := session.RunMeta{
+		RunID: "reserved", AgentID: testAgentChat, SessionID: testSessionID,
+		Status: session.RunStatusPending, Metadata: map[string]any{"source": "first"},
+	}
+	require.NoError(t, client.ReserveRun(ctx, run, "attempt-a", ""))
+	replay := run
+	replay.Metadata = map[string]any{"source": "replay"}
+	require.NoError(t, client.ReserveRun(ctx, replay, "attempt-a", ""))
+	require.ErrorIs(t, client.ReserveRun(ctx, run, "attempt-b", ""), session.ErrRunAlreadyExists)
+	require.ErrorIs(t, client.ReserveRun(ctx, session.RunMeta{
+		RunID: "reserved", AgentID: "other-agent", SessionID: testSessionID, Status: session.RunStatusPending,
+	}, "attempt-a", ""), session.ErrRunAlreadyExists)
+	stored, err := client.LoadRun(ctx, run.RunID)
+	require.NoError(t, err)
+	require.Equal(t, "first", stored.Metadata["source"])
+
+	require.NoError(t, client.RejectRun(ctx, run.RunID, "wrong-attempt"))
+	stored, err = client.LoadRun(ctx, run.RunID)
+	require.NoError(t, err)
+	require.Equal(t, session.RunStatusPending, stored.Status)
+	require.NoError(t, client.RejectRun(ctx, run.RunID, "attempt-a"))
+	stored, err = client.LoadRun(ctx, run.RunID)
+	require.NoError(t, err)
+	require.Equal(t, session.RunStatusFailed, stored.Status)
+	require.Equal(t, "first", stored.Metadata["source"])
+	require.NoError(t, client.RejectRun(ctx, run.RunID, "attempt-a"))
+
+	// Owner metadata is immutable across ordinary upserts.
+	run.Status = session.RunStatusRunning
+	require.NoError(t, client.UpsertRun(ctx, run))
+	require.NoError(t, client.RejectRun(ctx, run.RunID, "attempt-a"))
+	stored, err = client.LoadRun(ctx, run.RunID)
+	require.NoError(t, err)
+	require.Equal(t, session.RunStatusFailed, stored.Status)
+	running := run
+	running.RunID = "reserved-running"
+	running.Status = session.RunStatusPending
+	require.NoError(t, client.ReserveRun(ctx, running, "attempt-running", ""))
+	running.Status = session.RunStatusRunning
+	require.NoError(t, client.UpsertRun(ctx, running))
+	require.NoError(t, client.RejectRun(ctx, running.RunID, "attempt-running"))
+	stored, err = client.LoadRun(ctx, running.RunID)
+	require.NoError(t, err)
+	require.Equal(t, session.RunStatusRunning, stored.Status)
+	require.NoError(t, client.RejectRun(ctx, "missing-run", "attempt-running"))
+}
+
+func TestLinkChildReplayAfterSessionEnd(t *testing.T) {
+	client := mustNewTestClientWithSessions(t, testSessionID)
+	ctx := context.Background()
+	require.NoError(t, client.UpsertRun(ctx, session.RunMeta{
+		RunID: "parent", AgentID: testAgentChat, SessionID: testSessionID, Status: session.RunStatusRunning,
+	}))
+	child := session.RunMeta{RunID: "child", AgentID: testChildAgent, SessionID: testSessionID, Status: session.RunStatusPending}
+	require.NoError(t, client.ReserveRun(ctx, child, "attempt-child", "parent"))
+	_, err := client.EndSession(ctx, testSessionID, time.Now().UTC())
+	require.NoError(t, err)
+	require.NoError(t, client.LinkChildRun(ctx, "parent", child))
+	require.ErrorIs(t, client.LinkChildRun(ctx, "parent", session.RunMeta{
+		RunID: "new-child", AgentID: testChildAgent, SessionID: testSessionID, Status: session.RunStatusPending,
+	}), session.ErrSessionEnded)
+	parent, err := client.LoadRun(ctx, "parent")
+	require.NoError(t, err)
+	require.Equal(t, []string{"child"}, parent.ChildRunIDs)
+}
+
 func TestRunDocumentMetadataBSONRoundTripPreservesGoContainerTypes(t *testing.T) {
 	doc := runDocument{
 		RunID: "run-1",
@@ -411,6 +480,20 @@ func (c *fakeRunsCollection) FindOne(ctx context.Context, filter any, opts ...op
 	return fakeSingleResult{doc: &copyDoc}
 }
 
+func (c *fakeRunsCollection) InsertOne(ctx context.Context, document any, opts ...options.Lister[options.InsertOneOptions]) (*mongodriver.InsertOneResult, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	doc, ok := document.(runDocument)
+	if !ok {
+		return nil, errors.New("unsupported run document")
+	}
+	if _, exists := c.docs[doc.RunID]; exists {
+		return nil, mongodriver.WriteException{WriteErrors: []mongodriver.WriteError{{Code: 11000, Message: "duplicate run id"}}}
+	}
+	c.docs[doc.RunID] = doc
+	return &mongodriver.InsertOneResult{InsertedID: doc.RunID}, nil
+}
+
 func (c *fakeRunsCollection) Find(ctx context.Context, filter any, opts ...options.Lister[options.FindOptions]) (cursor, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -447,12 +530,21 @@ func (c *fakeRunsCollection) UpdateOne(ctx context.Context, filter any, update a
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	runID := filter.(bson.M)["run_id"].(string)
+	filterDoc := filter.(bson.M)
 	updateOpts, err := applyTestOptions[options.UpdateOneOptions](opts...)
 	if err != nil {
 		return nil, err
 	}
 	upsert := updateOpts.Upsert != nil && *updateOpts.Upsert
 	doc, ok := c.docs[runID]
+	if ok {
+		if expected, has := filterDoc["start_attempt_id"].(string); has && doc.StartAttemptID != expected {
+			return &mongodriver.UpdateResult{MatchedCount: 0}, nil
+		}
+		if expected, has := filterDoc["status"].(session.RunStatus); has && doc.Status != expected {
+			return &mongodriver.UpdateResult{MatchedCount: 0}, nil
+		}
+	}
 	if !ok {
 		if !upsert {
 			return &mongodriver.UpdateResult{MatchedCount: 0}, nil
@@ -579,6 +671,20 @@ func (c *fakeSessionsCollection) FindOne(ctx context.Context, filter any, opts .
 	}
 	copyDoc := doc
 	return fakeSingleResult{doc: &copyDoc}
+}
+
+func (c *fakeSessionsCollection) InsertOne(ctx context.Context, document any, opts ...options.Lister[options.InsertOneOptions]) (*mongodriver.InsertOneResult, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	doc, ok := document.(sessionDocument)
+	if !ok {
+		return nil, errors.New("unsupported session document")
+	}
+	if _, exists := c.docs[doc.SessionID]; exists {
+		return nil, mongodriver.WriteException{WriteErrors: []mongodriver.WriteError{{Code: 11000, Message: "duplicate session id"}}}
+	}
+	c.docs[doc.SessionID] = doc
+	return &mongodriver.InsertOneResult{InsertedID: doc.SessionID}, nil
 }
 
 func (c *fakeSessionsCollection) Find(ctx context.Context, filter any, opts ...options.Lister[options.FindOptions]) (cursor, error) {

@@ -177,6 +177,13 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   `NewWorkflowContext`. Immediately defer the returned release function. The
   release function removes the completed workflow from the process-local context
   registry.
+- Sessionful starts use owned `session.Store.ReserveRun` admission, not UpsertRun.
+  Only an error matching `engine.ErrWorkflowStartRejected` may trigger
+  `RejectRun`, which conditionally fails the owning still-pending reservation.
+  Unknown start outcomes and existing engine execution conflicts stay pending.
+  Child reservations atomically link their parent before submission and reuse a
+  workflow-replay-stable attempt identity. Replaying a committed link remains a
+  no-op after session end; new links still require an active session.
 - Run status is monotonic once terminal. The first committed `completed`,
   `failed`, or `canceled` status remains authoritative; later session-store
   updates may enrich metadata but must not reopen or replace that outcome.

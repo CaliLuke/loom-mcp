@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"maps"
+	"slices"
 	"sync"
 	"time"
 
@@ -20,17 +21,24 @@ type (
 	// Store is an in-memory implementation of session.Store.
 	// It is safe for concurrent use.
 	Store struct {
-		mu       sync.RWMutex
-		sessions map[string]session.Session
-		runs     map[string]session.RunMeta
+		mu            sync.RWMutex
+		sessions      map[string]session.Session
+		runs          map[string]session.RunMeta
+		startAttempts map[string]runStartAttempt
+	}
+
+	runStartAttempt struct {
+		id          string
+		parentRunID string
 	}
 )
 
 // New returns an empty Store.
 func New() *Store {
 	return &Store{
-		sessions: make(map[string]session.Session),
-		runs:     make(map[string]session.RunMeta),
+		sessions:      make(map[string]session.Session),
+		runs:          make(map[string]session.RunMeta),
+		startAttempts: make(map[string]runStartAttempt),
 	}
 }
 
@@ -160,6 +168,101 @@ func (s *Store) UpsertRun(ctx context.Context, run session.RunMeta) error {
 	return nil
 }
 
+// ReserveRun implements session.Store.
+func (s *Store) ReserveRun(ctx context.Context, run session.RunMeta, attemptID, parentRunID string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := session.ValidateRunReservation(run, attemptID); err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.reserveRunLocked(run, attemptID, parentRunID)
+}
+
+// reserveRunLocked creates a reservation and optional parent link while s.mu is held.
+func (s *Store) reserveRunLocked(run session.RunMeta, attemptID, parentRunID string) error {
+	if _, exists := s.runs[run.RunID]; exists {
+		owner := s.startAttempts[run.RunID]
+		existing := s.runs[run.RunID]
+		if owner.id == attemptID && owner.parentRunID == parentRunID &&
+			existing.AgentID == run.AgentID && existing.SessionID == run.SessionID {
+			return nil
+		}
+		return session.ErrRunAlreadyExists
+	}
+	owner, ok := s.sessions[run.SessionID]
+	if !ok {
+		return session.ErrSessionNotFound
+	}
+	if owner.Status == session.StatusEnded {
+		return session.ErrSessionEnded
+	}
+	var parent session.RunMeta
+	if parentRunID != "" {
+		var err error
+		parent, err = s.loadReservationParentLocked(parentRunID, run.SessionID)
+		if err != nil {
+			return err
+		}
+	}
+
+	s.persistRunReservationLocked(run, attemptID, parentRunID, parent)
+	return nil
+}
+
+// loadReservationParentLocked validates the parent identity while s.mu is held.
+func (s *Store) loadReservationParentLocked(parentRunID, sessionID string) (session.RunMeta, error) {
+	parent, ok := s.runs[parentRunID]
+	if !ok {
+		return session.RunMeta{}, session.ErrRunNotFound
+	}
+	if parent.SessionID != sessionID {
+		return session.RunMeta{}, session.ErrRunSessionMismatch
+	}
+	return parent, nil
+}
+
+// persistRunReservationLocked writes the new run and optional link while s.mu is held.
+func (s *Store) persistRunReservationLocked(run session.RunMeta, attemptID, parentRunID string, parent session.RunMeta) {
+	now := time.Now().UTC()
+	if run.StartedAt.IsZero() {
+		run.StartedAt = now
+	}
+	run.UpdatedAt = now
+	run.ChildRunIDs = nil
+	s.runs[run.RunID] = cloneRunMeta(run)
+	s.startAttempts[run.RunID] = runStartAttempt{id: attemptID, parentRunID: parentRunID}
+	if parentRunID != "" {
+		parent.UpdatedAt = now
+		parent.ChildRunIDs = appendUniqueRunID(parent.ChildRunIDs, run.RunID)
+		s.runs[parentRunID] = cloneRunMeta(parent)
+	}
+}
+
+// RejectRun implements session.Store.
+func (s *Store) RejectRun(ctx context.Context, runID, attemptID string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if runID == "" || attemptID == "" {
+		return errors.New("run id and run start attempt id are required")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	run, exists := s.runs[runID]
+	if !exists || s.startAttempts[runID].id != attemptID || run.Status != session.RunStatusPending {
+		return nil
+	}
+	run.Status = session.RunStatusFailed
+	run.UpdatedAt = time.Now().UTC()
+	s.runs[runID] = cloneRunMeta(run)
+	return nil
+}
+
 // LinkChildRun implements session.Store.
 //
 // Linking is idempotent: the child run ID is appended to the parent's
@@ -175,7 +278,11 @@ func (s *Store) LinkChildRun(ctx context.Context, parentRunID string, child sess
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.linkChildRunLocked(parentRunID, child)
+}
 
+// linkChildRunLocked commits a new child link while s.mu is held.
+func (s *Store) linkChildRunLocked(parentRunID string, child session.RunMeta) error {
 	parent, ok := s.runs[parentRunID]
 	if !ok {
 		return session.ErrRunNotFound
@@ -183,20 +290,37 @@ func (s *Store) LinkChildRun(ctx context.Context, parentRunID string, child sess
 	if parent.SessionID != child.SessionID {
 		return session.ErrRunSessionMismatch
 	}
-	owner, sessionExists := s.sessions[parent.SessionID]
-	if !sessionExists {
+	existingChild, childExists := s.runs[child.RunID]
+	if childExists && existingChild.SessionID != parent.SessionID {
+		return session.ErrRunSessionMismatch
+	}
+	if childExists && slices.Contains(parent.ChildRunIDs, child.RunID) {
+		return nil
+	}
+	if err := s.requireActiveSessionLocked(parent.SessionID); err != nil {
+		return err
+	}
+
+	s.persistChildRunLinkLocked(parent, child, existingChild, childExists)
+	return nil
+}
+
+// requireActiveSessionLocked rejects new run admission after session end.
+func (s *Store) requireActiveSessionLocked(sessionID string) error {
+	owner, exists := s.sessions[sessionID]
+	if !exists {
 		return session.ErrSessionNotFound
 	}
 	if owner.Status == session.StatusEnded {
 		return session.ErrSessionEnded
 	}
+	return nil
+}
 
+// persistChildRunLinkLocked stores the child and parent link while s.mu is held.
+func (s *Store) persistChildRunLinkLocked(parent, child, existingChild session.RunMeta, childExists bool) {
 	now := time.Now().UTC()
-	existingChild, childExists := s.runs[child.RunID]
 	if childExists {
-		if existingChild.SessionID != parent.SessionID {
-			return session.ErrRunSessionMismatch
-		}
 		existingChild.UpdatedAt = now
 		s.runs[child.RunID] = cloneRunMeta(existingChild)
 	} else {
@@ -212,8 +336,7 @@ func (s *Store) LinkChildRun(ctx context.Context, parentRunID string, child sess
 
 	parent.UpdatedAt = now
 	parent.ChildRunIDs = appendUniqueRunID(parent.ChildRunIDs, child.RunID)
-	s.runs[parentRunID] = cloneRunMeta(parent)
-	return nil
+	s.runs[parent.RunID] = cloneRunMeta(parent)
 }
 
 // LoadRun implements session.Store.

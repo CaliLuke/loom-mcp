@@ -42,6 +42,16 @@ func (s *Store) UpsertRun(ctx context.Context, run session.RunMeta) error {
 	return s.client.UpsertRun(ctx, run)
 }
 
+// ReserveRun implements session.Store.
+func (s *Store) ReserveRun(ctx context.Context, run session.RunMeta, attemptID, parentRunID string) error {
+	return s.client.ReserveRun(ctx, run, attemptID, parentRunID)
+}
+
+// RejectRun implements session.Store.
+func (s *Store) RejectRun(ctx context.Context, runID, attemptID string) error {
+	return s.client.RejectRun(ctx, runID, attemptID)
+}
+
 // LinkChildRun implements session.Store.
 func (s *Store) LinkChildRun(ctx context.Context, parentRunID string, child session.RunMeta) error {
 	return s.client.LinkChildRun(ctx, parentRunID, child)

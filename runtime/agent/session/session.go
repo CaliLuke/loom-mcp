@@ -90,6 +90,16 @@ type (
 		// Returns ErrSessionNotFound, ErrSessionEnded, or ErrRunSessionImmutable
 		// when those ownership invariants are violated.
 		UpsertRun(ctx context.Context, run RunMeta) error
+		// ReserveRun creates pending metadata for one start attempt. A repeated
+		// reservation by the same attempt, run agent, session, and parent is
+		// idempotent and preserves stored state; another owner or identity for the
+		// same run ID receives ErrRunAlreadyExists. When parentRunID is non-empty,
+		// child creation and parent linkage are atomic. New reservations require an
+		// active session.
+		ReserveRun(ctx context.Context, run RunMeta, attemptID, parentRunID string) error
+		// RejectRun marks a still-pending run failed only when attemptID owns its
+		// reservation. Missing, differently owned, or non-pending runs are unchanged.
+		RejectRun(ctx context.Context, runID, attemptID string) error
 		// LinkChildRun links a child run to a parent run atomically.
 		//
 		// Contract:
@@ -97,6 +107,8 @@ type (
 		// - The parent run must already exist, otherwise ErrRunNotFound is returned.
 		// - Parent and child runs must belong to the same session.
 		// - Child linkage is idempotent (duplicate links are ignored).
+		// - Replaying an already committed link is a no-op after session end;
+		//   creating a child or committing a new link requires an active session.
 		// - The implementation must ensure no observer can observe a linked child ID
 		//   without a corresponding child run record.
 		LinkChildRun(ctx context.Context, parentRunID string, child RunMeta) error
@@ -121,7 +133,7 @@ const (
 	// StatusEnded indicates the session is terminal and must not accept new runs.
 	StatusEnded SessionStatus = "ended"
 
-	// RunStatusPending indicates the run has been accepted but not started yet.
+	// RunStatusPending indicates a run is admitted for submission or awaiting execution.
 	RunStatusPending RunStatus = "pending"
 	// RunStatusRunning indicates the run is actively executing.
 	RunStatusRunning RunStatus = "running"
@@ -156,6 +168,8 @@ var (
 	ErrRunSessionMismatch = errors.New("parent and child runs must belong to the same session")
 	// ErrRunSessionImmutable indicates an existing run was assigned to a different session.
 	ErrRunSessionImmutable = errors.New("run session id is immutable")
+	// ErrRunAlreadyExists indicates a run ID is already reserved by another attempt.
+	ErrRunAlreadyExists = errors.New("run already exists")
 )
 
 // IsTerminalRunStatus reports whether status permanently closes a run.
@@ -182,6 +196,25 @@ func ValidateChildRunLink(parentRunID string, child RunMeta) error {
 		return ErrChildSessionIDRequired
 	case child.Status == "":
 		return ErrChildStatusRequired
+	default:
+		return nil
+	}
+}
+
+// ValidateRunReservation validates the identity and initial state for a run
+// start reservation.
+func ValidateRunReservation(run RunMeta, attemptID string) error {
+	switch {
+	case run.RunID == "":
+		return errors.New("run id is required")
+	case run.AgentID == "":
+		return errors.New("agent id is required")
+	case run.SessionID == "":
+		return errors.New("session id is required")
+	case attemptID == "":
+		return errors.New("run start attempt id is required")
+	case run.Status != RunStatusPending:
+		return errors.New("reserved run status must be pending")
 	default:
 		return nil
 	}

@@ -5,137 +5,74 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-
-	mockmongo "github.com/CaliLuke/loom-mcp/v2/features/session/mongo/clients/mongo/mocks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
+	sessioninmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/session/inmem"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+type inMemorySessionClient struct {
+	*sessioninmem.Store
+}
+
+func (c *inMemorySessionClient) Name() string {
+	return "test-session-client"
+}
+
+func (c *inMemorySessionClient) Ping(context.Context) error {
+	return nil
+}
 
 func TestNewStoreRequiresClient(t *testing.T) {
 	_, err := NewStore(nil)
 	require.EqualError(t, err, "client is required")
 }
 
-func TestCreateSessionDelegatesToClient(t *testing.T) {
-	mockClient := mockmongo.NewClient(t)
-	now := time.Now().UTC()
-	expected := session.Session{
-		ID:        "sess-1",
-		Status:    session.StatusActive,
-		CreatedAt: now,
-		EndedAt:   nil,
-	}
-	mockClient.AddCreateSession(func(ctx context.Context, id string, createdAt time.Time) (session.Session, error) {
-		require.Equal(t, "sess-1", id)
-		require.Equal(t, now, createdAt)
-		return expected, nil
-	})
-	store, err := NewStore(mockClient)
+func TestStoreSessionLifecycle(t *testing.T) {
+	client := &inMemorySessionClient{Store: sessioninmem.New()}
+	store, err := NewStore(client)
 	require.NoError(t, err)
-
-	sess, err := store.CreateSession(context.Background(), "sess-1", now)
+	ctx := t.Context()
+	now := time.Unix(1, 0).UTC()
+	created, err := store.CreateSession(ctx, "session", now)
 	require.NoError(t, err)
-	require.Equal(t, expected, sess)
-	require.False(t, mockClient.HasMore())
+	assert.Equal(t, session.StatusActive, created.Status)
+	assert.Equal(t, now, created.CreatedAt)
+	loaded, err := store.LoadSession(ctx, "session")
+	require.NoError(t, err)
+	assert.Equal(t, created, loaded)
+	end := now.Add(time.Hour)
+	ended, err := store.EndSession(ctx, "session", end)
+	require.NoError(t, err)
+	assert.Equal(t, session.StatusEnded, ended.Status)
+	require.NotNil(t, ended.EndedAt)
+	assert.Equal(t, end, *ended.EndedAt)
+	_, err = store.LoadSession(ctx, "missing")
+	assert.ErrorIs(t, err, session.ErrSessionNotFound)
 }
 
-func TestLoadSessionDelegatesToClient(t *testing.T) {
-	mockClient := mockmongo.NewClient(t)
-	now := time.Now().UTC()
-	expected := session.Session{
-		ID:        "sess-1",
-		Status:    session.StatusActive,
-		CreatedAt: now,
-	}
-	mockClient.AddLoadSession(func(ctx context.Context, id string) (session.Session, error) {
-		require.Equal(t, "sess-1", id)
-		return expected, nil
-	})
-	store, err := NewStore(mockClient)
+func TestStoreRunAdmissionAndLinking(t *testing.T) {
+	client := &inMemorySessionClient{Store: sessioninmem.New()}
+	store, err := NewStore(client)
 	require.NoError(t, err)
-
-	actual, err := store.LoadSession(context.Background(), "sess-1")
+	ctx := t.Context()
+	_, err = store.CreateSession(ctx, "session", time.Unix(1, 0))
 	require.NoError(t, err)
-	require.Equal(t, expected, actual)
-	require.False(t, mockClient.HasMore())
-}
-
-func TestEndSessionDelegatesToClient(t *testing.T) {
-	mockClient := mockmongo.NewClient(t)
-	now := time.Now().UTC()
-	end := now.Add(time.Minute)
-	expected := session.Session{
-		ID:        "sess-1",
-		Status:    session.StatusEnded,
-		CreatedAt: now,
-		EndedAt:   &end,
-	}
-	mockClient.AddEndSession(func(ctx context.Context, id string, endedAt time.Time) (session.Session, error) {
-		require.Equal(t, "sess-1", id)
-		require.Equal(t, end, endedAt)
-		return expected, nil
-	})
-	store, err := NewStore(mockClient)
+	parent := session.RunMeta{RunID: "parent", AgentID: "agent", SessionID: "session", Status: session.RunStatusRunning}
+	require.NoError(t, store.UpsertRun(ctx, parent))
+	child := session.RunMeta{RunID: "child", AgentID: "child-agent", SessionID: "session", Status: session.RunStatusPending}
+	require.NoError(t, store.ReserveRun(ctx, child, "attempt", "parent"))
+	require.NoError(t, store.LinkChildRun(ctx, parent.RunID, child))
+	loadedParent, err := store.LoadRun(ctx, parent.RunID)
 	require.NoError(t, err)
-
-	actual, err := store.EndSession(context.Background(), "sess-1", end)
+	assert.Equal(t, []string{child.RunID}, loadedParent.ChildRunIDs)
+	pending, err := store.ListRunsBySession(ctx, "session", []session.RunStatus{session.RunStatusPending})
 	require.NoError(t, err)
-	require.Equal(t, expected, actual)
-	require.False(t, mockClient.HasMore())
-}
-
-func TestUpsertRunDelegatesToClient(t *testing.T) {
-	mockClient := mockmongo.NewClient(t)
-	run := session.RunMeta{
-		RunID:     "run-1",
-		AgentID:   "agent",
-		SessionID: "sess-1",
-		Status:    session.RunStatusRunning,
-	}
-	mockClient.AddUpsertRun(func(ctx context.Context, r session.RunMeta) error {
-		require.Equal(t, run, r)
-		return nil
-	})
-	store, err := NewStore(mockClient)
+	require.Len(t, pending, 1)
+	assert.Equal(t, child.RunID, pending[0].RunID)
+	require.NoError(t, store.RejectRun(ctx, child.RunID, "attempt"))
+	stored, err := store.LoadRun(ctx, child.RunID)
 	require.NoError(t, err)
-
-	require.NoError(t, store.UpsertRun(context.Background(), run))
-	require.False(t, mockClient.HasMore())
-}
-
-func TestLoadRunDelegatesToClient(t *testing.T) {
-	mockClient := mockmongo.NewClient(t)
-	expected := session.RunMeta{RunID: "run-1", AgentID: "agent", SessionID: "sess-1"}
-	mockClient.AddLoadRun(func(ctx context.Context, runID string) (session.RunMeta, error) {
-		require.Equal(t, "run-1", runID)
-		return expected, nil
-	})
-	store, err := NewStore(mockClient)
-	require.NoError(t, err)
-
-	actual, err := store.LoadRun(context.Background(), "run-1")
-	require.NoError(t, err)
-	require.Equal(t, expected, actual)
-	require.False(t, mockClient.HasMore())
-}
-
-func TestListRunsBySessionDelegatesToClient(t *testing.T) {
-	mockClient := mockmongo.NewClient(t)
-	expected := []session.RunMeta{
-		{RunID: "run-1", AgentID: "agent", SessionID: "sess-1", Status: session.RunStatusRunning},
-		{RunID: "run-2", AgentID: "agent", SessionID: "sess-1", Status: session.RunStatusPending},
-	}
-	statuses := []session.RunStatus{session.RunStatusRunning, session.RunStatusPending}
-	mockClient.AddListRunsBySession(func(ctx context.Context, sessionID string, st []session.RunStatus) ([]session.RunMeta, error) {
-		require.Equal(t, "sess-1", sessionID)
-		require.Equal(t, statuses, st)
-		return expected, nil
-	})
-	store, err := NewStore(mockClient)
-	require.NoError(t, err)
-
-	actual, err := store.ListRunsBySession(context.Background(), "sess-1", statuses)
-	require.NoError(t, err)
-	require.Equal(t, expected, actual)
-	require.False(t, mockClient.HasMore())
+	assert.Equal(t, session.RunStatusFailed, stored.Status)
+	assert.ErrorIs(t, store.ReserveRun(ctx, child, "other", "parent"), session.ErrRunAlreadyExists)
 }

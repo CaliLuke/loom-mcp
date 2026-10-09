@@ -38,6 +38,14 @@ func (r *Runtime) ExecuteAgentChildWithRoute(
 	if route.ID == "" || route.WorkflowName == "" || route.DefaultTaskQueue == "" {
 		return nil, fmt.Errorf("child route is incomplete")
 	}
+	if err := r.reserveChildRun(wfCtx, nestedRunCtx, string(route.ID)); err != nil {
+		return nil, err
+	}
+	return r.executeReservedAgentChild(wfCtx, route, messages, nestedRunCtx)
+}
+
+// executeReservedAgentChild submits an already admitted child and awaits its result.
+func (r *Runtime) executeReservedAgentChild(wfCtx engine.WorkflowContext, route AgentRoute, messages []*model.Message, nestedRunCtx run.Context) (*RunOutput, error) {
 	input := RunInput{
 		AgentID:          route.ID,
 		RunID:            nestedRunCtx.RunID,
@@ -58,7 +66,7 @@ func (r *Runtime) ExecuteAgentChildWithRoute(
 		Input:     &input,
 	})
 	if err != nil {
-		return nil, err
+		return nil, r.rejectChildStart(wfCtx, nestedRunCtx, err)
 	}
 	out, err := handle.Get(wfCtx.Context())
 	if err != nil {
@@ -139,12 +147,13 @@ func (r *Runtime) startRunOn(ctx context.Context, input *RunInput, workflowName,
 	if err := validateWorkflowStartRequest(req, input.SessionID, requireSession); err != nil {
 		return nil, err
 	}
-	if err := r.recordPendingRun(ctx, input, requireSession); err != nil {
+	attemptID, err := r.recordPendingRun(ctx, input, requireSession)
+	if err != nil {
 		return nil, err
 	}
 	handle, err := r.Engine.StartWorkflow(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrWorkflowStartFailed, err)
+		return nil, fmt.Errorf("%w: %w", ErrWorkflowStartFailed, r.rejectRunStart(ctx, input.RunID, attemptID, err))
 	}
 	if r.RunEventStore != nil {
 		observed := newObservedWorkflowHandle(r, input, handle)
@@ -221,12 +230,13 @@ func validateWorkflowStartRequest(req engine.WorkflowStartRequest, sessionID str
 	return nil
 }
 
-func (r *Runtime) recordPendingRun(ctx context.Context, input *RunInput, requireSession bool) error {
+func (r *Runtime) recordPendingRun(ctx context.Context, input *RunInput, requireSession bool) (string, error) {
 	if !requireSession {
-		return nil
+		return "", nil
 	}
+	attemptID := generateRunID("start")
 	now := time.Now().UTC()
-	return r.SessionStore.UpsertRun(ctx, session.RunMeta{
+	err := r.SessionStore.ReserveRun(ctx, session.RunMeta{
 		AgentID:   string(input.AgentID),
 		RunID:     input.RunID,
 		SessionID: input.SessionID,
@@ -235,7 +245,8 @@ func (r *Runtime) recordPendingRun(ctx context.Context, input *RunInput, require
 		UpdatedAt: now,
 		Labels:    cloneLabels(input.Labels),
 		Metadata:  cloneMetadata(input.Metadata),
-	})
+	}, attemptID, "")
+	return attemptID, err
 }
 
 // CancelRun requests cancellation of the workflow identified by runID.

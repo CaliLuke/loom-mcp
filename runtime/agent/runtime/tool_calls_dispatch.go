@@ -210,17 +210,17 @@ func (e *toolBatchExec) dispatchInlineAgentToolCall(wfCtx engine.WorkflowContext
 	if err != nil {
 		return e.recordInlineAgentRequestFailure(ctx, b, call, err)
 	}
-	if err := e.publishChildRunLinked(ctx, call, nestedRunCtx.RunID, ts.AgentTool.AgentID); err != nil {
-		return err
-	}
 	route := ts.AgentTool.Route
 	if route.ID == "" || route.WorkflowName == "" || route.DefaultTaskQueue == "" {
 		return fmt.Errorf("agent tool route is incomplete for %s", call.Name)
 	}
+	if err := e.r.admitAgentChild(wfCtx, call, nestedRunCtx, ts.AgentTool.AgentID); err != nil {
+		return err
+	}
 	input := buildInlineAgentRunInput(route.ID, nestedRunCtx, messages)
 	handle, err := startInlineAgentChildWorkflow(wfCtx, ctx, route, &input)
 	if err != nil {
-		return fmt.Errorf("failed to start agent child workflow for %s: %w", call.Name, err)
+		return fmt.Errorf("failed to start agent child workflow for %s: %w", call.Name, e.r.rejectChildStart(wfCtx, nestedRunCtx, err))
 	}
 	b.childFutures = append(b.childFutures, agentChildFutureInfo{
 		handle:    handle,
@@ -244,10 +244,6 @@ func (e *toolBatchExec) recordInlineAgentRequestFailure(ctx context.Context, b *
 	b.inlineByID[call.ToolCallID] = Executed(tr)
 	e.recordDiscoveredToolCall(b, call.ToolCallID)
 	return nil
-}
-
-func (e *toolBatchExec) publishChildRunLinked(ctx context.Context, call planner.ToolRequest, nestedRunID string, agentID agent.Ident) error {
-	return e.r.publishHook(ctx, hooks.NewChildRunLinkedEvent(call.RunID, call.AgentID, call.SessionID, call.Name, call.ToolCallID, nestedRunID, agentID), "")
 }
 
 func buildInlineAgentRunInput(agentID agent.Ident, nestedRunCtx run.Context, messages []*model.Message) RunInput {

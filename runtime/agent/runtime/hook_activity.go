@@ -39,6 +39,9 @@ func (r *Runtime) hookActivity(ctx context.Context, input *HookActivityInput) er
 	stopHeartbeat := startActivityHeartbeat(ctx)
 	defer stopHeartbeat()
 
+	if input != nil && (input.Type == reserveRunCommand || input.Type == rejectRunCommand) {
+		return r.runAdmissionActivity(ctx, input)
+	}
 	evt, payload, err := r.decodeHookActivityEvent(ctx, input)
 	if err != nil {
 		return err

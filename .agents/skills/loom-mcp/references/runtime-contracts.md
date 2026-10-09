@@ -406,6 +406,18 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 
 ## Event Authority And Reliability
 
+- Sessionful starts reserve a run ID with a unique admission owner before engine
+  submission. `session.Store.ReserveRun` is idempotent only for that owner and
+  immutable run identity. `RejectRun` changes only its still-pending record to
+  failed; it never removes records or changes a running or terminal run.
+- Engines wrap `engine.ErrWorkflowStartRejected` only for proven rejection before
+  acceptance. Unknown transport outcomes and existing-execution conflicts must
+  not carry that marker. Runtime cleanup preserves the original error and any
+  persistence failure. Child admission uses a replay-stable owner and commits its
+  parent link atomically before submission; immediate definite rejection settles
+  that reservation. Asynchronous Temporal child-start outcomes remain outside
+  that classification.
+
 - Hook activity payloads use JSON v2 and
   `encoding/json.FormatDurationAsNano(true)`. Duration-bearing per-run policy
   fields cross the workflow/activity boundary as integer nanoseconds while

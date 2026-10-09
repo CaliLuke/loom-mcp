@@ -1,11 +1,10 @@
 // Package mongo hosts the MongoDB client used by the session store.
 package mongo
 
-//go:generate cmg gen .
-
 import (
 	"context"
 	"errors"
+	"slices"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -28,6 +27,7 @@ const (
 	fieldChildRunIDs          = "child_run_ids"
 	fieldRunID                = "run_id"
 	fieldSessionID            = "session_id"
+	fieldStartAttemptID       = "start_attempt_id"
 	fieldStatus               = "status"
 	fieldUpdatedAt            = "updated_at"
 	mongoSetOperator          = "$set"
@@ -42,6 +42,8 @@ type Client interface {
 	EndSession(ctx context.Context, sessionID string, endedAt time.Time) (session.Session, error)
 
 	UpsertRun(ctx context.Context, run session.RunMeta) error
+	ReserveRun(ctx context.Context, run session.RunMeta, attemptID, parentRunID string) error
+	RejectRun(ctx context.Context, runID, attemptID string) error
 	LinkChildRun(ctx context.Context, parentRunID string, child session.RunMeta) error
 	LoadRun(ctx context.Context, runID string) (session.RunMeta, error)
 	ListRunsBySession(ctx context.Context, sessionID string, statuses []session.RunStatus) ([]session.RunMeta, error)
@@ -216,6 +218,46 @@ func (c *client) UpsertRun(ctx context.Context, run session.RunMeta) error {
 	return err
 }
 
+// ReserveRun creates pending run metadata owned by one start attempt.
+func (c *client) ReserveRun(ctx context.Context, run session.RunMeta, attemptID, parentRunID string) error {
+	if err := session.ValidateRunReservation(run, attemptID); err != nil {
+		return err
+	}
+	if c.mongo == nil {
+		return c.reserveRun(ctx, run, attemptID, parentRunID)
+	}
+	sessionCtx, err := c.mongo.StartSession()
+	if err != nil {
+		return err
+	}
+	defer sessionCtx.EndSession(ctx)
+	_, err = sessionCtx.WithTransaction(ctx, func(txCtx context.Context) (any, error) {
+		return nil, c.reserveRun(txCtx, run, attemptID, parentRunID)
+	})
+	if errors.Is(err, session.ErrRunAlreadyExists) {
+		existing, loadErr := c.loadRunDocument(ctx, run.RunID)
+		if loadErr == nil && existing.StartAttemptID == attemptID && existing.StartParentRunID == parentRunID &&
+			existing.SessionID == run.SessionID && existing.AgentID == run.AgentID {
+			return nil
+		}
+	}
+	return err
+}
+
+// RejectRun transitions only the pending reservation owned by attemptID.
+func (c *client) RejectRun(ctx context.Context, runID, attemptID string) error {
+	if runID == "" || attemptID == "" {
+		return errors.New("run id and run start attempt id are required")
+	}
+	ctx, cancel := c.withTimeout(ctx)
+	defer cancel()
+	_, err := c.runs.UpdateOne(ctx,
+		bson.M{fieldRunID: runID, fieldStartAttemptID: attemptID, fieldStatus: session.RunStatusPending},
+		bson.M{mongoSetOperator: bson.M{fieldStatus: session.RunStatusFailed, fieldUpdatedAt: time.Now().UTC()}},
+	)
+	return err
+}
+
 // upsertRun applies one validated run mutation in the caller-owned transaction.
 func (c *client) upsertRun(ctx context.Context, run session.RunMeta) error {
 	existing, err := c.LoadRun(ctx, run.RunID)
@@ -264,6 +306,79 @@ func (c *client) upsertRun(ctx context.Context, run session.RunMeta) error {
 	return err
 }
 
+// reserveRun creates one pending run and optionally links it to its parent in
+// the caller-owned transaction.
+func (c *client) reserveRun(ctx context.Context, run session.RunMeta, attemptID, parentRunID string) error {
+	if alreadyReserved, err := c.checkReservationOwner(ctx, run, attemptID, parentRunID); err != nil {
+		return err
+	} else if alreadyReserved {
+		return nil
+	}
+	if err := c.admitRun(ctx, run.SessionID); err != nil {
+		return err
+	}
+	if err := c.validateReservationParent(ctx, run, parentRunID); err != nil {
+		return err
+	}
+	return c.persistRunReservation(ctx, run, attemptID, parentRunID)
+}
+
+// checkReservationOwner distinguishes an idempotent replay from a run ID conflict.
+func (c *client) checkReservationOwner(ctx context.Context, run session.RunMeta, attemptID, parentRunID string) (bool, error) {
+	existing, err := c.loadRunDocument(ctx, run.RunID)
+	if errors.Is(err, session.ErrRunNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if existing.StartAttemptID == attemptID && existing.StartParentRunID == parentRunID &&
+		existing.SessionID == run.SessionID && existing.AgentID == run.AgentID {
+		return true, nil
+	}
+	return false, session.ErrRunAlreadyExists
+}
+
+// validateReservationParent ensures a reserved child shares its parent's session.
+func (c *client) validateReservationParent(ctx context.Context, run session.RunMeta, parentRunID string) error {
+	if parentRunID == "" {
+		return nil
+	}
+	parent, err := c.loadRunDocument(ctx, parentRunID)
+	if err != nil {
+		return err
+	}
+	if parent.SessionID != run.SessionID {
+		return session.ErrRunSessionMismatch
+	}
+	return nil
+}
+
+// persistRunReservation inserts the reservation and optional parent link in the current transaction.
+func (c *client) persistRunReservation(ctx context.Context, run session.RunMeta, attemptID, parentRunID string) error {
+	now := time.Now().UTC()
+	if run.StartedAt.IsZero() {
+		run.StartedAt = now
+	}
+	run.UpdatedAt = now
+	run.ChildRunIDs = nil
+	doc := fromRunMeta(run)
+	doc.StartAttemptID = attemptID
+	doc.StartParentRunID = parentRunID
+	ctx, cancel := c.withTimeout(ctx)
+	defer cancel()
+	if _, err := c.runs.InsertOne(ctx, doc); err != nil {
+		if mongodriver.IsDuplicateKeyError(err) {
+			return session.ErrRunAlreadyExists
+		}
+		return err
+	}
+	if parentRunID != "" {
+		return c.addChildRunLink(ctx, parentRunID, run.RunID)
+	}
+	return nil
+}
+
 // LinkChildRun links a child run to a parent run atomically.
 func (c *client) LinkChildRun(ctx context.Context, parentRunID string, child session.RunMeta) error {
 	if err := session.ValidateChildRunLink(parentRunID, child); err != nil {
@@ -300,9 +415,6 @@ func (c *client) linkChildRun(ctx context.Context, parentRunID string, child ses
 	if parent.SessionID != child.SessionID {
 		return session.ErrRunSessionMismatch
 	}
-	if err := c.admitRun(ctx, parent.SessionID); err != nil {
-		return err
-	}
 
 	existingChild, err := c.LoadRun(ctx, child.RunID)
 	switch {
@@ -310,10 +422,19 @@ func (c *client) linkChildRun(ctx context.Context, parentRunID string, child ses
 		if existingChild.SessionID != parent.SessionID {
 			return session.ErrRunSessionMismatch
 		}
+		if slices.Contains(parent.ChildRunIDs, child.RunID) {
+			return nil
+		}
+		if err := c.admitRun(ctx, parent.SessionID); err != nil {
+			return err
+		}
 		if err := c.upsertRun(ctx, existingChild); err != nil {
 			return err
 		}
 	case errors.Is(err, session.ErrRunNotFound):
+		if err := c.admitRun(ctx, parent.SessionID); err != nil {
+			return err
+		}
 		if err := c.upsertRun(ctx, child); err != nil {
 			return err
 		}
@@ -374,17 +495,25 @@ func (c *client) LoadRun(ctx context.Context, runID string) (session.RunMeta, er
 	if runID == "" {
 		return session.RunMeta{}, errors.New("run id is required")
 	}
+	doc, err := c.loadRunDocument(ctx, runID)
+	if err != nil {
+		return session.RunMeta{}, err
+	}
+	return doc.toRunMeta(), nil
+}
+
+func (c *client) loadRunDocument(ctx context.Context, runID string) (runDocument, error) {
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
 	filter := bson.M{fieldRunID: runID}
 	var doc runDocument
 	if err := c.runs.FindOne(ctx, filter).Decode(&doc); err != nil {
 		if errors.Is(err, mongodriver.ErrNoDocuments) {
-			return session.RunMeta{}, session.ErrRunNotFound
+			return runDocument{}, session.ErrRunNotFound
 		}
-		return session.RunMeta{}, err
+		return runDocument{}, err
 	}
-	return doc.toRunMeta(), nil
+	return doc, nil
 }
 
 func (c *client) ListRunsBySession(ctx context.Context, sessionID string, statuses []session.RunStatus) ([]session.RunMeta, error) {
@@ -423,16 +552,18 @@ func (c *client) withTimeout(ctx context.Context) (context.Context, context.Canc
 }
 
 type runDocument struct {
-	RunID       string             `bson:"run_id"`
-	AgentID     string             `bson:"agent_id"`
-	SessionID   string             `bson:"session_id,omitempty"`
-	Status      session.RunStatus  `bson:"status"`
-	StartedAt   time.Time          `bson:"started_at"`
-	UpdatedAt   time.Time          `bson:"updated_at"`
-	Labels      map[string]string  `bson:"labels,omitempty"`
-	PromptRefs  []prompt.PromptRef `bson:"prompt_refs,omitempty"`
-	ChildRunIDs []string           `bson:"child_run_ids,omitempty"`
-	Metadata    map[string]any     `bson:"metadata,omitempty"`
+	RunID            string             `bson:"run_id"`
+	AgentID          string             `bson:"agent_id"`
+	SessionID        string             `bson:"session_id,omitempty"`
+	Status           session.RunStatus  `bson:"status"`
+	StartedAt        time.Time          `bson:"started_at"`
+	UpdatedAt        time.Time          `bson:"updated_at"`
+	Labels           map[string]string  `bson:"labels,omitempty"`
+	PromptRefs       []prompt.PromptRef `bson:"prompt_refs,omitempty"`
+	ChildRunIDs      []string           `bson:"child_run_ids,omitempty"`
+	Metadata         map[string]any     `bson:"metadata,omitempty"`
+	StartAttemptID   string             `bson:"start_attempt_id,omitempty"`
+	StartParentRunID string             `bson:"start_parent_run_id,omitempty"`
 }
 
 type sessionDocument struct {
@@ -615,6 +746,7 @@ func createSessionTimestamps(createdAt time.Time) (time.Time, time.Time) {
 type collection interface {
 	clientinfra.FindOneCollection
 	clientinfra.FindCollection
+	clientinfra.InsertOneCollection
 	clientinfra.UpdateOneCollection
 	clientinfra.IndexedCollection
 }

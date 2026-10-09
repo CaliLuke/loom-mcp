@@ -96,6 +96,8 @@ var (
 	ErrWorkflowNotFound = errors.New("workflow not found")
 	// ErrWorkflowCompleted indicates that a workflow exists but no longer accepts signals.
 	ErrWorkflowCompleted = errors.New("workflow completed")
+	// ErrWorkflowStartRejected indicates that a workflow start was definitely rejected before acceptance.
+	ErrWorkflowStartRejected = errors.New("workflow start rejected before acceptance")
 )
 
 type (
@@ -121,8 +123,9 @@ type (
 
 		// StartWorkflow initiates a new workflow execution and returns a handle for
 		// interacting with it. The workflow ID in req must be unique for the engine
-		// instance. Returns an error if the workflow name is not registered, the ID
-		// conflicts with a running workflow, or if scheduling fails.
+		// instance. Errors may describe a definite rejection or an uncertain outcome;
+		// only errors matching ErrWorkflowStartRejected prove that this invocation was
+		// not accepted. Duplicate IDs and transport errors must not match that sentinel.
 		StartWorkflow(ctx context.Context, req WorkflowStartRequest) (WorkflowHandle, error)
 
 		// QueryRunStatus returns the current lifecycle status for the workflow
