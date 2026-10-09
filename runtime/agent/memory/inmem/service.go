@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/CaliLuke/loom-mcp/v2/internal/structured"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/memory"
 )
 
@@ -320,12 +321,5 @@ func cloneStringMap(in map[string]string) map[string]string {
 }
 
 func cloneAnyMap(in map[string]any) map[string]any {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make(map[string]any, len(in))
-	for key, value := range in {
-		out[key] = value
-	}
-	return out
+	return structured.Clone(in)
 }

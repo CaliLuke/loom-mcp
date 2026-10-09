@@ -69,6 +69,10 @@ Run-log failure is not silently converted into a successful event publication. T
 
 Applications provide `memory.ScopeResolver` so namespace, user identity, and visibility are runtime-owned. Model tool payloads must not choose tenant/user scope or expose raw source references and storage metadata.
 
+In-memory memory entries and session runs copy acyclic JSON-shaped metadata
+on input and output, including nested string-keyed maps, slices, and byte
+slices. Treat opaque Go values as immutable; cyclic object graphs are unsupported.
+
 Generated `FromMemory(MemoryLongTerm(), ...)` registration passes the runtime memory service and resolver. The model-facing tool exposes bounded search inputs/results only.
 
 ## Planner preload

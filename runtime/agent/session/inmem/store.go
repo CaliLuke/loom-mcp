@@ -7,9 +7,11 @@ package inmem
 import (
 	"context"
 	"errors"
+	"maps"
 	"sync"
 	"time"
 
+	"github.com/CaliLuke/loom-mcp/v2/internal/structured"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/prompt"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
 )
@@ -274,12 +276,7 @@ func cloneSession(in session.Session) session.Session {
 
 func cloneRunMeta(in session.RunMeta) session.RunMeta {
 	out := in
-	if len(in.Labels) > 0 {
-		out.Labels = make(map[string]string, len(in.Labels))
-		for k, v := range in.Labels {
-			out.Labels[k] = v
-		}
-	}
+	out.Labels = maps.Clone(in.Labels)
 	if len(in.PromptRefs) > 0 {
 		out.PromptRefs = make([]prompt.PromptRef, len(in.PromptRefs))
 		copy(out.PromptRefs, in.PromptRefs)
@@ -288,12 +285,7 @@ func cloneRunMeta(in session.RunMeta) session.RunMeta {
 		out.ChildRunIDs = make([]string, len(in.ChildRunIDs))
 		copy(out.ChildRunIDs, in.ChildRunIDs)
 	}
-	if len(in.Metadata) > 0 {
-		out.Metadata = make(map[string]any, len(in.Metadata))
-		for k, v := range in.Metadata {
-			out.Metadata[k] = v
-		}
-	}
+	out.Metadata = structured.Clone(in.Metadata)
 	return out
 }
 

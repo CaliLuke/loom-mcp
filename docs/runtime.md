@@ -1638,6 +1638,12 @@ Mongo run admission and child linking serialize with session termination: they
 either commit before termination or reject the ended session. Existing run
 metadata can still be updated after its session ends.
 
+The in-memory session store and long-term memory service copy metadata on
+input and output. Supported mutable metadata is acyclic JSON-shaped data:
+string-keyed maps, nested slices, byte slices, and scalar values. Opaque Go
+values must be treated as immutable; cyclic object graphs are unsupported.
+Empty session label maps are copied too.
+
 `ToolCallArgsDelta` is intentionally excluded from the durable run event log and
 hook bus because it is a high-volume, best-effort UX signal. The finalized tool
 call remains canonical. `transcript.BuildMessagesFromEvents` consumes
