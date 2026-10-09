@@ -112,6 +112,7 @@ type ollamaChatResponse struct {
 
 const (
 	defaultResponseHeaderTimeout = 30 * time.Second
+	maxChatResponseBytes         = 16 << 20
 	toolExecutionFailed          = "tool execution failed"
 )
 
@@ -275,7 +276,14 @@ func (c *Client) doJSON(ctx context.Context, chatReq ollamaChatRequest, out *oll
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		return ollamaHTTPStatusError("ollama chat", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
-	if err := json.UnmarshalRead(resp.Body, out); err != nil {
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxChatResponseBytes+1))
+	if err != nil {
+		return fmt.Errorf("ollama chat: read response: %w", err)
+	}
+	if len(body) > maxChatResponseBytes {
+		return fmt.Errorf("ollama chat: response exceeds %d bytes", maxChatResponseBytes)
+	}
+	if err := json.Unmarshal(body, out); err != nil {
 		return fmt.Errorf("ollama chat: decode response: %w", err)
 	}
 	if err := ollamaProviderError(out.Error); err != nil {

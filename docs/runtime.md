@@ -2307,6 +2307,10 @@ An explicit `model.Request.Model` value has highest priority. If `Model` is
 empty, `ModelClass` selects `HighModel` or `SmallModel`. `DefaultModel` applies
 if a class-specific model is not configured.
 
+Successful non-streaming Ollama response bodies are limited to 16 MiB before
+JSON decoding, including for chunked responses without a content length.
+Oversized responses fail without returning a partial model response.
+
 Create a local Ollama chat client through the runtime helper. Ollama uses the
 `/api/chat` endpoint and supports text, images, streaming text, function tools,
 native thinking output, and schema-backed structured output for models that
