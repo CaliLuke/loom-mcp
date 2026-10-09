@@ -156,7 +156,11 @@ func newDefaultHTTPClient(timeout time.Duration) *http.Client {
 	if timeout == 0 {
 		timeout = defaultResponseHeaderTimeout
 	}
-	transport := http.DefaultTransport.(*http.Transport).Clone()
+	base, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return &http.Client{Transport: http.DefaultTransport}
+	}
+	transport := base.Clone()
 	transport.ResponseHeaderTimeout = timeout
 	return &http.Client{Transport: transport}
 }

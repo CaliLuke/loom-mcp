@@ -81,7 +81,11 @@ func mcpHTTPClient(httpClient *http.Client) *http.Client {
 	if httpClient != nil {
 		return httpClient
 	}
-	transport := http.DefaultTransport.(*http.Transport).Clone()
+	base, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return &http.Client{Transport: http.DefaultTransport}
+	}
+	transport := base.Clone()
 	transport.DialContext = (&net.Dialer{
 		Timeout:   defaultMCPHTTPDialTimeout,
 		KeepAlive: defaultMCPHTTPKeepAlive,

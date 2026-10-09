@@ -2857,6 +2857,11 @@ defer caller.Close()
 
 ### HTTPCaller
 
+MCP HTTP/SSE callers and Ollama preserve a custom `http.DefaultTransport` when
+constructing their default clients. Phase timeout tuning applies only when the
+default is a standard `*http.Transport`; a custom transport owns its timeouts.
+Explicitly supplied HTTP clients are used unchanged.
+
 Connects to an MCP server that exposes the streamable HTTP transport:
 
 ```go
