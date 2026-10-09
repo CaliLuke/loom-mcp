@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	pulse "github.com/CaliLuke/loom-mcp/v2/features/stream/pulse/clients/pulse"
@@ -366,59 +367,60 @@ func TestServeSetupFailurePrecedesRegistration(t *testing.T) {
 
 func TestServeClosesConsumptionBeforeLeaseExpiry(t *testing.T) {
 	t.Parallel()
-
-	events := make(chan *streaming.Event)
-	closed := make(chan time.Time, 1)
-	sink := mockpulse.NewSink(t)
-	sink.SetSubscribe(func() <-chan *streaming.Event {
-		return events
-	})
-	sink.SetClose(func(context.Context) error {
-		closed <- time.Now()
-		return nil
-	})
-	stream := mockpulse.NewStream(t)
-	stream.SetNewSink(func(context.Context, string, ...streamopts.Sink) (pulse.Sink, error) {
-		return sink, nil
-	})
-	client := mockpulse.NewClient(t)
-	client.SetStream(func(string, ...streamopts.Stream) (pulse.Stream, error) {
-		return stream, nil
-	})
-	leaseDuration := 150 * time.Millisecond
-	leaseExpiresAt := time.Now().Add(leaseDuration)
-	var registrations atomic.Int64
-
-	err := Serve(context.Background(), client, "test.toolset", &blockingHandler{}, Registration{
-		AdmissionRevision: testAdmissionRevision,
-		Register: func(context.Context, string, string, string, string) (RegistrationLease, error) {
-			if registrations.Add(1) > 1 {
-				return RegistrationLease{}, errors.New("registry unavailable")
-			}
-			return RegistrationLease{RegistrationToken: testRegistrationTokenA, Duration: leaseDuration}, nil
-		},
-		Drain:   func(context.Context, string, string, string, string, time.Duration) error { return nil },
-		Release: func(context.Context, string, string, string, string) error { return nil },
-		Complete: func(context.Context, string, string, string, string, string, toolregistry.ToolResultMessage) error {
+	synctest.Test(t, func(t *testing.T) {
+		events := make(chan *streaming.Event)
+		closed := make(chan time.Time, 1)
+		sink := mockpulse.NewSink(t)
+		sink.SetSubscribe(func() <-chan *streaming.Event {
+			return events
+		})
+		sink.SetClose(func(context.Context) error {
+			closed <- time.Now()
 			return nil
-		},
-		PublishOutputDelta:   publishOutputDeltaSuccess,
-		ReportOverload:       reportOverloadSuccess,
-		Claim:                claimExecute,
-		RetryInitialInterval: 5 * time.Millisecond,
-		RetryMaxInterval:     10 * time.Millisecond,
-		AttemptTimeout:       10 * time.Millisecond,
-		ShutdownMargin:       50 * time.Millisecond,
-	}, Options{
-		ProviderID: testProviderID,
-		Pong: func(context.Context, string, string, string) error {
-			return nil
-		},
-	})
+		})
+		stream := mockpulse.NewStream(t)
+		stream.SetNewSink(func(context.Context, string, ...streamopts.Sink) (pulse.Sink, error) {
+			return sink, nil
+		})
+		client := mockpulse.NewClient(t)
+		client.SetStream(func(string, ...streamopts.Stream) (pulse.Stream, error) {
+			return stream, nil
+		})
+		leaseDuration := 150 * time.Millisecond
+		leaseExpiresAt := time.Now().Add(leaseDuration)
+		var registrations atomic.Int64
 
-	require.ErrorIs(t, err, ErrRegistrationLeaseExpired)
-	closedAt := <-closed
-	assert.True(t, closedAt.Before(leaseExpiresAt))
+		err := Serve(context.Background(), client, "test.toolset", &blockingHandler{}, Registration{
+			AdmissionRevision: testAdmissionRevision,
+			Register: func(context.Context, string, string, string, string) (RegistrationLease, error) {
+				if registrations.Add(1) > 1 {
+					return RegistrationLease{}, errors.New("registry unavailable")
+				}
+				return RegistrationLease{RegistrationToken: testRegistrationTokenA, Duration: leaseDuration}, nil
+			},
+			Drain:   func(context.Context, string, string, string, string, time.Duration) error { return nil },
+			Release: func(context.Context, string, string, string, string) error { return nil },
+			Complete: func(context.Context, string, string, string, string, string, toolregistry.ToolResultMessage) error {
+				return nil
+			},
+			PublishOutputDelta:   publishOutputDeltaSuccess,
+			ReportOverload:       reportOverloadSuccess,
+			Claim:                claimExecute,
+			RetryInitialInterval: 5 * time.Millisecond,
+			RetryMaxInterval:     10 * time.Millisecond,
+			AttemptTimeout:       10 * time.Millisecond,
+			ShutdownMargin:       50 * time.Millisecond,
+		}, Options{
+			ProviderID: testProviderID,
+			Pong: func(context.Context, string, string, string) error {
+				return nil
+			},
+		})
+
+		require.ErrorIs(t, err, ErrRegistrationLeaseExpired)
+		closedAt := <-closed
+		assert.True(t, closedAt.Before(leaseExpiresAt))
+	})
 }
 
 func TestRegisterUntilSuccessRetriesTransientFailure(t *testing.T) {
