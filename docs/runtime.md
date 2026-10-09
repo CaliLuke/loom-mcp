@@ -1631,6 +1631,9 @@ terminal hook projections safe across in-memory and Mongo-backed stores.
 
 Ending a session is also idempotent: the first committed `EndedAt` remains
 authoritative, including when concurrent callers request different timestamps.
+Mongo run admission and child linking serialize with session termination: they
+either commit before termination or reject the ended session. Existing run
+metadata can still be updated after its session ends.
 
 `ToolCallArgsDelta` is intentionally excluded from the durable run event log and
 hook bus because it is a high-volume, best-effort UX signal. The finalized tool

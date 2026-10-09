@@ -228,12 +228,8 @@ func (c *client) upsertRun(ctx context.Context, run session.RunMeta) error {
 			run.Status = existing.Status
 		}
 	case errors.Is(err, session.ErrRunNotFound):
-		owner, loadErr := c.LoadSession(ctx, run.SessionID)
-		if loadErr != nil {
-			return loadErr
-		}
-		if owner.Status == session.StatusEnded {
-			return session.ErrSessionEnded
+		if err := c.admitRun(ctx, run.SessionID); err != nil {
+			return err
 		}
 	default:
 		return err
@@ -304,12 +300,8 @@ func (c *client) linkChildRun(ctx context.Context, parentRunID string, child ses
 	if parent.SessionID != child.SessionID {
 		return session.ErrRunSessionMismatch
 	}
-	owner, err := c.LoadSession(ctx, parent.SessionID)
-	if err != nil {
+	if err := c.admitRun(ctx, parent.SessionID); err != nil {
 		return err
-	}
-	if owner.Status == session.StatusEnded {
-		return session.ErrSessionEnded
 	}
 
 	existingChild, err := c.LoadRun(ctx, child.RunID)
@@ -330,6 +322,31 @@ func (c *client) linkChildRun(ctx context.Context, parentRunID string, child ses
 	}
 
 	return c.addChildRunLink(ctx, parentRunID, child.RunID)
+}
+
+// admitRun writes the owner session in the admission transaction so EndSession
+// conflicts with an admission based on an older active-session snapshot.
+func (c *client) admitRun(ctx context.Context, sessionID string) error {
+	owner, err := c.LoadSession(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	if owner.Status == session.StatusEnded {
+		return session.ErrSessionEnded
+	}
+	ctx, cancel := c.withTimeout(ctx)
+	defer cancel()
+	result, err := c.sessions.UpdateOne(ctx,
+		bson.M{fieldSessionID: sessionID, fieldStatus: session.StatusActive},
+		bson.M{"$inc": bson.M{"run_admission_version": int64(1)}},
+	)
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return session.ErrSessionEnded
+	}
+	return nil
 }
 
 // addChildRunLink appends childRunID to the parent's child_run_ids atomically
