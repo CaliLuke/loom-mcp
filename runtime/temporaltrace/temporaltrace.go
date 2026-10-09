@@ -18,7 +18,6 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"strings"
 
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/converter"
@@ -28,6 +27,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -240,91 +240,13 @@ func TraceParent(ctx context.Context) string {
 
 // ParseTraceParent parses a W3C traceparent header into a remote span context.
 //
-// This function enforces the core traceparent validity rules (shape, hex
-// encoding, non-zero trace/span IDs). If traceparent is invalid, it returns an
-// error to surface contract violations early.
+// Validation follows the OpenTelemetry W3C propagator. Invalid traceparent
+// values return an error to surface contract violations early.
 func ParseTraceParent(traceparent string) (trace.SpanContext, error) {
-	parts := strings.Split(traceparent, "-")
-	traceID, spanID, flags, err := parseTraceParentFields(parts, traceparent)
-	if err != nil {
-		return trace.SpanContext{}, err
-	}
-	if !traceID.IsValid() || !spanID.IsValid() {
-		return trace.SpanContext{}, fmt.Errorf("temporaltrace: invalid trace/span id %q", traceparent)
-	}
-
-	sc := trace.NewSpanContext(trace.SpanContextConfig{
-		TraceID:    traceID,
-		SpanID:     spanID,
-		TraceFlags: flags,
-		Remote:     true,
-	})
+	ctx := propagation.TraceContext{}.Extract(context.Background(), propagation.MapCarrier{"traceparent": traceparent})
+	sc := trace.SpanContextFromContext(ctx)
 	if !sc.IsValid() {
-		return trace.SpanContext{}, fmt.Errorf("temporaltrace: invalid span context %q", traceparent)
+		return trace.SpanContext{}, fmt.Errorf("temporaltrace: invalid traceparent %q", traceparent)
 	}
 	return sc, nil
-}
-
-func parseTraceParentFields(parts []string, traceparent string) (trace.TraceID, trace.SpanID, trace.TraceFlags, error) {
-	if err := validateTraceParentParts(parts, traceparent); err != nil {
-		return trace.TraceID{}, trace.SpanID{}, 0, err
-	}
-	traceID, err := decodeTraceID(parts[1], traceparent)
-	if err != nil {
-		return trace.TraceID{}, trace.SpanID{}, 0, err
-	}
-	spanID, err := decodeSpanID(parts[2], traceparent)
-	if err != nil {
-		return trace.TraceID{}, trace.SpanID{}, 0, err
-	}
-	flags, err := decodeTraceFlags(parts[3], traceparent)
-	if err != nil {
-		return trace.TraceID{}, trace.SpanID{}, 0, err
-	}
-	return traceID, spanID, flags, nil
-}
-
-func validateTraceParentParts(parts []string, traceparent string) error {
-	if len(parts) < 4 {
-		return fmt.Errorf("temporaltrace: invalid traceparent %q", traceparent)
-	}
-	version := parts[0]
-	if len(version) != 2 || strings.EqualFold(version, "ff") {
-		return fmt.Errorf("temporaltrace: invalid traceparent version %q", traceparent)
-	}
-	if strings.EqualFold(version, "00") && len(parts) != 4 {
-		return fmt.Errorf("temporaltrace: invalid traceparent shape %q", traceparent)
-	}
-	if len(parts[1]) != 32 || len(parts[2]) != 16 || len(parts[3]) != 2 {
-		return fmt.Errorf("temporaltrace: invalid traceparent fields %q", traceparent)
-	}
-	return nil
-}
-
-func decodeTraceID(hexValue, traceparent string) (trace.TraceID, error) {
-	buf, err := hex.DecodeString(hexValue)
-	if err != nil {
-		return trace.TraceID{}, fmt.Errorf("temporaltrace: invalid traceparent trace id %q: %w", traceparent, err)
-	}
-	var traceID trace.TraceID
-	copy(traceID[:], buf)
-	return traceID, nil
-}
-
-func decodeSpanID(hexValue, traceparent string) (trace.SpanID, error) {
-	buf, err := hex.DecodeString(hexValue)
-	if err != nil {
-		return trace.SpanID{}, fmt.Errorf("temporaltrace: invalid traceparent span id %q: %w", traceparent, err)
-	}
-	var spanID trace.SpanID
-	copy(spanID[:], buf)
-	return spanID, nil
-}
-
-func decodeTraceFlags(hexValue, traceparent string) (trace.TraceFlags, error) {
-	buf, err := hex.DecodeString(hexValue)
-	if err != nil {
-		return 0, fmt.Errorf("temporaltrace: invalid traceparent flags %q: %w", traceparent, err)
-	}
-	return trace.TraceFlags(buf[0]), nil
 }

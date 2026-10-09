@@ -2783,6 +2783,10 @@ as synchronous parent/child latency. `InstrumentationOptions.TracerOptions` is
 retained for source compatibility but is ignored by this trace-domain
 implementation.
 
+Origin `traceparent` values are validated by the OpenTelemetry W3C propagator.
+Malformed wire headers are rejected; valid sampled and unsampled origins retain
+their trace and span IDs as links.
+
 This engine instrumentation is separate from `runtime.WithTracer`. That option
 owns runtime spans, model spans, generated MCP adapter tracing, and the SDK
 `TransportObserver`. The local debug server and Pulse stream sink are separate
