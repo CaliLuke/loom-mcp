@@ -567,6 +567,7 @@ func (e *Engine) SealRegistration(ctx context.Context) error {
 func (e *Engine) injectWorkflowContextIntoActivity(ctx context.Context) context.Context {
 	info := activity.GetInfo(ctx)
 	with := engine.WithActivityContext(ctx)
+	with = engine.WithActivityAttempt(with, int(info.Attempt))
 	with = engine.WithActivityHeartbeatRecorder(with, temporalHeartbeatRecorder{ctx: ctx})
 	with = engine.WithActivityHeartbeatTimeout(with, info.HeartbeatTimeout)
 	if v, ok := e.workflowContexts.Load(info.WorkflowExecution.RunID); ok {

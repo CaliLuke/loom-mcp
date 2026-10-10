@@ -118,6 +118,8 @@ func (r *Runtime) RegisterModel(id string, client model.Client) error {
 }
 
 // ModelClient returns a registered model client by ID, if present.
+// Unlike PlannerContext.ModelClient, it does not attach model.CallInfo or allocate
+// a run store sequence for calls.
 func (r *Runtime) ModelClient(id string) (model.Client, bool) {
 	if id == "" {
 		return nil, false

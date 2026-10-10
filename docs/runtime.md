@@ -827,6 +827,33 @@ retry-and-reflect, workflow graphs, typed input, and debug endpoint visibility;
 package-level tests remain the owner for narrower DSL, codegen, planner, runtime
 toolset, and debug-server contracts.
 
+### Model-call identity
+
+Every `Complete` and `Stream` invocation through
+`PlannerContext.ModelClient(id)` receives `model.CallInfo` in its context before
+model middleware, interceptors, or the registered client run. Read it with
+`model.CallInfoFrom(ctx)`. It contains `AgentID`, `RunID`, `RootRunID`, `SessionID`,
+`TurnID`, `ModelID`, `Seq`, and `Attempt`. `ModelID` is the registered ID requested
+by the planner, not necessarily `Request.Model`.
+
+The runtime allocates `Seq` with
+`Runtime.RunStore.NextSeq(ctx, RootRunID, RunID)` for each invocation, starting at
+1 per run in the root run's scope. Parallel calls and activity retries receive
+new, distinct values. Sequence order is allocation order, not completion order;
+failed or short-circuited calls can consume values. Allocation failure returns an
+error before the registered client is called. Workers must share the run store
+to preserve uniqueness across retries on different workers.
+
+`Attempt` is the engine activity attempt, not `run.Context.Attempt`. Temporal
+supplies its current attempt; the in-memory engine executes once with attempt 1.
+Custom engines attach their one-based attempt with `engine.WithActivityAttempt`.
+`engine.ActivityAttemptFromContext` returns zero outside such an activity.
+
+`Runtime.ModelClient(id)` returns the registered client directly and does not add
+`CallInfo` or allocate a sequence. This also applies to clients obtained outside
+the planner path. `model.WithCallInfo` can attach metadata explicitly. Call
+identity alone does not record model requests or responses.
+
 ---
 
 ## Streaming Planners

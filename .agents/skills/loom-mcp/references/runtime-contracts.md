@@ -201,6 +201,20 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 ## Model Clients
 
 - Runtime model clients implement `runtime/agent/model.Client`.
+- `PlannerContext.ModelClient(id)` attaches `model.CallInfo` before each
+  `Complete`/`Stream` invocation reaches middleware or the registered client.
+  Identity includes agent, run, root run scope, session, turn, registered model
+  ID, sequence, and engine activity attempt. `model.CallInfoFrom(ctx)` reads it.
+- Each invocation allocates `Seq` through
+  `Runtime.RunStore.NextSeq(ctx, RootRunID, RunID)`. Values start at 1 per run
+  within its root scope and are never reused across parallel calls or retries;
+  allocation order is not completion order. Allocation failure fails unsent.
+  Workers must share the store. No call records are written by this wrapper.
+- `Attempt` comes from `engine.ActivityAttemptFromContext`, not run resume
+  metadata: Temporal reports its current attempt and in-memory execution uses
+  1. Custom adapters set `engine.WithActivityAttempt`; absence reads as zero.
+- `Runtime.ModelClient(id)` bypasses planner decoration and neither attaches
+  `CallInfo` nor allocates a sequence.
 - Provider packages under `features/model/*` implement raw `model.Provider`.
   Runtime helpers construct the provider and wrap it with `model.NewClient`.
   Direct callers must do the same before registration.

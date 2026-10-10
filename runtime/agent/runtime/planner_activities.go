@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/reminder"
@@ -367,6 +368,8 @@ func (r *Runtime) plannerContext(ctx context.Context, input *PlanActivityInput, 
 		runtime:   r,
 		agentID:   input.AgentID,
 		runID:     input.RunID,
+		rootRunID: input.RunContext.RootRunID,
+		attempt:   engine.ActivityAttemptFromContext(ctx),
 		memory:    reader,
 		sessionID: input.RunContext.SessionID,
 		labels:    input.RunContext.Labels,

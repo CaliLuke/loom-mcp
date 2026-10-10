@@ -17,6 +17,8 @@ type agentContextOptions struct {
 	runtime    *Runtime
 	agentID    agent.Ident
 	runID      string
+	rootRunID  string
+	attempt    int
 	memory     memory.Reader
 	sessionID  string
 	labels     map[string]string
@@ -32,6 +34,8 @@ type simplePlannerContext struct {
 	rt         *Runtime
 	agent      agent.Ident
 	runID      string
+	rootRunID  string
+	attempt    int
 	turnID     string
 	mem        memory.Reader
 	sessionID  string
@@ -47,6 +51,8 @@ func newAgentContext(opts agentContextOptions) planner.PlannerContext {
 		rt:         opts.runtime,
 		agent:      opts.agentID,
 		runID:      opts.runID,
+		rootRunID:  opts.rootRunID,
+		attempt:    opts.attempt,
 		turnID:     opts.turnID,
 		mem:        opts.memory,
 		sessionID:  opts.sessionID,
@@ -103,6 +109,14 @@ func (c *simplePlannerContext) ModelClient(id string) (model.Client, bool) {
 		ConversationID:       firstNonEmpty(c.sessionID, c.runID),
 		CaptureGenAIMessages: c.rt.captureGenAIMessages,
 	})
+	cli = &callInfoClientWrapper{
+		inner: cli,
+		store: c.rt.RunStore,
+		info: model.CallInfo{
+			AgentID: string(c.agent), RunID: c.runID, RootRunID: c.rootRunID,
+			SessionID: c.sessionID, TurnID: c.turnID, ModelID: id, Attempt: c.attempt,
+		},
+	}
 	return cli, true
 }
 

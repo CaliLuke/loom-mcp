@@ -222,6 +222,8 @@ func TestTracedClientCapturesEffectivePolicyAndInterceptorRequest(t *testing.T) 
 		StopReason: "tool_use",
 	}}
 	ctx := newAgentContext(agentContextOptions{
+		rootRunID: "root",
+
 		runtime: rt,
 		agentID: "svc.agent",
 		runID:   "run-effective-trace",

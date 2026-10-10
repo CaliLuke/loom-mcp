@@ -150,6 +150,8 @@ func TestModelInterceptorsMutateRequestAndResponseOnce(t *testing.T) {
 	rt.models["default"] = interceptableModelClient{calls: &calls}
 
 	ctx := newAgentContext(agentContextOptions{
+		rootRunID: "root",
+
 		runtime: rt,
 		agentID: "svc.agent",
 		runID:   "run-1",
@@ -284,6 +286,8 @@ func TestModelInterceptorStreamShortCircuitResponseDoesNotReturnNilStreamer(t *t
 	var calls []string
 	rt.models["default"] = interceptableModelClient{calls: &calls}
 	ctx := newAgentContext(agentContextOptions{
+		rootRunID: "root",
+
 		runtime: rt,
 		agentID: "svc.agent",
 		runID:   "run-1",
@@ -308,6 +312,8 @@ func TestModelInterceptorStreamAfterErrorClosesOpenedStreamer(t *testing.T) {
 	}))
 	rt.models["default"] = closeCountingModelClient{stream: opened}
 	ctx := newAgentContext(agentContextOptions{
+		rootRunID: "root",
+
 		runtime: rt,
 		agentID: "svc.agent",
 		runID:   "run-1",
@@ -331,6 +337,8 @@ func TestModelInterceptorAfterModelEmptyDecisionCannotClearModelError(t *testing
 	}))
 	rt.models["default"] = contractModelClient{completeErr: modelErr}
 	ctx := newAgentContext(agentContextOptions{
+		rootRunID: "root",
+
 		runtime: rt,
 		agentID: "svc.agent",
 		runID:   "run-1",
@@ -361,6 +369,8 @@ func TestModelInterceptorAfterModelReplacementResponseClearsModelError(t *testin
 	}))
 	rt.models["default"] = contractModelClient{completeErr: modelErr}
 	ctx := newAgentContext(agentContextOptions{
+		rootRunID: "root",
+
 		runtime: rt,
 		agentID: "svc.agent",
 		runID:   "run-1",
@@ -655,6 +665,8 @@ func TestModelInterceptorAfterModelEnforcesNonNilResponseContract(t *testing.T) 
 	}))
 	rt.models["default"] = contractModelClient{}
 	ctx := newAgentContext(agentContextOptions{
+		rootRunID: "root",
+
 		runtime: rt,
 		agentID: "svc.agent",
 		runID:   "run-1",
@@ -677,6 +689,8 @@ func TestModelInterceptorAfterModelStreamCannotClearModelError(t *testing.T) {
 	}))
 	rt.models["default"] = contractModelClient{streamErr: modelErr}
 	ctx := newAgentContext(agentContextOptions{
+		rootRunID: "root",
+
 		runtime: rt,
 		agentID: "svc.agent",
 		runID:   "run-1",
@@ -735,6 +749,8 @@ func TestModelInterceptorAfterModelStreamEnforcesNonNilStreamerContract(t *testi
 	}))
 	rt.models["default"] = contractModelClient{}
 	ctx := newAgentContext(agentContextOptions{
+		rootRunID: "root",
+
 		runtime: rt,
 		agentID: "svc.agent",
 		runID:   "run-1",

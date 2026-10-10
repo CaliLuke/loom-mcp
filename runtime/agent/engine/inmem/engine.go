@@ -894,7 +894,10 @@ func sendSignal[T any](ctx context.Context, done <-chan struct{}, ch chan<- T, p
 	}
 }
 
+// withOptionalTimeout builds an activity context. In-memory activities execute
+// once, so their attempt is always 1, independent of the parent context.
 func withOptionalTimeout(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	parent = engine.WithActivityAttempt(parent, 1)
 	if timeout <= 0 {
 		return parent, func() {
 		}
