@@ -1,16 +1,17 @@
 ---------------------------- MODULE RequestRecord ----------------------------
 (***************************************************************************)
 (* The call record's message sequence, docs/wips/context_compaction.md     *)
-(* (revision 8), section 4.13.                                             *)
+(* (revision 9), section 4.13.                                             *)
 (*                                                                         *)
 (* The rendered view at call time is a sequence of messages. A planner may *)
 (* send any sequence of messages: view messages in any order, subset or    *)
 (* repetition, and distinct messages of its own. The wrapper encodes the   *)
 (* request as segments, each a span of consecutive view positions or one   *)
-(* message hash, against the ViewRef it records. Later the view moves on   *)
-(* (a compaction); decoding must use the recorded ViewRef and rebuild the  *)
-(* request exactly. Every request up to MaxLen messages is an initial      *)
-(* state, so TLC checks all of them.                                       *)
+(* message hash, against the ViewRef it records. A message matches a view  *)
+(* position only when its full encoding is equal, Meta and cache points    *)
+(* included. Later the view moves on (a compaction); decoding must use the *)
+(* recorded ViewRef and rebuild the request exactly. Every request up to   *)
+(* MaxLen messages is an initial state, so TLC checks all of them.         *)
 (***************************************************************************)
 EXTENDS Naturals, Sequences
 
@@ -19,7 +20,7 @@ CONSTANTS
     Fault       \* "none", or one rule deliberately broken
 
 Faults == {"none", "viewref_plus_added", "span_ignores_order",
-           "hash_first_own", "decode_current_view"}
+           "hash_first_own", "decode_current_view", "match_canonical_hash"}
 
 ASSUME Fault \in Faults
 
@@ -30,7 +31,18 @@ LaterView == <<"m2", "m3", "m4">>
 
 ViewMsgs == {CallView[i] : i \in 1..Len(CallView)}
 OwnMsgs == {"o1", "o2"}
-Msgs == ViewMsgs \cup OwnMsgs
+\* m2 as the planner sent it with a different Meta: the same role and parts,
+\* so the canonical hash of 4.8 matches m2, but a different full encoding.
+MetaMsgs == {"m2meta"}
+Canonical(m) == IF m \in MetaMsgs THEN "m2" ELSE m
+Msgs == ViewMsgs \cup OwnMsgs \cup MetaMsgs
+\* Messages the request carries by hash, whatever their source.
+NotView == Msgs \ ViewMsgs
+
+\* A request message matches the view by its full encoding. The broken
+\* configuration matches by the canonical hash, which ignores Meta.
+MatchOf(m) == IF Fault = "match_canonical_hash" THEN Canonical(m) ELSE m
+Matches(m) == MatchOf(m) \in ViewMsgs
 
 Requests == UNION {[1..n -> Msgs] : n \in 0..MaxLen}
 
@@ -45,9 +57,9 @@ EncodeFrom(r, segs) ==
     IF r = <<>> THEN segs
     ELSE LET m == Head(r)
              last == IF segs = <<>> THEN [kind |-> "none"] ELSE segs[Len(segs)]
-         IN IF m \in OwnMsgs
+         IN IF ~Matches(m)
                THEN EncodeFrom(Tail(r), Append(segs, [kind |-> "hash", msg |-> m]))
-            ELSE LET p == PosIn(m, CallView)
+            ELSE LET p == PosIn(MatchOf(m), CallView)
                  IN IF last.kind = "span" /\ last.to + 1 = p
                        THEN EncodeFrom(Tail(r), [segs EXCEPT ![Len(segs)] = [kind |-> "span", from |-> last.from, to |-> p]])
                        ELSE EncodeFrom(Tail(r), Append(segs, [kind |-> "span", from |-> p, to |-> p]))
@@ -56,7 +68,7 @@ SetOf(r) == {r[i] : i \in 1..Len(r)}
 
 RECURSIVE OwnOf(_)
 OwnOf(r) == IF r = <<>> THEN <<>>
-            ELSE (IF Head(r) \in OwnMsgs THEN <<[kind |-> "hash", msg |-> Head(r)]>> ELSE <<>>) \o OwnOf(Tail(r))
+            ELSE (IF Head(r) \in NotView THEN <<[kind |-> "hash", msg |-> Head(r)]>> ELSE <<>>) \o OwnOf(Tail(r))
 
 RECURSIVE SpansOf(_, _)
 SpansOf(i, S) ==
@@ -109,6 +121,6 @@ RoundTrip == Decode(Encode(req), DecodeView) = req
 \* planner's additions, costs one span plus one segment per addition.
 InPlaceIsOneSpan ==
     (Len(req) >= Len(CallView) /\ SubSeq(req, 1, Len(CallView)) = CallView
-        /\ \A i \in (Len(CallView) + 1)..Len(req) : req[i] \in OwnMsgs)
+        /\ \A i \in (Len(CallView) + 1)..Len(req) : req[i] \in NotView)
     => Len(Encode(req)) = 1 + (Len(req) - Len(CallView))
 =============================================================================

@@ -1,7 +1,7 @@
 # Context compaction models
 
 These models check the context-compaction design in
-`docs/wips/context_compaction.md` (revision 8). Run them with TLA+ tools 1.7.4
+`docs/wips/context_compaction.md` (revision 9). Run them with TLA+ tools 1.7.4
 and Java:
 
 ```
@@ -34,9 +34,9 @@ witness and liveness configurations. The harness checks four things:
 | Module | Scope | Safe states | Faults | Witnesses | Liveness |
 |---|---|---|---|---|---|
 | `ContextCompaction.tla` | One run: store, index, view, checkpoint, compaction, overflow recovery, shrinking budgets, model access | 82.6M; 15.2M (limit changes twice); 60k (summary cap 4) | 16 | 1 | `RecoveryEnds` (+1 fault), `Terminates` (sanity) |
-| `SessionContinuation.tla` | One session of several runs: publishing, lineage, cross-run order and citations | 68.7M (three roots); 3.3M (two roots and a child) | 8 | 2 | `SealedRootsResolve` (sanity) |
-| `CallCommit.tla` | Planner steps under the commit protocol: crashes, timeouts, zombies, lost returns | 9.2M (one step, three attempts); 239k (two steps, two attempts, one timeout) | 7 | 1 | `StepsEnd` (+1 fault) |
-| `RequestRecord.tla` | The call record's lossless message sequence, every request up to five messages | 3.9k | 4 | — | — |
+| `SessionContinuation.tla` | One session of several runs: publishing, lineage, cross-run order and citations | 68.7M (three roots); 3.3M (two roots and a child) | 9 | 2 | `SealedRootsResolve` (sanity) |
+| `CallCommit.tla` | Planner steps under the commit protocol: crashes, timeouts, zombies, lost returns | 9.2M (one step, three attempts); 239k (two steps, two attempts, one timeout) | 8 | 1 | `StepsEnd` (+1 fault) |
+| `RequestRecord.tla` | The call record's lossless message sequence, every request up to five messages | 9.3k | 5 | — | — |
 | `ContinuationCarry.tla` | Carried forms, cap, copy bound, receipt chain and placeholders across three runs | 1.37M | 8 | 2 | — |
 | `RecallDiscovery.tla` | Discoverability, handle confinement, separate allowances, recall exposure, user text | 23.8M | 8 | 1 | `RefillRestoresReads` (+1 fault) |
 | `OverflowGuard.tla` | The advisory guard, per-request progress and step budgets | 1.3k | 4 | 1 | `Terminates` (+1 fault) |
@@ -74,7 +74,12 @@ failure rule did not say that "no progress" compares with the last
 (4.15; fault `compare_last_rejection`). Five more faults reproduce defects
 found in design review: a non-idempotent publish, ordering by local message
 ID, adoption read from transcript entries, revision 7's request encoding, and
-today's accumulated planner histories.
+today's accumulated planner histories. Checking revision 8 against the eval
+plan and the store backends found three more, fixed in revision 9: an
+interceptor could drop a step event (4.5; fault `intercepted_record_event`),
+request messages were matched by a hash that ignores `Meta` (4.13; fault
+`match_canonical_hash`), and nothing required `AdvanceContinuation` to be one
+transaction (4.16; fault `advance_two_writes`).
 
 # ContextCompaction.tla
 
@@ -212,7 +217,7 @@ today's accumulated planner histories.
 | `NoSilentBodyMismatch` | rule | "Already published" is returned only for the stored body; a different body fails loudly (4.16). |
 | `PublishedImpliesSealed` | rule | A published continuation comes from a sealed run (4.5). |
 | `OneSuccessor` | observed | Published continuations form one chain (4.16). |
-| `PositionsFollowChain` | observed | Positions, and so run labels, follow the chain (4.6). |
+| `PositionsFollowChain` | observed | Positions, and so chain labels, follow the chain (4.6). |
 | `OrderIsChronological` | observed | Ordering user messages by origin is the order the user wrote them (4.9). |
 | `CitationsResolve` | observed | Every citation resolves to the intended message in every run the summary reaches, including after re-summarising (4.9). |
 | `ChildNeverPublishes` | rule | Only root runs publish (4.16). |
@@ -230,6 +235,7 @@ today's accumulated planner histories.
 | `UnsafeOrderByLocalId` | Messages are ordered by local ID | `OrderIsChronological` |
 | `UnsafeBareCitesCurrentRun` | A bare citation in a copied summary resolves in the current run | `CitationsResolve` |
 | `UnsafeRawPreviousSummary` | The summariser sees the previous summary's citations unqualified | `CitationsResolve` |
+| `UnsafeAdvanceTwoWrites` | `AdvanceContinuation` inserts the continuation, then the worker crashes before the head update; a second run then publishes from the same head | `OneSuccessor` |
 | `WitnessAlreadyAfterAdvance` | A retry recognises its own publication after a later run advanced the head | its witness |
 | `WitnessResummarizedCopy` | A summary repeats a citation from a summary copied from an earlier run | its witness |
 
@@ -240,8 +246,10 @@ today's accumulated planner histories.
   user-index selection in K11.
 - Whether a run continues is a free choice; matching on `Visible` is K18's
   test. Retention is not modelled.
-- The store's conditional update is atomic by assumption; K18's store
-  conformance tests check it for the in-memory and Mongo stores.
+- The store's conditional update is atomic, and `UnsafeAdvanceTwoWrites`
+  shows why: as two writes, a second run publishes from the same head. K18's
+  conformance tests check atomicity for the in-memory store and for Mongo
+  against a real replica set.
 
 # CallCommit.tla
 
@@ -260,7 +268,8 @@ today's accumulated planner histories.
   once the last attempt has timed out.
 - A finished attempt stores its output, commits its presentation unless it
   reports an overflow, and returns. The workflow adopts the first return it
-  receives, indexes that attempt's output and records its call keys.
+  receives, indexes that attempt's output and records its call keys in the
+  step event, which skips `BeforeEvent` interceptors.
 - Reconstruction (`Classify`, `AdoptedAttempt`, `PresentationAdopted`)
   reads only the store and the run log; ground truth (`adopted`,
   `doneWritten`, each presentation's attempt) is recorded separately.
@@ -288,6 +297,7 @@ today's accumulated planner histories.
 | `UnsafeIndexFirstStored` | The index takes the first output stored in the step | `IndexMatchesAdoption` |
 | `UnsafePresentationWithoutKey` | Presentation events carry no call key | `PresentationsClassified` |
 | `UnsafeOverflowCommitsPresentation` | An overflowing attempt commits its presentation | `NoPresentationFromOverflow` |
+| `UnsafeInterceptedRecordEvent` | A `BeforeEvent` interceptor may drop the step event | `ClassificationCorrect` |
 | `LivenessUnsafeRetrySameAttempt` | Retries reschedule the same attempt without counting it | `StepsEnd` |
 | `WitnessZombieAfterAdoption` | A zombie attempt completes a call record after its step adopted another attempt and the run moved on | its witness |
 
@@ -302,9 +312,11 @@ today's accumulated planner histories.
 # RequestRecord.tla
 
 Every request of up to five messages, built from a three-message view in any
-order, subset or repetition and from two distinct messages of the planner's
-own, is an initial state. Encoding uses the view at call time; decoding uses
-the recorded ViewRef after the view has moved on.
+order, subset or repetition, from two distinct messages of the planner's own,
+and from a view message sent with a different `Meta` (the same role and parts,
+so the canonical hash of 4.8 matches it), is an initial state. Encoding uses
+the view at call time; decoding uses the recorded ViewRef after the view has
+moved on.
 
 | Name | Kind | Design rule |
 |---|---|---|
@@ -317,9 +329,10 @@ the recorded ViewRef after the view has moved on.
 | `UnsafeSpanIgnoresOrder` | Spans record positions, not order | `RoundTrip` |
 | `UnsafeHashFirstOwn` | Every own message is hashed as the first | `RoundTrip` |
 | `UnsafeDecodeCurrentView` | Decoding against the view at read time | `RoundTrip` |
+| `UnsafeMatchCanonicalHash` | Messages matched to the view by the canonical hash, which ignores `Meta` | `RoundTrip` |
 
-Limits: the wrapper's check before writing and the hashing of canonical
-message parts are K8's tests.
+Limits: the wrapper's check against the whole-request hash before writing,
+and the request fields other than messages, are K8's tests.
 
 # ContinuationCarry.tla
 

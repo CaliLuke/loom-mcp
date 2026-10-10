@@ -1,7 +1,7 @@
 ----------------------------- MODULE StepPayload -----------------------------
 (***************************************************************************)
 (* The bound on planner activity inputs (P2) and the index segments,       *)
-(* docs/wips/context_compaction.md (revision 8), sections 4.1, 4.5, 4.6    *)
+(* docs/wips/context_compaction.md (revision 9), sections 4.1, 4.5, 4.6    *)
 (* and 4.7.                                                                *)
 (*                                                                         *)
 (* The run start activity stores the caller's history as the first index  *)

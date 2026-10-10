@@ -124,6 +124,7 @@ expect_violation ${m} ${m}UnsafeOrderByLocalId OrderIsChronological
 expect_violation ${m} ${m}UnsafeBareCitesCurrentRun CitationsResolve
 expect_violation ${m} ${m}UnsafeRawPreviousSummary CitationsResolve
 expect_violation ${m} ${m}UnsafeAlreadyWithoutCompare NoSilentBodyMismatch
+expect_violation ${m} ${m}UnsafeAdvanceTwoWrites OneSuccessor
 
 m=CallCommit
 expect_pass ${m} ${m} 9200000
@@ -138,13 +139,15 @@ expect_violation ${m} ${m}UnsafeSeqPerAttempt KeysUnique
 expect_violation ${m} ${m}UnsafeIndexFirstStored IndexMatchesAdoption
 expect_violation ${m} ${m}UnsafePresentationWithoutKey PresentationsClassified
 expect_violation ${m} ${m}UnsafeOverflowCommitsPresentation NoPresentationFromOverflow
+expect_violation ${m} ${m}UnsafeInterceptedRecordEvent ClassificationCorrect
 
 m=RequestRecord
-expect_pass ${m} ${m} 3900
+expect_pass ${m} ${m} 9300
 expect_violation ${m} ${m}UnsafeViewrefPlusAdded RoundTrip
 expect_violation ${m} ${m}UnsafeSpanIgnoresOrder RoundTrip
 expect_violation ${m} ${m}UnsafeHashFirstOwn RoundTrip
 expect_violation ${m} ${m}UnsafeDecodeCurrentView RoundTrip
+expect_violation ${m} ${m}UnsafeMatchCanonicalHash RoundTrip
 
 m=ContinuationCarry
 expect_pass ${m} ${m} 1360000

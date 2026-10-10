@@ -1,7 +1,7 @@
 ----------------------------- MODULE OverflowGuard -----------------------------
 (***************************************************************************)
 (* The pre-send guard and overflow recovery for one planner step,          *)
-(* docs/wips/context_compaction.md (revision 8), sections 4.8 and 4.15.    *)
+(* docs/wips/context_compaction.md (revision 9), sections 4.8 and 4.15.    *)
 (*                                                                         *)
 (* The planner sends requests built from the framework's view, or its own  *)
 (* rewritten messages, or messages unrelated to the view. The guard        *)

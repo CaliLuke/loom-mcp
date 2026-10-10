@@ -1,7 +1,7 @@
 ---------------------------- MODULE RecallDiscovery ----------------------------
 (***************************************************************************)
 (* Discovery and recall of evicted evidence, docs/wips/context_compaction.md *)
-(* (revision 8), sections 4.6, 4.9 and 4.18.                               *)
+(* (revision 9), sections 4.6, 4.9 and 4.18.                               *)
 (*                                                                         *)
 (* A continued run (run 2) evicts its history one message at a time       *)
 (* behind a checkpoint whose chain reaches run 1's record through From.    *)

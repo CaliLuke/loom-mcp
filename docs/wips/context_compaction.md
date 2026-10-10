@@ -1,30 +1,36 @@
 # Context compaction: survey and design direction
 
-Status: revision 8, 2026-10-09, approved by design review for architectural
-freeze and implementation. Nothing here is implemented, and no acceptance
-proof has run yet.
-Revisions 2 and 3 incorporate a code-accuracy review, a design review and a
-second-round review. Revision 4 answers an architecture review: bounded
-checkpoints, session handoff, request-level budgeting, the durable record, and
-release criteria for turning compaction on by default. Revision 5 answers its
-follow-up: checkpoints that adapt when the budget shrinks, a bounded
-continuation kept apart from its evidence, explicit cross-run identity,
-bounded planner histories, receipt handles for discovery, and a
-non-inferiority release gate. Revision 6 answers a third review: precedence
-by message number with a user index, a model-facing projection, byte bounds
-kept apart from token estimates, non-text parts, explicit session lineage, a
-commit protocol, discoverable assistant text, split recall allowances, the
-remaining growth, a recall measure that does not penalise good summaries, and
-the tickets moved to an execution plan. Revision 7 fixes what a review of revision 6
-found: the summary can no longer outrank a user message, adoption is per
-activity attempt, non-text parts have their own bound and recall path, the
-release gate states its power, and continuations use a separate store
-interface. Revision 8 resolves four contract conflicts from the next
-review: eligible evidence is separated from its bounded rendering, call
-records store a lossless message sequence, user-message order and summary
-citations are defined across runs, and continuation publication is
-idempotent; it also sets a per-provider default for non-text content,
-calibrates the whole release gate, and reuses `model.TokenCounter`.
+Status: revision 9, 2026-10-09. Revision 8 was approved by design review for
+architectural freeze and implementation; revision 9 closes record gaps found
+by checking the design against the eval plan and the store backends. Nothing
+here is implemented, and no acceptance proof has run yet. Revisions 2 and 3
+incorporate a code-accuracy review, a design review and a second-round review.
+Revision 4 answers an architecture review: bounded checkpoints, session
+handoff, request-level budgeting, the durable record, and release criteria for
+turning compaction on by default. Revision 5 answers its follow-up:
+checkpoints that adapt when the budget shrinks, a bounded continuation kept
+apart from its evidence, explicit cross-run identity, bounded planner
+histories, receipt handles for discovery, and a non-inferiority release gate.
+Revision 6 answers a third review: precedence by message number with a user
+index, a model-facing projection, byte bounds kept apart from token estimates,
+non-text parts, explicit session lineage, a commit protocol, discoverable
+assistant text, split recall allowances, the remaining growth, a recall
+measure that does not penalise good summaries, and the tickets moved to an
+execution plan. Revision 7 fixes what a review of revision 6 found: the
+summary can no longer outrank a user message, adoption is per activity
+attempt, non-text parts have their own bound and recall path, the release gate
+states its power, and continuations use a separate store interface. Revision 8
+resolves four contract conflicts from the next review: eligible evidence is
+separated from its bounded rendering, call records store a lossless message
+sequence, user-message order and summary citations are defined across runs,
+and continuation publication is idempotent; it also sets a per-provider
+default for non-text content, calibrates the whole release gate, and reuses
+`model.TokenCounter`. Revision 9 makes the record what the eval plan needs:
+record events skip `BeforeEvent` interceptors, the request record matches
+messages by their full encoding and lists every request parameter, call
+records name their activity and step and keep their request facts, `RunRecord`
+has a self-contained export, and the store contracts state their conditional
+writes.
 
 This document records what loom-mcp's compaction does today, what the leading
 open-source agent harnesses and frameworks do, and the design direction that
@@ -225,8 +231,10 @@ A store beside the run log with two parts. Content is addressed by hash:
 records are keyed: `NextSeq(scope, runID) → Seq`, `PutCall(scope, CallRecord)`,
 `ListCalls(scope, runID)`. The keyed part is how a reader finds the call
 records of an activity attempt that failed or timed out, whose keys never
-reached the workflow. In-memory and Mongo implementations, matching the run
-log.
+reached the workflow. `PutCall` only moves a record forward: it inserts
+`started` idempotently (the same body again succeeds) and writes `completed`
+or `failed` only over `started`. In-memory and Mongo implementations, matching
+the run log; Mongo writes use majority write concern explicitly.
 
 **Scope is the root run.** A run tree (a root run and its agent-as-tool
 children) shares one scope, so a child can write its final output where its
@@ -243,11 +251,11 @@ enforces them, and nothing else reads across scopes:
 
 - the current run's session comes from the run context, never from tool
   arguments;
-- a run label resolves only by walking the current run's continuation chain
+- a chain label resolves only by walking the current run's continuation chain
   (`Prev` links, 4.16), whose runs are root runs that published a
   continuation; the handler confirms with `session.Store.LoadRun` that each
   has the current session's `SessionID`. Child, rejected and superseded runs
-  have no label;
+  have no chain label;
 - a receipt handle resolves only by walking the current checkpoint chain
   (4.18).
 
@@ -265,6 +273,7 @@ store before any workflow state or history refers to it.**
 | Source | Writer | When | Workflow receives |
 |---|---|---|---|
 | Caller history (`RunInput.Messages`) | Run start activity | First activity of the run | Hashes (the input itself stays in history once, as today) |
+| Memory preload (`PlanInput.PreloadedMemory`, `PreloadedMemoryEntries`) | Not indexed: the planner activity reads it from the memory store each step and hands it to the planner | — | Nothing; whatever the planner sends of it is in the call record's message sequence (4.13) |
 | Assistant output and tool calls | Planner activity: the streamed transcript (text, thinking) and each tool call separately | Before returning | Transcript hash, tool call hashes, and tool call arguments inline (needed for dispatch), bounded by the existing output bounds. The index entry holds the transcript hash, the hashes of the *allowed* tool calls and the producing call's key; the loader assembles the assistant message (4.7) |
 | Activity tool results | Tool activity: the eligible result, and separately the server-only parts (`ServerData`) | Before returning | Eligible hash, bounded model-facing preview, server-only hashes, metadata |
 | External tool results, clarification and await answers, typed inputs, confirmations, resume messages | `Runtime.Provide*` / `ResumeRun` client methods | Before signalling | Hashes in the signal |
@@ -375,9 +384,16 @@ leaves a state the reader classifies the same way.
 | Call record (4.13) | `PutCall(started)` with the request, *then* send; `PutCall(completed)` or `PutCall(failed)` with the response or error. A failed `started` write fails the call unsent. | The keyed record | `started` with no completion is **incomplete**: the response, if the provider sent one, is lost, and usage is unknown. Reported, never silently dropped. |
 | Content and checkpoint records | `Put` before the hash is returned | The store | An unreferenced hash is an orphan, never part of the transcript. |
 | Index segment | The loader stores it, then returns its hash; the workflow adopts the output and appends `planner_step{IndexHead, ViewRef}` | The latest `planner_step` (or `run_sealed`) | A stored segment no event names is an orphan. A retry stores the same segment: segments are built from workflow state, so the bytes and hash repeat. |
-| Seal | `SealRecord` stores the last segment, then appends `run_sealed{IndexHead}` | `run_sealed` | The run log's append is idempotent on `(run_id, event_key)` (`runlog.go`), so a retried seal writes the same event once. Without it, the run is unsealed (4.20). |
-| Continuation | `SealRecord` appends `run_sealed` first, then stores the continuation and calls `AdvanceContinuation`, so a published continuation always comes from a sealed run; a run sealed without one leaves the head at its predecessor | The session's continuations, keyed by publishing run | A retry gets *already published* if the first attempt advanced the head, so a lost acknowledgement is never reported as superseded (4.16). |
+| Seal | `SealRecord` stores the last segment, then appends `run_sealed{IndexHead}` | `run_sealed` | The run log's append is idempotent on `(run_id, event_key)` (`runlog.go`) and compares the whole event, timestamp included, so the workflow fixes the event key and timestamp in `SealRecord`'s input; a retried seal then writes the same event once. Without it, the run is unsealed (4.20). |
+| Continuation | `SealRecord` appends `run_sealed` first, then `Put`s the carried content and calls `AdvanceContinuation`, which stores the continuation and advances the head in one atomic step, so a published continuation always comes from a sealed run; a run sealed without one leaves the head at its predecessor | The session's continuations, keyed by publishing run | A retry gets *already published* if the first attempt advanced the head, so a lost acknowledgement is never reported as superseded (4.16). |
 | Model presentation | The planner activity commits `assistant_presentation_committed`, carrying the call key, when the planner returns successfully | What the user was shown, not the transcript | See below. |
+
+**Record events are canonical.** `planner_step`, `run_sealed`,
+`context_compacted`, `context_compaction_skipped` and `context_overflow`
+decide the index head and which calls were adopted, so they skip `BeforeEvent`
+interceptors, as the presentation commit already does
+(`hook_activity.go:49`). An interceptor that dropped or rewrote one would
+change what `RunRecord` reports as the transcript.
 
 **Adopted, abandoned, incomplete.** Adoption is per activity attempt, not
 per call. Every activity that calls models (planner, `SummarizeContext`)
@@ -411,6 +427,12 @@ latest `planner_step` event, walks the segments back, resolves hashes,
 renders structural entries with the templates of the recorded
 `WorkflowProtocolVersion`, and classifies every call record listed by
 `ListCalls`. It needs no Temporal history.
+
+**Export.** `RunRecord` also writes a self-contained export of a run tree: the
+index entries, checkpoint records, call records with their requests rebuilt,
+content by hash, and the run-log events it read. A reader that has neither the
+run store nor the renderer of an older `WorkflowProtocolVersion`, such as the
+eval plan's experiment store (T13), reads the export.
 
 ### 4.6 Transcript index and view
 
@@ -486,7 +508,7 @@ linearly with evictions.
 reference carries its root run, and an entry seeded from an earlier run
 renders with its `Origin`, not its new ID. References from the current run
 render as plain IDs; those from an earlier run of the session render with a
-run label, its position in the continuation chain (`r1` for the first
+chain label, its position in the continuation chain (`r1` for the first
 publishing run, `r2` for the next), so a recall never resolves against the
 wrong index (4.16). The position is stored in `Origin.Pos` and in each
 `Continuation`, so the loader labels and orders references from its own scope
@@ -663,9 +685,12 @@ type RequestFacts struct {
 
 `ViewBearing` is computed by hashing each request message's canonical role and
 parts (excluding `Meta` and cache points) against the view, so it does not
-depend on planners preserving `Message.Meta`. If every call in an activity is
-non-view-bearing (a planner that rewrites messages), the runtime emits
-`context_unmeasured` once per run.
+depend on planners preserving `Message.Meta`. This canonical hash serves
+measurement only; the request record matches full encodings (4.13). Each
+`RequestFacts` is also written with its call record's completion, so trigger
+and guard decisions can be replayed after Temporal history is gone (7.1). If
+every call in an activity is non-view-bearing (a planner that rewrites
+messages), the runtime emits `context_unmeasured` once per run.
 
 **Budget.** For a model with known limits, `B(m) = ContextWindow − OutputReserve`.
 Budgets, like rates, are kept per model; settings that are fractions of B use
@@ -965,16 +990,20 @@ wrapper (F1) to the run store, always on:
 type CallKey struct {
     RunID   string
     Seq     int // from NextSeq (4.3), unique per run across retries and parallel calls
-    Attempt int // attempt of the activity that made the call (planner or SummarizeContext)
+    Attempt int // attempt of the activity that made the call, as the engine reports it (eval plan T0)
 }
 
 type CallRecord struct {
     Key      CallKey
-    Request  RequestParts // hashes of the system block and tool definitions, the message sequence (below), and parameters
+    Activity ActivityKind // planner or SummarizeContext
+    TurnID   string       // the planner step the activity attempt served
+    Request  RequestParts // the system and tool hashes, the message sequence (below), and parameters
     Response *Hash        // the response or final streamed response, including ones later rejected
     Error    *CallError   // provider error kind and message, pre-send rejection, or output-validation kind
-    Usage    model.TokenUsage
+    Usage    model.TokenUsage // for a stream, the sum of its usage deltas
+    Started  time.Time    // when the started record was written
     Latency  time.Duration
+    Facts    *RequestFacts // written with the completion (4.8)
     Model    string
     Class    model.ModelClass
     Context  Fingerprint  // ContextConfigFingerprint (4.17)
@@ -997,33 +1026,46 @@ type RequestParts struct {
     View          *ViewRef          // the view the spans index into; nil if no span is used
     Messages      []MessageSegment  // in request order
     Params        Hash
+    Request       Hash              // the whole model.Request, to verify a rebuild
 }
 ```
 
-The wrapper builds the list by matching each request message's canonical
-hash, in order, against the rendered view: a message that continues the
-current span extends it; anything else starts a new segment. A subset, a
-reordering, a duplicate or an inserted message therefore costs one segment
-each, and replaying the segments rebuilds the exact request, which the wrapper
-checks before writing (a mismatch records every message by hash). A request
+`model.Request` has no system field: system text is in its messages. `System`
+is therefore a derived hash of the request's system-role messages, used to
+compare requests; the messages themselves are in `Messages`. `Params` holds
+every other field of `model.Request` (`RunID`, `Temperature`, `ToolChoice`,
+`MaxTokens`, `StructuredOutput`, `Stream`, `Thinking`, `Cache`); `Model`,
+`Class` and `Prompts` are on the record.
+
+The wrapper builds the list by matching each request message's full encoding,
+`Meta` and cache points included, in order, against the rendered view: a
+message that continues the current span extends it; anything else starts a new
+segment. A subset, a reordering, a duplicate, an inserted message or a view
+message with changed `Meta` therefore costs one segment each, and replaying
+the segments rebuilds the exact request, which the wrapper checks against
+`Request` before writing (a mismatch records every message by hash). A request
 that sends the view unchanged plus the planner's additions is one span plus
 the additions.
 
 **Growth.** For planners that send the view in place, a request's record is
 constant-size apart from its additions, so the call record grows linearly with
-the number of calls, with compaction on or off: a run without compaction has
-a longer view, but a span costs the same. A planner that builds requests
-whose messages are not in view order pays one segment per break, and one
-whose requests grow independently of the view (a planner that accumulates its
-own history) pays for every message in every request, which is quadratic over
-the run. The wrapper emits `context_request_growth` once per run when a
-request carries more bytes outside the view than inside it, whether or not
-the request is view-bearing, so that case is reported (4.23). Whether a
-response was committed is not part of the record: it is committed when an
-index entry names its key (4.5). Calls that bypass the wrapper (F1) or are
-short-circuited by an interceptor are not recorded; this is documented. The
-key is placed in the call context as `model.CallInfo`, the eval plan's T0,
-which K8 depends on.
+the number of calls, with compaction on or off: a run without compaction has a
+longer view, but a span costs the same. A planner that builds requests whose
+messages are not in view order pays one segment per break, and one whose
+requests grow independently of the view (a planner that accumulates its own
+history) pays for every message in every request, which is quadratic over the
+run. The wrapper emits `context_request_growth` once per run when a request
+carries more bytes outside the view than inside it, whether or not the request
+is view-bearing, so that case is reported (4.23). Whether a response was
+committed is not part of the record: it is committed when an index entry names
+its key (4.5). Calls that bypass the wrapper (F1) or are short-circuited by an
+interceptor are not recorded; this is documented. The key is placed in the
+call context as `model.CallInfo`, the eval plan's T0, which K8 depends on; T0
+takes `Seq` from K2's `NextSeq`, the only source unique across retries and
+parallel calls under Temporal, and exposes the activity attempt through the
+engine, which does not report it today. A call that bypasses the wrapper
+leaves its assistant entry with a nil `MessageEntry.Call`, which `RunRecord`
+reports as an unrecorded call.
 
 This replaces the eval plan's harness-installed capture decorator for agent
 runs (section 7.3). It also closes the eval plan's open item on capture with
@@ -1214,7 +1256,7 @@ Only a root run of an agent with threshold compaction publishes, never a
 child run. A store holds one head per session and every continuation ever
 published in it, keyed by its `ID` (the publishing run). `SealRecord`
 publishes with `AdvanceContinuation(session, expected, next)`, which returns
-one of three results:
+one of four results:
 
 - **published:** the head was `expected`; it is now `next`;
 - **already published:** a continuation with `next.ID` is already in the
@@ -1222,11 +1264,18 @@ one of three results:
   attempt advanced the head, and whose acknowledgement was lost, gets this,
   even if a later run has since advanced the head again. The stored
   continuation must equal `next` (it is built from the sealed index, so a
-  retry rebuilds the same bytes); a different body fails loudly, like a
-  conflicting run-log append;
+  retry rebuilds the same bytes, and it holds no publish timestamp);
+- **conflict:** a continuation with `next.ID` is stored with a different body.
+  `SealRecord` fails loudly, like a conflicting run-log append;
 - **superseded:** neither; another run advanced the head first.
 
-The check and the update are one atomic operation in the store. The
+The ID check comes before the head check, and the checks, the insert and the
+head update are one atomic operation in the store: one transaction in Mongo,
+with a unique `(session, ID)` index. Two writes are not enough: a crash
+between the insert and the head update would leave a stored continuation that
+a retry reports as already published although it never became the head, and a
+second run could then publish from the same head. `session.ContinuationStore`
+also reads the head and a continuation by ID. The
 method is on a new interface, `session.ContinuationStore`, not on
 `session.Store`, so existing store implementations keep compiling; the
 in-memory and Mongo stores implement both, and registering an agent with
@@ -1361,8 +1410,11 @@ summariser model, and `ContextWindow`, a pretend window, so a short eval
 scenario crosses the trigger several times. Overflow handling and the
 pre-send guard still use the real window.
 
-**Fingerprint.** Effective settings and the prompt reference hash to a
-`ContextConfigFingerprint`, recorded on checkpoints and call records.
+**Fingerprint.** Effective settings, including the pretend `ContextWindow` and
+the `ContextModel`, and the prompt reference hash to a
+`ContextConfigFingerprint`, recorded on checkpoints and call records. The
+canonical settings are stored with `Put`, and the fingerprint is their hash,
+so a reader resolves a fingerprint to the settings behind it.
 
 ### 4.18 recall_context
 
@@ -1382,7 +1434,7 @@ never mention it (4.6).
 Input, one of three kinds. **Reads** return content:
 
 - a tool use ID or message ID from a receipt line, placeholder, pin or user
-  index line, optionally qualified by a run label, with an `offset` to page a
+  index line, optionally qualified by a chain label, with an `offset` to page a
   large result or message;
 - a checkpoint ID from a bounded summary (`r1:ck-91b2`), with an `offset`,
   which pages the full stored summary.
@@ -1393,7 +1445,7 @@ cursor for the next page:
 - `list` with a handle from a collapsed line (`rc-c41e` for receipts,
   `rc-02d9` for the user index). The agent needs no run ID or range it has
   not been shown: the handle is on the line;
-- `list` with a message range, optionally qualified by a run label, which
+- `list` with a message range, optionally qualified by a chain label, which
   lists *every* model-visible message in it: user and assistant text by first
   line, tool calls by receipt line, results by size and error flag.
 
@@ -1532,9 +1584,9 @@ The tickets, their order and their acceptance proofs are in
 | D12 | Unknown model limits | Trigger and guard off for that model, overflow recovery on, one `context_limits_unknown` event; fail fast only when the agent declares `Context(...)`. |
 | D13 | Rejected summaries | Kept in the call record for evals; never referenced by a checkpoint, view or index entry. |
 | D14 | `ViewRef` shape | A constant-size reference into the stored index, not a copy of the view. |
-| D15 | Authorization for cross-run recall | Enforced by the runtime's recall handler: session from run context, run labels resolved through the session store, handles through the checkpoint chain; an optional `RecallAuthorizer` hook; no tenant model added. |
+| D15 | Authorization for cross-run recall | Enforced by the runtime's recall handler: session from run context, chain labels resolved through the session store, handles through the checkpoint chain; an optional `RecallAuthorizer` hook; no tenant model added. |
 | D16 | Recall budget | Separate discovery and read allowances, replenished at each compaction (4.18). |
-| D17 | Continuation store | A new `session.ContinuationStore` interface with an atomic, idempotent `AdvanceContinuation` (published, already published, superseded); `session.Store` is unchanged; registration fails fast when an agent with threshold compaction has a store without it. |
+| D17 | Continuation store | A new `session.ContinuationStore` interface with an atomic, idempotent `AdvanceContinuation` (published, already published, conflict, superseded; one transaction in Mongo) and reads of the head and of a continuation by ID; `session.Store` is unchanged; registration fails fast when an agent with threshold compaction has a store without it. |
 
 ## 7. Evaluating compaction
 
@@ -1560,7 +1612,8 @@ Per cut point and variant:
   full record.
 - **Cost:** summary size, compression ratio, summariser tokens, latency.
 - **Drift:** runs with several checkpoints are replayed down the chain. With a
-  different cut setting, cuts are recomputed by the same pure functions, but
+  different cut setting, cuts are recomputed by the same pure functions from
+  the request facts in the call records (4.8), but
   the agent's later behaviour is the recorded run's, so drift results are
   approximate and labelled so.
 
@@ -1584,7 +1637,13 @@ recoveries. Long-running scenarios use the pretend window.
   decorator (eval plan 5.3): one schema, one layer, one store. The harness
   keeps a decorator only for calls outside a run, such as `Decide`.
 - Calls are keyed by `(RunID, Seq, Attempt)` from `model.CallInfo`; child runs
-  have their own keys.
+  have their own keys. T0 takes `Seq` from `NextSeq`, so it follows K2.
+- An attempt in the experiment store (eval plan T13) holds `RunRecord`'s
+  export (4.5), so K20's replay and `show` work after the run's store is gone.
+- Record events skip `BeforeEvent` interceptors (4.5), so the transcript and
+  the classification of calls hold even under an application interceptor. The
+  other run-log events the trajectory reads stay interceptable, so the
+  harness still refuses `BeforeEvent` interceptors by default (eval plan 5.4).
 - Experiment identity (eval plan B3) includes the fingerprint and prompt
   reference per variant; `compare` does not warn about identical system
   messages and tools when those differ.
@@ -1734,16 +1793,16 @@ module's states, invariants, faults, assumptions and limits.
 | Module | Checks |
 |---|---|
 | `ContextCompaction.tla` (one run) | Nothing refers to unstored content; cuts never split a call from its result; every position before the view is carried by summary or receipt, including a large result the view renders as an omission; trigger decisions replay from the recorded facts and ViewRef; the retried request is strictly smaller than the failed one and renders under the failed model's recorded budget; recovery ends even when the provider keeps rejecting; the checkpoint stays within the current budget; no planner request, rejected request or summariser input carries server-only data. |
-| `SessionContinuation.tla` | A retry after a lost acknowledgement is never reported superseded, and "already published" is returned only for the stored body; published continuations come from sealed runs and form one chain with unambiguous positions; child runs never publish; ordering by origin is chronological across runs that reuse message numbers; citations resolve to the intended message after copying and after re-summarising; sealed runs learn their outcome. |
-| `CallCommit.tla` | Under crashes, zombies that write into the next step, lost returns and step failure, reconstruction classifies every call (adopted, abandoned, incomplete) and every presentation as what happened; the index references the adopted attempt's output; sequence numbers are unique; no request is sent unrecorded; every step ends. |
-| `RequestRecord.tla` | The segment encoding rebuilds every request exactly, own messages distinct and the view moved on, and the in-place case costs one span. |
+| `SessionContinuation.tla` | A retry after a lost acknowledgement is never reported superseded, and "already published" is returned only for the stored body; published continuations come from sealed runs and form one chain with unambiguous positions; child runs never publish; ordering by origin is chronological across runs that reuse message numbers; citations resolve to the intended message after copying and after re-summarising; sealed runs learn their outcome; publishing is one atomic step, without which a second run publishes from the same head. |
+| `CallCommit.tla` | Under crashes, zombies that write into the next step, lost returns and step failure, reconstruction classifies every call (adopted, abandoned, incomplete) and every presentation as what happened; the index references the adopted attempt's output, which needs step events that no interceptor can drop; sequence numbers are unique; no request is sent unrecorded; every step ends. |
+| `RequestRecord.tla` | The segment encoding rebuilds every request exactly, own messages distinct, view messages sent with a changed `Meta`, and the view moved on, and the in-place case costs one span. |
 | `ContinuationCarry.tla` | The carried tail fits the cap or is minimal (and the minimal case is reached); every part of runs 1 and 2 is carried or in the receipt chain; what the next run renders whole was copied whole; no reasoning crosses runs; placeholders stick. |
 | `RecallDiscovery.tla` | Every evicted message, assistant text and results of parallel calls included, is reachable from the rendered checkpoint; any token, forged ones included, resolves only within the From chain; recall never returns server-only data; listing never spends reads; refills restore reads. |
 | `OverflowGuard.tla` | With calibration that can change mid-step, every failure is explained by a provider overflow; no retry is sent that is no smaller than a provider-rejected request; budget failures are honest; every step ends. |
 | `StepPayload.tla` | Activity inputs depend on neither run length nor initial history; walking the segments from the head finds exactly the committed entries. |
 
 The harness runs each safe configuration with deadlock checking on and a
-floor on the states explored, 60 safety fault configurations that must each
+floor on the states explored, 63 safety fault configurations that must each
 produce the counterexample for the rule they break, 9 witness configurations
 that prove interesting scenarios reachable, and 5 liveness configurations,
 four of whose properties each have a liveness fault that must break them. The
@@ -1754,10 +1813,13 @@ real proof is the ticket's Go test).
 A fresh review of the models found two design defects, both fixed above: a
 summariser could turn a copied summary's bare citation into one of the
 current run (4.9), and the no-progress check was not tied to the last
-provider rejection (4.15). Seven faults reproduce defects found in review:
+provider rejection (4.15). Ten faults reproduce defects found in review:
 those two, a non-idempotent publish, ordering by local message ID, adoption
-read from transcript entries, revision 7's request encoding, and today's
-accumulated planner histories.
+read from transcript entries, revision 7's request encoding, today's
+accumulated planner histories, and three found by checking revision 8 against
+the eval plan and the store backends: a step event dropped by an interceptor,
+request messages matched by the canonical hash, and `AdvanceContinuation`
+written as two operations.
 
 The models' guarantees are structural. `NothingSilentlyDropped` shows that
 every evicted position is covered by a summary or receipt under the model's

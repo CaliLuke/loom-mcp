@@ -1,7 +1,7 @@
 -------------------------- MODULE ContextCompaction --------------------------
 (***************************************************************************)
 (* One agent run under the context-compaction design in                   *)
-(* docs/wips/context_compaction.md (revision 8).                           *)
+(* docs/wips/context_compaction.md (revision 9).                           *)
 (*                                                                         *)
 (* Content ids stand in for content hashes and are named after what       *)
 (* produced them, so equal histories are equal states. The run store only *)

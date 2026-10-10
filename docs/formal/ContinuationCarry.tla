@@ -1,7 +1,7 @@
 --------------------------- MODULE ContinuationCarry ---------------------------
 (***************************************************************************)
 (* The continuation's carried forms, docs/wips/context_compaction.md       *)
-(* (revision 8), section 4.16.                                             *)
+(* (revision 9), section 4.16.                                             *)
 (*                                                                         *)
 (* A run ends with a tail of units. SealRecord carries it into the next    *)
 (* run within a cap: it drops reasoning blocks, evicts the oldest units    *)

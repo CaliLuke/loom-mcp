@@ -1,7 +1,7 @@
 ------------------------- MODULE SessionContinuation -------------------------
 (***************************************************************************)
 (* One session of several runs under the context-compaction design in     *)
-(* docs/wips/context_compaction.md (revision 8), sections 4.9 and 4.16.    *)
+(* docs/wips/context_compaction.md (revision 9), sections 4.9 and 4.16.    *)
 (*                                                                         *)
 (* Root runs start from the session's head continuation, add user          *)
 (* messages, may write a summary that cites one user message, seal, and    *)
@@ -27,7 +27,7 @@ CONSTANTS
 Faults == {"none", "non_idempotent_publish", "publish_before_seal",
            "unconditional_head", "child_publishes", "order_by_local_id",
            "bare_cites_current_run", "raw_previous_summary",
-           "already_without_compare"}
+           "already_without_compare", "advance_two_writes"}
 
 ASSUME Roots \cap Children = {}
 ASSUME Fault \in Faults
@@ -152,7 +152,8 @@ Seal(r) ==
     /\ UNCHANGED <<head, pubs, prev, pos, outcome, msgs, added, summ, sums, presented, now>>
 
 \* AdvanceContinuation(session, expected = Prev, next): one atomic store step
-\* returning published, already published, or superseded. The broken
+\* (one transaction in Mongo) that checks the ID before the head and returns
+\* published, already published, conflict or superseded. The broken
 \* configurations drop the idempotency check, ignore the expected head, or
 \* publish before sealing.
 StoredBody(r) == CHOOSE b \in pubs : b.id = r
@@ -187,6 +188,18 @@ PublishWith(r, ack) ==
 Publish(r) == PublishWith(r, TRUE)
 PublishLost(r) == PublishWith(r, FALSE)
 
+\* The broken configuration implements AdvanceContinuation as two writes:
+\* it inserts the continuation, then the worker crashes before the
+\* conditional head update. The retry finds the ID and gets "already".
+PublishInsertOnly(r) ==
+    /\ Fault = "advance_two_writes"
+    /\ phase[r] = "sealed"
+    /\ r \notin PubIds
+    /\ head = prev[r]
+    /\ pubs' = pubs \cup {Body(r, 1)}
+    /\ presented' = [presented EXCEPT ![r] = Body(r, 1)]
+    /\ UNCHANGED <<head, phase, prev, pos, sealed, outcome, msgs, added, summ, sums, now>>
+
 \* The workflow is terminated outside workflow code.
 Terminate(r) ==
     /\ phase[r] \in {"running", "sealed"}
@@ -201,7 +214,7 @@ Done == Finished /\ UNCHANGED vars
 Next ==
     \/ \E r \in Runs :
           \/ Start(r) \/ AddUser(r) \/ Summarize(r) \/ Seal(r)
-          \/ Publish(r) \/ PublishLost(r) \/ Terminate(r)
+          \/ Publish(r) \/ PublishLost(r) \/ PublishInsertOnly(r) \/ Terminate(r)
     \/ Done
 
 \* A delivered acknowledgement is eventually possible for every sealed root.
@@ -220,7 +233,7 @@ PublishedImpliesSealed == \A r \in PubIds : sealed[r]
 \* Continuations form one chain: no continuation has two successors.
 OneSuccessor == \A a, b \in pubs : a.prev = b.prev => a = b
 
-\* Positions follow the chain, so run labels (rN) are unambiguous.
+\* Positions follow the chain, so chain labels (rN) are unambiguous.
 PositionsFollowChain ==
     \A b \in pubs :
         IF b.prev = None THEN b.pos = 1

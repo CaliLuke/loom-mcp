@@ -1,7 +1,7 @@
 ----------------------------- MODULE CallCommit -----------------------------
 (***************************************************************************)
 (* Planner steps under the commit protocol of                              *)
-(* docs/wips/context_compaction.md (revision 8), sections 4.5 and 4.13.    *)
+(* docs/wips/context_compaction.md (revision 9), sections 4.5 and 4.13.    *)
 (*                                                                         *)
 (* A run has Steps planner steps. For each step the workflow schedules     *)
 (* activity attempts; each attempt makes a producing model call and an     *)
@@ -29,7 +29,7 @@ CONSTANTS
 Faults == {"none", "send_before_started", "adopt_by_entry",
            "presentation_without_key", "overflow_commits_presentation",
            "incomplete_as_abandoned", "seq_per_attempt", "index_first_stored",
-           "retry_same_attempt"}
+           "retry_same_attempt", "intercepted_record_event"}
 
 ASSUME Fault \in Faults
 ASSUME Steps \in Nat /\ Steps >= 1 /\ MaxAttempts \in Nat /\ MaxAttempts >= 1
@@ -208,8 +208,10 @@ StepFail ==
 
 \* The workflow receives an attempt's output, adopts it, indexes its output,
 \* records the call keys it returned in the step's event, and moves to the
-\* next step. The broken configurations record only the call a transcript
-\* entry names, or index the first output stored in the step.
+\* next step. The step event is a record event, so it skips BeforeEvent
+\* interceptors and always lands as written. The broken configurations record
+\* only the call a transcript entry names, index the first output stored in
+\* the step, or let an interceptor drop the step event.
 Adopt(a) ==
     /\ ~failed
     /\ a[1] = cur
@@ -221,9 +223,10 @@ Adopt(a) ==
                     IF Fault = "index_first_stored"
                        THEN CHOOSE b \in Attempts : <<cur, b>> \in outputs /\ \A c \in Attempts : <<cur, c>> \in outputs => b <= c
                        ELSE a[2]]
-    /\ event' = [event EXCEPT ![cur] =
-                    [keys |-> IF Fault = "adopt_by_entry" THEN {<<a[1], a[2], 1>>}
-                              ELSE {k \in CallsOf(a) : rec[k] # "none"}]]
+    /\ LET written == [keys |-> IF Fault = "adopt_by_entry" THEN {<<a[1], a[2], 1>>}
+                                ELSE {k \in CallsOf(a) : rec[k] # "none"}]
+       IN \E e \in IF Fault = "intercepted_record_event" THEN {written, NoEvent} ELSE {written} :
+             event' = [event EXCEPT ![cur] = e]
     /\ IF cur < Steps
           THEN /\ cur' = cur + 1
                /\ att' = 1
