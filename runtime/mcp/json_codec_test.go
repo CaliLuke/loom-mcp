@@ -170,10 +170,10 @@ func TestCanMarshalJSONDirectly(t *testing.T) {
 	type stringOption struct {
 		Count int `json:"count,string"`
 	}
-	type duplicateNames struct {
-		First  string `json:"name"`
-		Second string `json:"name"`
-	}
+	duplicateNames := reflect.StructOf([]reflect.StructField{
+		{Name: "First", Type: reflect.TypeOf(""), Tag: `json:"name"`},
+		{Name: "Second", Type: reflect.TypeOf(""), Tag: `json:"name"`},
+	})
 	type recursive struct {
 		Next *recursive `json:"next,omitempty"`
 	}
@@ -209,7 +209,7 @@ func TestCanMarshalJSONDirectly(t *testing.T) {
 		{name: "non-string map key", typeOf: reflect.TypeOf(map[int]string{}), want: false},
 		{name: "string tag option", typeOf: reflect.TypeOf(stringOption{}), want: false},
 		{name: "empty tag name", typeOf: emptyTagName, want: false},
-		{name: "duplicate names", typeOf: reflect.TypeOf(duplicateNames{}), want: false},
+		{name: "duplicate names", typeOf: duplicateNames, want: false},
 		{name: "recursive struct", typeOf: reflect.TypeOf(recursive{}), want: false},
 		{name: "zero struct omitempty", typeOf: reflect.TypeOf(zeroStructOmitEmpty{}), want: false},
 		{name: "non-generated tag name", typeOf: invalidTagName, want: false},
