@@ -54,7 +54,7 @@ PROTOC_INSTALL_DIR ?= $(GOPATH)
 
 all: build lint test
 
-.PHONY: release release-promote release-test release-model-test
+.PHONY: release release-promote release-test release-model-test context-model-test
 release:
 	$(GO) run ./internal/cmd/release --mode alpha --source "$$SOURCE" --version "$$VERSION"
 
@@ -67,6 +67,10 @@ release-test:
 # TLC is a development-only tool; supply the downloaded tla2tools.jar path.
 release-model-test:
 	bash ./scripts/release_model_test.sh "$(TLA2TOOLS_JAR)"
+
+# TLA+ model of the context-compaction design (docs/formal/ContextCompaction.md).
+context-model-test:
+	bash ./scripts/context_model_test.sh "$(TLA2TOOLS_JAR)"
 
 build: tools
 	$(GO) build ./...
