@@ -46,6 +46,16 @@ type (
 		UpdateOne(ctx context.Context, filter any, update any, opts ...options.Lister[options.UpdateOneOptions]) (*mongodriver.UpdateResult, error)
 	}
 
+	// FindOneAndUpdateCollection captures an atomic Mongo read and update.
+	FindOneAndUpdateCollection interface {
+		FindOneAndUpdate(ctx context.Context, filter any, update any, opts ...options.Lister[options.FindOneAndUpdateOptions]) SingleResultDecoder
+	}
+
+	// DeleteManyCollection captures the common Mongo DeleteMany operation.
+	DeleteManyCollection interface {
+		DeleteMany(ctx context.Context, filter any, opts ...options.Lister[options.DeleteManyOptions]) (*mongodriver.DeleteResult, error)
+	}
+
 	// IndexedCollection captures access to Mongo index management.
 	IndexedCollection interface {
 		Indexes() IndexCreator
@@ -129,6 +139,16 @@ func (c Collection) InsertOne(ctx context.Context, document any, opts ...options
 // UpdateOne forwards to the wrapped Collection.
 func (c Collection) UpdateOne(ctx context.Context, filter any, update any, opts ...options.Lister[options.UpdateOneOptions]) (*mongodriver.UpdateResult, error) {
 	return c.Coll.UpdateOne(ctx, filter, update, opts...)
+}
+
+// FindOneAndUpdate forwards to the wrapped Collection.
+func (c Collection) FindOneAndUpdate(ctx context.Context, filter any, update any, opts ...options.Lister[options.FindOneAndUpdateOptions]) SingleResultDecoder {
+	return SingleResult{Res: c.Coll.FindOneAndUpdate(ctx, filter, update, opts...)}
+}
+
+// DeleteMany forwards to the wrapped Collection.
+func (c Collection) DeleteMany(ctx context.Context, filter any, opts ...options.Lister[options.DeleteManyOptions]) (*mongodriver.DeleteResult, error) {
+	return c.Coll.DeleteMany(ctx, filter, opts...)
 }
 
 // Indexes forwards to the wrapped Collection.

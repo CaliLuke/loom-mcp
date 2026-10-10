@@ -17,6 +17,8 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/reminder"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog"
 	runloginmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog/inmem"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
+	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
 	sessioninmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/session/inmem"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/stream"
@@ -96,6 +98,13 @@ func WithSessionStore(s session.Store) RuntimeOption { return func(o *Options) {
 
 // WithRunEventStore sets the canonical run event store.
 func WithRunEventStore(s runlog.Store) RuntimeOption { return func(o *Options) { o.RunEventStore = s } }
+
+// WithRunStore sets the scoped content and call record store.
+func WithRunStore(s runstore.Store) RuntimeOption {
+	return func(o *Options) {
+		o.RunStore = s
+	}
+}
 
 // WithPolicy sets the policy engine.
 func WithPolicy(p policy.Engine) RuntimeOption { return func(o *Options) { o.Policy = p } }
@@ -189,6 +198,7 @@ func newFromOptions(opts Options) *Runtime {
 		SessionStore:         sessionStore,
 		Policy:               opts.Policy,
 		RunEventStore:        runEventStore,
+		RunStore:             resolveRunStore(opts.RunStore),
 		Bus:                  bus,
 		Stream:               opts.Stream,
 		hookActivityTimeout:  opts.HookActivityTimeout,
@@ -290,6 +300,13 @@ func resolveRunEventStore(store runlog.Store) runlog.Store {
 		return store
 	}
 	return runloginmem.New()
+}
+
+func resolveRunStore(store runstore.Store) runstore.Store {
+	if store != nil {
+		return store
+	}
+	return runstoreinmem.New()
 }
 
 func resolveSessionStore(store session.Store) session.Store {

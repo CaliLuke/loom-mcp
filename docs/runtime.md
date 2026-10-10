@@ -107,10 +107,11 @@ func main() {
     defer temporalEng.Close()
 
     // MongoDB stores for persistence. Construct these with the adapters under
-    // features/{memory,runlog,session}/mongo.
+    // features/{memory,runlog,runstore,session}/mongo.
     mongoClient := newMongoClient()
     memStore := memorymongo.New(mongoClient)
     runlogStore := newMongoRunlogStore(mongoClient)
+    runStore := newMongoRunStore(mongoClient)
     sessionStore := newMongoSessionStore(mongoClient)
 
     // Pulse sink for real-time streaming
@@ -121,6 +122,7 @@ func main() {
         runtime.WithEngine(temporalEng),
         runtime.WithMemoryStore(memStore),
         runtime.WithRunEventStore(runlogStore),
+        runtime.WithRunStore(runStore),
         runtime.WithSessionStore(sessionStore),
         runtime.WithStream(pulseSink),
         runtime.WithPolicy(basicpolicy.New()),
@@ -145,13 +147,52 @@ func main() {
 ```
 
 Temporal persists workflow history, including the live workflow ledger, but it
-does not persist the runtime's other stores. If `WithRunEventStore` and
+does not persist the runtime's other stores. If `WithRunEventStore`, `WithRunStore`, and
 `WithSessionStore` are omitted, `runtime.New` uses process-local in-memory
-stores: workflow replay still works, while canonical run introspection and
-session/run metadata can disappear at process restart. Use shared persistent
+stores: workflow replay still works, while canonical run introspection, stored content, call records,
+and session/run metadata can disappear at process restart. Use shared persistent
 stores in every worker and client-only process that reads or writes those
 surfaces. Configure `memory.Store` and `stream.Sink` separately when their
 derived projection or delivery state must also survive worker replacement.
+
+The Mongo run store uses explicit majority write concern and primary reads.
+`runtime.WithRunStore` exposes the store on `Runtime.RunStore`. Runtime execution
+does not read or write it yet. The store accepts a required root run ID as its
+scope. Each Mongo content item has a 15 MiB limit. `DeleteScope` deletes all
+content, call records, and sequence counters in that scope.
+
+The run log and run store each use a client constructor and a store wrapper:
+
+```go
+// runlogclient: features/runlog/mongo/clients/mongo
+// runlogmongo: features/runlog/mongo
+// runstoreclient: features/runstore/mongo/clients/mongo
+// runstoremongo: features/runstore/mongo
+runlogClient, err := runlogclient.New(runlogclient.Options{
+    Client: mongoClient, Database: "agents",
+})
+if err != nil {
+    return err
+}
+runlogStore, err := runlogmongo.NewStore(runlogClient)
+if err != nil {
+    return err
+}
+runStoreClient, err := runstoreclient.New(runstoreclient.Options{
+    Client: mongoClient, Database: "agents",
+})
+if err != nil {
+    return err
+}
+runStore, err := runstoremongo.NewStore(runStoreClient)
+if err != nil {
+    return err
+}
+rt := runtime.New(
+    runtime.WithRunEventStore(runlogStore),
+    runtime.WithRunStore(runStore),
+)
+```
 
 ### Seal semantics
 
@@ -1923,6 +1964,59 @@ Deployments can enforce a separate wall-clock limit at the workflow boundary.
 ---
 
 ## Memory and Stores
+
+### Run Store
+
+`runstore.Store` holds content by hash, opaque call records, and sequence
+counters. Every operation requires a non-empty scope: the root run ID shared
+by a run tree. The store treats this ID as opaque. It does not derive root run
+IDs or expose content from another scope.
+
+`Put` computes `sha256:` plus the lowercase hexadecimal SHA-256 digest of the
+bytes. Identical bytes in one scope have one stored copy and the same hash.
+`Get` returns `ErrNotFound` when the scope does not hold that hash.
+`NextSeq` allocates 1, 2, 3, and subsequent values per scope and run, without
+repetition under concurrent calls.
+
+Call identity is `(scope, RunID, Seq, Attempt)`. `Seq` comes from `NextSeq` and
+is unique across retries and parallel calls. `Attempt` identifies the activity
+attempt. Callers own the encodings of `Started` (request and start metadata)
+and `Completion`. The store compares these bodies byte for byte.
+
+`PutCall` rejects invalid keys, states, and bodies before any write. Every
+write requires `Started`. A started record requires an empty `Completion`.
+Completed and failed records require a non-empty `Completion`.
+
+| Existing record | Incoming record | Result |
+| --- | --- | --- |
+| None | Started | Insert |
+| Started | Started with identical `Started` | Idempotent success |
+| Started | Started with different `Started` | `ErrCallConflict` |
+| Started | Completed or failed with identical `Started` | Conditional completion |
+| Started | Completed or failed with different `Started` | `ErrCallConflict` |
+| Completed or failed | Same state and identical bodies | Idempotent success |
+| Completed or failed | Any other completed or failed record | `ErrCallConflict` |
+| Completed or failed | Started | `ErrCallTransition` |
+| None | Completed or failed | `ErrCallTransition` |
+
+`ListCalls` returns every record of the run in that scope, ordered by `Seq`
+then `Attempt`. A record that has no completion stays `CallStarted`. The reader
+classifies this record as incomplete.
+
+The default in-memory store copies bytes on input and output. It has no size
+limit and does not survive process replacement. The Mongo adapter uses
+`agent_run_content`, `agent_run_calls`, and `agent_run_sequences` by default.
+Its `Options` can set each collection name and the operation timeout.
+All three collections use majority write concern and primary read preference.
+
+Mongo `Put` rejects content larger than `MaxContentBytes` (15 MiB) with
+`ErrContentTooLarge` before it writes. This limit leaves room for metadata
+within MongoDB's 16 MiB document limit. There is no chunking or GridFS support.
+
+`DeleteScope` deletes the scope's content, call records, and sequence counters.
+It preserves other scopes, and repeated deletion succeeds. The next sequence
+allocation in a deleted scope starts at 1. Mongo deletes from three collections
+without a transaction. If deletion fails, the caller can retry it.
 
 ### Memory Store
 

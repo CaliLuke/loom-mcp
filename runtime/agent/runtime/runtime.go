@@ -43,6 +43,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/prompt"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/reminder"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/stream"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
@@ -102,6 +103,9 @@ type (
 		Policy policy.Engine
 		// RunEventStore is the canonical append-only run event log.
 		RunEventStore runlog.Store
+
+		// RunStore holds scoped content and opaque call records.
+		RunStore runstore.Store
 		// Bus is the bus used for streaming runtime events.
 		Bus hooks.Bus
 		// Stream publishes planner/tool/assistant events to the caller.
@@ -209,6 +213,9 @@ type (
 		Policy policy.Engine
 		// RunEventStore is the canonical append-only run event log.
 		RunEventStore runlog.Store
+
+		// RunStore holds scoped content and opaque call records.
+		RunStore runstore.Store
 		// Hooks is the Pulse-backed bus used for streaming runtime events.
 		Hooks hooks.Bus
 		// Stream publishes planner/tool/assistant events to the caller.

@@ -174,7 +174,7 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   after an application-owned dead-letter commit.
 - Temporal persists workflow history, not the runtime's store defaults.
   Production worker and client runtimes must explicitly share persistent
-  `runlog.Store` and `session.Store` implementations when run introspection and
+  `runlog.Store`, `runstore.Store`, and `session.Store` implementations when run introspection and
   session metadata must survive process replacement; configure memory and
   stream projections independently.
 - If you register a Temporal workflow outside `Engine.RegisterWorkflow`, call
