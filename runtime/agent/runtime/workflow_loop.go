@@ -33,7 +33,7 @@ type (
 		reg   AgentRegistration
 
 		input *RunInput
-		base  *planner.PlanInput
+		base  *workflowPlanInput
 		st    *runLoopState
 
 		turnID        string
@@ -66,7 +66,7 @@ func newWorkflowLoop(
 	wfCtx engine.WorkflowContext,
 	reg AgentRegistration,
 	input *RunInput,
-	base *planner.PlanInput,
+	base *workflowPlanInput,
 	st *runLoopState,
 	turnID string,
 	ctrl *interrupt.Controller,
@@ -215,7 +215,6 @@ func (l *workflowLoop) handlePendingInterrupts() error {
 		l.ctrl,
 		&l.st.NextAttempt,
 		l.deadlines.Budget,
-		l.st,
 	)
 }
 
@@ -237,7 +236,7 @@ func (l *workflowLoop) finalizeForTimeBudget() (*RunOutput, error) {
 		l.input,
 		l.base,
 		l.st.ToolEvents,
-		l.st.ToolOutputs,
+
 		l.st.AggUsage,
 		l.st.Caps,
 		l.st.NextAttempt,

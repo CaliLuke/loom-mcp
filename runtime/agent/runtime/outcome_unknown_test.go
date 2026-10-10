@@ -3,9 +3,10 @@ package runtime
 import (
 	"context"
 	"encoding/json/v2"
-	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 	"testing"
 	"time"
+
+	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
@@ -37,13 +38,13 @@ func TestUnknownToolOutcomeFinalizesWithoutOrdinaryResume(t *testing.T) {
 		planResult:    &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: final}},
 	}
 	input := &RunInput{RootRunID: "run-unknown", AgentID: "svc.agent", RunID: "run-unknown"}
-	base := &planner.PlanInput{RunContext: run.Context{RunID: input.RunID}}
+	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID}})
 	reg := AgentRegistration{
 		ID: input.AgentID, Planner: &stubPlanner{}, ExecuteToolActivity: "execute", ResumeActivityName: "resume",
 		Specs: []tools.ToolSpec{spec}, Policy: RunPolicy{MaxRecoveryTurns: 1},
 	}
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: tool, Payload: []byte(`{}`)}}}
-	out, err := rt.runLoop(wfCtx, reg, input, base, initial, nil, model.TokenUsage{}, initialCaps(reg.Policy), time.Time{}, time.Time{}, 2, "turn-1", nil, nil, 0)
+	out, err := testRunLoop(t, rt, wfCtx, reg, input, base, initial, nil, initialCaps(reg.Policy), time.Time{}, time.Time{}, 2, "turn-1", nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, out)
@@ -54,8 +55,8 @@ func TestUnknownToolOutcomeFinalizesWithoutOrdinaryResume(t *testing.T) {
 	require.NotNil(t, call.Input.Finalize)
 	require.Equal(t, planner.TerminationReasonOutcomeUnknown, call.Input.Finalize.Reason)
 	require.Empty(t, call.Input.AllowedTools)
-	require.Len(t, call.Input.ToolOutputs, 1)
-	require.Equal(t, planner.ToolErrorKindOutcomeUnknown, call.Input.ToolOutputs[0].Error.Kind)
+	require.Len(t, testPlannerView(t, rt, call.Input).Outputs, 1)
+	require.Equal(t, planner.ToolErrorKindOutcomeUnknown, testPlannerView(t, rt, call.Input).Outputs[0].Error.Kind)
 }
 
 func TestOutcomeUnknownClassificationUsesTypedField(t *testing.T) {
@@ -92,11 +93,11 @@ func TestAwaitContinuationFinalizesWhenHistoryHasUnknownOutcome(t *testing.T) {
 		planResult:    &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: final}},
 	}
 	input := &RunInput{RootRunID: "run-unknown-await", AgentID: "svc.agent", RunID: "run-unknown-await"}
-	base := &planner.PlanInput{RunContext: run.Context{RunID: input.RunID}}
+	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID}})
 	reg := AgentRegistration{ID: input.AgentID, ResumeActivityName: "resume"}
 	st := &runLoopState{
 		Caps: policy.CapsState{MaxRecoveryTurns: 2, RemainingRecoveryTurns: 2},
-		ToolOutputs: []*planner.ToolOutput{{Error: planner.NewToolErrorWithKind(
+		ToolEvents: []*planner.ToolResult{{Error: planner.NewToolErrorWithKind(
 			"outcome is unknown", planner.ToolErrorKindOutcomeUnknown,
 		)}},
 	}
@@ -130,7 +131,7 @@ func TestUnknownOutcomeKindSurvivesActivityJSONRoundTrip(t *testing.T) {
 	require.NoError(t, json.Unmarshal(payload, &decodedActivityOutput))
 
 	decodedResult, err := (&toolBatchExec{r: rt}).decodeActivityToolResult(
-		context.Background(),
+
 		futureInfo{call: planner.ToolRequest{Name: tool, ToolCallID: "call-1"}},
 		&decodedActivityOutput,
 	)
@@ -152,14 +153,8 @@ func TestUnknownOutcomeSkipsRecoveryCapAndRejectsFinalizerToolCall(t *testing.T)
 	}}
 	unknown := planner.NewToolErrorWithKind("execution outcome is unknown", planner.ToolErrorKindOutcomeUnknown)
 	result := &planner.ToolResult{Name: effectTool, ToolCallID: "call-1", Error: unknown}
-	toolOutput := &planner.ToolOutput{Name: effectTool, ToolCallID: "call-1", Error: unknown}
-	wfCtx := &testWorkflowContext{
-		ctx:           context.Background(),
-		hasPlanResult: true,
-		planResult: &planner.PlanResult{ToolCalls: []planner.ToolRequest{{
-			Name: effectTool, ToolCallID: "replacement-call", Payload: []byte(`{}`),
-		}}},
-	}
+
+	wfCtx := &testWorkflowContext{finishRuntime: rt, ctx: context.Background(), hasPlanResult: true, planResult: &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: effectTool, ToolCallID: "replacement-call", Payload: []byte(`{}`)}}}}
 	input := &RunInput{AgentID: "svc.agent", RunID: "run-unknown-terminal", Policy: &PolicyOverrides{
 		LimitTerminalPlans: &LimitTerminalPlans{
 			TimeBudget:  LimitTerminalCall{Name: recoveryTool, Payload: []byte(`{}`)},
@@ -167,15 +162,11 @@ func TestUnknownOutcomeSkipsRecoveryCapAndRejectsFinalizerToolCall(t *testing.T)
 			RecoveryCap: LimitTerminalCall{Name: recoveryTool, Payload: []byte(`{}`)},
 		},
 	}}
-	base := &planner.PlanInput{RunContext: run.Context{RunID: input.RunID}}
+	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID}})
 	reg := AgentRegistration{ID: input.AgentID, ResumeActivityName: "resume", Specs: []tools.ToolSpec{effectSpec, recoverySpec}}
 	require.NoError(t, rt.validateLimitTerminalPlans(reg, input.Policy.LimitTerminalPlans))
 
-	out, err := rt.finalizeWithPlanner(
-		wfCtx, reg, input, base, []*planner.ToolResult{result}, []*planner.ToolOutput{toolOutput},
-		model.TokenUsage{}, policy.CapsState{}, 1, "turn-1", nil,
-		planner.TerminationReasonFailureCap, time.Time{},
-	)
+	out, err := rt.finalizeWithPlanner(wfCtx, reg, input, base, []*planner.ToolResult{result}, model.TokenUsage{}, policy.CapsState{}, 1, "turn-1", nil, planner.TerminationReasonFailureCap, time.Time{})
 
 	require.Nil(t, out)
 	require.ErrorContains(t, err, "outside the current recovery catalog")
@@ -193,11 +184,7 @@ func TestUnknownOutcomeWithRequiredCompletionFailsWithoutMoreWork(t *testing.T) 
 	unknown := planner.NewToolErrorWithKind("execution outcome is unknown", planner.ToolErrorKindOutcomeUnknown)
 	result := &planner.ToolResult{Name: "svc.effect", Error: unknown}
 
-	out, err := rt.finalizeWithPlanner(
-		wfCtx, AgentRegistration{}, input, &planner.PlanInput{}, []*planner.ToolResult{result}, nil,
-		model.TokenUsage{}, policy.CapsState{}, 1, "turn-1", nil,
-		planner.TerminationReasonFailureCap, time.Time{},
-	)
+	out, err := rt.finalizeWithPlanner(wfCtx, AgentRegistration{}, input, testWorkflowInput(t, rt, &planner.PlanInput{}), []*planner.ToolResult{result}, model.TokenUsage{}, policy.CapsState{}, 1, "turn-1", nil, planner.TerminationReasonFailureCap, time.Time{})
 
 	require.ErrorContains(t, err, "outcome_unknown")
 	require.ErrorContains(t, err, "completion tool")

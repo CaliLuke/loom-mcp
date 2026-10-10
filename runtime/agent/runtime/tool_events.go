@@ -20,9 +20,6 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 )
 
-const maxPlanToolResultBytes = 64 * 1024
-const resultOmittedReasonWorkflowBudget = "workflow_budget"
-
 // encodeToolEvents converts typed in-memory tool results into workflow-boundary safe
 // envelopes.
 //
@@ -50,6 +47,7 @@ func (r *Runtime) encodeToolEvents(ctx context.Context, events []*planner.ToolRe
 		}
 		out = append(out, &api.ToolEvent{
 			Refs:          ev.Refs,
+			Preview:       ev.Preview,
 			Name:          ev.Name,
 			Result:        rawjson.Message(result),
 			ResultBytes:   resultBytes,
@@ -63,58 +61,6 @@ func (r *Runtime) encodeToolEvents(ctx context.Context, events []*planner.ToolRe
 			ChildrenCount: ev.ChildrenCount,
 			RunLink:       ev.RunLink,
 			Artifacts:     artifactRefsFromContents(ev.Artifacts),
-		})
-	}
-	return out, nil
-}
-
-// encodeToolEventsForPlanning converts tool results into workflow-boundary safe envelopes
-// suitable for PlanStart/PlanResume activity inputs.
-//
-// The planner resume inputs must remain small: the workflow loop is the control plane
-// and should not shuttle observer-side rendering payloads or large values across workflow/activity
-// boundaries. Full tool results are persisted via hooks and returned in
-// the run store for callers using LoadRunToolEvents.
-//
-// Contract:
-//   - ServerData is always omitted.
-//   - Results larger than maxPlanToolResultBytes are omitted (Result=nil) and must be
-//     consumed via the provider transcript (tool_result parts) or via out-of-band
-//     persistence.
-func (r *Runtime) encodeToolEventsForPlanning(ctx context.Context, events []*planner.ToolResult) ([]*api.ToolEvent, error) {
-	if len(events) == 0 {
-		return nil, nil
-	}
-	out := make([]*api.ToolEvent, 0, len(events))
-	for _, ev := range events {
-		result, err := r.marshalToolValue(ctx, ev.Name, ev.Result, ev.Bounds)
-		if err != nil {
-			return nil, fmt.Errorf("encode tool result for %s: %w", ev.Name, err)
-		}
-		resultBytes := len(result)
-		omitted := false
-		omittedReason := ""
-		if len(result) > maxPlanToolResultBytes {
-			omitted = true
-			omittedReason = resultOmittedReasonWorkflowBudget
-			result = nil
-		}
-		out = append(out, &api.ToolEvent{
-			Refs:                ev.Refs,
-			Name:                ev.Name,
-			Result:              rawjson.Message(result),
-			ResultBytes:         resultBytes,
-			ResultOmitted:       omitted,
-			ResultOmittedReason: omittedReason,
-			ServerData:          nil,
-			Bounds:              ev.Bounds,
-			Error:               ev.Error,
-			RetryHint:           ev.RetryHint,
-			Telemetry:           ev.Telemetry,
-			ToolCallID:          ev.ToolCallID,
-			ChildrenCount:       ev.ChildrenCount,
-			RunLink:             ev.RunLink,
-			Artifacts:           artifactRefsFromContents(ev.Artifacts),
 		})
 	}
 	return out, nil
@@ -188,6 +134,7 @@ func (r *Runtime) buildPlannerToolOutput(
 	}
 	output := &planner.ToolOutput{
 		Refs:                result.Refs,
+		Preview:             result.Preview,
 		Name:                call.Name,
 		ToolCallID:          call.ToolCallID,
 		Payload:             append(rawjson.Message(nil), call.Payload...),
@@ -201,7 +148,7 @@ func (r *Runtime) buildPlannerToolOutput(
 		Telemetry:           result.Telemetry,
 		Artifacts:           artifactRefsFromContents(result.Artifacts),
 	}
-	if result.ResultOmitted {
+	if result.ResultOmitted || result.Refs.Result != "" {
 		return output, nil
 	}
 	resultJSON, err := r.marshalToolValue(ctx, call.Name, result.Result, result.Bounds)
@@ -211,72 +158,6 @@ func (r *Runtime) buildPlannerToolOutput(
 	output.Result = rawjson.Message(resultJSON)
 	output.ResultBytes = len(resultJSON)
 	return output, nil
-}
-
-// decodeToolOutputs converts workflow-boundary tool output envelopes back into
-// planner ToolOutput values.
-func (r *Runtime) decodeToolOutputs(ctx context.Context, scope string, events []*api.ToolCallOutput) ([]*planner.ToolOutput, error) {
-	if len(events) == 0 {
-		return nil, nil
-	}
-	out := make([]*planner.ToolOutput, 0, len(events))
-	for _, ev := range events {
-		if ev == nil {
-			return nil, fmt.Errorf("nil tool output entry")
-		}
-		result, serverData, err := loadToolContent(ctx, r.RunStore, scope, ev.Name, ev.Refs, ev.Result, ev.ServerData)
-		if err != nil {
-			return nil, fmt.Errorf("decode planner tool output: %w", err)
-		}
-		out = append(out, &planner.ToolOutput{
-			Refs:                ev.Refs,
-			Name:                ev.Name,
-			ToolCallID:          ev.ToolCallID,
-			Payload:             append(rawjson.Message(nil), ev.Payload...),
-			Result:              result,
-			ResultBytes:         ev.ResultBytes,
-			ResultOmitted:       ev.ResultOmitted,
-			ResultOmittedReason: ev.ResultOmittedReason,
-			ServerData:          serverData,
-			Bounds:              ev.Bounds,
-			Error:               ev.Error,
-			RetryHint:           ev.RetryHint,
-			Telemetry:           ev.Telemetry,
-			Artifacts:           cloneArtifactRefs(ev.Artifacts),
-		})
-	}
-	return out, nil
-}
-
-// encodePlannerToolOutputs clones planner ToolOutput values into the
-// workflow-boundary safe api.ToolCallOutput shape used by plan activities.
-func encodePlannerToolOutputs(outputs []*planner.ToolOutput) ([]*api.ToolCallOutput, error) {
-	if len(outputs) == 0 {
-		return nil, nil
-	}
-	out := make([]*api.ToolCallOutput, 0, len(outputs))
-	for _, output := range outputs {
-		if output == nil {
-			return nil, fmt.Errorf("encode planner tool outputs: nil tool output")
-		}
-		out = append(out, &api.ToolCallOutput{
-			Refs:                output.Refs,
-			Name:                output.Name,
-			ToolCallID:          output.ToolCallID,
-			Payload:             append(rawjson.Message(nil), output.Payload...),
-			Result:              inlineContent(output.Result, output.Refs.Result),
-			ResultBytes:         output.ResultBytes,
-			ResultOmitted:       output.ResultOmitted,
-			ResultOmittedReason: output.ResultOmittedReason,
-			ServerData:          inlineContent(output.ServerData, output.Refs.ServerData),
-			Bounds:              output.Bounds,
-			Error:               output.Error,
-			RetryHint:           output.RetryHint,
-			Telemetry:           output.Telemetry,
-			Artifacts:           cloneArtifactRefs(output.Artifacts),
-		})
-	}
-	return out, nil
 }
 
 // inlineContent copies only content that has not already been stored.

@@ -39,14 +39,15 @@ func ProjectToolResultContent(resultJSON rawjson.Message, bounds *agent.Bounds, 
 		return nil, nil
 	}
 	if len(resultJSON) > MaxToolResultContentBytes {
-		return toolResultOmission(preview, bounds)
+		return OmittedToolResultContent(preview, bounds)
 	}
 	return decodeToolResultJSONValue(jsontext.Value(resultJSON))
 }
 
-// toolResultOmission builds the explicit omission object used when a canonical
-// successful result exceeds the transcript size budget.
-func toolResultOmission(preview string, bounds *agent.Bounds) (map[string]any, error) {
+// OmittedToolResultContent builds the same omission object as
+// ProjectToolResultContent when a successful result exceeds MaxToolResultContentBytes.
+// Callers with stored byte counts can project it without loading the result body.
+func OmittedToolResultContent(preview string, bounds *agent.Bounds) (map[string]any, error) {
 	content := map[string]any{
 		"omitted": true,
 		"reason":  toolResultOmittedReasonSizeLimit,

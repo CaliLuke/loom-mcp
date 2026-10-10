@@ -33,7 +33,8 @@ func TestContentRecoveryCorrectionStoredBeforeReturn(t *testing.T) {
 				writes := store.snapshot()
 				require.Len(t, writes, 1)
 				assert.Equal(t, "root", writes[0].scope)
-				assert.Equal(t, []byte(out.Recovery.Correction), writes[0].data)
+				assert.Empty(t, out.Recovery.Correction)
+				assert.NotEmpty(t, writes[0].data)
 				assert.Equal(t, writes[0].hash, out.Recovery.CorrectionRef)
 			})
 		}

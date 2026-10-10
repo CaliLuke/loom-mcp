@@ -9,30 +9,32 @@ import (
 	"time"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/interrupt"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
 )
 
-func (r *Runtime) waitAwaitQueueItem(ctx context.Context, ctrl *interrupt.Controller, input *RunInput, base *planner.PlanInput, st *runLoopState, turnID string, timeout time.Duration, it planner.AwaitItem) ([]*planner.ToolResult, error) {
+func (r *Runtime) waitAwaitQueueItem(ctx context.Context, ctrl *interrupt.Controller, input *RunInput, base *workflowPlanInput, st *runLoopState, timeout time.Duration, it planner.AwaitItem) ([]*planner.ToolResult, error) {
 	switch it.Kind {
 	case planner.AwaitItemKindClarification:
-		return waitAwaitClarification(ctx, ctrl, base, timeout, it.Clarification, st)
+		return waitAwaitClarification(ctx, ctrl, base, timeout, it.Clarification)
 	case planner.AwaitItemKindQuestions:
-		return r.waitAwaitQuestions(ctx, ctrl, input, base, st, turnID, timeout, it.Questions)
+		return r.waitAwaitQuestions(ctx, ctrl, input, base, st, timeout, it.Questions)
 	case planner.AwaitItemKindExternalTools:
-		return r.waitAwaitExternalTools(ctx, ctrl, input, base, st, turnID, timeout, it.ExternalTools)
+		return r.waitAwaitExternalTools(ctx, ctrl, input, base, st, timeout, it.ExternalTools)
 	case planner.AwaitItemKindTypedInput:
-		return waitAwaitTypedInput(ctx, ctrl, st, timeout, it.TypedInput)
+		return waitAwaitTypedInput(ctx, ctrl, input, base, timeout, it.TypedInput)
 	default:
 		return nil, fmt.Errorf("unknown await item kind %q", it.Kind)
 	}
 }
 
-func (r *Runtime) consumeProvidedToolResults(ctx context.Context, input *RunInput, base *planner.PlanInput, st *runLoopState, turnID string, rs *api.ToolResultsSet, allowed []planner.ToolRequest, expected map[string]struct{}) ([]*planner.ToolResult, error) {
+func (r *Runtime) consumeProvidedToolResults(ctx context.Context, input *RunInput, base *workflowPlanInput, st *runLoopState, rs *api.ToolResultsSet, allowed []planner.ToolRequest, expected map[string]struct{}) ([]*planner.ToolResult, error) {
 	if rs == nil {
 		return nil, errors.New("await: nil tool results set")
 	}
@@ -40,26 +42,32 @@ func (r *Runtime) consumeProvidedToolResults(ctx context.Context, input *RunInpu
 		return nil, errors.New("await: no tool results provided")
 	}
 
-	providedByID, err := indexProvidedToolResults(rs, expected)
+	if _, err := indexProvidedToolResults(rs, expected); err != nil {
+		return nil, err
+	}
+	wf := engine.WorkflowContextFromContext(ctx)
+	if wf == nil {
+		return nil, errors.New("provided tool results require workflow context")
+	}
+	out, err := wf.ExecuteRecordContentActivity(ctx, engine.RecordContentActivityCall{
+		Name:  RecordContentActivityName(input.AgentID),
+		Input: &api.RecordContentInput{RootRunID: base.RunContext.RootRunID, Provided: &api.ProvidedContent{Calls: allowed, Results: rs.Results, RunContext: base.RunContext, AgentID: input.AgentID, First: index.MessageID(len(base.Entries) + 1), CallRefs: base.CallRefs}},
+	})
 	if err != nil {
 		return nil, err
 	}
-
-	decoded, resultJSONs, err := r.decodeProvidedToolResults(ctx, allowed, providedByID)
-	if err != nil {
+	decoded := make([]*planner.ToolResult, len(out.ToolResults))
+	for i, result := range out.ToolResults {
+		decoded[i] = &planner.ToolResult{Name: result.Name, ToolCallID: result.ToolCallID, Refs: result.Refs, Bounds: result.Bounds, Error: result.Error, RetryHint: result.RetryHint, Preview: result.Preview, ResultBytes: result.ResultBytes, Artifacts: artifactContentsFromRefs(result.Artifacts)}
+	}
+	if err := adoptResultEntries(base, out.Entries, decoded); err != nil {
 		return nil, err
 	}
-
-	if err := r.recordProvidedToolResults(ctx, base, st, allowed, decoded); err != nil {
-		return nil, err
-	}
-	if err := r.publishProvidedToolResults(ctx, input, base, turnID, decoded, resultJSONs); err != nil {
-		return nil, err
-	}
+	st.ToolEvents = append(st.ToolEvents, cloneToolResults(decoded)...)
 	return decoded, nil
 }
 
-func waitAwaitClarification(ctx context.Context, ctrl *interrupt.Controller, base *planner.PlanInput, timeout time.Duration, clarification *planner.AwaitClarification, st *runLoopState) ([]*planner.ToolResult, error) {
+func waitAwaitClarification(ctx context.Context, ctrl *interrupt.Controller, base *workflowPlanInput, timeout time.Duration, clarification *planner.AwaitClarification) ([]*planner.ToolResult, error) {
 	if clarification == nil {
 		return nil, errors.New("await clarification missing payload")
 	}
@@ -73,17 +81,10 @@ func waitAwaitClarification(ctx context.Context, ctrl *interrupt.Controller, bas
 	if clarification.ID != "" && ans.ID != "" && ans.ID != clarification.ID {
 		return nil, errors.New("unexpected await ID for clarification")
 	}
-	st.ClarificationRefs = append(st.ClarificationRefs, ans.AnswerRef)
-	if ans.Answer != "" {
-		base.Messages = append(base.Messages, &model.Message{
-			Role:  model.ConversationRoleUser,
-			Parts: []model.Part{model.TextPart{Text: ans.Answer}},
-		})
-	}
-	return nil, nil
+	return nil, appendClarificationAnswer(base, ans.AnswerRef)
 }
 
-func waitAwaitTypedInput(ctx context.Context, ctrl *interrupt.Controller, st *runLoopState, timeout time.Duration, typedInput *planner.AwaitTypedInput) ([]*planner.ToolResult, error) {
+func waitAwaitTypedInput(ctx context.Context, ctrl *interrupt.Controller, input *RunInput, base *workflowPlanInput, timeout time.Duration, typedInput *planner.AwaitTypedInput) ([]*planner.ToolResult, error) {
 	if typedInput == nil {
 		return nil, errors.New("await typed_input missing payload")
 	}
@@ -103,18 +104,15 @@ func waitAwaitTypedInput(ctx context.Context, ctrl *interrupt.Controller, st *ru
 	if ans.ID != "" && ans.ID != typedInput.ID {
 		return nil, errors.New("unexpected await ID for typed_input")
 	}
-	if len(ans.Payload) == 0 || !jsontext.Value(ans.Payload).IsValid() {
-		return nil, errors.New("await typed_input: invalid answer payload")
-	}
-	if err := validateTypedInputPayload(typedInput.Schema, ans.Payload); err != nil {
+	wf := engine.WorkflowContextFromContext(ctx)
+	_, err = wf.ExecuteRecordContentActivity(ctx, engine.RecordContentActivityCall{
+		Name:  RecordContentActivityName(input.AgentID),
+		Input: &api.RecordContentInput{RootRunID: base.RunContext.RootRunID, Typed: &api.TypedContentValidation{Schema: typedInput.Schema, PayloadRef: ans.PayloadRef}},
+	})
+	if err != nil {
 		return nil, err
 	}
-	st.TypedInputs = append(st.TypedInputs, planner.TypedInputOutput{
-		ID:         typedInput.ID,
-		PayloadRef: ans.PayloadRef,
-		Payload:    append(ans.Payload[:0:0], ans.Payload...),
-	})
-	return nil, nil
+	return nil, base.appendEntry(index.MessageEntry{Kind: index.TypedInput, Hash: ans.PayloadRef, InputID: typedInput.ID})
 }
 
 func validateTypedInputPayload(schemaJSON rawjson.Message, payload rawjson.Message) error {
@@ -140,7 +138,7 @@ func validateTypedInputPayload(schemaJSON rawjson.Message, payload rawjson.Messa
 	return nil
 }
 
-func (r *Runtime) waitAwaitQuestions(ctx context.Context, ctrl *interrupt.Controller, input *RunInput, base *planner.PlanInput, st *runLoopState, turnID string, timeout time.Duration, questions *planner.AwaitQuestions) ([]*planner.ToolResult, error) {
+func (r *Runtime) waitAwaitQuestions(ctx context.Context, ctrl *interrupt.Controller, input *RunInput, base *workflowPlanInput, st *runLoopState, timeout time.Duration, questions *planner.AwaitQuestions) ([]*planner.ToolResult, error) {
 	if questions == nil {
 		return nil, errors.New("await questions missing payload")
 	}
@@ -154,10 +152,10 @@ func (r *Runtime) waitAwaitQuestions(ctx context.Context, ctrl *interrupt.Contro
 		ToolCallID: questions.ToolCallID,
 		Payload:    questions.Payload,
 	}}
-	return r.consumeProvidedToolResults(ctx, input, base, st, turnID, rs, allowed, expected)
+	return r.consumeProvidedToolResults(ctx, input, base, st, rs, allowed, expected)
 }
 
-func (r *Runtime) waitAwaitExternalTools(ctx context.Context, ctrl *interrupt.Controller, input *RunInput, base *planner.PlanInput, st *runLoopState, turnID string, timeout time.Duration, external *planner.AwaitExternalTools) ([]*planner.ToolResult, error) {
+func (r *Runtime) waitAwaitExternalTools(ctx context.Context, ctrl *interrupt.Controller, input *RunInput, base *workflowPlanInput, st *runLoopState, timeout time.Duration, external *planner.AwaitExternalTools) ([]*planner.ToolResult, error) {
 	if external == nil {
 		return nil, errors.New("await external_tools missing payload")
 	}
@@ -169,7 +167,7 @@ func (r *Runtime) waitAwaitExternalTools(ctx context.Context, ctrl *interrupt.Co
 	if err != nil {
 		return nil, err
 	}
-	return r.consumeProvidedToolResults(ctx, input, base, st, turnID, rs, allowed, expected)
+	return r.consumeProvidedToolResults(ctx, input, base, st, rs, allowed, expected)
 }
 
 func waitForProvidedToolResults(ctx context.Context, ctrl *interrupt.Controller, timeout time.Duration, awaitID string, kind string) (*api.ToolResultsSet, error) {
@@ -230,16 +228,7 @@ func indexProvidedToolResults(rs *api.ToolResultsSet, expected map[string]struct
 	return providedByID, nil
 }
 
-func (r *Runtime) recordProvidedToolResults(ctx context.Context, base *planner.PlanInput, st *runLoopState, allowed []planner.ToolRequest, decoded []*planner.ToolResult) error {
-	st.ToolEvents = append(st.ToolEvents, cloneToolResults(decoded)...)
-	if err := r.appendToolOutputs(ctx, st, allowed, decoded); err != nil {
-		return err
-	}
-	r.hideSuccessfulBookkeepingCallsFromPlanner(base, decoded)
-	return r.appendUserToolResults(base, allowed, decoded, st.Ledger)
-}
-
-func (r *Runtime) publishProvidedToolResults(ctx context.Context, input *RunInput, base *planner.PlanInput, turnID string, decoded []*planner.ToolResult, resultJSONs []rawjson.Message) error {
+func (r *Runtime) publishProvidedToolResults(ctx context.Context, input *RunInput, base *workflowPlanInput, turnID string, decoded []*planner.ToolResult, resultJSONs []rawjson.Message) error {
 	for i, tr := range decoded {
 		if tr == nil {
 			continue
@@ -251,7 +240,7 @@ func (r *Runtime) publishProvidedToolResults(ctx context.Context, input *RunInpu
 	return nil
 }
 
-func (r *Runtime) publishProvidedToolResult(ctx context.Context, input *RunInput, base *planner.PlanInput, turnID string, tr *planner.ToolResult, resultJSONs []rawjson.Message, idx int) error {
+func (r *Runtime) publishProvidedToolResult(ctx context.Context, input *RunInput, base *workflowPlanInput, turnID string, tr *planner.ToolResult, resultJSONs []rawjson.Message, idx int) error {
 	var resultJSON rawjson.Message
 	if idx < len(resultJSONs) {
 		resultJSON = resultJSONs[idx]

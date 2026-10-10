@@ -38,7 +38,7 @@ type confirmationAwait struct {
 // splitConfirmationCalls partitions allowed tool calls into:
 // - calls that may execute immediately, and
 // - calls that require an await_confirmation boundary before execution.
-func (r *Runtime) splitConfirmationCalls(ctx context.Context, base *planner.PlanInput, allowed []planner.ToolRequest) ([]planner.ToolRequest, []confirmationAwait, error) {
+func (r *Runtime) splitConfirmationCalls(ctx context.Context, base *workflowPlanInput, allowed []planner.ToolRequest) ([]planner.ToolRequest, []confirmationAwait, error) {
 	if len(allowed) == 0 {
 		return nil, nil, nil
 	}

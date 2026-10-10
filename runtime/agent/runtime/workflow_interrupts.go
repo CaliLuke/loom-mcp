@@ -15,7 +15,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/interrupt"
-	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 )
 
 const resumeMetadataKey = "resumed_by"
@@ -25,12 +25,12 @@ const resumeMetadataKey = "resumed_by"
 func (r *Runtime) handleInterrupts(
 	wfCtx engine.WorkflowContext,
 	input *RunInput,
-	base *planner.PlanInput,
+	base *workflowPlanInput,
 	turnID string,
 	ctrl *interrupt.Controller,
 	nextAttempt *int,
 	budgetDeadline time.Time,
-	st *runLoopState,
+
 ) error {
 	if ctrl == nil {
 		return nil
@@ -45,8 +45,9 @@ func (r *Runtime) handleInterrupts(
 		if err != nil || resumeReq == nil {
 			return err
 		}
-		applyResumeMessages(base, nextAttempt, resumeReq)
-		st.SignalMessageRefs = append(st.SignalMessageRefs, resumeReq.MessageRefs...)
+		if err := applyResumeMessages(base, nextAttempt, resumeReq); err != nil {
+			return err
+		}
 		if err := r.publishResumed(ctx, input, turnID, resumeReq); err != nil {
 			return err
 		}
@@ -93,12 +94,15 @@ func (r *Runtime) handleResumeWaitError(ctx context.Context, input *RunInput, tu
 	return err
 }
 
-func applyResumeMessages(base *planner.PlanInput, nextAttempt *int, resumeReq interrupt.ResumeRequest) {
-	if len(resumeReq.Messages) > 0 {
-		base.Messages = append(base.Messages, resumeReq.Messages...)
+func applyResumeMessages(base *workflowPlanInput, nextAttempt *int, resumeReq interrupt.ResumeRequest) error {
+	for _, ref := range resumeReq.MessageRefs {
+		if err := base.appendEntry(index.MessageEntry{Kind: index.Message, Hash: ref}); err != nil {
+			return err
+		}
 	}
 	base.RunContext.Attempt = *nextAttempt
 	*nextAttempt++
+	return nil
 }
 
 func resolveResumeActivityOptions(reg AgentRegistration, input *RunInput) engine.ActivityOptions {
@@ -123,6 +127,6 @@ func (r *Runtime) publishResumeReason(ctx context.Context, input *RunInput, turn
 
 func (r *Runtime) publishResumed(ctx context.Context, input *RunInput, turnID string, req interrupt.ResumeRequest) error {
 	return r.publishHook(ctx, hooks.NewRunResumedEvent(
-		input.RunID, input.AgentID, input.SessionID, req.Notes, req.RequestedBy, req.Labels, len(req.Messages),
+		input.RunID, input.AgentID, input.SessionID, req.Notes, req.RequestedBy, req.Labels, len(req.MessageRefs),
 	), turnID)
 }

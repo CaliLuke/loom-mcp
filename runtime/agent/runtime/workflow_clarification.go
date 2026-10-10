@@ -19,7 +19,9 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 )
 
 // handleMissingFieldsPolicy inspects tool results for a RetryHint indicating missing
@@ -40,10 +42,9 @@ func (r *Runtime) handleMissingFieldsPolicy(
 	wfCtx engine.WorkflowContext,
 	reg AgentRegistration,
 	input *RunInput,
-	base *planner.PlanInput,
+	base *workflowPlanInput,
 	results []*planner.ToolResult,
 	allResults []*planner.ToolResult,
-	allToolOutputs []*planner.ToolOutput,
 	aggUsage model.TokenUsage,
 	caps policy.CapsState,
 	nextAttempt *int,
@@ -51,7 +52,7 @@ func (r *Runtime) handleMissingFieldsPolicy(
 	notes []planner.PlannerAnnotation,
 	ctrl *interrupt.Controller,
 	deadlines *runDeadlines,
-	st *runLoopState,
+
 ) (*RunOutput, error) {
 	if ctrl == nil || reg.Policy.OnMissingFields == "" {
 		return nil, nil
@@ -62,10 +63,10 @@ func (r *Runtime) handleMissingFieldsPolicy(
 	}
 	switch reg.Policy.OnMissingFields {
 	case MissingFieldsFinalize:
-		out, err := r.finalizeWithPlanner(wfCtx, reg, input, base, allResults, allToolOutputs, aggUsage, caps, *nextAttempt, turnID, notes, planner.TerminationReasonFailureCap, time.Time{})
+		out, err := r.finalizeWithPlanner(wfCtx, reg, input, base, allResults, aggUsage, caps, *nextAttempt, turnID, notes, planner.TerminationReasonFailureCap, time.Time{})
 		return out, err
 	case MissingFieldsAwaitClarification:
-		return r.awaitMissingFieldClarification(wfCtx, input, base, turnID, ctrl, deadlines, mf, triggerTool, triggerCall, st)
+		return r.awaitMissingFieldClarification(wfCtx, input, base, turnID, ctrl, deadlines, mf, triggerTool, triggerCall)
 	case MissingFieldsResume:
 		return nil, nil
 	default:
@@ -88,14 +89,14 @@ func firstMissingFieldsHint(results []*planner.ToolResult) (*planner.RetryHint, 
 func (r *Runtime) awaitMissingFieldClarification(
 	wfCtx engine.WorkflowContext,
 	input *RunInput,
-	base *planner.PlanInput,
+	base *workflowPlanInput,
 	turnID string,
 	ctrl *interrupt.Controller,
 	deadlines *runDeadlines,
 	mf *planner.RetryHint,
 	triggerTool tools.Ident,
 	triggerCall string,
-	st *runLoopState,
+
 ) (*RunOutput, error) {
 	ctx := wfCtx.Context()
 	awaitID := generateDeterministicAwaitID(base.RunContext.RunID, base.RunContext.TurnID, triggerTool, triggerCall)
@@ -115,8 +116,9 @@ func (r *Runtime) awaitMissingFieldClarification(
 	if ans.ID != "" && ans.ID != awaitID {
 		return nil, fmt.Errorf("unexpected await ID for clarification")
 	}
-	appendClarificationAnswer(base, ans.Answer)
-	st.ClarificationRefs = append(st.ClarificationRefs, ans.AnswerRef)
+	if err := appendClarificationAnswer(base, ans.AnswerRef); err != nil {
+		return nil, err
+	}
 	if err := r.publishClarificationResumed(ctx, input, base, turnID, ans); err != nil {
 		return nil, err
 	}
@@ -126,7 +128,7 @@ func (r *Runtime) awaitMissingFieldClarification(
 func (r *Runtime) publishMissingFieldAwaitClarification(
 	ctx context.Context,
 	input *RunInput,
-	base *planner.PlanInput,
+	base *workflowPlanInput,
 	turnID string,
 	awaitID string,
 	mf *planner.RetryHint,
@@ -164,7 +166,7 @@ func waitForClarificationAnswer(
 func (r *Runtime) publishClarificationError(
 	ctx context.Context,
 	input *RunInput,
-	base *planner.PlanInput,
+	base *workflowPlanInput,
 	turnID string,
 	awaitID string,
 ) error {
@@ -174,20 +176,14 @@ func (r *Runtime) publishClarificationError(
 	), turnID)
 }
 
-func appendClarificationAnswer(base *planner.PlanInput, answer string) {
-	if answer == "" {
-		return
-	}
-	base.Messages = append(base.Messages, &model.Message{
-		Role:  model.ConversationRoleUser,
-		Parts: []model.Part{model.TextPart{Text: answer}},
-	})
+func appendClarificationAnswer(base *workflowPlanInput, ref runstore.Hash) error {
+	return base.appendEntry(index.MessageEntry{Kind: index.Clarification, Hash: ref})
 }
 
 func (r *Runtime) publishClarificationResumed(
 	ctx context.Context,
 	input *RunInput,
-	base *planner.PlanInput,
+	base *workflowPlanInput,
 	turnID string,
 	ans interrupt.ClarificationAnswer,
 ) error {

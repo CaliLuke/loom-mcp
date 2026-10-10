@@ -43,7 +43,7 @@ func TestActivityContentReferencesSurviveEnvelopes(t *testing.T) {
 	out, err := rt.ExecuteToolActivity(t.Context(), &ToolInput{RootRunID: "root", RunID: "child", ToolName: "tool", Payload: rawjson.Message(`{"input":1}`)})
 	require.NoError(t, err)
 	call := planner.ToolRequest{Name: "tool", ToolCallID: "call"}
-	result, err := (&toolBatchExec{r: rt}).decodeActivityToolResult(t.Context(), futureInfo{call: call}, out)
+	result, err := (&toolBatchExec{r: rt}).decodeActivityToolResult(futureInfo{call: call}, out)
 	require.NoError(t, err)
 	assert.Equal(t, out.Refs, result.Refs)
 	require.NotEmpty(t, result.Refs.Result)
@@ -55,17 +55,11 @@ func TestActivityContentReferencesSurviveEnvelopes(t *testing.T) {
 	events, err := rt.encodeToolEvents(t.Context(), []*planner.ToolResult{result})
 	require.NoError(t, err)
 	assert.Equal(t, out.Refs, events[0].Refs)
-	planning, err := rt.encodeToolEventsForPlanning(t.Context(), []*planner.ToolResult{result})
+	assert.Empty(t, events[0].Result)
+	assert.Empty(t, events[0].ServerData)
+	loaded, err := (viewContent{store: rt.RunStore, scope: "root"}).LoadToolResult(t.Context(), events[0].Refs)
 	require.NoError(t, err)
-	assert.Equal(t, out.Refs, planning[0].Refs)
-	outputs, err := rt.buildPlannerToolOutputs(t.Context(), []planner.ToolRequest{call}, []*planner.ToolResult{result})
-	require.NoError(t, err)
-	encoded, err := encodePlannerToolOutputs(outputs)
-	require.NoError(t, err)
-	decoded, err := rt.decodeToolOutputs(t.Context(), "root", encoded)
-	require.NoError(t, err)
-	assert.Equal(t, out.Refs, decoded[0].Refs)
-	assert.Equal(t, outputs[0].Result, decoded[0].Result)
+	assert.JSONEq(t, `{"ok":true}`, string(loaded))
 }
 
 func TestActivityErrorWithoutResultStoresNoEligibleContent(t *testing.T) {

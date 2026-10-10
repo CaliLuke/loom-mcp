@@ -3,9 +3,10 @@ package runtime
 import (
 	"context"
 	"encoding/json/v2"
-	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 	"testing"
 	"time"
+
+	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 
 	agent "github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
@@ -345,7 +346,7 @@ func TestAgentTool_UsesFinalToolResultBeforeAggregation(t *testing.T) {
 		ToolEventCount: 1,
 	}
 
-	tr, err := rt.adaptAgentChildOutput(context.Background(), cfg, call, run.Context{RunID: "child-run"}, out)
+	tr, err := rt.adaptAgentChildOutput(context.Background(), cfg, call, run.Context{RootRunID: "test-root", RunID: "child-run"}, out)
 	require.NoError(t, err)
 	require.NotNil(t, tr)
 	require.Nil(t, tr.Error)

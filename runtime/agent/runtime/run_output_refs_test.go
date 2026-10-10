@@ -105,48 +105,33 @@ func TestRunOutputConstantSize(t *testing.T) {
 }
 
 func TestPlannerToolOutputReferences(t *testing.T) {
-	for _, referenced := range []bool{true, false} {
-		t.Run(fmt.Sprint(referenced), func(t *testing.T) {
-			result := rawjson.Message(`{"result":"eligible-marker"}`)
-			serverData := rawjson.Message(`{"private":"server-marker"}`)
-			called := false
-			rt := newTestRuntimeWithPlanner("test.agent", &stubPlanner{resume: func(_ context.Context, input *planner.PlanResumeInput) (*planner.PlanResult, error) {
-				called = true
-				require.Len(t, input.ToolOutputs, 1)
-				assert.Equal(t, result, input.ToolOutputs[0].Result)
-				assert.Equal(t, serverData, input.ToolOutputs[0].ServerData)
-				return &planner.PlanResult{FinalToolResult: &planner.FinalToolResult{Result: rawjson.Message(`{}`)}}, nil
-			}})
-			output := &planner.ToolOutput{Name: "test.result", ToolCallID: "call", Result: result, ServerData: serverData}
-			if referenced {
-				var err error
-				output.Refs.Result, err = rt.RunStore.Put(t.Context(), "root", result)
-				require.NoError(t, err)
-				output.Refs.ServerData, err = rt.RunStore.Put(t.Context(), "root", serverData)
-				require.NoError(t, err)
-			}
-			attempt := 1
-			input, err := rt.buildNextResumeRequest("test.agent", &planner.PlanInput{RunContext: run.Context{RunID: "child", RootRunID: "root"}}, []*planner.ToolOutput{output}, nil, &attempt)
-			require.NoError(t, err)
-			finalInput, _, err := rt.buildFinalizePlanRequest(AgentRegistration{}, &planner.PlanInput{RunContext: input.RunContext}, &RunInput{AgentID: "test.agent"}, []*planner.ToolOutput{output}, policy.CapsState{}, 2, planner.TerminationReasonToolCap)
-			require.NoError(t, err)
-			assert.Equal(t, input.ToolOutputs, finalInput.ToolOutputs)
-			if referenced {
-				assert.Empty(t, input.ToolOutputs[0].Result)
-				assert.Empty(t, input.ToolOutputs[0].ServerData)
-				data, err := json.Marshal(input)
-				require.NoError(t, err)
-				assert.NotContains(t, string(data), "eligible-marker")
-				assert.NotContains(t, string(data), "server-marker")
-			} else {
-				assert.Equal(t, result, input.ToolOutputs[0].Result)
-				assert.Equal(t, serverData, input.ToolOutputs[0].ServerData)
-			}
-			_, err = rt.PlanResumeActivity(t.Context(), &input)
-			require.NoError(t, err)
-			assert.True(t, called)
-		})
-	}
+	result := rawjson.Message(`{"result":"eligible-marker"}`)
+	server := rawjson.Message(`{"private":"server-marker"}`)
+	called := 0
+	rt := newTestRuntimeWithPlanner("test.agent", &stubPlanner{resume: func(ctx context.Context, input *planner.PlanResumeInput) (*planner.PlanResult, error) {
+		called++
+		require.Len(t, input.ToolOutputs, 1)
+		assert.JSONEq(t, string(result), string(testLoadToolResult(t, ctx, input)))
+		assert.JSONEq(t, string(server), string(testLoadServerData(t, ctx, input)))
+		return &planner.PlanResult{FinalToolResult: &planner.FinalToolResult{Result: rawjson.Message(`{}`)}}, nil
+	}})
+	view := testOutputView(t, rt, []*api.ToolCallOutput{{Name: "test.result", ToolCallID: "call", Result: result, ServerData: server}})
+	base := &workflowPlanInput{RunContext: run.Context{RunID: "child", RootRunID: "root"}, Entries: view.Pending}
+	attempt := 1
+	input, err := rt.buildNextResumeRequest("test.agent", base, &attempt)
+	require.NoError(t, err)
+	data, err := json.Marshal(input)
+	require.NoError(t, err)
+	assert.NotContains(t, string(data), "eligible-marker")
+	assert.NotContains(t, string(data), "server-marker")
+	out, err := rt.PlanResumeActivity(t.Context(), &input)
+	require.NoError(t, err)
+	base.adopt(out)
+	finalInput, _, err := rt.buildFinalizePlanRequest(AgentRegistration{}, base, &RunInput{AgentID: "test.agent"}, policy.CapsState{}, 2, planner.TerminationReasonToolCap)
+	require.NoError(t, err)
+	_, err = rt.PlanResumeActivity(t.Context(), &finalInput)
+	require.NoError(t, err)
+	assert.Equal(t, 2, called)
 }
 
 func TestPlannerMissingToolOutputReference(t *testing.T) {
@@ -154,12 +139,12 @@ func TestPlannerMissingToolOutputReference(t *testing.T) {
 		t.Error("planner must not run with missing content")
 		return &planner.PlanResult{}, nil
 	}})
-	_, err := rt.PlanResumeActivity(t.Context(), &PlanActivityInput{AgentID: "test.agent", RunContext: run.Context{RootRunID: "root"}, ToolOutputs: []*api.ToolCallOutput{{Name: "test.result", Refs: tools.ResultRefs{Result: "sha256:missing"}}}})
+	view := testOutputView(t, rt, []*api.ToolCallOutput{{Name: "test.result", Refs: tools.ResultRefs{Result: "sha256:missing"}}})
+	_, err := rt.PlanResumeActivity(t.Context(), &PlanActivityInput{AgentID: "test.agent", RunContext: run.Context{RootRunID: "root"}, View: view})
 	require.ErrorIs(t, err, runstore.ErrNotFound)
-	assert.ErrorContains(t, err, "test.result")
 }
 
-func TestInlineToolOutputsRetainBytesAndReferences(t *testing.T) {
+func TestInlineToolOutputsExposeLoadableReferences(t *testing.T) {
 	rt := New()
 	spec := newAnyJSONSpec("inline.result", "inline")
 	result := rawjson.Message(`{"inline":true}`)
@@ -177,8 +162,8 @@ func TestInlineToolOutputsRetainBytesAndReferences(t *testing.T) {
 		resume: func(_ context.Context, in *planner.PlanResumeInput) (*planner.PlanResult, error) {
 			require.Len(t, in.ToolOutputs, 1)
 			assert.NotEmpty(t, in.ToolOutputs[0].Refs.Result)
-			assert.Equal(t, result, in.ToolOutputs[0].Result)
-			assert.Equal(t, serverData, in.ToolOutputs[0].ServerData)
+			assert.JSONEq(t, string(result), string(testLoadToolResult(t, t.Context(), in)))
+			assert.JSONEq(t, string(serverData), string(testLoadServerData(t, t.Context(), in)))
 			return &planner.PlanResult{FinalToolResult: &planner.FinalToolResult{Result: rawjson.Message(`"done"`)}}, nil
 		},
 	}

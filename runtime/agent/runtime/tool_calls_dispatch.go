@@ -183,8 +183,7 @@ func (e *toolBatchExec) adaptInlinePayload(ctx context.Context, call planner.Too
 func (e *toolBatchExec) dispatchInlineToolCall(wfCtx engine.WorkflowContext, b *toolCallBatch, call planner.ToolRequest, ts ToolsetRegistration) error {
 	start := wfCtx.Now()
 	ctx := wfCtx.Context()
-	ctxInline := engine.WithWorkflowContext(ctx, wfCtx)
-	execResult, err := ts.Execute(ctxInline, &call)
+	execResult, err := ts.Execute(ctx, &call)
 	if err != nil {
 		return fmt.Errorf("inline tool %q failed: %w", call.Name, err)
 	}
@@ -196,7 +195,7 @@ func (e *toolBatchExec) dispatchInlineToolCall(wfCtx engine.WorkflowContext, b *
 	if err != nil {
 		return err
 	}
-	if err := e.r.recordWorkflowToolResult(ctx, e.agentID, e.runCtx.RootRunID, result, resultJSON); err != nil {
+	if err := e.r.recordWorkflowToolResult(ctx, result, resultJSON); err != nil {
 		return err
 	}
 	if err := e.publishToolResultReceived(ctx, call, result, resultJSON, duration); err != nil {
@@ -209,7 +208,19 @@ func (e *toolBatchExec) dispatchInlineToolCall(wfCtx engine.WorkflowContext, b *
 
 func (e *toolBatchExec) dispatchInlineAgentToolCall(wfCtx engine.WorkflowContext, b *toolCallBatch, call planner.ToolRequest, ts ToolsetRegistration) error {
 	ctx := wfCtx.Context()
-	messages, nestedRunCtx, err := e.r.buildAgentChildRequest(ctx, ts.AgentTool, &call, e.messages, e.runCtx)
+	failure, err := e.r.validateChildDispatch(wfCtx, e.agentID, ts.AgentTool, &call, e.runCtx, e.base)
+	if err != nil {
+		return err
+	}
+	if failure != nil {
+		if err := e.publishToolResultReceived(ctx, call, failure, nil, 0); err != nil {
+			return err
+		}
+		b.inlineByID[call.ToolCallID] = Executed(failure)
+		e.recordDiscoveredToolCall(b, call.ToolCallID)
+		return nil
+	}
+	messages, nestedRunCtx, err := e.r.buildAgentChildRequest(ctx, ts.AgentTool, &call)
 	if err != nil {
 		return e.recordInlineAgentRequestFailure(ctx, b, call, err)
 	}

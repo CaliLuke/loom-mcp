@@ -7,9 +7,10 @@ package runtime
 
 import (
 	"context"
-	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 	"testing"
 	"time"
+
+	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/interrupt"
@@ -63,10 +64,10 @@ func TestRunLoopRecordsAssistantTranscriptOncePerTurn(t *testing.T) {
 			}}}
 
 			input := &RunInput{RootRunID: "run-1", AgentID: "svc.agent", RunID: "run-1"}
-			base := &planner.PlanInput{
-				RunContext: run.Context{RunID: input.RunID},
+			base := testWorkflowInput(t, rt, &planner.PlanInput{
+				RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID},
 				Agent:      newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID}),
-			}
+			})
 			initial := &planner.PlanResult{ToolCalls: tc.toolCalls}
 			turnTranscript := []*model.Message{{
 				Role:  model.ConversationRoleAssistant,
@@ -74,17 +75,17 @@ func TestRunLoopRecordsAssistantTranscriptOncePerTurn(t *testing.T) {
 			}}
 			ctrl := interrupt.NewController(wfCtx)
 
-			_, err := rt.runLoop(wfCtx, AgentRegistration{
+			_, err := testRunLoop(t, rt, wfCtx, AgentRegistration{
 				ID:                  input.AgentID,
 				Planner:             &stubPlanner{},
 				ExecuteToolActivity: "execute",
 				ResumeActivityName:  "resume",
-			}, input, base, initial, turnTranscript, model.TokenUsage{}, policy.CapsState{}, time.Time{}, time.Time{}, 2, "turn-1", nil, ctrl, 0)
+			}, input, base, initial, turnTranscript, policy.CapsState{}, time.Time{}, time.Time{}, 2, "turn-1", ctrl)
 			require.NoError(t, err)
 
-			assert.Equal(t, 1, countAssistantTextParts(base.Messages, "turn-reasoning"), "streamed assistant transcript must be recorded exactly once")
+			assert.Equal(t, 1, countAssistantTextParts(testView(t, rt, base).Messages, "turn-reasoning"), "streamed assistant transcript must be recorded exactly once")
 			for _, call := range tc.toolCalls {
-				assert.Equal(t, 1, countToolUseParts(base.Messages, call.ToolCallID), "tool_use %s must be declared exactly once", call.ToolCallID)
+				assert.Equal(t, 1, countToolUseParts(testView(t, rt, base).Messages, call.ToolCallID), "tool_use %s must be declared exactly once", call.ToolCallID)
 			}
 		})
 	}

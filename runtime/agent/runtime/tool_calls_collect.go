@@ -111,7 +111,7 @@ func (e *toolBatchExec) collectActivityExecution(wfCtx engine.WorkflowContext, c
 		}
 		return Executed(tr), nil
 	}
-	toolRes, err := e.decodeActivityToolResult(ctx, info, out)
+	toolRes, err := e.decodeActivityToolResult(info, out)
 	if err != nil {
 		return nil, err
 	}
@@ -149,45 +149,28 @@ func popReadyActivityFuture(pending []futureInfo) (futureInfo, []futureInfo, boo
 	return futureInfo{}, pending, false
 }
 
-func (e *toolBatchExec) decodeActivityToolResult(ctx context.Context, info futureInfo, out *ToolOutput) (*planner.ToolResult, error) {
+func (e *toolBatchExec) decodeActivityToolResult(info futureInfo, out *ToolOutput) (*planner.ToolResult, error) {
 	spec, ok := e.r.toolSpec(info.call.Name)
 	if !ok {
 		return nil, fmt.Errorf("missing tool spec for %s", info.call.Name)
 	}
-	decoded, err := e.decodeActivityResultValue(ctx, info, out)
-	if err != nil {
-		return nil, err
-	}
 	toolRes := &planner.ToolResult{
-		Name:       info.call.Name,
-		Result:     decoded,
-		Refs:       out.Refs,
-		Bounds:     out.Bounds,
-		ServerData: out.ServerData,
-		ToolCallID: info.call.ToolCallID,
-		Telemetry:  out.Telemetry,
-		Artifacts:  artifactContentsFromRefs(out.Artifacts),
+		Name:        info.call.Name,
+		Preview:     out.Preview,
+		ResultBytes: out.ResultBytes,
+		Refs:        out.Refs,
+		Bounds:      out.Bounds,
+		ServerData:  out.ServerData,
+		ToolCallID:  info.call.ToolCallID,
+		Telemetry:   out.Telemetry,
+		Artifacts:   artifactContentsFromRefs(out.Artifacts),
 	}
 	if out.Error != "" {
 		toolRes.Error = planner.NewToolError(out.Error)
 		toolRes.Error.Kind = out.ErrorKind
 	}
-	if err := e.r.enforceToolResultContracts(spec, info.call, toolRes); err != nil {
-		return nil, err
-	}
 	applyActivityRetryHint(toolRes, spec, out)
 	return toolRes, nil
-}
-
-func (e *toolBatchExec) decodeActivityResultValue(ctx context.Context, info futureInfo, out *ToolOutput) (any, error) {
-	if out.Error != "" || !hasNonNullJSON(out.Payload.RawMessage()) {
-		return nil, nil
-	}
-	v, err := e.r.unmarshalToolValue(ctx, info.call.Name, out.Payload.RawMessage(), false)
-	if err != nil {
-		return nil, fmt.Errorf("tool %q result decode failed (tool_call_id=%s): %w", info.call.Name, info.call.ToolCallID, err)
-	}
-	return v, nil
 }
 
 func applyActivityRetryHint(toolRes *planner.ToolResult, spec tools.ToolSpec, out *ToolOutput) {
@@ -248,7 +231,7 @@ func (e *toolBatchExec) collectChildResult(wfCtx engine.WorkflowContext, ctx con
 	if err != nil {
 		return nil, err
 	}
-	if err := e.r.recordWorkflowToolResult(ctx, e.agentID, e.runCtx.RootRunID, tr, resultJSON); err != nil {
+	if err := e.r.recordWorkflowToolResult(ctx, tr, resultJSON); err != nil {
 		return nil, err
 	}
 	if err := e.publishToolResultReceived(ctx, info.call, tr, resultJSON, duration); err != nil {

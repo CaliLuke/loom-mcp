@@ -114,7 +114,7 @@ func TestAgentFeatureMethodBackedDispatcher(t *testing.T) {
 		Labels:     map[string]string{"tenant": "acme"},
 	})
 	require.NoError(t, err)
-	require.JSONEq(t, `{"ok":true,"message":"echo:loom"}`, string(out.Payload))
+	require.JSONEq(t, `{"ok":true,"message":"echo:loom"}`, fixtureToolResult(t, fx.rt, "run-method-backed-dispatcher", out))
 	require.Equal(t, "loom", svc.topic)
 }
 
@@ -299,8 +299,8 @@ func TestGeneratedFeatureRunPersistsArtifactsMemorySkillsAndDebugState(t *testin
 		Payload:    rawjson.Message([]byte(`{"mime_type":"text/plain"}`)),
 	})
 	require.NoError(t, err)
-	require.Contains(t, string(listArtifacts.Payload), refs[0].ID)
-	require.NotContains(t, string(listArtifacts.Payload), "published")
+	require.Contains(t, fixtureToolResult(t, rt, runID, listArtifacts), refs[0].ID)
+	require.NotContains(t, fixtureToolResult(t, rt, runID, listArtifacts), "published")
 
 	loadArtifact, err := rt.ExecuteToolActivity(ctx, &agentsruntime.ToolInput{RootRunID: runID,
 		AgentID:    coordinator.AgentID,
@@ -311,7 +311,7 @@ func TestGeneratedFeatureRunPersistsArtifactsMemorySkillsAndDebugState(t *testin
 		Payload:    rawjson.Message([]byte(`{"id":"` + refs[0].ID + `","max_bytes":5}`)),
 	})
 	require.NoError(t, err)
-	require.JSONEq(t, `{"content":"publi","mime_type":"text/plain","truncated":true,"size_bytes":9}`, string(loadArtifact.Payload))
+	require.JSONEq(t, `{"content":"publi","mime_type":"text/plain","truncated":true,"size_bytes":9}`, fixtureToolResult(t, rt, runID, loadArtifact))
 
 	loadMemory, err := rt.ExecuteToolActivity(ctx, &agentsruntime.ToolInput{RootRunID: runID,
 		AgentID:    coordinator.AgentID,
@@ -322,7 +322,7 @@ func TestGeneratedFeatureRunPersistsArtifactsMemorySkillsAndDebugState(t *testin
 		Payload:    rawjson.Message([]byte(`{"scope":"current_run","limit":5}`)),
 	})
 	require.NoError(t, err)
-	require.Contains(t, string(loadMemory.Payload), "seed memory")
+	require.Contains(t, fixtureToolResult(t, rt, runID, loadMemory), "seed memory")
 
 	indexedMemory, err := rt.ExecuteToolActivity(ctx, &agentsruntime.ToolInput{RootRunID: runID,
 		AgentID:    coordinator.AgentID,
@@ -333,7 +333,7 @@ func TestGeneratedFeatureRunPersistsArtifactsMemorySkillsAndDebugState(t *testin
 		Payload:    rawjson.Message([]byte(`{"scope":"indexed","event_types":["user_message"],"labels":{"tenant":"acme"},"limit":50}`)),
 	})
 	require.NoError(t, err)
-	require.Contains(t, string(indexedMemory.Payload), "indexed memory")
+	require.Contains(t, fixtureToolResult(t, rt, runID, indexedMemory), "indexed memory")
 	require.Equal(t, string(coordinator.AgentID), indexedQuery.AgentID)
 	require.Equal(t, runID, indexedQuery.RunID)
 	require.Equal(t, "sess-state", indexedQuery.SessionID)
@@ -361,7 +361,7 @@ func TestGeneratedFeatureRunPersistsArtifactsMemorySkillsAndDebugState(t *testin
 		Payload:    rawjson.Message([]byte(`{"query":"fixture memory","labels":{"tenant":"acme"},"limit":50}`)),
 	})
 	require.NoError(t, err)
-	require.Contains(t, string(longTermMemory.Payload), "long-term fixture memory")
+	require.Contains(t, fixtureToolResult(t, rt, runID, longTermMemory), "long-term fixture memory")
 
 	listSkills, err := rt.ExecuteToolActivity(ctx, &agentsruntime.ToolInput{RootRunID: runID,
 		AgentID:    coordinator.AgentID,
@@ -372,11 +372,11 @@ func TestGeneratedFeatureRunPersistsArtifactsMemorySkillsAndDebugState(t *testin
 		Payload:    rawjson.Message([]byte(`{}`)),
 	})
 	require.NoError(t, err)
-	require.Contains(t, string(listSkills.Payload), "release-check")
-	require.Contains(t, string(listSkills.Payload), `"allowed_tools":["shell"]`)
-	require.Contains(t, string(listSkills.Payload), `"preload":"on_start"`)
-	require.Contains(t, string(listSkills.Payload), `"reload":"per_call"`)
-	require.Contains(t, string(listSkills.Payload), `"preloaded":true`)
+	require.Contains(t, fixtureToolResult(t, rt, runID, listSkills), "release-check")
+	require.Contains(t, fixtureToolResult(t, rt, runID, listSkills), `"allowed_tools":["shell"]`)
+	require.Contains(t, fixtureToolResult(t, rt, runID, listSkills), `"preload":"on_start"`)
+	require.Contains(t, fixtureToolResult(t, rt, runID, listSkills), `"reload":"per_call"`)
+	require.Contains(t, fixtureToolResult(t, rt, runID, listSkills), `"preloaded":true`)
 
 	loadSkill, err := rt.ExecuteToolActivity(ctx, &agentsruntime.ToolInput{RootRunID: runID,
 		AgentID:    coordinator.AgentID,
@@ -387,7 +387,7 @@ func TestGeneratedFeatureRunPersistsArtifactsMemorySkillsAndDebugState(t *testin
 		Payload:    rawjson.Message([]byte(`{"skill":"release-check"}`)),
 	})
 	require.NoError(t, err)
-	require.Contains(t, string(loadSkill.Payload), `"reloaded":true`)
+	require.Contains(t, fixtureToolResult(t, rt, runID, loadSkill), `"reloaded":true`)
 
 	srv, err := agentdebug.NewServer(agentdebug.Config{Runtime: rt})
 	require.NoError(t, err)

@@ -10,8 +10,10 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 )
 
 // RecordContentActivityName returns the content activity registered on an agent's queue.
@@ -20,7 +22,7 @@ func RecordContentActivityName(id agent.Ident) string {
 }
 
 // RecordContentActivity stores Items in the root scope, returning ordered references
-// only after every Put succeeds. Inline bytes remain in their original envelopes.
+// only after every Put succeeds. Workflows retain references instead of content.
 func (r *Runtime) RecordContentActivity(ctx context.Context, input *api.RecordContentInput) (*api.RecordContentOutput, error) {
 	if input == nil || input.RootRunID == "" {
 		return nil, fmt.Errorf("record content: root run id is required")
@@ -28,6 +30,26 @@ func (r *Runtime) RecordContentActivity(ctx context.Context, input *api.RecordCo
 	if r.RunStore == nil {
 		return nil, fmt.Errorf("record content: run store is required")
 	}
+	if input.FinalizeCalls != nil {
+		return r.recordFinalizationCalls(ctx, input)
+	}
+	if input.Typed != nil {
+		data, err := r.RunStore.Get(ctx, input.RootRunID, input.Typed.PayloadRef)
+		if err != nil {
+			return nil, err
+		}
+		if err := validateTypedInputPayload(input.Typed.Schema, rawjson.Message(data)); err != nil {
+			return nil, err
+		}
+	}
+	if input.Provided != nil {
+		return r.recordProvidedContent(ctx, input)
+	}
+	return r.recordContentItems(ctx, input)
+}
+
+// recordContentItems commits seed segments only after their message content.
+func (r *Runtime) recordContentItems(ctx context.Context, input *api.RecordContentInput) (*api.RecordContentOutput, error) {
 	refs := make([]runstore.Hash, len(input.Items))
 	for i, data := range input.Items {
 		hash, err := r.RunStore.Put(ctx, input.RootRunID, data)
@@ -36,7 +58,19 @@ func (r *Runtime) RecordContentActivity(ctx context.Context, input *api.RecordCo
 		}
 		refs[i] = hash
 	}
-	return &api.RecordContentOutput{Refs: refs}, nil
+	out := &api.RecordContentOutput{Refs: refs}
+	if input.SeedMessages {
+		entries := make([]index.MessageEntry, len(refs))
+		for i, ref := range refs {
+			entries[i] = index.MessageEntry{ID: index.MessageID(i + 1), Kind: index.Message, Hash: ref, Bytes: len(input.Items[i])}
+		}
+		head, committed, err := storeIndexSegments(ctx, r.RunStore, input.RootRunID, "", "", entries)
+		if err != nil {
+			return nil, err
+		}
+		out.IndexHead, out.Entries = head, committed
+	}
+	return out, nil
 }
 
 func encodeContentMessages(messages []*model.Message) ([][]byte, error) {
@@ -51,40 +85,20 @@ func encodeContentMessages(messages []*model.Message) ([][]byte, error) {
 	return items, nil
 }
 
-// recordWorkflowMessages encodes messages individually and preserves their order.
-func recordWorkflowMessages(ctx context.Context, id agent.Ident, root string, messages []*model.Message) ([]runstore.Hash, error) {
-	items, err := encodeContentMessages(messages)
-	if err != nil {
-		return nil, err
+// recordWorkflowContent collects content without scheduling an activity. The
+// owner flushes the complete step before adopting references or index entries.
+func recordWorkflowContent(ctx context.Context, items [][]byte) ([]runstore.Hash, error) {
+	batch := contentBatchFromContext(ctx)
+	if batch == nil {
+		return nil, fmt.Errorf("record content requires a workflow content batch")
 	}
-	return recordWorkflowContent(ctx, id, root, items)
+	return batch.add(items), nil
 }
 
-// recordWorkflowContent performs no store access in workflow code.
-func recordWorkflowContent(ctx context.Context, agentID agent.Ident, root string, items [][]byte) ([]runstore.Hash, error) {
-	if len(items) == 0 {
-		return nil, nil
-	}
-	wf := engine.WorkflowContextFromContext(ctx)
-	if wf == nil {
-		return nil, fmt.Errorf("record content: workflow context is required")
-	}
-	out, err := wf.ExecuteRecordContentActivity(ctx, engine.RecordContentActivityCall{
-		Name: RecordContentActivityName(agentID), Input: &api.RecordContentInput{RootRunID: root, Items: items},
-	})
-	if err != nil {
-		return nil, err
-	}
-	if out == nil || len(out.Refs) != len(items) {
-		return nil, fmt.Errorf("record content: activity returned invalid reference count")
-	}
-	return out.Refs, nil
-}
-
-// recordWorkflowToolResult stores only content-bearing results. Error-only and
-// structural synthesized results have no eligible content and never call this path.
-func (r *Runtime) recordWorkflowToolResult(ctx context.Context, id agent.Ident, root string, result *planner.ToolResult, resultJSON []byte) error {
-	if result.Result == nil {
+// recordWorkflowToolResult collects content-bearing results and prepares their
+// hashes. The step owner must flush the batch before adopting these references.
+func (r *Runtime) recordWorkflowToolResult(ctx context.Context, result *planner.ToolResult, resultJSON []byte) error {
+	if result.Error != nil && result.Result == nil {
 		return nil
 	}
 	if len(resultJSON) == 0 {
@@ -94,11 +108,16 @@ func (r *Runtime) recordWorkflowToolResult(ctx context.Context, id agent.Ident, 
 		}
 		resultJSON = encoded
 	}
+	result.Preview = r.formatResultPreview(ctx, result.Name, nil, result.Result, result.Bounds)
+	if len(resultJSON) == 0 {
+		resultJSON = []byte("null")
+	}
+	result.ResultBytes = len(resultJSON)
 	items := [][]byte{resultJSON}
 	if len(result.ServerData) > 0 {
 		items = append(items, result.ServerData)
 	}
-	refs, err := recordWorkflowContent(ctx, id, root, items)
+	refs, err := recordWorkflowContent(ctx, items)
 	if err != nil {
 		return err
 	}
@@ -107,4 +126,18 @@ func (r *Runtime) recordWorkflowToolResult(ctx context.Context, id agent.Ident, 
 		result.Refs.ServerData = refs[1]
 	}
 	return nil
+}
+
+func seedWorkflowIndex(wf engine.WorkflowContext, input *RunInput) (*api.RecordContentOutput, error) {
+	if len(input.Messages) == 0 {
+		return &api.RecordContentOutput{}, nil
+	}
+	items, err := encodeContentMessages(input.Messages)
+	if err != nil {
+		return nil, err
+	}
+	return wf.ExecuteRecordContentActivity(wf.Context(), engine.RecordContentActivityCall{
+		Name:  RecordContentActivityName(input.AgentID),
+		Input: &api.RecordContentInput{RootRunID: input.RootRunID, Items: items, SeedMessages: true},
+	})
 }

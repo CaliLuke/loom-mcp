@@ -63,7 +63,7 @@ func TestExecuteToolCalls_AgentToolPreChildValidatorReturnsToolError(t *testing.
 		"execute",
 		engine.ActivityOptions{},
 		"agent-1",
-		&run.Context{
+		&run.Context{RootRunID: "test-root",
 			RunID:     "run-1",
 			SessionID: "session-1",
 			TurnID:    "turn-1",

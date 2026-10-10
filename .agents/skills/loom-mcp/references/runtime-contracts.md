@@ -375,6 +375,44 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   from all three surfaces.
 - Interceptor errors short-circuit the active path.
 
+## Transcript Views And Child Validation
+
+- Protocol 5 planner activity inputs carry only ViewRef for history: IndexHead
+  plus one step's Pending. Caller seed history is committed before the first
+  planner invocation and never sent in Pending. Entries are immutable; a later
+  HideBookkeeping entry changes rendering without changing earlier hashes.
+- The view loader stores deterministic pending segments before returning a head,
+  verifies the chain/content and incrementally caches segments, ToolOutputs and
+  TypedInputs in workers, bounded to 256 runs per runtime with LRU eviction.
+  WithViewCacheRuns(n) changes the bound and panics for n <= 0. Evicted runs
+  reconstruct from IndexHead; eviction removes only the map/list reference so
+  active loads remain safe. Canonical JSON message equality is the observable
+  contract, including the in-memory engine. History policy, recovery correction
+  and resume-only ValidateBedrock operate on loaded messages.
+- PlanResumeInput.ToolOutputs has refs, bounded preview and metadata, with empty
+  Result/ServerData/Payload. PlanResumeInput.Content loads full canonical content
+  in RootRunID. TypedInputs carries ID/PayloadRef and empty Payload; finalize
+  supplies no typed inputs. Graph predicates load results through ContentLoader.
+- Each workflow result batch makes at most one RecordContent activity call for
+  content, metadata, large structural parameters and reminders. A stored call
+  supplies original payload content unless an adapted payload has its own ref.
+- PreChildValidator runs in ChildDispatchActivity before child admission/start.
+  A view load with Pending returns IndexHead on success or structured rejection;
+  the workflow adopts it before following dispatches/planner steps, preserving
+  the warm cache and held call references. Unloaded/empty Pending returns no head.
+  AgentToolValidationInput.View is a lazy ViewLoader with LoadMessages(ctx),
+  replacing Messages. No parent message content returns to the workflow. Custom
+  engines must implement the typed register/execute child-dispatch methods.
+- The run-loop ledger and ledger_messages query are removed. Content signals
+  contain refs only. Over-1-MB planner envelopes return PlanActivityInputBudgetError
+  with Bytes, Limit and RunID, matching errors.As. Replay fixture is protocol 5.
+- `make test-payload-growth` runs full non-short payload/growth acceptance. Fixed per-run
+  ToolArgs, Labels and tool catalogs remain inline; K7 accepts the measured
+  fixed-part overruns documented in runtime.md. `make itest` invokes the target;
+  `make test` covers typed P2 and 1,000-step growth. Omitted result bodies load
+  only on explicit ContentLoader requests. K8 still owns terminal sealing, trailing
+  pending entries, planner/run hooks and FinishRunInput.ToolEvents growth.
+
 ## Workflow Composition
 
 - Plain `Workflow` plus `Step` remains source-compatible and generated through
@@ -447,7 +485,7 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   `encoding/json.FormatDurationAsNano(true)`. Duration-bearing per-run policy
   fields cross the workflow/activity boundary as integer nanoseconds while
   JSON field tags and duration map keys keep their standard behavior.
-- Workflow state/ledger is the live deterministic execution authority.
+- Workflow state and its transcript index are the live deterministic execution authority.
 - `runlog.Store` is the canonical append-only introspection record. Run-log
   append or metadata-update failure fails the hook activity so the engine can
   retry or stop; it is not best-effort.

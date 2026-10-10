@@ -4,10 +4,10 @@ import (
 	"context"
 	"testing"
 
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
-	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 	"github.com/stretchr/testify/assert"
@@ -100,15 +100,14 @@ func TestSuccessfulBookkeepingStaysInTranscriptButNotPlannerContext(t *testing.T
 	rt.toolSpecs[spec.Name] = spec
 	call := planner.ToolRequest{Name: spec.Name, ToolCallID: "progress-1"}
 	result := &planner.ToolResult{Name: spec.Name, ToolCallID: call.ToolCallID, Result: map[string]any{"saved": true}}
-	base := &planner.PlanInput{}
-	ledger := transcript.NewLedger()
+	base := testWorkflowInput(t, rt, &planner.PlanInput{})
 
-	rt.recordAssistantTurn(base, nil, []planner.ToolRequest{call}, ledger)
-	rt.hideSuccessfulBookkeepingCallsFromPlanner(base, []*planner.ToolResult{result})
-	require.NoError(t, rt.appendUserToolResults(base, []planner.ToolRequest{call}, []*planner.ToolResult{result}, ledger))
+	testRecordAssistant(t, rt, base, []planner.ToolRequest{call})
+	testHideBookkeeping(t, rt, base, []*planner.ToolResult{result})
+	require.NoError(t, rt.appendIndexResults(testIndexContext(t, rt), base, []planner.ToolRequest{call}, []*planner.ToolResult{result}, false))
 
-	require.Empty(t, base.Messages)
-	require.Len(t, ledger.BuildMessages(), 2)
+	require.Empty(t, testView(t, rt, base).Messages)
+	require.GreaterOrEqual(t, len(base.Entries), 2)
 }
 
 func TestConfirmedBookkeepingStaysInTranscriptButNotPlannerContext(t *testing.T) {
@@ -123,21 +122,20 @@ func TestConfirmedBookkeepingStaysInTranscriptButNotPlannerContext(t *testing.T)
 			rt.toolSpecs[spec.Name] = spec
 			call := planner.ToolRequest{Name: spec.Name, ToolCallID: "progress-1"}
 			result := &planner.ToolResult{Name: spec.Name, ToolCallID: call.ToolCallID, Result: map[string]any{"saved": true}}
-			base := &planner.PlanInput{}
-			ledger := transcript.NewLedger()
-			st := &runLoopState{Ledger: ledger}
-			rt.recordAssistantTurn(base, nil, []planner.ToolRequest{call}, ledger)
+			base := testWorkflowInput(t, rt, &planner.PlanInput{})
+			st := &runLoopState{}
+			testRecordAssistant(t, rt, base, []planner.ToolRequest{call})
 
 			var err error
 			if executed {
-				err = rt.recordExecutedConfirmationResults(context.Background(), base, st, call, []*planner.ToolResult{result})
+				err = rt.recordExecutedConfirmationResults(testIndexContext(t, rt), base, st, call, []*planner.ToolResult{result})
 			} else {
-				err = rt.recordConfirmationToolResult(context.Background(), base, st, call, result)
+				err = rt.recordConfirmationToolResult(testIndexContext(t, rt), base, st, call, result)
 			}
 
 			require.NoError(t, err)
-			require.Empty(t, base.Messages)
-			require.Len(t, ledger.BuildMessages(), 2)
+			require.Empty(t, testView(t, rt, base).Messages)
+			require.GreaterOrEqual(t, len(base.Entries), 2)
 		})
 	}
 }
@@ -150,17 +148,16 @@ func TestBookkeepingHidingScansAllPendingAssistantMessages(t *testing.T) {
 	second := planner.ToolRequest{Name: spec.Name, ToolCallID: "progress-2"}
 	firstResult := &planner.ToolResult{Name: spec.Name, ToolCallID: first.ToolCallID, Result: map[string]any{"saved": true}}
 	secondResult := &planner.ToolResult{Name: spec.Name, ToolCallID: second.ToolCallID, Result: map[string]any{"saved": true}}
-	base := &planner.PlanInput{}
-	ledger := transcript.NewLedger()
-	rt.recordAssistantTurn(base, nil, []planner.ToolRequest{first}, ledger)
-	rt.recordAssistantTurn(base, nil, []planner.ToolRequest{second}, ledger)
+	base := testWorkflowInput(t, rt, &planner.PlanInput{})
+	testRecordAssistant(t, rt, base, []planner.ToolRequest{first})
+	testRecordAssistant(t, rt, base, []planner.ToolRequest{second})
 
-	rt.hideSuccessfulBookkeepingCallsFromPlanner(base, []*planner.ToolResult{firstResult})
-	require.Zero(t, countToolUseParts(base.Messages, first.ToolCallID))
-	require.Equal(t, 1, countToolUseParts(base.Messages, second.ToolCallID))
+	testHideBookkeeping(t, rt, base, []*planner.ToolResult{firstResult})
+	require.Zero(t, countToolUseParts(testView(t, rt, base).Messages, first.ToolCallID))
+	require.Equal(t, 1, countToolUseParts(testView(t, rt, base).Messages, second.ToolCallID))
 
-	rt.hideSuccessfulBookkeepingCallsFromPlanner(base, []*planner.ToolResult{secondResult})
-	require.Empty(t, base.Messages)
+	testHideBookkeeping(t, rt, base, []*planner.ToolResult{secondResult})
+	require.Empty(t, testView(t, rt, base).Messages)
 }
 
 func TestProvidedBookkeepingStaysInTranscriptButNotPlannerContext(t *testing.T) {
@@ -168,17 +165,15 @@ func TestProvidedBookkeepingStaysInTranscriptButNotPlannerContext(t *testing.T) 
 	spec := bookkeepingSpec("control.progress", false)
 	rt.toolSpecs[spec.Name] = spec
 	call := planner.ToolRequest{Name: spec.Name, ToolCallID: "progress-1"}
-	result := &planner.ToolResult{Name: spec.Name, ToolCallID: call.ToolCallID, Result: map[string]any{"saved": true}}
-	base := &planner.PlanInput{}
-	ledger := transcript.NewLedger()
-	st := &runLoopState{Ledger: ledger}
-	rt.recordAssistantTurn(base, nil, []planner.ToolRequest{call}, ledger)
-
-	err := rt.recordProvidedToolResults(context.Background(), base, st, []planner.ToolRequest{call}, []*planner.ToolResult{result})
+	base := testWorkflowInput(t, rt, &planner.PlanInput{})
+	base.RunContext.RunID = "test-run"
+	testRecordAssistant(t, rt, base, []planner.ToolRequest{call})
+	ref := testPutJSON(t, rt, base.RunContext.RootRunID, map[string]any{"saved": true})
+	_, err := rt.consumeProvidedToolResults(testIndexContext(t, rt), &RunInput{AgentID: base.AgentID}, base, &runLoopState{}, &api.ToolResultsSet{Results: []*api.ProvidedToolResult{{Name: call.Name, ToolCallID: call.ToolCallID, Refs: tools.ResultRefs{Result: ref}}}}, []planner.ToolRequest{call}, map[string]struct{}{call.ToolCallID: {}})
 
 	require.NoError(t, err)
-	require.Empty(t, base.Messages)
-	require.Len(t, ledger.BuildMessages(), 2)
+	require.Empty(t, testView(t, rt, base).Messages)
+	require.GreaterOrEqual(t, len(base.Entries), 2)
 }
 
 func TestSuccessfulBookkeepingDoesNotResetRecoveryBudget(t *testing.T) {

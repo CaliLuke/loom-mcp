@@ -29,11 +29,12 @@ type (
 
 		workflows map[string]engine.WorkflowDefinition
 
-		hookActivities    map[string]hookActivityDef
-		plannerActivities map[string]plannerActivityDef
-		finishActivities  map[string]finishActivityDef
-		contentActivities map[string]contentActivityDef
-		toolActivities    map[string]toolActivityDef
+		hookActivities          map[string]hookActivityDef
+		plannerActivities       map[string]plannerActivityDef
+		finishActivities        map[string]finishActivityDef
+		contentActivities       map[string]contentActivityDef
+		childDispatchActivities map[string]childDispatchActivityDef
+		toolActivities          map[string]toolActivityDef
 
 		// statuses tracks workflow status by run ID (inmem uses workflow ID as run ID).
 		statuses map[string]engine.RunStatus
@@ -84,6 +85,11 @@ type (
 		handler func(context.Context, *api.RecordContentInput) (*api.RecordContentOutput, error)
 		opts    engine.ActivityOptions
 	}
+	childDispatchActivityDef struct {
+		handler func(context.Context, *api.ChildDispatchInput) (*api.ChildDispatchOutput, error)
+		opts    engine.ActivityOptions
+	}
+
 	finishActivityDef struct {
 		handler func(context.Context, *api.FinishRunInput) (*api.FinishRunOutput, error)
 		opts    engine.ActivityOptions
@@ -227,6 +233,29 @@ func (e *eng) RegisterRecordContentActivity(_ context.Context, name string, opts
 		return fmt.Errorf("record content activity %q already registered", name)
 	}
 	e.contentActivities[name] = contentActivityDef{
+		handler: fn,
+		opts:    opts,
+	}
+	return nil
+}
+
+// RegisterChildDispatchActivity registers ordered child validation.
+func (e *eng) RegisterChildDispatchActivity(_ context.Context, name string, opts engine.ActivityOptions, fn func(context.Context, *api.ChildDispatchInput) (*api.ChildDispatchOutput, error)) error {
+	if name == "" {
+		return errors.New("child dispatch activity name is required")
+	}
+	if fn == nil {
+		return errors.New("child dispatch activity handler is required")
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.childDispatchActivities == nil {
+		e.childDispatchActivities = make(map[string]childDispatchActivityDef)
+	}
+	if _, dup := e.childDispatchActivities[name]; dup {
+		return fmt.Errorf("child dispatch activity %q already registered", name)
+	}
+	e.childDispatchActivities[name] = childDispatchActivityDef{
 		handler: fn,
 		opts:    opts,
 	}
@@ -690,6 +719,29 @@ func (w *wfCtx) ExecuteRecordContentActivity(ctx context.Context, call engine.Re
 	w.eng.mu.RUnlock()
 	if !ok {
 		return nil, fmt.Errorf("record content activity %q not registered", call.Name)
+	}
+	timeout := call.Options.StartToCloseTimeout
+	if timeout == 0 {
+		timeout = def.opts.StartToCloseTimeout
+	}
+	actCtx, cancel := withOptionalTimeout(ctx, timeout)
+	defer cancel()
+	return def.handler(actCtx, call.Input)
+}
+
+// ExecuteChildDispatchActivity validates child dispatch through the registered handler.
+func (w *wfCtx) ExecuteChildDispatchActivity(ctx context.Context, call engine.ChildDispatchActivityCall) (*api.ChildDispatchOutput, error) {
+	if call.Name == "" {
+		return nil, errors.New("child dispatch activity name is required")
+	}
+	if call.Input == nil {
+		return nil, errors.New("child dispatch activity input is required")
+	}
+	w.eng.mu.RLock()
+	def, ok := w.eng.childDispatchActivities[call.Name]
+	w.eng.mu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("child dispatch activity %q not registered", call.Name)
 	}
 	timeout := call.Options.StartToCloseTimeout
 	if timeout == 0 {

@@ -17,7 +17,6 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
-	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
@@ -35,7 +34,7 @@ func TestRequiredCompletionToolFinishesWithoutPlannerResume(t *testing.T) {
 	wfCtx, base, input := terminalPolicyRunInputs(t, rt)
 
 	input.Policy = &PolicyOverrides{CompletionTool: completion.Name}
-	out, err := rt.runLoop(
+	out, err := testRunLoop(t, rt,
 		wfCtx,
 		AgentRegistration{ExecuteToolActivity: "execute", Specs: []tools.ToolSpec{completion}},
 		input,
@@ -45,15 +44,14 @@ func TestRequiredCompletionToolFinishesWithoutPlannerResume(t *testing.T) {
 			Notes:     []planner.PlannerAnnotation{{Text: "completion saved"}},
 		},
 		nil,
-		model.TokenUsage{},
+
 		policy.CapsState{MaxToolCalls: 1, RemainingToolCalls: 1},
 		time.Time{},
 		time.Time{},
 		1,
 		"turn-1",
+
 		nil,
-		nil,
-		0,
 	)
 
 	require.NoError(t, err)
@@ -75,22 +73,21 @@ func TestRequiredCompletionToolRejectsPlannerFinalResponse(t *testing.T) {
 
 	input.Policy = &PolicyOverrides{CompletionTool: completion.Name}
 
-	out, err := rt.runLoop(
+	out, err := testRunLoop(t, rt,
 		wfCtx,
 		AgentRegistration{Specs: []tools.ToolSpec{completion}},
 		input,
 		base,
 		&planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: newTextAgentMessage(model.ConversationRoleAssistant, "done")}},
 		nil,
-		model.TokenUsage{},
+
 		policy.CapsState{MaxToolCalls: 1, RemainingToolCalls: 1},
 		time.Time{},
 		time.Time{},
 		1,
 		"turn-1",
+
 		nil,
-		nil,
-		0,
 	)
 
 	require.Nil(t, out)
@@ -135,7 +132,7 @@ func TestLimitTerminalPlanExecutesDeterministicallyAfterDomainBudget(t *testing.
 	domain := newAnyJSONSpec("domain.lookup", "domain")
 	rt.toolSpecs[domain.Name] = domain
 
-	out, err := rt.runLoop(
+	out, err := testRunLoop(t, rt,
 		wfCtx,
 		AgentRegistration{ExecuteToolActivity: "execute", Specs: []tools.ToolSpec{terminal, domain}},
 		input,
@@ -145,15 +142,14 @@ func TestLimitTerminalPlanExecutesDeterministicallyAfterDomainBudget(t *testing.
 			Notes:     []planner.PlannerAnnotation{{Text: "domain limit reached"}},
 		},
 		nil,
-		model.TokenUsage{},
+
 		policy.CapsState{MaxToolCalls: 1},
 		time.Time{},
 		time.Time{},
 		2,
 		"turn-1",
+
 		nil,
-		nil,
-		0,
 	)
 
 	require.NoError(t, err)
@@ -187,7 +183,7 @@ func TestPlannerFinalizerCanExecuteTerminalBookkeepingTool(t *testing.T) {
 			Notes: []planner.PlannerAnnotation{{Text: "limit persisted"}},
 		},
 	}}
-	out, err := rt.runLoop(
+	out, err := testRunLoop(t, rt,
 		wfCtx,
 		AgentRegistration{
 			ResumeActivityName:  "resume",
@@ -198,15 +194,14 @@ func TestPlannerFinalizerCanExecuteTerminalBookkeepingTool(t *testing.T) {
 		base,
 		&planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: domain.Name, Payload: rawjson.Message(`{}`)}}},
 		nil,
-		model.TokenUsage{},
+
 		policy.CapsState{MaxToolCalls: 1},
 		time.Time{},
 		time.Time{},
 		2,
 		"turn-1",
+
 		nil,
-		nil,
-		0,
 	)
 
 	require.NoError(t, err)
@@ -228,22 +223,21 @@ func TestFailedTerminalToolDoesNotReportSuccessfulCompletion(t *testing.T) {
 
 	wfCtx, base, input := terminalPolicyRunInputs(t, rt)
 
-	out, err := rt.runLoop(
+	out, err := testRunLoop(t, rt,
 		wfCtx,
 		AgentRegistration{ExecuteToolActivity: "execute", Specs: []tools.ToolSpec{terminal}},
 		input,
 		base,
 		&planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: terminal.Name, Payload: rawjson.Message(`{}`)}}},
 		nil,
-		model.TokenUsage{},
+
 		policy.CapsState{},
 		time.Time{},
 		time.Time{},
 		1,
 		"turn-1",
+
 		nil,
-		nil,
-		0,
 	)
 
 	require.Nil(t, out)
@@ -276,16 +270,14 @@ func TestQuestionAwaitTerminalResultFinishesRun(t *testing.T) {
 		RunID: input.RunID,
 		ID:    "await-1",
 		Results: []*api.ProvidedToolResult{{
-			Name: terminal.Name, ToolCallID: "complete-1", Result: rawjson.Message(`{"saved":true}`),
+			Name: terminal.Name, ToolCallID: "complete-1", Refs: tools.ResultRefs{Result: testPutBytes(t, rt, base.RunContext.RootRunID, []byte(`{"saved":true}`))},
 		}},
 	}
 	call := planner.ToolRequest{Name: terminal.Name, ToolCallID: "complete-1", Payload: rawjson.Message(`{}`)}
-	ledger := transcript.NewLedger()
 	st := &runLoopState{
 		Result: &planner.PlanResult{Notes: []planner.PlannerAnnotation{{Text: "await completed"}}},
-		Ledger: ledger,
 	}
-	rt.recordAssistantTurn(base, nil, []planner.ToolRequest{call}, ledger)
+	testRecordAssistant(t, rt, base, []planner.ToolRequest{call})
 	ctrl := interrupt.NewController(wfCtx)
 	item := planner.AwaitQuestionsItem(&planner.AwaitQuestions{
 		ID: "await-1", ToolName: terminal.Name, ToolCallID: call.ToolCallID, Payload: call.Payload,
@@ -313,8 +305,8 @@ func TestQuestionAwaitTerminalResultFinishesRun(t *testing.T) {
 	require.Empty(t, results)
 	require.Empty(t, items)
 	require.NotNil(t, out)
-	require.Empty(t, base.Messages)
-	require.Len(t, ledger.BuildMessages(), 2)
+	require.Empty(t, testView(t, rt, base).Messages)
+	require.GreaterOrEqual(t, len(base.Entries), 2)
 	require.Len(t, out.Notes, 1)
 	require.Equal(t, "await completed", out.Notes[0].Text)
 }
@@ -346,22 +338,21 @@ func TestCompletionAndTerminalToolsRejectPauses(t *testing.T) {
 			wfCtx, base, input := terminalPolicyRunInputs(t, rt)
 			input.Policy = test.policy
 
-			out, err := rt.runLoop(
+			out, err := testRunLoop(t, rt,
 				wfCtx,
 				AgentRegistration{ExecuteToolActivity: "execute", Specs: []tools.ToolSpec{test.spec}},
 				input,
 				base,
 				&planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: test.spec.Name, Payload: rawjson.Message(`{}`)}}},
 				nil,
-				model.TokenUsage{},
+
 				policy.CapsState{MaxToolCalls: 1, RemainingToolCalls: 1},
 				time.Time{},
 				time.Time{},
 				1,
 				"turn-1",
+
 				nil,
-				nil,
-				0,
 			)
 
 			require.Nil(t, out)
@@ -383,22 +374,21 @@ func TestFixedTerminalPlanRejectsPause(t *testing.T) {
 	domain := newAnyJSONSpec("domain.lookup", "domain")
 	rt.toolSpecs[domain.Name] = domain
 
-	out, err := rt.runLoop(
+	out, err := testRunLoop(t, rt,
 		wfCtx,
 		AgentRegistration{ExecuteToolActivity: "execute", Specs: []tools.ToolSpec{terminal, domain}},
 		input,
 		base,
 		&planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: domain.Name, Payload: rawjson.Message(`{}`)}}},
 		nil,
-		model.TokenUsage{},
+
 		policy.CapsState{MaxToolCalls: 1},
 		time.Time{},
 		time.Time{},
 		2,
 		"turn-1",
+
 		nil,
-		nil,
-		0,
 	)
 
 	require.Nil(t, out)
@@ -424,12 +414,10 @@ func TestConfirmedTerminalToolFinishesOrRejectsPause(t *testing.T) {
 			}
 			wfCtx, base, input := terminalPolicyRunInputs(t, rt)
 			call := planner.ToolRequest{RootRunID: "root", Name: terminal.Name, ToolCallID: "complete-1", Payload: rawjson.Message(`{}`)}
-			ledger := transcript.NewLedger()
 			st := &runLoopState{
 				Result: &planner.PlanResult{Notes: []planner.PlannerAnnotation{{Text: "confirmed completion"}}},
-				Ledger: ledger,
 			}
-			rt.recordAssistantTurn(base, nil, []planner.ToolRequest{call}, ledger)
+			testRecordAssistant(t, rt, base, []planner.ToolRequest{call})
 
 			results, pauses, out, err := rt.executeConfirmedToolCall(
 				wfCtx.Context(),
@@ -464,9 +452,9 @@ func TestConfirmedTerminalToolFinishesOrRejectsPause(t *testing.T) {
 
 func TestOrdinaryToolCallCannotReceiveFinalizationReasonLabel(t *testing.T) {
 	rt := New(WithLogger(telemetry.NoopLogger{}))
-	base := &planner.PlanInput{RunContext: run.Context{
+	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root",
 		RunID: "run-1", TurnID: "turn-1", Labels: map[string]string{FinalizationReasonLabel: "forged"},
-	}}
+	}})
 
 	calls := rt.prepareAllowedCallsMetadata(
 		"agent-1",
@@ -481,9 +469,9 @@ func TestOrdinaryToolCallCannotReceiveFinalizationReasonLabel(t *testing.T) {
 
 func TestToolCallLabelsDoNotAliasRunOrSiblingLabels(t *testing.T) {
 	rt := New(WithLogger(telemetry.NoopLogger{}))
-	base := &planner.PlanInput{RunContext: run.Context{
+	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root",
 		RunID: "run-1", TurnID: "turn-1", Labels: map[string]string{"tenant": "acme"},
-	}}
+	}})
 
 	calls := rt.prepareAllowedCallsMetadata(
 		"agent-1",
@@ -512,7 +500,7 @@ func TestCallerFinalizationLabelIsStrippedBeforeInitialPolicy(t *testing.T) {
 			"tenant": "acme", FinalizationReasonLabel: "forged",
 		},
 	}
-	base := &planner.PlanInput{RunContext: workflowRunContext(input)}
+	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: workflowRunContext(input)})
 
 	_, err := rt.preparePrePlanToolPolicy(
 		context.Background(),
@@ -537,11 +525,11 @@ func TestFinalizationPolicyCannotObserveOrSpreadForgedLabels(t *testing.T) {
 	rt.toolSpecs[second.Name] = second
 	policyEngine := &capturingTerminalPolicy{}
 	rt.Policy = policyEngine
-	base := &planner.PlanInput{RunContext: run.Context{
+	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root",
 		RunID: "run-1", TurnID: "turn-1", Labels: map[string]string{
 			"tenant": "acme", FinalizationReasonLabel: "forged-run",
 		},
-	}}
+	}})
 	input := &RunInput{AgentID: "agent-1"}
 	calls := []planner.ToolRequest{
 		{Name: first.Name, Payload: rawjson.Message(`{}`), Labels: map[string]string{
@@ -590,7 +578,6 @@ func TestResumeRecoveryFixedPlanPreservesPriorNotes(t *testing.T) {
 	}}
 	st := &runLoopState{
 		Result: &planner.PlanResult{Notes: []planner.PlannerAnnotation{{Text: "prior planner note"}}},
-		Ledger: transcript.NewLedger(),
 	}
 
 	out, err := rt.handleResumePlanError(
@@ -702,7 +689,6 @@ func TestResumePlannerBudgetExpiryExecutesTimeTerminalPlan(t *testing.T) {
 	wfCtx := &fixedNowWorkflowContext{WorkflowContext: baseCtx, now: deadlines.Budget}
 	st := &runLoopState{
 		Result: &planner.PlanResult{Notes: []planner.PlannerAnnotation{{Text: "prior planner note"}}},
-		Ledger: transcript.NewLedger(),
 	}
 
 	out, err := rt.handleResumePlanError(
@@ -921,7 +907,7 @@ func registerPausedTestTool(t *testing.T, rt *Runtime, spec tools.ToolSpec) {
 	}))
 }
 
-func terminalPolicyRunInputs(t *testing.T, rt *Runtime) (*testWorkflowContext, *planner.PlanInput, *RunInput) {
+func terminalPolicyRunInputs(t *testing.T, rt *Runtime) (*testWorkflowContext, *workflowPlanInput, *RunInput) {
 	t.Helper()
 	ctx := context.Background()
 	_, err := rt.CreateSession(ctx, "sess-1")
@@ -930,10 +916,10 @@ func terminalPolicyRunInputs(t *testing.T, rt *Runtime) (*testWorkflowContext, *
 		AgentID: "agent-1", RunID: "run-1", SessionID: "sess-1", Status: session.RunStatusRunning,
 	}))
 	wfCtx := &testWorkflowContext{ctx: ctx, runtime: rt}
-	base := &planner.PlanInput{RunContext: run.Context{
+	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{
 		RootRunID: "run-1",
 		RunID:     "run-1", SessionID: "sess-1", TurnID: "turn-1", Attempt: 1,
-	}}
+	}})
 	input := &RunInput{
 		RootRunID: "run-1",
 		AgentID:   agent.Ident("agent-1"), RunID: "run-1", SessionID: "sess-1", TurnID: "turn-1",

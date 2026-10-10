@@ -404,6 +404,21 @@ func (e *Engine) RegisterRecordContentActivity(_ context.Context, name string, o
 	return e.registerActivityWithCtx(name, opts, wrapped)
 }
 
+// RegisterChildDispatchActivity registers child validation on the agent queue.
+func (e *Engine) RegisterChildDispatchActivity(_ context.Context, name string, opts engine.ActivityOptions, fn func(context.Context, *api.ChildDispatchInput) (*api.ChildDispatchOutput, error)) error {
+	if err := e.requireWorkerMode("register child dispatch activities"); err != nil {
+		return err
+	}
+	opts = e.applyActivityClassDefaults(activityKindHook, opts)
+	// Wrap to inject originating WorkflowContext into activity context so runtime code
+	// can start child workflows (agent-as-tool) with engine-owned context.
+	wrapped := func(ctx context.Context, in *api.ChildDispatchInput) (*api.ChildDispatchOutput, error) {
+		out, err := fn(e.injectWorkflowContextIntoActivity(ctx), in)
+		return out, classifyTemporalCancellation(err)
+	}
+	return e.registerActivityWithCtx(name, opts, wrapped)
+}
+
 // RegisterExecuteToolActivity registers a typed execute_tool activity with the
 // Temporal engine.  This method binds a Go function that accepts *api.ToolInput
 // and returns *api.ToolOutput to a logical activity name for use within agent

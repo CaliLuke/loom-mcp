@@ -18,8 +18,7 @@ import (
 
 func TestAppendUserToolResults_IncludesErrorInToolResultContent(t *testing.T) {
 	rt := &Runtime{}
-	base := &planner.PlanInput{}
-	led := transcript.NewLedger()
+	base := testWorkflowInput(t, rt, &planner.PlanInput{})
 
 	call := planner.ToolRequest{
 		Name:       tools.Ident("svc.commands.adjust_setpoint"),
@@ -31,13 +30,14 @@ func TestAppendUserToolResults_IncludesErrorInToolResultContent(t *testing.T) {
 		Error:      planner.NewToolError("access denied: missing controlleddevices.write privilege"),
 	}
 
-	require.NoError(t, rt.appendUserToolResults(base, []planner.ToolRequest{call}, []*planner.ToolResult{tr}, led))
+	testStoreCalls(t, rt, base, []planner.ToolRequest{call})
+	require.NoError(t, rt.appendIndexResults(testIndexContext(t, rt), base, []planner.ToolRequest{call}, []*planner.ToolResult{tr}, false))
 
-	require.Len(t, base.Messages, 1)
-	require.Equal(t, model.ConversationRoleUser, base.Messages[0].Role)
-	require.Len(t, base.Messages[0].Parts, 1)
+	require.Len(t, testView(t, rt, base).Messages, 1)
+	require.Equal(t, model.ConversationRoleUser, testView(t, rt, base).Messages[0].Role)
+	require.Len(t, testView(t, rt, base).Messages[0].Parts, 1)
 
-	part, ok := base.Messages[0].Parts[0].(model.ToolResultPart)
+	part, ok := testView(t, rt, base).Messages[0].Parts[0].(model.ToolResultPart)
 	require.True(t, ok)
 	require.True(t, part.IsError)
 	require.Equal(t, "access denied: missing controlleddevices.write privilege", part.Content)
@@ -58,8 +58,7 @@ func TestAppendUserToolResults_DecodesSuccessfulResultContent(t *testing.T) {
 			},
 		},
 	}
-	base := &planner.PlanInput{}
-	led := transcript.NewLedger()
+	base := testWorkflowInput(t, rt, &planner.PlanInput{})
 
 	call := planner.ToolRequest{
 		Name:       tools.Ident("svc.commands.adjust_setpoint"),
@@ -73,10 +72,11 @@ func TestAppendUserToolResults_DecodesSuccessfulResultContent(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, rt.appendUserToolResults(base, []planner.ToolRequest{call}, []*planner.ToolResult{tr}, led))
+	testStoreCalls(t, rt, base, []planner.ToolRequest{call})
+	require.NoError(t, rt.appendIndexResults(testIndexContext(t, rt), base, []planner.ToolRequest{call}, []*planner.ToolResult{tr}, false))
 
-	require.Len(t, base.Messages, 1)
-	part, ok := base.Messages[0].Parts[0].(model.ToolResultPart)
+	require.Len(t, testView(t, rt, base).Messages, 1)
+	part, ok := testView(t, rt, base).Messages[0].Parts[0].(model.ToolResultPart)
 	require.True(t, ok)
 	require.False(t, part.IsError)
 	content, ok := part.Content.(map[string]any)
@@ -140,20 +140,18 @@ func TestAppendUserToolResults_MatchesReplayProjection(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			base := &planner.PlanInput{}
-			led := transcript.NewLedger()
+			base := testWorkflowInput(t, rt, &planner.PlanInput{})
 
-			require.NoError(t, rt.appendUserToolResults(base, []planner.ToolRequest{call}, []*planner.ToolResult{tc.tr}, led))
-			require.Len(t, base.Messages, 1)
+			testStoreCalls(t, rt, base, []planner.ToolRequest{call})
+			require.NoError(t, rt.appendIndexResults(testIndexContext(t, rt), base, []planner.ToolRequest{call}, []*planner.ToolResult{tc.tr}, false))
+			require.Len(t, testView(t, rt, base).Messages, 1)
 
-			livePart, ok := base.Messages[0].Parts[0].(model.ToolResultPart)
+			livePart, ok := testView(t, rt, base).Messages[0].Parts[0].(model.ToolResultPart)
 			require.True(t, ok)
 
 			resultJSON := ""
-			if tc.tr.Result != nil {
-				raw, err := rt.marshalToolValue(t.Context(), tc.tr.Name, tc.tr.Result, tc.tr.Bounds)
-				require.NoError(t, err)
-				resultJSON = string(raw)
+			if tc.tr.Refs.Result != "" {
+				resultJSON = string(testStoredBytes(t, rt, base.RunContext.RootRunID, tc.tr.Refs.Result))
 			}
 			errorMessage := ""
 			if tc.tr.Error != nil {
@@ -203,8 +201,7 @@ func TestAppendUserToolResults_AppendsBoundsReminderAfterToolResults(t *testing.
 			},
 		},
 	}
-	base := &planner.PlanInput{}
-	led := transcript.NewLedger()
+	base := testWorkflowInput(t, rt, &planner.PlanInput{})
 
 	call := planner.ToolRequest{
 		Name:       tools.Ident("svc.read.list_devices"),
@@ -223,13 +220,14 @@ func TestAppendUserToolResults_AppendsBoundsReminderAfterToolResults(t *testing.
 		},
 	}
 
-	require.NoError(t, rt.appendUserToolResults(base, []planner.ToolRequest{call}, []*planner.ToolResult{tr}, led))
+	testStoreCalls(t, rt, base, []planner.ToolRequest{call})
+	require.NoError(t, rt.appendIndexResults(testIndexContext(t, rt), base, []planner.ToolRequest{call}, []*planner.ToolResult{tr}, false))
 
-	require.Len(t, base.Messages, 2)
-	require.Equal(t, model.ConversationRoleUser, base.Messages[0].Role)
-	require.Equal(t, model.ConversationRoleSystem, base.Messages[1].Role)
+	require.Len(t, testView(t, rt, base).Messages, 2)
+	require.Equal(t, model.ConversationRoleUser, testView(t, rt, base).Messages[0].Role)
+	require.Equal(t, model.ConversationRoleSystem, testView(t, rt, base).Messages[1].Role)
 
-	txt, ok := base.Messages[1].Parts[0].(model.TextPart)
+	txt, ok := testView(t, rt, base).Messages[1].Parts[0].(model.TextPart)
 	require.True(t, ok)
 	require.Contains(t, txt.Text, "A tool call returned a bounded/truncated result.")
 	require.Contains(t, txt.Text, "Next cursor: opaque-cursor")
@@ -237,8 +235,7 @@ func TestAppendUserToolResults_AppendsBoundsReminderAfterToolResults(t *testing.
 
 func TestAppendUserToolResults_AppendsRetryHintReminderAfterToolResults(t *testing.T) {
 	rt := &Runtime{}
-	base := &planner.PlanInput{}
-	led := transcript.NewLedger()
+	base := testWorkflowInput(t, rt, &planner.PlanInput{})
 
 	call := planner.ToolRequest{
 		Name:       tools.Ident("svc.read.aggregate"),
@@ -259,13 +256,14 @@ func TestAppendUserToolResults_AppendsRetryHintReminderAfterToolResults(t *testi
 		},
 	}
 
-	require.NoError(t, rt.appendUserToolResults(base, []planner.ToolRequest{call}, []*planner.ToolResult{tr}, led))
+	testStoreCalls(t, rt, base, []planner.ToolRequest{call})
+	require.NoError(t, rt.appendIndexResults(testIndexContext(t, rt), base, []planner.ToolRequest{call}, []*planner.ToolResult{tr}, false))
 
-	require.Len(t, base.Messages, 2)
-	require.Equal(t, model.ConversationRoleUser, base.Messages[0].Role)
-	require.Equal(t, model.ConversationRoleSystem, base.Messages[1].Role)
+	require.Len(t, testView(t, rt, base).Messages, 2)
+	require.Equal(t, model.ConversationRoleUser, testView(t, rt, base).Messages[0].Role)
+	require.Equal(t, model.ConversationRoleSystem, testView(t, rt, base).Messages[1].Role)
 
-	txt, ok := base.Messages[1].Parts[0].(model.TextPart)
+	txt, ok := testView(t, rt, base).Messages[1].Parts[0].(model.TextPart)
 	require.True(t, ok)
 	require.Contains(t, txt.Text, "A tool call failed and provided a RetryHint.")
 	require.Contains(t, txt.Text, "Tool: svc.read.aggregate")

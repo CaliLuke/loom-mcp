@@ -445,7 +445,7 @@ func TestBeforeModelShortCircuitUsesEffectiveToolPolicyForRecovery(t *testing.T)
 	require.Nil(t, out.Result)
 	require.NotNil(t, out.Recovery)
 	require.Equal(t, model.OutputValidationToolIdentity, out.Recovery.Kind)
-	require.Contains(t, out.Recovery.Correction, "allowed")
+	require.Contains(t, string(testStoredBytes(t, rt, "root", out.Recovery.CorrectionRef)), "allowed")
 	require.NotContains(t, out.Recovery.Correction, "blocked")
 }
 
@@ -471,11 +471,11 @@ func TestBeforeModelShortCircuitSeesToolFreeFinalAnswerRecovery(t *testing.T) {
 		RunID:            "run-before-model-tool-free",
 		RunContext:       run.Context{RootRunID: "root", RunID: "run-before-model-tool-free"},
 		ToolPolicyActive: true,
-		Recovery: &api.ModelRecovery{
+		Recovery: testRecovery(t, rt, "root", &api.ModelRecovery{
 			Kind:         model.OutputValidationStructuredOutput,
 			Correction:   "replace the invalid final answer",
 			DisableTools: true,
-		},
+		}),
 	})
 	require.NoError(t, err)
 	require.Nil(t, out.Recovery)
@@ -543,7 +543,7 @@ func TestPlanActivityKeepsPlannerResultAfterCaughtModelValidation(t *testing.T) 
 	out, err := rt.PlanStartActivity(context.Background(), &PlanActivityInput{
 		AgentID:    "svc.agent",
 		RunID:      "run-caught-validation",
-		RunContext: run.Context{RunID: "run-caught-validation"},
+		RunContext: run.Context{RootRunID: "test-root", RunID: "run-caught-validation"},
 	})
 	require.NoError(t, err)
 	require.Nil(t, out.Recovery)
@@ -762,7 +762,7 @@ func TestRunInterceptorsOrderAndErrorShortCircuit(t *testing.T) {
 			return nil, nil
 		},
 	}))
-	_, err := runBeforeRunInterceptors(context.Background(), rt.interceptors, RunInput{AgentID: "svc.agent", RunID: "run-1"}, run.Context{RunID: "run-1"})
+	_, err := runBeforeRunInterceptors(context.Background(), rt.interceptors, RunInput{AgentID: "svc.agent", RunID: "run-1"}, run.Context{RootRunID: "test-root", RunID: "run-1"})
 	require.ErrorIs(t, err, runErr)
 	require.Equal(t, []string{"before"}, calls)
 }

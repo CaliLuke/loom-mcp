@@ -98,14 +98,18 @@ func (p *GraphWorkflowPlanner) PlanStart(_ context.Context, _ *PlanInput) (*Plan
 }
 
 // PlanResume emits ready graph nodes without rerunning completed nodes.
-func (p *GraphWorkflowPlanner) PlanResume(_ context.Context, input *PlanResumeInput) (*PlanResult, error) {
+func (p *GraphWorkflowPlanner) PlanResume(ctx context.Context, input *PlanResumeInput) (*PlanResult, error) {
 	if input == nil {
 		return nil, errors.New("plan resume input is required")
 	}
 	if input.Finalize != nil {
 		return p.finalResult(), nil
 	}
-	return p.nextResult(input.ToolOutputs, input.TypedInputs)
+	outputs, typed, err := p.predicateInputs(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	return p.nextResult(outputs, typed)
 }
 
 func (p *GraphWorkflowPlanner) nextResult(outputs []*ToolOutput, typedInputs []TypedInputOutput) (*PlanResult, error) {

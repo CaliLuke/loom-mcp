@@ -68,12 +68,3 @@ func resultsContainOutcomeUnknown(results []*planner.ToolResult) bool {
 	}
 	return false
 }
-
-func toolOutputsContainOutcomeUnknown(outputs []*planner.ToolOutput) bool {
-	for _, output := range outputs {
-		if output != nil && output.Error != nil && output.Error.Kind == planner.ToolErrorKindOutcomeUnknown {
-			return true
-		}
-	}
-	return false
-}

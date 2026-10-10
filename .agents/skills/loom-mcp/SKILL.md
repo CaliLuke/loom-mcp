@@ -69,29 +69,49 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   recorded-history replay test. Drain running workflows before deploying the
   new version; mismatched and unstamped inputs fail before workflow effects.
 
-- Workflow protocol 4 stores `RunOutput.ToolEvents` behind `ToolEventsRef` and
-  `ToolEventCount`. Use `runtime.LoadRunToolEvents` outside workflows to load
-  full events in the root run scope. Planner inputs omit referenced result and
-  server-data bytes; `PlanResumeActivity` restores them before planner invocation.
-  `RegisterAgent` registers `FinishRunActivity` on the agent queue to store the
-  terminal event list and decode/bound typed final results. Manual registrations
-  and custom engines must provide the finish activity too.
-  Protocol 4 also registers `RecordContentActivity` (`<agentID>.record_content`)
-  through the typed engine activity API. It accepts `api.RecordContentInput`
-  (`RootRunID`, ordered `Items`) and returns `RecordContentOutput.Refs` only after
-  every Put succeeds. Effective caller messages are recorded after BeforeRun and
-  before planning; `runLoopState.InitialMessageRefs` retains their ordered hashes
-  for K7. Planner activities store transcript JSON, each returned tool request,
-  and recovery correction text before returning `TranscriptRef`, `ToolCallRefs`,
-  and `CorrectionRef`. Arguments and other inline bytes remain available.
-  Content signal clients query `root_run_id` via `Engine.QueryRootRunID` and
-  store messages/answers/results before signalling. Client-only processes must
-  share workers' run store. Workflows copy signal refs without store reads.
-  Inline content-bearing results (including tool_unavailable) and adapted child
-  results use RecordContent before entering state. FinishRun stores optional Final
-  messages as FinalRef in the root scope. Error-only synthesized results and
-  structural denials, reminders, and finalization hints create no content writes.
-  Do not add the K7 index/segments/ViewRef/loader or K8 hook changes here.
+- Workflow protocol 5 uses immutable `runtime/agent/transcript/index` entries
+  and linked segments. Workflows retain entries and IndexHead; planner activity
+  inputs carry ViewRef (head plus one step's Pending), never accumulated messages,
+  ToolOutputs, TypedInputs or the old ledger. Seeded caller history is committed
+  through run-start RecordContent before planning, split under the 15 MiB cap.
+  The loader stores Pending before returning its head, validates hashes/chains,
+  and caches decoded segments and output/answer projections per worker. These
+  caches use least-recently-used eviction, bounded to 256 runs per runtime by
+  default. WithViewCacheRuns(n) requires n > 0; evicted runs rebuild identical
+  views cold from IndexHead, while active loads retain safe cache pointers. Warm
+  derivation appends new entries only; owned message snapshots still copy the
+  visible history. Missing content needed by the view fails before planning.
+  Store canonical calls in planner activities before dispatch, preserving the
+  deterministic ID formula. Hide bookkeeping with a later structural entry,
+  never by rewriting earlier entries. Structural text over 16 KiB is content.
+  Each workflow result step batches content, metadata, large structural text and
+  reminders into at most one RecordContent call. Reuse stored calls for original
+  payloads; do not store payload bytes again when there is no adapted payload.
+  Planners receive ToolOutputs as refs plus bounded previews/metadata, with empty
+  Result/ServerData/Payload; TypedInputs has PayloadRef and empty Payload.
+  PlanResumeInput.Content is the root-scoped ContentLoader. Finalize still has no
+  typed answers. Canonical JSON message equality is the planner contract, also
+  on the in-memory engine. Resume-only ValidateBedrock, history policy and
+  recovery correction run after loading.
+  PreChildValidator has AgentToolValidationInput.View (ViewLoader), not Messages,
+  and runs in the typed child-dispatch activity before child admission/start.
+  A view load with Pending returns IndexHead on success or structured rejection;
+  the workflow adopts it before following dispatches/planner steps, preserving
+  the warm cache and held call references. Unloaded/empty Pending returns no head.
+  Custom engines register/execute ChildDispatchActivity as well as RecordContent
+  and FinishRun. Parent messages never return to workflow state.
+  Content signal clients query root_run_id and store content before signalling
+  refs only; client processes must share workers' run store. FinishRun stores
+  FinalRef and ToolEventsRef/ToolEventCount; LoadRunToolEvents loads terminal
+  events outside workflows. The ledger_messages query is removed.
+  Over-1-MB PlanActivityInput returns exported PlanActivityInputBudgetError,
+  errors.As-able. Run `make test-payload-growth` for full P2 and cold/warm growth acceptance.
+  `make itest` invokes that target; `make test` covers typed P2 and 1,000-step
+  growth. Omitted result bodies are read only on explicit ContentLoader requests.
+  Large per-run ToolArgs, Labels and tool catalogs can exceed P2's 4 KiB fixed
+  allowance; this K7 exception is documented and regression-tested.
+  K8 owns terminal sealing, trailing pending entries, new planner/run hooks and
+  the remaining per-call FinishRunInput.ToolEvents history growth.
 
 - Codex `ReasoningEffort` is a native provider/runtime factory option. Empty
   preserves provider defaults. Applications validate model-specific supported

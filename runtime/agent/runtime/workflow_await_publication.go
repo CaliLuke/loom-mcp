@@ -9,7 +9,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 )
 
-func (r *Runtime) publishAwaitQueueItem(ctx context.Context, input *RunInput, base *planner.PlanInput, st *runLoopState, turnID string, it planner.AwaitItem, idx int) error {
+func (r *Runtime) publishAwaitQueueItem(ctx context.Context, input *RunInput, base *workflowPlanInput, st *runLoopState, turnID string, it planner.AwaitItem, idx int) error {
 	if it.Kind == "" {
 		return fmt.Errorf("await item %d missing kind", idx)
 	}
@@ -28,7 +28,7 @@ func (r *Runtime) publishAwaitQueueItem(ctx context.Context, input *RunInput, ba
 	}
 }
 
-func (r *Runtime) publishAwaitClarification(ctx context.Context, input *RunInput, base *planner.PlanInput, turnID string, c *planner.AwaitClarification, idx int) error {
+func (r *Runtime) publishAwaitClarification(ctx context.Context, input *RunInput, base *workflowPlanInput, turnID string, c *planner.AwaitClarification, idx int) error {
 	if c == nil {
 		return fmt.Errorf("await clarification item %d missing payload", idx)
 	}
@@ -44,7 +44,7 @@ func (r *Runtime) publishAwaitClarification(ctx context.Context, input *RunInput
 	), turnID)
 }
 
-func (r *Runtime) publishAwaitTypedInput(ctx context.Context, input *RunInput, base *planner.PlanInput, turnID string, t *planner.AwaitTypedInput, idx int) error {
+func (r *Runtime) publishAwaitTypedInput(ctx context.Context, input *RunInput, base *workflowPlanInput, turnID string, t *planner.AwaitTypedInput, idx int) error {
 	if t == nil {
 		return fmt.Errorf("await typed_input item %d missing payload", idx)
 	}
@@ -64,7 +64,7 @@ func (r *Runtime) publishAwaitTypedInput(ctx context.Context, input *RunInput, b
 	), turnID)
 }
 
-func (r *Runtime) publishAwaitQuestions(ctx context.Context, input *RunInput, base *planner.PlanInput, st *runLoopState, turnID string, q *planner.AwaitQuestions, idx int) error {
+func (r *Runtime) publishAwaitQuestions(ctx context.Context, input *RunInput, base *workflowPlanInput, st *runLoopState, turnID string, q *planner.AwaitQuestions, idx int) error {
 	if q == nil {
 		return fmt.Errorf("await questions item %d missing payload", idx)
 	}
@@ -86,7 +86,9 @@ func (r *Runtime) publishAwaitQuestions(ctx context.Context, input *RunInput, ba
 		return err
 	}
 	call := planner.ToolRequest{Name: q.ToolName, ToolCallID: q.ToolCallID, Payload: q.Payload}
-	r.recordAssistantTurn(base, st.takeTurnTranscript(), []planner.ToolRequest{call}, st.Ledger)
+	if err := base.recordAssistant(st.takeTurnTranscript(), []planner.ToolRequest{call}); err != nil {
+		return err
+	}
 	if q.ToolCallID == "" {
 		return errors.New("await_questions: missing tool_call_id")
 	}
@@ -116,7 +118,7 @@ func awaitQuestionHook(question planner.AwaitQuestion) hooks.AwaitQuestion {
 	}
 }
 
-func (r *Runtime) publishAwaitExternalTools(ctx context.Context, input *RunInput, base *planner.PlanInput, st *runLoopState, turnID string, e *planner.AwaitExternalTools, idx int) error {
+func (r *Runtime) publishAwaitExternalTools(ctx context.Context, input *RunInput, base *workflowPlanInput, st *runLoopState, turnID string, e *planner.AwaitExternalTools, idx int) error {
 	if e == nil {
 		return fmt.Errorf("await external_tools item %d missing payload", idx)
 	}
@@ -133,7 +135,9 @@ func (r *Runtime) publishAwaitExternalTools(ctx context.Context, input *RunInput
 	), turnID); err != nil {
 		return err
 	}
-	r.recordAssistantTurn(base, st.takeTurnTranscript(), awaitCalls, st.Ledger)
+	if err := base.recordAssistant(st.takeTurnTranscript(), awaitCalls); err != nil {
+		return err
+	}
 	return publishAwaitScheduledToolCalls(ctx, r, input, base, turnID, awaitCalls)
 }
 
@@ -155,7 +159,7 @@ func awaitExternalToolHooks(items []planner.AwaitToolItem) ([]hooks.AwaitToolIte
 	return hookItems, awaitCalls
 }
 
-func publishAwaitScheduledToolCalls(ctx context.Context, r *Runtime, input *RunInput, base *planner.PlanInput, turnID string, calls []planner.ToolRequest) error {
+func publishAwaitScheduledToolCalls(ctx context.Context, r *Runtime, input *RunInput, base *workflowPlanInput, turnID string, calls []planner.ToolRequest) error {
 	for _, call := range calls {
 		if call.ToolCallID == "" {
 			continue

@@ -231,6 +231,9 @@ type ToolRequest struct {
 
 // ToolResult captures the outcome of a tool invocation.
 type ToolResult struct {
+	// Preview is computed before result content leaves its producing activity.
+	Preview string
+
 	// Refs addresses stored activity content in the root run scope. ServerData and
 	// Payload are server-only and must never enter model-facing messages.
 	Refs tools.ResultRefs
@@ -316,6 +319,12 @@ type ToolResult struct {
 //   - This type must remain workflow-boundary safe; it intentionally does not
 //     carry decoded `any` values.
 type ToolOutput struct {
+	// Call addresses the stored dispatched call when Refs.Payload is empty.
+	Call runstore.Hash
+
+	// Preview is bounded model-facing result text. Full content is read through Content.
+	Preview string
+
 	// Refs addresses stored activity content in the root run scope. ServerData and
 	// Payload are server-only and must never enter model-facing messages.
 	Refs tools.ResultRefs
@@ -605,7 +614,7 @@ type TypedInputOutput struct {
 	PayloadRef runstore.Hash
 	// ID identifies the awaited typed input request.
 	ID string
-	// Payload is the canonical JSON answer payload.
+	// Payload is empty at the runtime boundary; Content loads PayloadRef.
 	Payload rawjson.Message
 }
 
@@ -680,6 +689,9 @@ type PlanInput struct {
 
 // PlanResumeInput carries messages plus execution history into PlanResume.
 type PlanResumeInput struct {
+	// Content loads referenced content within the root run scope.
+	Content ContentLoader
+
 	// Messages is the full conversation history including the most recent tool_use/tool_result blocks.
 	Messages []*model.Message
 
@@ -692,14 +704,17 @@ type PlanResumeInput struct {
 	// Events allows planners to emit streaming updates.
 	Events PlannerEvents
 
-	// ToolOutputs is the accumulated executed tool-call history for the run so far.
+	// ToolOutputs is the accumulated, read-only execution metadata for the run.
+	// Entries contain references and bounded previews; Result, ServerData and
+	// Payload are empty. Use Content to load their bytes. Copy entries before editing.
 	//
 	// This is the single truthful planner-facing execution-history boundary.
 	// Planners that need typed convenience views derive them locally from these
 	// canonical tool outputs instead of relying on a duplicate runtime field.
 	ToolOutputs []*ToolOutput
 
-	// TypedInputs contains typed human-input answers received during await resume.
+	// TypedInputs is a read-only view of answers received during await resume.
+	// Payload is empty; load PayloadRef through Content. Copy entries before editing.
 	TypedInputs []TypedInputOutput
 
 	// Finalize is non-nil when the runtime forces termination and requests a final response.

@@ -163,13 +163,13 @@ func TestFinishWithoutToolCalls_UsesPlannerFinalToolResult(t *testing.T) {
 		AgentID:   "svc.agent",
 		SessionID: "sess-1",
 	}
-	base := &planner.PlanInput{
-		RunContext: run.Context{
+	base := testWorkflowInput(t, rt, &planner.PlanInput{
+		RunContext: run.Context{RootRunID: "test-root",
 			RunID:     "run-1",
 			SessionID: "sess-1",
 			Tool:      "svc.tools.do",
 		},
-	}
+	})
 	st := &runLoopState{
 		Result: &planner.PlanResult{
 			FinalToolResult: &planner.FinalToolResult{
@@ -198,12 +198,12 @@ func TestFinishWithoutToolCalls_PublishesAssistantTurnCommitted(t *testing.T) {
 		AgentID:   "svc.agent",
 		SessionID: "",
 	}
-	base := &planner.PlanInput{
-		RunContext: run.Context{
+	base := testWorkflowInput(t, rt, &planner.PlanInput{
+		RunContext: run.Context{RootRunID: "test-root",
 			RunID:     "run-1",
 			SessionID: "",
 		},
-	}
+	})
 	msg := &model.Message{
 		Role:  model.ConversationRoleAssistant,
 		Parts: []model.Part{model.TextPart{Text: "all done"}},
@@ -252,13 +252,13 @@ func TestFinishWithoutToolCallsRejectsDualTerminalOutputs(t *testing.T) {
 		AgentID:   "svc.agent",
 		SessionID: "sess-1",
 	}
-	base := &planner.PlanInput{
-		RunContext: run.Context{
+	base := testWorkflowInput(t, rt, &planner.PlanInput{
+		RunContext: run.Context{RootRunID: "test-root",
 			RunID:     "run-1",
 			SessionID: "sess-1",
 			Tool:      "svc.tools.do",
 		},
-	}
+	})
 	st := &runLoopState{
 		Result: &planner.PlanResult{
 			FinalResponse: &planner.FinalResponse{
@@ -609,15 +609,15 @@ func TestRecoveryTurnAllowsOneReplacementPlannerActivity(t *testing.T) {
 		planResult:    &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: finalMessage}},
 	}
 	input := &RunInput{RootRunID: "run-1", AgentID: "svc.agent", RunID: "run-1"}
-	base := &planner.PlanInput{RunContext: run.Context{RunID: input.RunID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})}
+	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})})
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: tools.Ident("fail")}}}
-	out, err := rt.runLoop(wfCtx, AgentRegistration{
+	out, err := testRunLoop(t, rt, wfCtx, AgentRegistration{
 		ID:                  input.AgentID,
 		Planner:             &stubPlanner{},
 		ExecuteToolActivity: "execute",
 		ResumeActivityName:  "resume",
 		Policy:              RunPolicy{MaxRecoveryTurns: 1},
-	}, input, base, initial, nil, model.TokenUsage{}, initialCaps(RunPolicy{MaxRecoveryTurns: 1}), time.Time{}, time.Time{}, 2, "", nil, nil, 0)
+	}, input, base, initial, nil, initialCaps(RunPolicy{MaxRecoveryTurns: 1}), time.Time{}, time.Time{}, 2, "", nil)
 	require.NoError(t, err)
 	require.NotNil(t, out)
 	require.Equal(t, finalMessage, out.Final)
@@ -899,14 +899,14 @@ func TestTimeBudgetExceeded(t *testing.T) {
 	}
 	wfCtx := &testWorkflowContext{ctx: context.Background(), asyncResult: ToolOutput{Payload: []byte("null")}}
 	input := &RunInput{AgentID: "svc.agent", RunID: "run-1"}
-	base := &planner.PlanInput{RunContext: run.Context{RunID: input.RunID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})}
+	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})})
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: tools.Ident("tool")}}}
-	_, err := rt.runLoop(wfCtx, AgentRegistration{
+	_, err := testRunLoop(t, rt, wfCtx, AgentRegistration{
 		ID:                  input.AgentID,
 		Planner:             &stubPlanner{},
 		ExecuteToolActivity: "execute",
 		ResumeActivityName:  "resume",
-	}, input, base, initial, nil, model.TokenUsage{}, policy.CapsState{MaxToolCalls: 1, RemainingToolCalls: 1}, wfCtx.Now().Add(-time.Second), wfCtx.Now().Add(-time.Second), 2, "", nil, nil, 0)
+	}, input, base, initial, nil, policy.CapsState{MaxToolCalls: 1, RemainingToolCalls: 1}, wfCtx.Now().Add(-time.Second), wfCtx.Now().Add(-time.Second), 2, "", nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "time budget exceeded")
 }
@@ -1092,10 +1092,10 @@ func TestAgentAsToolNestedUpdates(t *testing.T) {
 	// Parent run requests a single agent-tool invocation
 	parentInput := &RunInput{RootRunID: "run-parent", AgentID: "parent.agent", RunID: "run-parent", SessionID: "session-1", TurnID: "turn-1"}
 	seedParentRun(t, rt.SessionStore, parentInput.RunID, parentInput.SessionID)
-	base := &planner.PlanInput{RunContext: run.Context{RootRunID: parentInput.RunID, RunID: parentInput.RunID, SessionID: parentInput.SessionID, TurnID: parentInput.TurnID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: parentInput.AgentID, runID: parentInput.RunID})}
+	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: parentInput.RunID, RunID: parentInput.RunID, SessionID: parentInput.SessionID, TurnID: parentInput.TurnID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: parentInput.AgentID, runID: parentInput.RunID})})
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: tools.Ident("invoke")}}}
 
-	_, err = rt.runLoop(wfCtx, parentReg, parentInput, base, initial, nil, model.TokenUsage{}, policy.CapsState{MaxToolCalls: 3, RemainingToolCalls: 3}, time.Time{}, time.Time{}, 2, parentInput.TurnID, nil, nil, 0)
+	_, err = testRunLoop(t, rt, wfCtx, parentReg, parentInput, base, initial, nil, policy.CapsState{MaxToolCalls: 3, RemainingToolCalls: 3}, time.Time{}, time.Time{}, 2, parentInput.TurnID, nil)
 	require.NoError(t, err)
 
 	// Assert ToolCallUpdatedEvent emitted twice with counts 2 then 3 referencing parent tool call id
@@ -1181,7 +1181,7 @@ func TestExecuteToolCallsPublishesChildUpdates(t *testing.T) {
 		{Name: tools.Ident("child1")},
 		{Name: tools.Ident("child2")},
 	}
-	childCtx := &run.Context{
+	childCtx := &run.Context{RootRunID: "test-root",
 		RunID:            "run-1",
 		SessionID:        "session-1",
 		TurnID:           "turn-1",
@@ -1267,11 +1267,11 @@ func TestRuntimePublishesPolicyDecision(t *testing.T) {
 	_, sessionErr := rt.CreateSession(context.Background(), input.SessionID)
 	require.NoError(t, sessionErr)
 
-	base := &planner.PlanInput{
+	base := testWorkflowInput(t, rt, &planner.PlanInput{
 		Messages: []*model.Message{
 			{Role: "user", Parts: []model.Part{model.TextPart{Text: "hello"}}},
 		},
-		RunContext: run.Context{
+		RunContext: run.Context{RootRunID: "test-root",
 			RunID:     input.RunID,
 			SessionID: input.SessionID,
 			TurnID:    input.TurnID,
@@ -1282,7 +1282,7 @@ func TestRuntimePublishesPolicyDecision(t *testing.T) {
 			agentID: input.AgentID,
 			runID:   input.RunID,
 		}),
-	}
+	})
 
 	wfCtx := &testWorkflowContext{finishRuntime: rt,
 		ctx:           context.Background(),
@@ -1309,7 +1309,7 @@ func TestRuntimePublishesPolicyDecision(t *testing.T) {
 	}
 	caps := policy.CapsState{MaxToolCalls: 5, RemainingToolCalls: 5}
 
-	_, err = rt.runLoop(
+	_, err = testRunLoop(t, rt,
 		wfCtx,
 		AgentRegistration{
 			ID:                  input.AgentID,
@@ -1321,15 +1321,14 @@ func TestRuntimePublishesPolicyDecision(t *testing.T) {
 		base,
 		initial,
 		nil,
-		model.TokenUsage{},
+
 		caps,
 		time.Time{},
 		time.Time{},
 		2,
 		input.TurnID,
+
 		nil,
-		nil,
-		0,
 	)
 	require.NoError(t, err)
 

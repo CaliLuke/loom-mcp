@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
-	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
@@ -37,7 +36,7 @@ func TestRunLoopStopsAfterTerminalTool(t *testing.T) {
 		ctx:     context.Background(),
 		runtime: rt,
 	}
-	base := &planner.PlanInput{
+	base := testWorkflowInput(t, rt, &planner.PlanInput{
 		RunContext: run.Context{
 			RootRunID: "run-1",
 			RunID:     "run-1",
@@ -45,7 +44,7 @@ func TestRunLoopStopsAfterTerminalTool(t *testing.T) {
 			TurnID:    "turn-1",
 			Attempt:   1,
 		},
-	}
+	})
 	input := &RunInput{
 		RootRunID: "run-1",
 		AgentID:   agent.Ident("agent-1"),
@@ -61,7 +60,7 @@ func TestRunLoopStopsAfterTerminalTool(t *testing.T) {
 			},
 		},
 	}
-	out, err := rt.runLoop(
+	out, err := testRunLoop(t, rt,
 		wfCtx,
 		AgentRegistration{
 			ExecuteToolActivity: "execute",
@@ -70,15 +69,14 @@ func TestRunLoopStopsAfterTerminalTool(t *testing.T) {
 		base,
 		initial,
 		nil,
-		model.TokenUsage{},
+
 		policy.CapsState{},
 		time.Time{},
 		time.Time{},
 		2,
 		"turn-1",
+
 		nil,
-		nil,
-		0,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, out)

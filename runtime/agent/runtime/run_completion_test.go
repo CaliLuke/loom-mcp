@@ -216,7 +216,7 @@ func TestQueriedCompletionSanitizesHostileError(t *testing.T) {
 	rt := New(WithHooks(recorder), WithRunEventStore(runloginmem.New()))
 	ctx := context.Background()
 	runID := "queried-hostile"
-	require.NoError(t, rt.publishHookErr(ctx, hooks.NewRunStartedEvent(runID, "svc.agent", run.Context{
+	require.NoError(t, rt.publishHookErr(ctx, hooks.NewRunStartedEvent(runID, "svc.agent", run.Context{RootRunID: "test-root",
 		RunID:  runID,
 		TurnID: "turn-hostile",
 	}, nil), "turn-hostile"))

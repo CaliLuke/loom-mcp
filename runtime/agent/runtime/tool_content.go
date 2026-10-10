@@ -75,9 +75,12 @@ func recordActivityRequest(ctx context.Context, payload rawjson.Message) error {
 func (r *Runtime) storedToolActivityOutput(ctx context.Context, scope string, resultJSON rawjson.Message, result *planner.ToolResult, pause *ToolPause, payload []byte) (*ToolOutput, error) {
 	out := newToolActivityOutput(resultJSON, result)
 	out.Pause = pause
+	out.Preview = r.formatResultPreview(ctx, result.Name, nil, result.Result, result.Bounds)
+	out.ResultBytes = len(resultJSON)
 	if err := r.storeToolActivityContent(ctx, scope, out, payload); err != nil {
 		return nil, err
 	}
+	out.Payload, out.ServerData = nil, nil
 	return out, nil
 }
 

@@ -277,7 +277,7 @@ func (r *Runtime) prepareFinalizationToolCalls(
 	ctx context.Context,
 	reg AgentRegistration,
 	input *RunInput,
-	base *planner.PlanInput,
+	base *workflowPlanInput,
 	calls []planner.ToolRequest,
 	caps policy.CapsState,
 	turnID string,
@@ -304,7 +304,7 @@ func (r *Runtime) prepareFinalizationToolCalls(
 	if len(decision.AllowedCalls) != len(calls) {
 		return nil, errors.New("finalization terminal tool plan is excluded by runtime policy")
 	}
-	prepared := r.prepareAllowedCallsMetadata(input.AgentID, base, decision.AllowedCalls, nil)
+	prepared := r.prepareAllowedCallsMetadata(input.AgentID, base, decision.AllowedCalls, newChildTracker(base.RunContext.ParentToolCallID))
 	stampFinalizationReason(prepared, reason)
 	return prepared, nil
 }
@@ -313,7 +313,7 @@ func (r *Runtime) executeFinalizationToolCalls(
 	wfCtx engine.WorkflowContext,
 	reg AgentRegistration,
 	input *RunInput,
-	base *planner.PlanInput,
+	base *workflowPlanInput,
 	calls []planner.ToolRequest,
 	allToolResults []*planner.ToolResult,
 	aggUsage model.TokenUsage,
@@ -323,9 +323,7 @@ func (r *Runtime) executeFinalizationToolCalls(
 	reason planner.TerminationReason,
 	hardDeadline time.Time,
 ) (*RunOutput, error) {
-	prepared, err := r.prepareFinalizationToolCalls(
-		wfCtx.Context(), reg, input, base, calls, caps, turnID, nextAttempt, reason,
-	)
+	prepared, err := r.storedFinalizationCalls(wfCtx, reg, input, base, calls, caps, turnID, nextAttempt, reason)
 	if err != nil {
 		return nil, err
 	}
@@ -389,7 +387,7 @@ func (r *Runtime) runPreparedFinalizationToolCalls(
 	wfCtx engine.WorkflowContext,
 	reg AgentRegistration,
 	input *RunInput,
-	base *planner.PlanInput,
+	base *workflowPlanInput,
 	prepared []planner.ToolRequest,
 	hardDeadline time.Time,
 ) ([]*planner.ToolResult, error) {
@@ -400,7 +398,7 @@ func (r *Runtime) runPreparedFinalizationToolCalls(
 		toolOpts,
 		input.AgentID,
 		&base.RunContext,
-		base.Messages,
+		base,
 		prepared,
 		0,
 		nil,

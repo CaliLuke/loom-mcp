@@ -147,7 +147,7 @@ func TestAgentChildImmediateRejectionSettlesReservation(t *testing.T) {
 				spec.IsAgentTool = true
 				spec.AgentID = string(cfg.AgentID)
 				rt.toolSpecs[toolID] = spec
-				parent := &run.Context{RunID: "parent", SessionID: "session", TurnID: "turn"}
+				parent := &run.Context{RootRunID: "test-root", RunID: "parent", SessionID: "session", TurnID: "turn"}
 				seedParentRun(t, rt.SessionStore, parent.RunID, parent.SessionID)
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()

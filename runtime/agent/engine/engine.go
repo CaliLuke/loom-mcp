@@ -127,6 +127,9 @@ type (
 		// RegisterRecordContentActivity registers ordered workflow content storage.
 		RegisterRecordContentActivity(ctx context.Context, name string, opts ActivityOptions, fn func(context.Context, *api.RecordContentInput) (*api.RecordContentOutput, error)) error
 
+		// RegisterChildDispatchActivity registers pre-child validation.
+		RegisterChildDispatchActivity(ctx context.Context, name string, opts ActivityOptions, fn func(context.Context, *api.ChildDispatchInput) (*api.ChildDispatchOutput, error)) error
+
 		// QueryRootRunID resolves the workflow run tree storage scope.
 		QueryRootRunID(ctx context.Context, workflowID string) (string, error)
 
@@ -255,6 +258,9 @@ type (
 
 		// ExecuteRecordContentActivity stores ordered content outside workflow execution.
 		ExecuteRecordContentActivity(ctx context.Context, call RecordContentActivityCall) (*api.RecordContentOutput, error)
+
+		// ExecuteChildDispatchActivity validates a child before it starts.
+		ExecuteChildDispatchActivity(ctx context.Context, call ChildDispatchActivityCall) (*api.ChildDispatchOutput, error)
 
 		// ExecuteToolActivity schedules a tool execution activity and blocks until it
 		// completes. This is useful for sequential execution (finalizers, single tools).
@@ -539,5 +545,12 @@ type FinishRunActivityCall struct {
 type RecordContentActivityCall struct {
 	Name    string
 	Input   *api.RecordContentInput
+	Options ActivityOptions
+}
+
+// ChildDispatchActivityCall schedules validation before starting a child workflow.
+type ChildDispatchActivityCall struct {
+	Name    string
+	Input   *api.ChildDispatchInput
 	Options ActivityOptions
 }

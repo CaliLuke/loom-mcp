@@ -20,7 +20,6 @@ import (
 	sessioninmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/session/inmem"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
-	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript"
 	"github.com/stretchr/testify/require"
 )
 
@@ -167,15 +166,16 @@ func TestApplyExecutedToolTurn_DoesNotPersistPauseIntoToolOutputs(t *testing.T) 
 		},
 	}
 
-	base := &planner.PlanInput{}
-	st := &runLoopState{Ledger: transcript.NewLedger()}
+	base := testWorkflowInput(t, rt, &planner.PlanInput{})
+	st := &runLoopState{}
 
+	testStoreCalls(t, rt, base, []planner.ToolRequest{call})
 	vals := toolResultsFromExecutions(outcomes)
-	require.NoError(t, applyExecutedToolTurn(context.Background(), rt, base, st, []planner.ToolRequest{call}, vals))
+	require.NoError(t, applyExecutedToolTurn(testIndexContext(t, rt), rt, base, st, []planner.ToolRequest{call}, vals))
 
 	// ToolOutputs holds exactly the durable result. There is no pause payload.
-	require.Len(t, st.ToolOutputs, 1)
-	require.Equal(t, "tc-pause", st.ToolOutputs[0].ToolCallID)
+	require.Len(t, testView(t, rt, base).Outputs, 1)
+	require.Equal(t, "tc-pause", testView(t, rt, base).Outputs[0].ToolCallID)
 
 	// ToolEvents (the cumulative planner-facing audit trail) also holds only
 	// the durable shape.
@@ -257,7 +257,7 @@ func TestRunLoopBudgetedToolPauseRecordsResultBeforeUserAnswer(t *testing.T) {
 	}
 	wfCtx.ensureSignals()
 	ctrl := interrupt.NewController(wfCtx)
-	wfCtx.clarifyCh <- &api.ClarificationAnswer{ID: "clar-1", Answer: "Compressor 1"}
+	wfCtx.clarifyCh <- &api.ClarificationAnswer{ID: "clar-1", AnswerRef: testPutBytes(t, rt, "run-1", []byte("Compressor 1"))}
 
 	input := &RunInput{RootRunID: "run-1",
 		AgentID:   agent.Ident("svc.agent"),
@@ -276,15 +276,15 @@ func TestRunLoopBudgetedToolPauseRecordsResultBeforeUserAnswer(t *testing.T) {
 		StartedAt: now,
 		UpdatedAt: now,
 	}))
-	base := &planner.PlanInput{
+	base := testWorkflowInput(t, rt, &planner.PlanInput{
 		RunContext: run.Context{RootRunID: "root", RunID: input.RunID, SessionID: input.SessionID, TurnID: input.TurnID, Attempt: 1},
 		Agent:      newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID}),
-	}
+	})
 	initial := &planner.PlanResult{
 		ToolCalls: []planner.ToolRequest{{Name: tools.Ident("inline.ts.ask")}},
 	}
 
-	_, err = rt.runLoop(
+	_, err = testRunLoop(t, rt,
 		wfCtx,
 		AgentRegistration{
 			ID:                  input.AgentID,
@@ -292,16 +292,16 @@ func TestRunLoopBudgetedToolPauseRecordsResultBeforeUserAnswer(t *testing.T) {
 			ExecuteToolActivity: "execute",
 			ResumeActivityName:  "resume",
 		},
-		input, base, initial, nil, model.TokenUsage{},
+		input, base, initial, nil,
 		policy.CapsState{MaxToolCalls: 4, RemainingToolCalls: 4},
-		time.Time{}, time.Time{}, 2, input.TurnID, nil, ctrl, 0,
+		time.Time{}, time.Time{}, 2, input.TurnID, ctrl,
 	)
 	require.NoError(t, err)
 
 	// The resume planner call must have happened with the recorded transcript.
 	require.Equal(t, "resume", wfCtx.lastPlannerCall.Name)
 	require.NotNil(t, wfCtx.lastPlannerCall.Input)
-	msgs := wfCtx.lastPlannerCall.Input.Messages
+	msgs := testPlannerView(t, rt, wfCtx.lastPlannerCall.Input).Messages
 	require.NotEmpty(t, msgs, "resume planner call must see recorded transcript")
 
 	// Locate the durable user tool_result and the user clarification answer in

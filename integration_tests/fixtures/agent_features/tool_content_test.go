@@ -63,7 +63,7 @@ func TestActivityContentTypedLargeRoundTrip(t *testing.T) {
 	stored, err := store.Get(t.Context(), "root", out.Refs.Result)
 	require.NoError(t, err)
 	assert.Equal(t, canonical, stored)
-	assert.Equal(t, canonical, []byte(out.Payload))
+	assert.Empty(t, out.Payload)
 	assertStoredRefs(t, store, "root", out.Refs)
 	_, err = agentsruntime.LoadToolResult(t.Context(), store, "child", *spec, out.Refs.Result)
 	assert.ErrorIs(t, err, runstore.ErrNotFound)
@@ -176,15 +176,30 @@ func (p contentPlanner) PlanStart(_ context.Context, input *planner.PlanInput) (
 	return &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: workflow.MethodEcho, ToolCallID: "echo", Payload: rawjson.Message(`{"topic":"model"}`)}}}, nil
 }
 
-func (p contentPlanner) PlanResume(_ context.Context, input *planner.PlanResumeInput) (*planner.PlanResult, error) {
+func (p contentPlanner) PlanResume(ctx context.Context, input *planner.PlanResumeInput) (*planner.PlanResult, error) {
 	require.Len(p.t, input.ToolOutputs, 1)
 	output := input.ToolOutputs[0]
 	if p.fail {
-		assert.Empty(p.t, output.Refs)
+		assert.Empty(p.t, output.Refs.Result)
+		assert.Empty(p.t, output.Refs.ServerData)
+		payload, err := input.Content.LoadToolPayload(ctx, output)
+		require.NoError(p.t, err)
+		assert.JSONEq(p.t, `{"topic":"model"}`, string(payload))
 		assert.NotNil(p.t, output.Error)
 	} else {
 		assertStoredRefs(p.t, p.store, "content-root", output.Refs)
-		assert.JSONEq(p.t, `{"topic":"model"}`, string(output.Payload))
+		assert.Empty(p.t, output.Payload)
+		assert.Empty(p.t, output.Result)
+		assert.Empty(p.t, output.ServerData)
+		payload, err := input.Content.LoadToolPayload(ctx, output)
+		require.NoError(p.t, err)
+		assert.JSONEq(p.t, `{"topic":"mapped-injected","session_id":"private-session"}`, string(payload))
+		result, err := input.Content.LoadToolResult(ctx, output.Refs)
+		require.NoError(p.t, err)
+		assert.JSONEq(p.t, `{"ok":true,"message":"eligible"}`, string(result))
+		serverData, err := input.Content.LoadServerData(ctx, output.Refs)
+		require.NoError(p.t, err)
+		assert.JSONEq(p.t, `{"private":"sidecar-marker"}`, string(serverData))
 		messages, err := json.Marshal(input.Messages)
 		require.NoError(p.t, err)
 		for _, secret := range []string{"private-session", "sidecar-marker", string(output.Refs.ServerData), string(output.Refs.Payload)} {
@@ -208,4 +223,14 @@ func assertStoredRefs(t *testing.T, store *recordingContentStore, scope string, 
 		}
 		assert.Contains(t, store.writes, contentWrite{scope: scope, hash: hash})
 	}
+}
+
+// fixtureToolResult verifies the activity boundary is reference-only before
+// loading the canonical bytes from the same root scope as the run.
+func fixtureToolResult(t *testing.T, rt *agentsruntime.Runtime, root string, output *api.ToolOutput) string {
+	t.Helper()
+	require.Empty(t, output.Payload)
+	data, err := rt.RunStore.Get(t.Context(), root, output.Refs.Result)
+	require.NoError(t, err)
+	return string(data)
 }

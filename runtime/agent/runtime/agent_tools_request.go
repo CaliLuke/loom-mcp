@@ -27,7 +27,14 @@ func defaultAgentToolExecute(rt *Runtime, cfg AgentToolConfig) func(context.Cont
 			SessionID: call.SessionID,
 			TurnID:    call.TurnID,
 		}
-		messages, nestedRunCtx, err := rt.buildAgentChildRequest(wfCtx.Context(), &cfg, call, nil, parentRun)
+		failure, err := rt.validateChildDispatch(wfCtx, call.AgentID, &cfg, call, parentRun, nil)
+		if err != nil {
+			return nil, err
+		}
+		if failure != nil {
+			return Executed(failure), nil
+		}
+		messages, nestedRunCtx, err := rt.buildAgentChildRequest(wfCtx.Context(), &cfg, call)
 		if err != nil {
 			result, ferr := rt.agentToolRequestFailureResult(*call, err)
 			if ferr != nil {
@@ -35,19 +42,25 @@ func defaultAgentToolExecute(rt *Runtime, cfg AgentToolConfig) func(context.Cont
 			}
 			return Executed(result), nil
 		}
-		if err := rt.admitAgentChild(wfCtx, *call, nestedRunCtx, cfg.AgentID); err != nil {
-			return nil, err
-		}
-		outPtr, err := rt.executeReservedAgentChild(wfCtx, cfg.Route, messages, nestedRunCtx)
-		if err != nil {
-			return nil, fmt.Errorf("execute agent: %w", err)
-		}
-		result, err := rt.adaptAgentChildOutput(ctx, &cfg, call, nestedRunCtx, outPtr)
-		if err != nil {
-			return nil, err
-		}
-		return Executed(result), nil
+		return rt.executeValidatedAgentChild(ctx, wfCtx, &cfg, call, messages, nestedRunCtx)
 	}
+}
+
+// executeValidatedAgentChild owns admission and execution only after request
+// construction and the recorded pre-child validator have succeeded.
+func (r *Runtime) executeValidatedAgentChild(ctx context.Context, wfCtx engine.WorkflowContext, cfg *AgentToolConfig, call *planner.ToolRequest, messages []*model.Message, nestedRunCtx run.Context) (*ToolExecutionResult, error) {
+	if err := r.admitAgentChild(wfCtx, *call, nestedRunCtx, cfg.AgentID); err != nil {
+		return nil, err
+	}
+	outPtr, err := r.executeReservedAgentChild(wfCtx, cfg.Route, messages, nestedRunCtx)
+	if err != nil {
+		return nil, fmt.Errorf("execute agent: %w", err)
+	}
+	result, err := r.adaptAgentChildOutput(ctx, cfg, call, nestedRunCtx, outPtr)
+	if err != nil {
+		return nil, err
+	}
+	return Executed(result), nil
 }
 
 func (r *Runtime) agentToolRequestFailureResult(call planner.ToolRequest, err error) (*planner.ToolResult, error) {
@@ -74,10 +87,10 @@ func (r *Runtime) agentToolRequestFailureResult(call planner.ToolRequest, err er
 }
 
 // buildAgentChildRequest constructs the nested agent messages and run context for an agent-as-tool invocation.
-func (r *Runtime) buildAgentChildRequest(ctx context.Context, cfg *AgentToolConfig, call *planner.ToolRequest, messages []*model.Message, parentRun *run.Context) ([]*model.Message, run.Context, error) {
+func (r *Runtime) buildAgentChildRequest(ctx context.Context, cfg *AgentToolConfig, call *planner.ToolRequest) ([]*model.Message, run.Context, error) {
 	var zeroCtx run.Context
 
-	promptPayload, err := r.validateAgentToolRequest(ctx, cfg, call, messages, parentRun)
+	promptPayload, err := r.decodeAgentToolPromptPayload(ctx, *call)
 	if err != nil {
 		return nil, zeroCtx, err
 	}

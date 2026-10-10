@@ -21,6 +21,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 )
 
 // finalizeWithPlanner executes the configured limit plan or asks the finalizer
@@ -29,9 +30,8 @@ func (r *Runtime) finalizeWithPlanner(
 	wfCtx engine.WorkflowContext,
 	reg AgentRegistration,
 	input *RunInput,
-	base *planner.PlanInput,
+	base *workflowPlanInput,
 	allToolResults []*planner.ToolResult,
-	allToolOutputs []*planner.ToolOutput,
 	aggUsage model.TokenUsage,
 	caps policy.CapsState,
 	nextAttempt int,
@@ -58,7 +58,7 @@ func (r *Runtime) finalizeWithPlanner(
 		}
 	}
 	return r.finalizeWithModelPlan(
-		wfCtx, reg, input, base, allToolResults, allToolOutputs, aggUsage, caps, nextAttempt, turnID, reason, hardDeadline,
+		wfCtx, reg, input, base, allToolResults, aggUsage, caps, nextAttempt, turnID, reason, hardDeadline,
 	)
 }
 
@@ -66,7 +66,7 @@ func (r *Runtime) executeFixedLimitTerminalPlan(
 	wfCtx engine.WorkflowContext,
 	reg AgentRegistration,
 	input *RunInput,
-	base *planner.PlanInput,
+	base *workflowPlanInput,
 	allToolResults []*planner.ToolResult,
 	aggUsage model.TokenUsage,
 	caps policy.CapsState,
@@ -119,9 +119,8 @@ func (r *Runtime) finalizeWithModelPlan(
 	wfCtx engine.WorkflowContext,
 	reg AgentRegistration,
 	input *RunInput,
-	base *planner.PlanInput,
+	base *workflowPlanInput,
 	allToolResults []*planner.ToolResult,
-	allToolOutputs []*planner.ToolOutput,
 	aggUsage model.TokenUsage,
 	caps policy.CapsState,
 	nextAttempt int,
@@ -130,7 +129,7 @@ func (r *Runtime) finalizeWithModelPlan(
 	hardDeadline time.Time,
 ) (*RunOutput, error) {
 	output, aggUsage, err := r.runFinalizationPlan(
-		wfCtx, reg, input, base, allToolOutputs, aggUsage, caps, nextAttempt, turnID, reason, hardDeadline,
+		wfCtx, reg, input, base, aggUsage, caps, nextAttempt, turnID, reason, hardDeadline,
 	)
 	if err != nil {
 		return nil, err
@@ -170,8 +169,7 @@ func (r *Runtime) runFinalizationPlan(
 	wfCtx engine.WorkflowContext,
 	reg AgentRegistration,
 	input *RunInput,
-	base *planner.PlanInput,
-	allToolOutputs []*planner.ToolOutput,
+	base *workflowPlanInput,
 	aggUsage model.TokenUsage,
 	caps policy.CapsState,
 	nextAttempt int,
@@ -180,7 +178,7 @@ func (r *Runtime) runFinalizationPlan(
 	hardDeadline time.Time,
 ) (*PlanActivityOutput, model.TokenUsage, error) {
 	ctx := wfCtx.Context()
-	req, reasonText, resumeOpts, err := r.prepareFinalizePlan(ctx, reg, input, base, allToolOutputs, caps, nextAttempt, turnID, reason)
+	req, reasonText, resumeOpts, err := r.prepareFinalizePlan(ctx, reg, input, base, caps, nextAttempt, turnID, reason)
 	if err != nil {
 		return nil, aggUsage, err
 	}
@@ -188,6 +186,7 @@ func (r *Runtime) runFinalizationPlan(
 	if err != nil {
 		return nil, aggUsage, fmt.Errorf("%s: %w", reasonText, err)
 	}
+	base.adopt(output)
 	if err := validateFinalizePlanOutput(output, reasonText, reason); err != nil {
 		return nil, aggUsage, err
 	}
@@ -223,7 +222,7 @@ func validateFinalizePlanOutput(output *PlanActivityOutput, reasonText string, r
 
 func (r *Runtime) publishFinalizeOutput(
 	ctx context.Context,
-	base *planner.PlanInput,
+	base *workflowPlanInput,
 	input *RunInput,
 	turnID string,
 	output *PlanActivityOutput,
@@ -239,7 +238,7 @@ func (r *Runtime) publishFinalizeOutput(
 
 func buildFinalizedRunOutput(
 	agentID agent.Ident,
-	base *planner.PlanInput,
+	base *workflowPlanInput,
 	output *PlanActivityOutput,
 	finished *api.FinishRunOutput,
 	aggUsage model.TokenUsage,
@@ -262,8 +261,7 @@ func (r *Runtime) prepareFinalizePlan(
 	ctx context.Context,
 	reg AgentRegistration,
 	input *RunInput,
-	base *planner.PlanInput,
-	allToolOutputs []*planner.ToolOutput,
+	base *workflowPlanInput,
 	caps policy.CapsState,
 	nextAttempt int,
 	turnID string,
@@ -272,7 +270,7 @@ func (r *Runtime) prepareFinalizePlan(
 	if err := r.publishFinalizingPhase(ctx, base, input, turnID); err != nil {
 		return PlanActivityInput{}, "", engine.ActivityOptions{}, err
 	}
-	req, reasonText, err := r.buildFinalizePlanRequest(reg, base, input, allToolOutputs, caps, nextAttempt, reason)
+	req, reasonText, err := r.buildFinalizePlanRequest(reg, base, input, caps, nextAttempt, reason)
 
 	if err != nil {
 		return PlanActivityInput{}, "", engine.ActivityOptions{}, err
@@ -285,9 +283,8 @@ func (r *Runtime) prepareFinalizePlan(
 
 func (r *Runtime) buildFinalizePlanRequest(
 	reg AgentRegistration,
-	base *planner.PlanInput,
+	base *workflowPlanInput,
 	input *RunInput,
-	allToolOutputs []*planner.ToolOutput,
 	caps policy.CapsState,
 	nextAttempt int,
 	reason planner.TerminationReason,
@@ -296,19 +293,23 @@ func (r *Runtime) buildFinalizePlanRequest(
 	resumeCtx := base.RunContext
 	resumeCtx.Attempt = nextAttempt
 	resumeCtx.MaxDuration = "0s"
-	encodedToolOutputs, err := encodePlannerToolOutputs(allToolOutputs)
-	if err != nil {
+	if err := base.structural(index.FinalizeResults, nil); err != nil {
+		return PlanActivityInput{}, "", err
+	}
+	if err := base.appendEntry(index.MessageEntry{Kind: index.Structural, Structural: &index.StructuralEntry{Kind: index.FinalizeHint, ProtocolVersion: index.TemplateProtocolVersion, Reason: string(reason)}}); err != nil {
 		return PlanActivityInput{}, "", err
 	}
 	req := PlanActivityInput{
 		AgentID:          input.AgentID,
 		RunID:            base.RunContext.RunID,
-		Messages:         prepareFinalizationMessages(base.Messages, hint),
+		View:             base.view(),
 		RunContext:       resumeCtx,
-		ToolOutputs:      encodedToolOutputs,
 		Finalize:         &planner.Termination{Reason: reason, Message: hint},
 		ToolPolicyActive: true,
 		PolicyCaps:       caps,
+	}
+	if input.Policy != nil {
+		req.FinalizeMaxToolCalls = input.Policy.PerTurnMaxToolCalls
 	}
 	if reason != planner.TerminationReasonOutcomeUnknown {
 		req.AllowedTools = r.terminalFinalizerToolNames(reg, input)
@@ -324,13 +325,7 @@ func finalPlannerMessage(output *PlanActivityOutput) *model.Message {
 	if output.Result.FinalResponse == nil {
 		return nil
 	}
-	finalMsg := output.Result.FinalResponse.Message
-	if output.Result.Streamed && agentMessageText(finalMsg) == "" {
-		if text := transcriptText(output.Transcript); text != "" {
-			return newTextAgentMessage(model.ConversationRoleAssistant, text)
-		}
-	}
-	return finalMsg
+	return output.Result.FinalResponse.Message
 }
 
 func plannerResultNotes(result *planner.PlanResult) []planner.PlannerAnnotation {
@@ -348,7 +343,7 @@ func clonePlannerNotes(in []planner.PlannerAnnotation) []*planner.PlannerAnnotat
 	return out
 }
 
-func (r *Runtime) publishFinalizingPhase(ctx context.Context, base *planner.PlanInput, input *RunInput, turnID string) error {
+func (r *Runtime) publishFinalizingPhase(ctx context.Context, base *workflowPlanInput, input *RunInput, turnID string) error {
 	return r.publishHook(ctx, hooks.NewRunPhaseChangedEvent(base.RunContext.RunID, input.AgentID, base.RunContext.SessionID, run.PhaseSynthesizing), turnID)
 }
 
@@ -368,43 +363,7 @@ func finalizationHint(reason planner.TerminationReason) string {
 	}
 }
 
-func prepareFinalizationMessages(messages []*model.Message, hint string) []*model.Message {
-	out := cloneMessages(messages)
-	out = appendSyntheticToolResultsForFinalize(out)
-	if hint != "" {
-		out = append(out, &model.Message{
-			Role:  model.ConversationRoleSystem,
-			Parts: []model.Part{model.TextPart{Text: hint}},
-		})
-	}
-	return out
-}
-
-func appendSyntheticToolResultsForFinalize(messages []*model.Message) []*model.Message {
-	if len(messages) == 0 {
-		return messages
-	}
-	last := messages[len(messages)-1]
-	if last.Role != model.ConversationRoleAssistant {
-		return messages
-	}
-	var parts []model.Part
-	for _, p := range last.Parts {
-		if tu, ok := p.(model.ToolUsePart); ok {
-			parts = append(parts, model.ToolResultPart{
-				ToolUseID: tu.ID,
-				Content:   "Finalized before a tool result was provided for this request.",
-				IsError:   true,
-			})
-		}
-	}
-	if len(parts) == 0 {
-		return messages
-	}
-	return append(messages, &model.Message{Role: model.ConversationRoleUser, Parts: parts})
-}
-
-func (r *Runtime) publishFinalizeTransition(ctx context.Context, base *planner.PlanInput, input *RunInput, turnID string, reason planner.TerminationReason) error {
+func (r *Runtime) publishFinalizeTransition(ctx context.Context, base *workflowPlanInput, input *RunInput, turnID string, reason planner.TerminationReason) error {
 	if err := r.publishHook(ctx, hooks.NewRunPausedEvent(
 		base.RunContext.RunID, input.AgentID, base.RunContext.SessionID, "finalize", "runtime", map[string]string{"reason": string(reason)}, nil,
 	), turnID); err != nil {
@@ -430,7 +389,7 @@ func finalizationReasonText(reason planner.TerminationReason) string {
 	}
 }
 
-func (r *Runtime) publishFinalizationAssistantMessage(ctx context.Context, base *planner.PlanInput, input *RunInput, turnID string, msg *model.Message) error {
+func (r *Runtime) publishFinalizationAssistantMessage(ctx context.Context, base *workflowPlanInput, input *RunInput, turnID string, msg *model.Message) error {
 	if err := r.publishHook(ctx, hooks.NewAssistantMessageEvent(
 		base.RunContext.RunID, input.AgentID, base.RunContext.SessionID, agentMessageText(msg), nil,
 	), turnID); err != nil {

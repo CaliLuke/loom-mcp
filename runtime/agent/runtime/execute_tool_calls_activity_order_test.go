@@ -84,7 +84,7 @@ func TestExecuteToolCalls_ServiceToolsPublishResultsAsComplete(t *testing.T) {
 		close(futSlow.ready)
 	}()
 
-	results, _, err := rt.executeToolCalls(wfCtx, "execute", engine.ActivityOptions{}, agent.Ident("agent-1"), &run.Context{RunID: "run-1", SessionID: "sess-1", TurnID: "turn-1"}, nil, []planner.ToolRequest{callSlow, callFast}, 0, nil, time.Time{})
+	results, _, err := rt.executeToolCalls(wfCtx, "execute", engine.ActivityOptions{}, agent.Ident("agent-1"), &run.Context{RootRunID: "test-root", RunID: "run-1", SessionID: "sess-1", TurnID: "turn-1"}, nil, []planner.ToolRequest{callSlow, callFast}, 0, nil, time.Time{})
 	require.NoError(t, err)
 	require.Len(t, results, 2)
 
@@ -146,7 +146,7 @@ func TestExecuteToolCalls_ScheduledFailureForLaterCallDispatchesNoCall(t *testin
 				{Name: tools.Ident("svc.tools.write"), RunID: "run-1", SessionID: "sess-1", TurnID: "turn-1", ToolCallID: "call-second"},
 			}
 
-			_, _, err := rt.executeToolCalls(wfCtx, "execute", engine.ActivityOptions{}, agent.Ident("agent-1"), &run.Context{RunID: "run-1", SessionID: "sess-1", TurnID: "turn-1"}, nil, calls, 0, nil, time.Time{})
+			_, _, err := rt.executeToolCalls(wfCtx, "execute", engine.ActivityOptions{}, agent.Ident("agent-1"), &run.Context{RootRunID: "test-root", RunID: "run-1", SessionID: "sess-1", TurnID: "turn-1"}, nil, calls, 0, nil, time.Time{})
 
 			require.ErrorIs(t, err, errScheduledRejected)
 			assert.Empty(t, wfCtx.lastToolCall.Name, "no activity may start before every call is scheduled")
@@ -203,7 +203,7 @@ func TestExecuteToolCalls_ExplicitActivityDispatchIgnoresLegacyInlineFlag(t *tes
 		},
 	}
 
-	results, _, err := rt.executeToolCalls(wfCtx, "execute", engine.ActivityOptions{}, agent.Ident("agent-1"), &run.Context{RunID: "run-1", SessionID: "sess-1", TurnID: "turn-1"}, nil, []planner.ToolRequest{call}, 0, nil, time.Time{})
+	results, _, err := rt.executeToolCalls(wfCtx, "execute", engine.ActivityOptions{}, agent.Ident("agent-1"), &run.Context{RootRunID: "test-root", RunID: "run-1", SessionID: "sess-1", TurnID: "turn-1"}, nil, []planner.ToolRequest{call}, 0, nil, time.Time{})
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.False(t, inlineCalled)
@@ -239,7 +239,7 @@ func TestExecuteToolCalls_RequestErrorPublishesFailureWithoutDispatch(t *testing
 		hookRuntime: rt,
 	}
 
-	results, timedOut, err := rt.executeToolCalls(wfCtx, "execute", engine.ActivityOptions{}, agent.Ident("agent-1"), &run.Context{RunID: "run-1", SessionID: "sess-1", TurnID: "turn-1"}, nil, []planner.ToolRequest{call}, 0, nil, time.Time{})
+	results, timedOut, err := rt.executeToolCalls(wfCtx, "execute", engine.ActivityOptions{}, agent.Ident("agent-1"), &run.Context{RootRunID: "test-root", RunID: "run-1", SessionID: "sess-1", TurnID: "turn-1"}, nil, []planner.ToolRequest{call}, 0, nil, time.Time{})
 	require.NoError(t, err)
 	require.False(t, timedOut)
 	require.Len(t, results, 1)
@@ -303,7 +303,7 @@ func TestExecuteToolCalls_ServiceToolErrorDoesNotAbortRun(t *testing.T) {
 	wfCtx.toolFutures[callFail.ToolCallID] = futFail
 	close(futFail.ready)
 
-	results, _, err := rt.executeToolCalls(wfCtx, "execute", engine.ActivityOptions{}, agent.Ident("agent-1"), &run.Context{RunID: "run-1", SessionID: "sess-1", TurnID: "turn-1"}, nil, []planner.ToolRequest{callFail}, 0, nil, time.Time{})
+	results, _, err := rt.executeToolCalls(wfCtx, "execute", engine.ActivityOptions{}, agent.Ident("agent-1"), &run.Context{RootRunID: "test-root", RunID: "run-1", SessionID: "sess-1", TurnID: "turn-1"}, nil, []planner.ToolRequest{callFail}, 0, nil, time.Time{})
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.NotNil(t, results[0].ToolResult.Error)

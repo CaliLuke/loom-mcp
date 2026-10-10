@@ -27,6 +27,7 @@
 package runtime
 
 import (
+	"container/list"
 	"context"
 	"encoding/json/jsontext"
 	"sync"
@@ -106,6 +107,11 @@ type (
 
 		// RunStore holds scoped content and opaque call records.
 		RunStore runstore.Store
+
+		viewMu        sync.Mutex
+		viewCaches    map[string]*runViewCache
+		viewLRU       list.List
+		viewCacheRuns int
 		// Bus is the bus used for streaming runtime events.
 		Bus hooks.Bus
 		// Stream publishes planner/tool/assistant events to the caller.
@@ -216,6 +222,8 @@ type (
 
 		// RunStore holds scoped content and opaque call records.
 		RunStore runstore.Store
+		// ViewCacheRuns bounds cached run views. Zero uses the default of 256.
+		ViewCacheRuns int
 		// Hooks is the Pulse-backed bus used for streaming runtime events.
 		Hooks hooks.Bus
 		// Stream publishes planner/tool/assistant events to the caller.

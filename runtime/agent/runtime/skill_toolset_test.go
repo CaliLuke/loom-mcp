@@ -36,7 +36,7 @@ func TestSkillToolsetRegistrationExposesSkillsAsModelTools(t *testing.T) {
 		Payload:     rawjson.Message([]byte(`{}`)),
 	})
 	require.NoError(t, err)
-	require.JSONEq(t, `{"skills":[{"id":"code-review","name":"Code Review","description":"Review code.","uri":"skill://code-review/SKILL.md","allowed_tools":["shell"],"preload":"on_start","reload":"per_call","metadata":{"id":"code-review","name":"Code Review","description":"Review code.","allowed_tools":["shell"],"preload":"on_start","reload":"per_call"},"preloaded":true}]}`, string(listOut.Payload))
+	require.JSONEq(t, `{"skills":[{"id":"code-review","name":"Code Review","description":"Review code.","uri":"skill://code-review/SKILL.md","allowed_tools":["shell"],"preload":"on_start","reload":"per_call","metadata":{"id":"code-review","name":"Code Review","description":"Review code.","allowed_tools":["shell"],"preload":"on_start","reload":"per_call"},"preloaded":true}]}`, string(testStoredBytes(t, rt, "root", listOut.Refs.Result)))
 
 	loadOut, err := rt.ExecuteToolActivity(context.Background(), &ToolInput{
 		RootRunID:   "root",
@@ -46,7 +46,7 @@ func TestSkillToolsetRegistrationExposesSkillsAsModelTools(t *testing.T) {
 		Payload:     rawjson.Message([]byte(`{"skill":"code-review","path":"reference.md"}`)),
 	})
 	require.NoError(t, err)
-	require.JSONEq(t, `{"uri":"skill://code-review/reference.md","mime_type":"text/markdown; charset=utf-8","text":"# Reference\n","metadata":{"id":"code-review","name":"Code Review","description":"Review code.","allowed_tools":["shell"],"preload":"on_start","reload":"per_call"},"reloaded":true}`, string(loadOut.Payload))
+	require.JSONEq(t, `{"uri":"skill://code-review/reference.md","mime_type":"text/markdown; charset=utf-8","text":"# Reference\n","metadata":{"id":"code-review","name":"Code Review","description":"Review code.","allowed_tools":["shell"],"preload":"on_start","reload":"per_call"},"reloaded":true}`, string(testStoredBytes(t, rt, "root", loadOut.Refs.Result)))
 }
 
 func TestSkillToolsetHonorsPerSkillReloadMetadata(t *testing.T) {
@@ -72,7 +72,7 @@ func TestSkillToolsetHonorsPerSkillReloadMetadata(t *testing.T) {
 		Payload:     payload,
 	})
 	require.NoError(t, err)
-	require.Contains(t, string(first.Payload), "# First")
+	require.Contains(t, string(testStoredBytes(t, rt, "root", first.Refs.Result)), "# First")
 
 	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nid: code-review\nname: Code Review\nreload: per_call\n---\n# Second\n"), 0o600))
 	second, err := rt.ExecuteToolActivity(context.Background(), &ToolInput{
@@ -83,8 +83,8 @@ func TestSkillToolsetHonorsPerSkillReloadMetadata(t *testing.T) {
 		Payload:     payload,
 	})
 	require.NoError(t, err)
-	require.Contains(t, string(second.Payload), "# Second")
-	require.Contains(t, string(second.Payload), `"reloaded":true`)
+	require.Contains(t, string(testStoredBytes(t, rt, "root", second.Refs.Result)), "# Second")
+	require.Contains(t, string(testStoredBytes(t, rt, "root", second.Refs.Result)), `"reloaded":true`)
 }
 
 func TestSkillToolsetCacheSupportsConcurrentListAndLoad(t *testing.T) {

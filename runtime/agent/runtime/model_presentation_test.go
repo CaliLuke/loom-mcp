@@ -119,7 +119,7 @@ func TestModelPresentationStreamsLiveThenAcceptsCanonicalContent(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, out.Recovery)
 	require.True(t, out.Result.Streamed)
-	require.Len(t, out.Transcript, 2)
+	require.Len(t, testStoredTranscript(t, rt, out, "test-root"), 2)
 
 	events := sink.snapshot()
 	require.Len(t, events, 5)
@@ -202,10 +202,10 @@ func TestModelPresentationCommitsAuthoritativeResponseMessages(t *testing.T) {
 	out, err := rt.PlanStartActivity(context.Background(), presentationPlanInput("run-authoritative", ""))
 
 	require.NoError(t, err)
-	require.Len(t, out.Transcript, 2)
-	require.Equal(t, "message-1", out.Transcript[0].Meta["provider_message_id"])
-	require.Equal(t, "message-2", out.Transcript[1].Meta["provider_message_id"])
-	cited := out.Transcript[0].Parts[0].(model.CitationsPart)
+	require.Len(t, testStoredTranscript(t, rt, out, "test-root"), 2)
+	require.Equal(t, "message-1", testStoredTranscript(t, rt, out, "test-root")[0].Meta["provider_message_id"])
+	require.Equal(t, "message-2", testStoredTranscript(t, rt, out, "test-root")[1].Meta["provider_message_id"])
+	cited := testStoredTranscript(t, rt, out, "test-root")[0].Parts[0].(model.CitationsPart)
 	require.Equal(t, "first", cited.Text)
 	require.Equal(t, "source", cited.Citations[0].Title)
 	require.Len(t, runlogStore.events, 1)
@@ -213,7 +213,7 @@ func TestModelPresentationCommitsAuthoritativeResponseMessages(t *testing.T) {
 		Messages []*model.Message
 	}
 	require.NoError(t, json.Unmarshal(runlogStore.events[0].Payload, &committed))
-	require.Equal(t, out.Transcript, committed.Messages)
+	require.Equal(t, testStoredTranscript(t, rt, out, "test-root"), committed.Messages)
 }
 
 func TestModelPresentationCommitsResponseAboveOrdinaryHookLimit(t *testing.T) {
@@ -229,8 +229,8 @@ func TestModelPresentationCommitsResponseAboveOrdinaryHookLimit(t *testing.T) {
 
 	require.NoError(t, err)
 	require.True(t, out.Result.Streamed)
-	require.Len(t, out.Transcript, 1)
-	require.Equal(t, text, out.Transcript[0].Parts[0].(model.TextPart).Text)
+	require.Len(t, testStoredTranscript(t, rt, out, "test-root"), 1)
+	require.Equal(t, text, testStoredTranscript(t, rt, out, "test-root")[0].Parts[0].(model.TextPart).Text)
 	require.Len(t, runlogStore.events, 1)
 	require.Greater(t, len(runlogStore.events[0].Payload), maxHookPayloadBytes)
 }
@@ -355,9 +355,9 @@ func TestCanonicalPresentationProjectionsCannotMutateTranscript(t *testing.T) {
 	out, err := rt.PlanStartActivity(context.Background(), presentationPlanInput("run-owned", "session-owned"))
 
 	require.NoError(t, err)
-	require.Len(t, out.Transcript, 1)
-	require.Equal(t, "canonical", out.Transcript[0].Parts[0].(model.TextPart).Text)
-	require.Equal(t, "message-1", out.Transcript[0].Meta["provider_message_id"])
+	require.Len(t, testStoredTranscript(t, rt, out, "test-root"), 1)
+	require.Equal(t, "canonical", testStoredTranscript(t, rt, out, "test-root")[0].Parts[0].(model.TextPart).Text)
+	require.Equal(t, "message-1", testStoredTranscript(t, rt, out, "test-root")[0].Meta["provider_message_id"])
 	require.Len(t, memoryStore.appends, 1)
 	projected, err := memory.DecodeAssistantMessageData(memoryStore.appends[0])
 	require.NoError(t, err)
@@ -712,8 +712,8 @@ func TestCanonicalPresentationCommitBypassesEventMutation(t *testing.T) {
 	require.False(t, interceptorCalled)
 	require.Len(t, runlogStore.events, 1)
 	require.Equal(t, hooks.AssistantTurnCommitted, runlogStore.events[0].Type)
-	require.Len(t, out.Transcript, 1)
-	require.Equal(t, "canonical", out.Transcript[0].Parts[0].(model.TextPart).Text)
+	require.Len(t, testStoredTranscript(t, rt, out, "test-root"), 1)
+	require.Equal(t, "canonical", testStoredTranscript(t, rt, out, "test-root")[0].Parts[0].(model.TextPart).Text)
 }
 
 func TestCanonicalPresentationIgnoresPostCommitSubscriberFailure(t *testing.T) {
@@ -738,7 +738,7 @@ func TestCanonicalPresentationIgnoresPostCommitSubscriberFailure(t *testing.T) {
 	out, err := rt.PlanStartActivity(context.Background(), presentationPlanInput("run-subscriber-failure", "session-subscriber-failure"))
 
 	require.NoError(t, err)
-	require.Len(t, out.Transcript, 1)
+	require.Len(t, testStoredTranscript(t, rt, out, "test-root"), 1)
 	require.Len(t, runlogStore.events, 1)
 	streamEvents := sink.snapshot()
 	require.Equal(t, stream.EventAssistantTurn, streamEvents[len(streamEvents)-2].Type())

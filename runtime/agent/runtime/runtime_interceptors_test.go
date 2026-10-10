@@ -83,7 +83,7 @@ func TestExecuteToolActivityRunsInterceptorsAroundTool(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"before", "execute", "after"}, calls)
 	require.Equal(t, map[string]string{"text": "rewritten"}, executorPayload)
-	require.JSONEq(t, `{"text":"after"}`, string(out.Payload))
+	require.JSONEq(t, `{"text":"after"}`, string(testStoredBytes(t, rt, "root", out.Refs.Result)))
 }
 
 func TestExecuteToolActivityRunsAgentInterceptors(t *testing.T) {
@@ -140,7 +140,7 @@ func TestExecuteToolActivityRunsAgentInterceptors(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, []string{"global-before", "agent-before", "execute", "agent-after"}, calls)
-	require.JSONEq(t, `{"text":"agent"}`, string(out.Payload))
+	require.JSONEq(t, `{"text":"agent"}`, string(testStoredBytes(t, rt, "root", out.Refs.Result)))
 }
 
 func TestInterceptorsForAgentReturnsPrecomputedMergedSlice(t *testing.T) {
@@ -450,7 +450,7 @@ func TestAfterRunInterceptorReturnErrorIsSanitized(t *testing.T) {
 			return nil, cycle
 		}}},
 		RunInput{AgentID: "svc.agent", RunID: "run-hostile-interceptor-return"},
-		run.Context{RunID: "run-hostile-interceptor-return"},
+		run.Context{RootRunID: "test-root", RunID: "run-hostile-interceptor-return"},
 		nil,
 		errors.New("planner failed"),
 	)

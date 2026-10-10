@@ -2,9 +2,10 @@ package runtime
 
 import (
 	"context"
-	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 	"testing"
 	"time"
+
+	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/interrupt"
@@ -45,14 +46,14 @@ func TestRunLoopPauseResumeEmitsEvents_Barriered(t *testing.T) {
 	wfCtx.hasPlanResult = true
 	wfCtx.planResult = &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: &model.Message{Role: "assistant", Parts: []model.Part{model.TextPart{Text: "ok"}}}}}
 	input := &RunInput{RootRunID: "run-1", AgentID: "svc.agent", RunID: "run-1"}
-	base := &planner.PlanInput{RunContext: run.Context{RunID: input.RunID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})}
+	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})})
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: "tool"}}}
 	ctrl := interrupt.NewController(wfCtx)
-	_, err := rt.runLoop(wfCtx, AgentRegistration{
+	_, err := testRunLoop(t, rt, wfCtx, AgentRegistration{
 		ID:                  input.AgentID,
 		Planner:             &stubPlanner{},
 		ExecuteToolActivity: "execute",
 		ResumeActivityName:  "resume",
-	}, input, base, initial, nil, model.TokenUsage{}, policy.CapsState{MaxToolCalls: 1, RemainingToolCalls: 1}, time.Time{}, time.Time{}, 2, "turn-1", nil, ctrl, 0)
+	}, input, base, initial, nil, policy.CapsState{MaxToolCalls: 1, RemainingToolCalls: 1}, time.Time{}, time.Time{}, 2, "turn-1", ctrl)
 	require.NoError(t, err)
 }

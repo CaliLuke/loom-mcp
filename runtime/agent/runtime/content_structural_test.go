@@ -3,9 +3,10 @@ package runtime
 import (
 	"context"
 	"errors"
+	"testing"
+
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	engineinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine/inmem"
-	"testing"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
@@ -17,7 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestContentStructuralResultsDoNotWrite(t *testing.T) {
+func TestContentStructuralResultsStoreOnlyRequiredContent(t *testing.T) {
 	for _, kind := range []string{"request error", "activity error", "confirmation denial", "tool unavailable"} {
 		t.Run(kind, func(t *testing.T) {
 			store := &contentPathStore{Store: storeinmem.New()}
@@ -48,8 +49,13 @@ func TestContentStructuralResultsDoNotWrite(t *testing.T) {
 				return &planner.PlanResult{ToolCalls: []planner.ToolRequest{call}}, nil
 			}, resume: func(_ context.Context, in *planner.PlanResumeInput) (*planner.PlanResult, error) {
 				require.Len(t, in.ToolOutputs, 1)
-				assert.Empty(t, in.ToolOutputs[0].Refs)
-				assert.Len(t, store.snapshot(), 1, "only the returned planner tool call is content")
+				assert.Empty(t, in.ToolOutputs[0].Result)
+				if kind == "confirmation denial" {
+					assert.NotEmpty(t, in.ToolOutputs[0].Refs.Result)
+				} else {
+					assert.Empty(t, in.ToolOutputs[0].Refs.Result)
+				}
+				assert.NotEmpty(t, store.snapshot())
 				return &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: contentMessage("done")}}, nil
 			}})
 			handle, err := rt.MustClient("content.agent").Start(t.Context(), "session", nil, WithRunID("root"))

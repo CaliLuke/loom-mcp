@@ -13,6 +13,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	runloginmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog/inmem"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 	"github.com/stretchr/testify/require"
 )
 
@@ -24,11 +25,11 @@ func TestPublishAwaitQueueItemPublishesTypedInput(t *testing.T) {
 		RunEventStore: runloginmem.New(),
 		Bus:           bus,
 	}
-	base := &planner.PlanInput{
-		RunContext: run.Context{
+	base := testWorkflowInput(t, rt, &planner.PlanInput{
+		RunContext: run.Context{RootRunID: "test-root",
 			RunID: "run-1",
 		},
-	}
+	})
 
 	err := rt.publishAwaitQueueItem(
 		context.Background(),
@@ -55,40 +56,43 @@ func TestPublishAwaitQueueItemPublishesTypedInput(t *testing.T) {
 func TestWaitAwaitTypedInputAppendsTypedInput(t *testing.T) {
 	t.Parallel()
 
-	wf := &testWorkflowContext{ctx: context.Background()}
+	rt := New()
+	base := testWorkflowInput(t, rt, &planner.PlanInput{})
+	wf := &testWorkflowContext{ctx: context.Background(), finishRuntime: rt}
 	wf.ensureSignals()
-	wf.typedInputCh <- &api.TypedInputAnswer{
+	wf.typedInputCh <- testTypedSignal(t, rt, base.RunContext.RootRunID, &api.TypedInputAnswer{
 		RunID:   "run-1",
 		ID:      "approval",
 		Payload: rawjson.Message(`{"approved":true}`),
-	}
+	})
 	ctrl := interrupt.NewController(wf)
-	st := &runLoopState{}
 
-	results, err := waitAwaitTypedInput(context.Background(), ctrl, st, time.Second, &planner.AwaitTypedInput{
+	results, err := waitAwaitTypedInput(wf.Context(), ctrl, &RunInput{AgentID: base.AgentID}, base, time.Second, &planner.AwaitTypedInput{
 		ID:     "approval",
 		Schema: rawjson.Message(`{"type":"object"}`),
 	})
 	require.NoError(t, err)
 	require.Nil(t, results)
-	require.Len(t, st.TypedInputs, 1)
-	require.Equal(t, "approval", st.TypedInputs[0].ID)
-	require.JSONEq(t, `{"approved":true}`, string(st.TypedInputs[0].Payload))
+	require.Len(t, testView(t, rt, base).Typed, 1)
+	require.Equal(t, "approval", testView(t, rt, base).Typed[0].ID)
+	require.JSONEq(t, `{"approved":true}`, string(testTypedValue(t, rt, base)))
 }
 
 func TestWaitAwaitTypedInputRejectsInvalidPayload(t *testing.T) {
 	t.Parallel()
 
-	wf := &testWorkflowContext{ctx: context.Background()}
+	rt := New()
+	base := testWorkflowInput(t, rt, &planner.PlanInput{})
+	wf := &testWorkflowContext{ctx: context.Background(), finishRuntime: rt}
 	wf.ensureSignals()
-	wf.typedInputCh <- &api.TypedInputAnswer{
+	wf.typedInputCh <- testTypedSignal(t, rt, base.RunContext.RootRunID, &api.TypedInputAnswer{
 		RunID:   "run-1",
 		ID:      "approval",
 		Payload: rawjson.Message(`{"approved":`),
-	}
+	})
 	ctrl := interrupt.NewController(wf)
 
-	_, err := waitAwaitTypedInput(context.Background(), ctrl, &runLoopState{}, time.Second, &planner.AwaitTypedInput{
+	_, err := waitAwaitTypedInput(wf.Context(), ctrl, &RunInput{AgentID: base.AgentID}, base, time.Second, &planner.AwaitTypedInput{
 		ID:     "approval",
 		Schema: rawjson.Message(`{"type":"object"}`),
 	})
@@ -99,16 +103,18 @@ func TestWaitAwaitTypedInputRejectsInvalidPayload(t *testing.T) {
 func TestWaitAwaitTypedInputRejectsSchemaMismatch(t *testing.T) {
 	t.Parallel()
 
-	wf := &testWorkflowContext{ctx: context.Background()}
+	rt := New()
+	base := testWorkflowInput(t, rt, &planner.PlanInput{})
+	wf := &testWorkflowContext{ctx: context.Background(), finishRuntime: rt}
 	wf.ensureSignals()
-	wf.typedInputCh <- &api.TypedInputAnswer{
+	wf.typedInputCh <- testTypedSignal(t, rt, base.RunContext.RootRunID, &api.TypedInputAnswer{
 		RunID:   "run-1",
 		ID:      "approval",
 		Payload: rawjson.Message(`{"approved":"yes"}`),
-	}
+	})
 	ctrl := interrupt.NewController(wf)
 
-	_, err := waitAwaitTypedInput(context.Background(), ctrl, &runLoopState{}, time.Second, &planner.AwaitTypedInput{
+	_, err := waitAwaitTypedInput(wf.Context(), ctrl, &RunInput{AgentID: base.AgentID}, base, time.Second, &planner.AwaitTypedInput{
 		ID:     "approval",
 		Schema: rawjson.Message(`{"type":"object","properties":{"approved":{"type":"boolean"}},"required":["approved"]}`),
 	})
@@ -164,10 +170,12 @@ func TestValidateTypedInputPayloadRejectsInvalidJSON(t *testing.T) {
 func TestWaitAwaitTypedInputTimesOut(t *testing.T) {
 	t.Parallel()
 
-	wf := &testWorkflowContext{ctx: context.Background()}
+	rt := New()
+	base := testWorkflowInput(t, rt, &planner.PlanInput{})
+	wf := &testWorkflowContext{ctx: context.Background(), finishRuntime: rt}
 	ctrl := interrupt.NewController(wf)
 
-	_, err := waitAwaitTypedInput(context.Background(), ctrl, &runLoopState{}, time.Nanosecond, &planner.AwaitTypedInput{
+	_, err := waitAwaitTypedInput(wf.Context(), ctrl, &RunInput{AgentID: base.AgentID}, base, time.Nanosecond, &planner.AwaitTypedInput{
 		ID:     "approval",
 		Schema: rawjson.Message(`{"type":"object"}`),
 	})
@@ -179,22 +187,18 @@ func TestBuildNextResumeRequestCarriesTypedInputs(t *testing.T) {
 	t.Parallel()
 
 	rt := &Runtime{}
-	base := &planner.PlanInput{
-		RunContext: run.Context{
+	base := testWorkflowInput(t, rt, &planner.PlanInput{
+		RunContext: run.Context{RootRunID: "test-root",
 			RunID: "run-1",
 		},
-	}
+	})
+	answer := testTypedSignal(t, rt, base.RunContext.RootRunID, &api.TypedInputAnswer{Payload: rawjson.Message(`{"approved":true}`)})
+	require.NoError(t, base.appendEntry(index.MessageEntry{Kind: index.TypedInput, Hash: answer.PayloadRef, InputID: "approval"}))
 	nextAttempt := 1
 
-	req, err := rt.buildNextResumeRequest(
-		agent.Ident("svc.agent"),
-		base,
-		nil,
-		[]planner.TypedInputOutput{{ID: "approval", Payload: rawjson.Message(`{"approved":true}`)}},
-		&nextAttempt,
-	)
+	req, err := rt.buildNextResumeRequest(agent.Ident("svc.agent"), base, &nextAttempt)
 	require.NoError(t, err)
-	require.Len(t, req.TypedInputs, 1)
-	require.Equal(t, "approval", req.TypedInputs[0].ID)
-	require.JSONEq(t, `{"approved":true}`, string(req.TypedInputs[0].Payload))
+	require.Len(t, testPlannerView(t, rt, &req).Typed, 1)
+	require.Equal(t, "approval", testPlannerView(t, rt, &req).Typed[0].ID)
+	require.JSONEq(t, `{"approved":true}`, string(testTypedValue(t, rt, base)))
 }

@@ -10,7 +10,6 @@ import (
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/interrupt"
-	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 )
 
 // handleAwaitOnlyResult executes an await-only planner result (no tool calls).
@@ -22,7 +21,7 @@ func (r *Runtime) handleAwaitOnlyResult(
 	wfCtx engine.WorkflowContext,
 	reg AgentRegistration,
 	input *RunInput,
-	base *planner.PlanInput,
+	base *workflowPlanInput,
 	st *runLoopState,
 	resumeOpts engine.ActivityOptions,
 	ctrl *interrupt.Controller,

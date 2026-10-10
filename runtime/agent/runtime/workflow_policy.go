@@ -89,7 +89,7 @@ type policyApplicationResult struct {
 // remaining-cap limits in one call.
 func (r *Runtime) applyPolicy(
 	ctx context.Context,
-	base *planner.PlanInput,
+	base *workflowPlanInput,
 	input *RunInput,
 	candidates []planner.ToolRequest,
 	caps policy.CapsState,
@@ -129,7 +129,7 @@ func (r *Runtime) preparePrePlanToolPolicy(
 	ctx context.Context,
 	reg AgentRegistration,
 	input *RunInput,
-	base *planner.PlanInput,
+	base *workflowPlanInput,
 	caps policy.CapsState,
 	turnID string,
 ) (prePlanPolicyResult, error) {
@@ -203,7 +203,7 @@ func (r *Runtime) policyCandidateCalls(reg AgentRegistration) []planner.ToolRequ
 // this helper directly.
 func (r *Runtime) applyRuntimePolicy(
 	ctx context.Context,
-	base *planner.PlanInput,
+	base *workflowPlanInput,
 	input *RunInput,
 	candidates []planner.ToolRequest,
 	caps policy.CapsState,
@@ -242,7 +242,7 @@ func (r *Runtime) applyRuntimePolicy(
 
 func runtimePolicyInput(
 	r *Runtime,
-	base *planner.PlanInput,
+	base *workflowPlanInput,
 	candidates []planner.ToolRequest,
 	caps policy.CapsState,
 	retry *planner.RetryHint,
@@ -257,7 +257,7 @@ func runtimePolicyInput(
 	}
 }
 
-func applyPolicyLabels(base *planner.PlanInput, input *RunInput, labels map[string]string) {
+func applyPolicyLabels(base *workflowPlanInput, input *RunInput, labels map[string]string) {
 	if len(labels) == 0 {
 		return
 	}
@@ -309,7 +309,7 @@ func (r *Runtime) budgetedToolCallCount(calls []planner.ToolRequest) int {
 
 // prepareAllowedCallsMetadata stamps run/session/turn IDs and deterministic tool
 // call IDs on allowed calls. It also fills parentToolCallID when tracking children.
-func (r *Runtime) prepareAllowedCallsMetadata(agentID agent.Ident, base *planner.PlanInput, allowed []planner.ToolRequest, parentTracker *childTracker) []planner.ToolRequest {
+func (r *Runtime) prepareAllowedCallsMetadata(agentID agent.Ident, base *workflowPlanInput, allowed []planner.ToolRequest, parentTracker *childTracker) []planner.ToolRequest {
 	delete(base.RunContext.Labels, FinalizationReasonLabel)
 	for i := range allowed {
 		allowed[i].RootRunID = base.RunContext.RootRunID

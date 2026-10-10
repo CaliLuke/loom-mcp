@@ -13,6 +13,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	aitools "github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/sdk/converter"
 )
@@ -46,18 +47,18 @@ type (
 		// (e.g. api.PlanActivityInput) using standard JSON defaults, which emit the
 		// Go field names ("AgentID", "RunID", ...). We must decode that payload
 		// verbatim to preserve correctness for existing workflow histories.
-		AgentID     agent.Ident
-		RunID       string
-		Messages    []*model.Message
-		RunContext  run.Context
-		ToolOutputs []*api.ToolCallOutput
-		TypedInputs []planner.TypedInputOutput
-		Finalize    *planner.Termination
-		Recovery    *api.ModelRecovery
+		AgentID    agent.Ident
+		RunID      string
+		View       index.ViewRef
+		RunContext run.Context
+		Finalize   *planner.Termination
+		Recovery   *api.ModelRecovery
 
-		ToolPolicyActive bool
-		AllowedTools     []aitools.Ident
-		PolicyCaps       planCapsWire
+		ToolPolicyActive     bool
+		CallFilter           api.PlanToolFilter
+		FinalizeMaxToolCalls int
+		AllowedTools         []aitools.Ident
+		PolicyCaps           planCapsWire
 	}
 
 	planCapsWire struct {
@@ -231,15 +232,15 @@ func decodePlanActivityInput(p *commonpb.Payload, valuePtr any) error {
 
 	dst.AgentID = w.AgentID
 	dst.RunID = w.RunID
-	dst.Messages = w.Messages
+	dst.View = w.View
 	dst.RunContext = w.RunContext
-	dst.ToolOutputs = w.ToolOutputs
-	dst.TypedInputs = w.TypedInputs
 	dst.Finalize = w.Finalize
 	dst.Recovery = w.Recovery
 	dst.ToolPolicyActive = w.ToolPolicyActive
 	dst.AllowedTools = w.AllowedTools
 	dst.PolicyCaps = decodePlanCaps(w.PolicyCaps)
+	dst.CallFilter = w.CallFilter
+	dst.FinalizeMaxToolCalls = w.FinalizeMaxToolCalls
 	return nil
 }
 
@@ -283,18 +284,18 @@ func encodePlanActivityInputWire(in *api.PlanActivityInput) (*planActivityInputW
 		return nil, fmt.Errorf("temporal: plan activity input is nil")
 	}
 	return &planActivityInputWire{
-		AgentID:     in.AgentID,
-		RunID:       in.RunID,
-		Messages:    in.Messages,
-		RunContext:  in.RunContext,
-		ToolOutputs: in.ToolOutputs,
-		TypedInputs: in.TypedInputs,
-		Finalize:    in.Finalize,
-		Recovery:    in.Recovery,
+		AgentID:    in.AgentID,
+		RunID:      in.RunID,
+		View:       in.View,
+		RunContext: in.RunContext,
+		Finalize:   in.Finalize,
+		Recovery:   in.Recovery,
 
-		ToolPolicyActive: in.ToolPolicyActive,
-		AllowedTools:     in.AllowedTools,
-		PolicyCaps:       encodePlanCaps(in.PolicyCaps),
+		ToolPolicyActive:     in.ToolPolicyActive,
+		AllowedTools:         in.AllowedTools,
+		PolicyCaps:           encodePlanCaps(in.PolicyCaps),
+		CallFilter:           in.CallFilter,
+		FinalizeMaxToolCalls: in.FinalizeMaxToolCalls,
 	}, nil
 }
 

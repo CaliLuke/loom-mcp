@@ -101,6 +101,11 @@ test: tools
 	$(MAKE) coverage-check-critical
 	$(MAKE) test-codex-live
 
+# Full payload and cache-growth acceptance; also part of the normal itest gate.
+.PHONY: test-payload-growth
+test-payload-growth:
+	$(GO) test -count=1 -timeout=20m -v ./runtime/agent/runtime -run '^(TestIndexPayloadAcceptance|TestIndexLoaderGrowth|TestPlanActivityInputFixedFields)$$'
+
 # Run on every local make test, even when Go can reuse cached unit results.
 .PHONY: test-codex-live
 test-codex-live:
@@ -201,6 +206,7 @@ test-fuzz:
 # Run generated quickstart acceptance plus every generated fixture and MCP
 # framework contract. Nested fixture modules must be invoked explicitly.
 itest: tools
+	$(MAKE) test-payload-growth
 	$(GO) test -race -count=1 ./codegen/agent/tests -run '^TestQuickstartGeneratesAndRuns$$'
 	$(MAKE) verify-mcp-local
 

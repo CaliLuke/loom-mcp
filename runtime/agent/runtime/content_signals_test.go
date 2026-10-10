@@ -111,12 +111,16 @@ func TestContentSignalsRecordBeforeDelivery(t *testing.T) {
 					assert.Equal(t, want, writes[0].data)
 					switch v := value.(type) {
 					case *api.ResumeRequest:
+						assert.Empty(t, v.Messages)
 						assert.Equal(t, []runstore.Hash{writes[0].hash}, v.MessageRefs)
 					case *api.ClarificationAnswer:
+						assert.Empty(t, v.Answer)
 						assert.Equal(t, writes[0].hash, v.AnswerRef)
 					case *api.ToolResultsSet:
+						assert.Empty(t, v.Results[0].Result)
 						assert.Equal(t, writes[0].hash, v.Results[0].Refs.Result)
 					case *api.TypedInputAnswer:
+						assert.Empty(t, v.Payload)
 						assert.Equal(t, writes[0].hash, v.PayloadRef)
 					}
 				})

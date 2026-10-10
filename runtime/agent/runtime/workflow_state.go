@@ -13,16 +13,10 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
-	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript"
 )
 
 type (
 	runLoopState struct {
-		// InitialMessageRefs records effective caller messages in order for K7 indexing.
-		InitialMessageRefs []runstore.Hash
-		// SignalMessageRefs and ClarificationRefs retain adopted signal content for K7.
-		SignalMessageRefs []runstore.Hash
-		ClarificationRefs []runstore.Hash
 		// Caps is the current runtime policy cap state (remaining tool budget, failure budget, etc.).
 		Caps policy.CapsState
 
@@ -35,22 +29,9 @@ type (
 		// Result is the current planner result being processed by the loop.
 		Result *planner.PlanResult
 
-		// Transcript is the provider transcript for the current planner result.
-		Transcript []*model.Message
-
-		// Ledger is the provider transcript ledger used to merge tool_use/tool_result into messages.
-		Ledger *transcript.Ledger
-
+		TranscriptRef runstore.Hash
 		// ToolEvents are the accumulated tool results emitted over the lifetime of this run.
 		ToolEvents []*planner.ToolResult
-
-		// ToolOutputs is the accumulated executed tool-call history emitted over
-		// the lifetime of this run.
-		ToolOutputs []*planner.ToolOutput
-
-		// TypedInputs is the accumulated typed human-input history emitted over
-		// the lifetime of this run.
-		TypedInputs []planner.TypedInputOutput
 
 		// ToolPolicy is the canonical model-visible and execution-visible allowlist
 		// for the current planner turn.
@@ -63,34 +44,33 @@ type (
 	}
 )
 
-func newRunLoopState(result *planner.PlanResult, transcriptMsgs []*model.Message, usage model.TokenUsage, caps policy.CapsState, nextAttempt int, toolPolicy toolPolicyEnvelope) *runLoopState {
+func newRunLoopState(result *planner.PlanResult, transcriptRef runstore.Hash, usage model.TokenUsage, caps policy.CapsState, nextAttempt int, toolPolicy toolPolicyEnvelope) *runLoopState {
 	return &runLoopState{
-		Caps:        caps,
-		NextAttempt: nextAttempt,
-		AggUsage:    usage,
-		Result:      result,
-		Transcript:  transcriptMsgs,
-		Ledger:      transcript.FromModelMessages(transcriptMsgs),
-		ToolPolicy:  cloneToolPolicyEnvelope(toolPolicy),
+		Caps:          caps,
+		NextAttempt:   nextAttempt,
+		AggUsage:      usage,
+		Result:        result,
+		TranscriptRef: transcriptRef,
+		ToolPolicy:    cloneToolPolicyEnvelope(toolPolicy),
 	}
 }
 
 // setTurnTranscript installs the streamed provider transcript for a new
 // planner turn and re-arms the once-per-turn recording gate.
-func (st *runLoopState) setTurnTranscript(msgs []*model.Message) {
-	st.Transcript = msgs
+func (st *runLoopState) setTurnTranscript(ref runstore.Hash) {
+	st.TranscriptRef = ref
 	st.turnTranscriptRecorded = false
 }
 
 // takeTurnTranscript returns the streamed transcript for the current planner
-// turn exactly once. Subsequent calls within the same turn return nil so a
+// turn exactly once. Subsequent calls within the same turn return "" so a
 // turn that records multiple tool_use batches (immediate execution,
 // confirmations, await handshakes) never duplicates the assistant
 // thinking/text in the provider conversation.
-func (st *runLoopState) takeTurnTranscript() []*model.Message {
+func (st *runLoopState) takeTurnTranscript() runstore.Hash {
 	if st.turnTranscriptRecorded {
-		return nil
+		return ""
 	}
 	st.turnTranscriptRecorded = true
-	return st.Transcript
+	return st.TranscriptRef
 }

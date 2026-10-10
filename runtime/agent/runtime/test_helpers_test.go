@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -249,7 +250,7 @@ func (t *testWorkflowContext) ExecutePlannerActivity(ctx context.Context, call e
 	callCopy := call
 	if call.Input != nil {
 		inputCopy := *call.Input
-		inputCopy.Messages = append([]*model.Message(nil), call.Input.Messages...)
+		inputCopy.View.Pending = slices.Clone(call.Input.View.Pending)
 		inputCopy.AllowedTools = append([]tools.Ident(nil), call.Input.AllowedTools...)
 		if call.Input.Recovery != nil {
 			recoveryCopy := *call.Input.Recovery
@@ -261,7 +262,7 @@ func (t *testWorkflowContext) ExecutePlannerActivity(ctx context.Context, call e
 	if len(root.plannerOutputs) > 0 {
 		output := root.plannerOutputs[0]
 		root.plannerOutputs = root.plannerOutputs[1:]
-		return output, nil
+		return t.storedPlannerOutput(ctx, call.Input, output)
 	}
 	switch call.Name {
 	case "plan", "nested.plan":
@@ -278,10 +279,7 @@ func (t *testWorkflowContext) ExecutePlannerActivity(ctx context.Context, call e
 	if t.hasPlanResult {
 		result = t.planResult
 	}
-	return &PlanActivityOutput{
-		Result:     result,
-		Transcript: nil,
-	}, nil
+	return t.storedPlannerOutput(ctx, call.Input, &PlanActivityOutput{Result: result})
 }
 
 func (t *testWorkflowContext) ExecuteToolActivity(ctx context.Context, call engine.ToolActivityCall) (*api.ToolOutput, error) {
@@ -1050,4 +1048,26 @@ func (r *routeWorkflowContext) ExecuteRecordContentActivity(ctx context.Context,
 }
 func (s *stubEngine) QueryRootRunID(_ context.Context, id string) (string, error) {
 	return id, nil
+}
+
+func (s *stubEngine) RegisterChildDispatchActivity(context.Context, string, engine.ActivityOptions, func(context.Context, *api.ChildDispatchInput) (*api.ChildDispatchOutput, error)) error {
+	return nil
+}
+
+func (t *testWorkflowContext) ExecuteChildDispatchActivity(ctx context.Context, call engine.ChildDispatchActivityCall) (*api.ChildDispatchOutput, error) {
+	rt := t.finishRuntime
+	if rt == nil {
+		rt = t.runtime
+	}
+	if rt == nil {
+		rt = t.hookRuntime
+	}
+	if rt == nil {
+		return nil, fmt.Errorf("test finish runtime is required")
+	}
+	return rt.ChildDispatchActivity(ctx, call.Input)
+}
+
+func (r *routeWorkflowContext) ExecuteChildDispatchActivity(ctx context.Context, call engine.ChildDispatchActivityCall) (*api.ChildDispatchOutput, error) {
+	return r.hookRuntime.ChildDispatchActivity(ctx, call.Input)
 }

@@ -34,6 +34,7 @@ func (r *Runtime) storeResumeRequest(ctx context.Context, req *api.ResumeRequest
 	}
 	out := *req
 	out.MessageRefs = refs
+	out.Messages = nil
 	return &out, nil
 }
 
@@ -48,17 +49,20 @@ func (r *Runtime) storeProvidedResults(ctx context.Context, input *api.ToolResul
 		copyResult := *result
 		copyResult.Refs = tools.ResultRefs{}
 		out.Results[i] = &copyResult
-		if hasNonNullJSON(result.Result.RawMessage()) {
-			items = append(items, result.Result)
+		data := []byte(result.Result)
+		if len(data) == 0 {
+			data = []byte("null")
 		}
+		items = append(items, data)
 	}
 	refs, err := r.storeSignalContent(ctx, input.RunID, items)
 	if err != nil {
 		return nil, err
 	}
 	for _, result := range out.Results {
-		if result != nil && hasNonNullJSON(result.Result.RawMessage()) {
+		if result != nil {
 			result.Refs.Result = refs[0]
+			result.Result = nil
 			refs = refs[1:]
 		}
 	}

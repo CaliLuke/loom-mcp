@@ -33,7 +33,7 @@ func TestBestEffortSubscriberErrorDoesNotPropagate(t *testing.T) {
 	_, err := rt.registerSubscriber(bus, best, SubscriberBestEffort)
 	require.NoError(t, err)
 
-	evt := hooks.NewRunStartedEvent("run-1", agent.Ident("svc.agent"), run.Context{RunID: "run-1"}, nil)
+	evt := hooks.NewRunStartedEvent("run-1", agent.Ident("svc.agent"), run.Context{RootRunID: "test-root", RunID: "run-1"}, nil)
 
 	assert.NoError(t, bus.Publish(context.Background(), evt), "best-effort subscriber error must not surface through Bus.Publish")
 	assert.NoError(t, rt.publishHookBusEvent(context.Background(), evt.Type(), evt), "publishHookBusEvent must swallow best-effort subscriber errors")
@@ -58,7 +58,7 @@ func TestCriticalSubscriberErrorFailsRunFast(t *testing.T) {
 	_, err := rt.registerSubscriber(bus, critical, SubscriberCritical)
 	require.NoError(t, err)
 
-	evt := hooks.NewRunStartedEvent("run-1", agent.Ident("svc.agent"), run.Context{RunID: "run-1"}, nil)
+	evt := hooks.NewRunStartedEvent("run-1", agent.Ident("svc.agent"), run.Context{RootRunID: "test-root", RunID: "run-1"}, nil)
 	err = rt.publishHookBusEvent(context.Background(), evt.Type(), evt)
 	require.Error(t, err, "critical subscriber error must propagate out of publishHookBusEvent")
 	assert.ErrorIs(t, err, sentinel)

@@ -182,7 +182,7 @@ func TestExecuteToolActivityPropagatesServerData(t *testing.T) {
 	out, err := rt.ExecuteToolActivity(context.Background(), &input)
 	require.NoError(t, err)
 	require.NotNil(t, out)
-	require.JSONEq(t, `[{"kind":"example.evidence","data":[{"uri":"example://points/123","kind":"time_series"}]}]`, string(out.ServerData))
+	require.JSONEq(t, `[{"kind":"example.evidence","data":[{"uri":"example://points/123","kind":"time_series"}]}]`, string(testStoredBytes(t, rt, "run", out.Refs.ServerData)))
 }
 
 func TestExecuteToolActivityRunsResultMaterializer(t *testing.T) {
@@ -210,7 +210,7 @@ func TestExecuteToolActivityRunsResultMaterializer(t *testing.T) {
 	out, err := rt.ExecuteToolActivity(context.Background(), &input)
 	require.NoError(t, err)
 	require.NotNil(t, out)
-	require.JSONEq(t, `[{"kind":"example.materialized","data":{"source":"runtime"}}]`, string(out.ServerData))
+	require.JSONEq(t, `[{"kind":"example.materialized","data":{"source":"runtime"}}]`, string(testStoredBytes(t, rt, "run", out.Refs.ServerData)))
 }
 
 func TestExecuteToolActivityPropagatesBounds(t *testing.T) {
@@ -317,7 +317,7 @@ func TestExecuteToolActivityProjectsBoundsIntoEncodedResult(t *testing.T) {
 		"truncated": true,
 		"next_cursor": "next-page",
 		"refinement_hint": "narrow by source"
-	}`, string(out.Payload))
+	}`, string(testStoredBytes(t, rt, "run", out.Refs.Result)))
 }
 
 func TestExecuteToolActivityDropsStaleOptionalBoundFieldsFromSemanticResult(t *testing.T) {
@@ -348,7 +348,7 @@ func TestExecuteToolActivityDropsStaleOptionalBoundFieldsFromSemanticResult(t *t
 		"results": ["alpha"],
 		"returned": 1,
 		"truncated": false
-	}`, string(out.Payload))
+	}`, string(testStoredBytes(t, rt, "run", out.Refs.Result)))
 }
 
 func TestPublishToolResultReceivedProjectsBoundsIntoResultPreview(t *testing.T) {
@@ -438,14 +438,14 @@ func TestToolsetTaskQueueOverrideUsed(t *testing.T) {
 	rt.toolSpecs = map[tools.Ident]tools.ToolSpec{"child": newAnyJSONSpec("child", "svc.export")}
 	wfCtx := &testWorkflowContext{finishRuntime: rt, ctx: context.Background(), asyncResult: ToolOutput{Payload: []byte("null")}, planResult: &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: &model.Message{Role: "assistant", Parts: []model.Part{model.TextPart{Text: "ok"}}}}}, hasPlanResult: true}
 	input := &RunInput{RootRunID: "run-1", AgentID: "svc.agent", RunID: "run-1"}
-	base := &planner.PlanInput{RunContext: run.Context{RunID: input.RunID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})}
+	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})})
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: tools.Ident("child")}}}
-	_, err := rt.runLoop(wfCtx, AgentRegistration{
+	_, err := testRunLoop(t, rt, wfCtx, AgentRegistration{
 		ID:                  input.AgentID,
 		Planner:             &stubPlanner{},
 		ExecuteToolActivity: "execute",
 		ResumeActivityName:  "resume",
-	}, input, base, initial, nil, model.TokenUsage{}, policy.CapsState{MaxToolCalls: 1, RemainingToolCalls: 1}, time.Time{}, time.Time{}, 2, "", nil, nil, 0)
+	}, input, base, initial, nil, policy.CapsState{MaxToolCalls: 1, RemainingToolCalls: 1}, time.Time{}, time.Time{}, 2, "", nil)
 	require.NoError(t, err)
 	require.Equal(t, "q1", wfCtx.lastToolCall.Options.Queue)
 	require.NotNil(t, wfCtx.lastToolCall.Input)
@@ -461,15 +461,15 @@ func TestPreserveModelProvidedToolCallID(t *testing.T) {
 	rt.toolSpecs = map[tools.Ident]tools.ToolSpec{"tool": newAnyJSONSpec("tool", "svc.ts")}
 	wfCtx := &testWorkflowContext{finishRuntime: rt, ctx: context.Background(), asyncResult: ToolOutput{Payload: []byte("null")}, planResult: &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: &model.Message{Role: "assistant", Parts: []model.Part{model.TextPart{Text: "ok"}}}}}, hasPlanResult: true}
 	input := &RunInput{RootRunID: "run-1", AgentID: "svc.agent", RunID: "run-1"}
-	base := &planner.PlanInput{RunContext: run.Context{RunID: input.RunID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})}
+	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})})
 	// Planner supplies an explicit ToolCallID from the model
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: tools.Ident("tool"), ToolCallID: "model-123"}}}
-	_, err := rt.runLoop(wfCtx, AgentRegistration{
+	_, err := testRunLoop(t, rt, wfCtx, AgentRegistration{
 		ID:                  input.AgentID,
 		Planner:             &stubPlanner{},
 		ExecuteToolActivity: "execute",
 		ResumeActivityName:  "resume",
-	}, input, base, initial, nil, model.TokenUsage{}, policy.CapsState{MaxToolCalls: 1, RemainingToolCalls: 1}, time.Time{}, time.Time{}, 2, "", nil, nil, 0)
+	}, input, base, initial, nil, policy.CapsState{MaxToolCalls: 1, RemainingToolCalls: 1}, time.Time{}, time.Time{}, 2, "", nil)
 	require.NoError(t, err)
 	// Activity input should carry the same ID
 	require.NotNil(t, wfCtx.lastToolCall.Input)
@@ -528,15 +528,15 @@ func TestRunLoopPauseResumeEmitsEvents(t *testing.T) {
 		StartedAt: now,
 		UpdatedAt: now,
 	}))
-	base := &planner.PlanInput{RunContext: run.Context{RunID: input.RunID, SessionID: input.SessionID, TurnID: input.TurnID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})}
+	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID, SessionID: input.SessionID, TurnID: input.TurnID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})})
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: tools.Ident("tool")}}}
 	ctrl := interrupt.NewController(wfCtx)
-	_, err = rt.runLoop(wfCtx, AgentRegistration{
+	_, err = testRunLoop(t, rt, wfCtx, AgentRegistration{
 		ID:                  input.AgentID,
 		Planner:             &stubPlanner{},
 		ExecuteToolActivity: "execute",
 		ResumeActivityName:  "resume",
-	}, input, base, initial, nil, model.TokenUsage{}, policy.CapsState{MaxToolCalls: 1, RemainingToolCalls: 1}, time.Time{}, time.Time{}, 2, input.TurnID, nil, ctrl, 0)
+	}, input, base, initial, nil, policy.CapsState{MaxToolCalls: 1, RemainingToolCalls: 1}, time.Time{}, time.Time{}, 2, input.TurnID, ctrl)
 	require.NoError(t, err)
 	var sawPause, sawResume bool
 	for _, evt := range recorder.events {
@@ -571,7 +571,7 @@ func TestServiceToolEventsUseChildRunContext(t *testing.T) {
 		hookRuntime: rt,
 		asyncResult: ToolOutput{Payload: []byte("null")},
 	}
-	parentCtx := &run.Context{
+	parentCtx := &run.Context{RootRunID: "test-root",
 		RunID:            "child-run",
 		SessionID:        "session-1",
 		TurnID:           "turn-1",
@@ -628,7 +628,7 @@ func TestServiceToolEventsPropagateServerData(t *testing.T) {
 		hookRuntime: rt,
 		asyncResult: ToolOutput{Payload: []byte("null"), ServerData: server},
 	}
-	parentCtx := &run.Context{
+	parentCtx := &run.Context{RootRunID: "test-root",
 		RunID:            "child-run",
 		SessionID:        "session-1",
 		TurnID:           "turn-1",
@@ -679,14 +679,14 @@ func TestConsumeProvidedToolResultsRunsResultMaterializer(t *testing.T) {
 			tools.Ident("svc.tools.example"): newAnyJSONSpec("svc.tools.example", "svc.tools"),
 		},
 	}
-	base := &planner.PlanInput{
-		RunContext: run.Context{
+	base := testWorkflowInput(t, rt, &planner.PlanInput{
+		RunContext: run.Context{RootRunID: "test-root",
 			RunID:     "run-1",
 			SessionID: "session-1",
 			TurnID:    "turn-1",
 		},
-	}
-	state := newRunLoopState(nil, nil, model.TokenUsage{}, policy.CapsState{}, 1, toolPolicyEnvelope{})
+	})
+	state := newRunLoopState(nil, "", model.TokenUsage{}, policy.CapsState{}, 1, toolPolicyEnvelope{})
 	allowed := []planner.ToolRequest{
 		{
 			Name:       tools.Ident("svc.tools.example"),
@@ -694,8 +694,11 @@ func TestConsumeProvidedToolResultsRunsResultMaterializer(t *testing.T) {
 			Payload:    rawjson.Message([]byte(`{"input":"ok"}`)),
 		},
 	}
+	resultRef, err := rt.RunStore.Put(t.Context(), base.RunContext.RootRunID, []byte(`{"ok":true}`))
+	require.NoError(t, err)
+	testStoreCalls(t, rt, base, allowed)
 	results, err := rt.consumeProvidedToolResults(
-		context.Background(),
+		testIndexContext(t, rt),
 		&RunInput{
 			AgentID:   "agent",
 			RunID:     "run-1",
@@ -704,7 +707,7 @@ func TestConsumeProvidedToolResultsRunsResultMaterializer(t *testing.T) {
 		},
 		base,
 		state,
-		"turn-1",
+
 		&api.ToolResultsSet{
 			RunID: "run-1",
 			ID:    "await-1",
@@ -712,7 +715,7 @@ func TestConsumeProvidedToolResultsRunsResultMaterializer(t *testing.T) {
 				{
 					Name:       tools.Ident("svc.tools.example"),
 					ToolCallID: "tool-call-1",
-					Result:     rawjson.Message([]byte(`{"ok":true}`)),
+					Refs:       tools.ResultRefs{Result: resultRef},
 				},
 			},
 		},
@@ -721,7 +724,7 @@ func TestConsumeProvidedToolResultsRunsResultMaterializer(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-	require.JSONEq(t, `[{"kind":"example.materialized","data":{"source":"await"}}]`, string(results[0].ServerData))
+	require.JSONEq(t, `[{"kind":"example.materialized","data":{"source":"await"}}]`, string(testStoredBytes(t, rt, base.RunContext.RootRunID, results[0].Refs.ServerData)))
 
 	var resultEvt *hooks.ToolResultReceivedEvent
 	for _, evt := range recorder.events {
@@ -844,7 +847,7 @@ func TestServiceToolEventsPropagateBounds(t *testing.T) {
 			},
 		},
 	}
-	parentCtx := &run.Context{
+	parentCtx := &run.Context{RootRunID: "test-root",
 		RunID:            "child-run",
 		SessionID:        "session-1",
 		TurnID:           "turn-1",
@@ -917,15 +920,15 @@ func TestInlineToolsetEmitsParentToolEvents(t *testing.T) {
 		hasPlanResult: true,
 	}
 	input := &RunInput{RootRunID: "run-inline", AgentID: "parent.agent", RunID: "run-inline", SessionID: "sess-1", TurnID: "turn-1"}
-	base := &planner.PlanInput{
+	base := testWorkflowInput(t, rt, &planner.PlanInput{
 		RunContext: run.Context{RootRunID: "root", RunID: input.RunID, SessionID: input.SessionID, TurnID: input.TurnID},
 		Agent:      newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID}),
-	}
+	})
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{
 		Name:       tools.Ident("child.get_time_series"),
 		ToolCallID: "tool-parent",
 	}}}
-	_, err := rt.runLoop(
+	_, err := testRunLoop(t, rt,
 		wfCtx,
 		AgentRegistration{
 			ID:                  input.AgentID,
@@ -937,15 +940,14 @@ func TestInlineToolsetEmitsParentToolEvents(t *testing.T) {
 		base,
 		initial,
 		nil,
-		model.TokenUsage{},
+
 		policy.CapsState{MaxToolCalls: 2, RemainingToolCalls: 2},
 		time.Time{},
 		time.Time{},
 		2,
 		input.TurnID,
+
 		nil,
-		nil,
-		0,
 	)
 	require.NoError(t, err)
 

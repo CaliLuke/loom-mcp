@@ -1535,6 +1535,14 @@ end-to-end wall-clock limit at the caller or workflow boundary.
 be unique because it becomes the tool-call ID used to correlate workflow output. Graph helpers
 switch the generated planner to `planner.NewGraphWorkflowPlanner(...)`, where node completion is
 keyed by stable step IDs rather than `len(ToolOutputs)`.
+
+`PlanResumeInput.ToolOutputs` contains result references and bounded previews,
+with empty inline `Result`, `ServerData`, and `Payload`. Custom planners load
+canonical JSON with `input.Content.LoadToolResult(ctx, output.Refs)` (or the
+server-data/payload loader methods). Generated graph result predicates load through
+that same root-scoped `ContentLoader`; sequential workflows use output metadata.
+This is a breaking planner contract in workflow protocol 5.
+
 Graph node IDs cannot contain `#`. The planner reserves that character for loop iteration IDs.
 
 ```go
@@ -1575,7 +1583,9 @@ Workflow(func() {
 `RequestInput` emits a typed human-input await item with the supplied JSON schema.
 The answer resumes through `Runtime.ProvideTypedInput` and is available to the
 generated graph planner as `PlanResumeInput.TypedInputs`; it does not enter
-`ToolOutputs`.
+`ToolOutputs`. The answer carries `PayloadRef` with empty `Payload`; custom planners
+read it through `input.Content.LoadTypedInput(ctx, answer.PayloadRef)`. Finalization
+continues to pass no typed inputs.
 
 Workflow graph dependencies must be acyclic. Dependency IDs, branch source and
 target IDs, and loop `UntilJSONPath` step IDs must all name declared graph

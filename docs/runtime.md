@@ -146,7 +146,7 @@ func main() {
 }
 ```
 
-Temporal persists workflow history, including the live workflow ledger, but it
+Temporal persists workflow history, including the transcript index, but it
 does not persist the runtime's other stores. If `WithRunEventStore`, `WithRunStore`, and
 `WithSessionStore` are omitted, `runtime.New` uses process-local in-memory
 stores: workflow replay still works, while canonical run introspection, stored content, call records,
@@ -175,71 +175,172 @@ An error-only outcome has no eligible result hash.
 `planner.ToolOutput.Refs`, and `api.ToolCallOutput.Refs` carry `tools.ResultRefs`
 (also available as `api.ToolResultRefs`). `Result` addresses the full eligible
 result; `ServerData` and `Payload` address server-only content. Never put the
-server-only hashes or bytes into model messages. Typed results remain in workflow
-state; hook payloads and model-facing previews remain unchanged. Inline tools,
+server-only hashes or bytes into model messages. The workflow retains references; hook payloads and model-facing previews remain unchanged. Inline tools,
 adapted child results, and externally provided results also carry result references.
 
 Typed consumers can call
 `runtime.LoadToolResult(ctx, store, rootRunID, toolSpec, refs.Result)` to load the
 eligible bytes and decode them with the generated result codec. Empty or missing
-hashes fail. Tool execution still decodes inline activity results in workflow
-state; terminal completion decoding runs in the finish activity.
+hashes fail. Tool activities return references; terminal completion decoding runs in the finish activity.
 
-**Content recording (workflow protocol 4).** Content references are `runstore.Hash`
-values in the root run scope. Producers finish every `Put` before returning or
-signalling references. A failed write fails that path without publishing partial
-references; earlier successful writes may remain unreferenced. Retries may repeat
-writes, which are content-addressed and idempotent. K6 adds these references beside
-inline content; it does not build the transcript index or remove inline bytes.
-The existing K5 planner-input and terminal-event omission rules still apply.
+### Transcript index and planner views (protocol 5)
 
-| Content | Producer and boundary | Reference |
-| --- | --- | --- |
-| Effective caller messages, after `BeforeRun` rewrites | Workflow calls `RecordContent` before the first planner activity; no messages skips it | Private `runLoopState.InitialMessageRefs`, in message order, for K7 |
-| Non-empty planner transcript | Planner activity stores JSON-encoded `PlanActivityOutput.Transcript` before return | `PlanActivityOutput.TranscriptRef` |
-| Each returned planner tool call | Planner activity stores each JSON-encoded `planner.ToolRequest`; arguments remain inline for dispatch | `PlanActivityOutput.ToolCallRefs`, parallel to `Result.ToolCalls` |
-| Recovery correction text | Rejected planner activity stores UTF-8 correction bytes before return | `ModelRecovery.CorrectionRef` |
-| Resume messages | Runtime client stores each encoded `model.Message` before signalling | `ResumeRequest.MessageRefs` |
-| Clarification answer | Runtime client stores UTF-8 answer bytes before signalling | `ClarificationAnswer.AnswerRef` |
-| Provided tool result | Runtime client stores present, non-null result JSON before signalling | `ProvidedToolResult.Refs.Result`, copied to the adopted `planner.ToolResult.Refs` |
-| Typed input | Runtime client stores the answer JSON before signalling | `TypedInputAnswer.PayloadRef`, copied to `planner.TypedInputOutput.PayloadRef` |
-| Inline result, including `tool_unavailable` | Workflow calls `RecordContent` with eligible result JSON and any `ServerData` before retaining the result | `planner.ToolResult.Refs` |
-| Child final message, when present | Child `FinishRunActivity` stores encoded `model.Message` before completion | `FinishRunOutput.FinalRef` and `RunOutput.FinalRef` |
-| Adapted child output, typed result or text | Parent calls `RecordContent` after adaptation/materialization and before retaining it | `planner.ToolResult.Refs.Result` (plus server data when present) |
+The workflow keeps immutable `index.MessageEntry` values and a committed
+`IndexHead`, rather than accumulated messages, tool outputs, typed answers, or a
+transcript ledger. `runtime/agent/transcript/index` owns deterministic JSON v2
+encoding, chain verification, segment walking, and pure rendering; it depends on
+model values and run-store addresses, not the runtime, planner, or engine.
 
-`Runtime.RecordContentActivity` accepts `api.RecordContentInput{RootRunID, Items}`
-and returns `api.RecordContentOutput{Refs}` with one hash per item, in order.
-`RegisterAgent` registers it on the workflow queue as
-`runtime.RecordContentActivityName(agentID)` (`<agentID>.record_content`). Manual
-registrations must register it too. Custom engines implement
-`Engine.RegisterRecordContentActivity` and
-`WorkflowContext.ExecuteRecordContentActivity`, using
-`engine.RecordContentActivityCall`. Workflow code never reads the store.
+`PlanActivityInput.View` is an `index.ViewRef`. It contains the committed head
+and `Pending`, limited to entries added since the last planner activity. It has
+no accumulated `Messages`, `ToolOutputs`, or `TypedInputs`. Seeded caller history
+is stored by the run-start `RecordContent` activity as the first segments;
+caller history never enters `Pending`. Segments split below the Mongo store's
+15 MiB content cap.
 
-Before each content-bearing signal, the client calls `Engine.QueryRootRunID`,
-which queries the target workflow's `root_run_id` handler (`api.QueryRootRunID`).
-The handler returns `RunInput.RootRunID`, including for child runs. Query or store
-failure returns an error and sends no signal. **Client-only processes must share
-the run store with workers.** The workflow adopts signal references without store
-reads; `SignalMessageRefs` and `ClarificationRefs` retain adopted message/answer
-references in run-loop state for K7. `PauseRun` and `ProvideConfirmation` have no
-content storage step.
+Before invoking start, resume, or finalization planners, the loader stores pending
+entries as `IndexSegment{Prev, First, Entries}`. Only successful storage produces
+a new `IndexHead` in `PlanActivityOutput`, which the workflow adopts. Deterministic
+bytes make crash/retry writes idempotent. A failed write cannot advance the
+workflow head; missing content needed by the view fails before planner invocation.
+Successful results above `transcript.MaxToolResultContentBytes` (64 KiB) render
+as the same size-limit omission object using the entry's byte count, preview and
+bounds, without fetching the result body. A planner can request those bytes
+through `ContentLoader`; a missing omitted body fails when explicitly loaded.
+The loader walks segments backwards and applies entries in their original order. Worker-local
+caches retain decoded segments, rendered state, and reference-only output/answer
+slices for at most 256 runs per runtime by default, with least-recently-used
+eviction. Set `runtime.WithViewCacheRuns(n)` to change that bound; `n` must be
+greater than zero or the option panics. Eviction removes only the cache reference,
+so active loads can finish safely. The next load of an evicted run rebuilds from
+its stored `IndexHead`, producing the same messages, tool outputs and typed inputs.
+Warm steps append only new entries. An owned canonical message
+snapshot still costs work proportional to the visible message history.
 
-Error-only synthesized results (`synthesizeToolError`, dispatch/request failures,
-and unknown-tool results) have no eligible content to store. Structural policy or
-confirmation denials, reminders, and finalization hints do not create content
-writes. A value returned by an inline tool is content even when the tool is the
-runtime's `tool_unavailable` tool. Eligibility is determined by content kind, not
-size. Structural rendering remains versioned by the workflow protocol; the K7
-index is outside this change.
+The index types have these fields:
 
-**Planner activity boundary.** Every `PlanActivityInput.ToolOutputs` entry omits
-`Result` when `Refs.Result` is set and omits `ServerData` when
-`Refs.ServerData` is set. `PlanResumeActivity` loads these bytes from `RunStore`
-in `RunContext.RootRunID` before invoking the planner. Planners still receive
-full `planner.PlanResumeInput.ToolOutputs`; a missing hash fails the activity
-with a wrapped store error. Entries without references remain inline. Messages
-and accumulated workflow histories retain their current representation.
+| Type | Fields and meaning |
+| --- | --- |
+| `MessageID` | One-based `uint64` entry position |
+| `MessageEntry` | `ID`, `Kind`, `Hash`, `Calls`, `Structural`, `Role`, `ToolUseIDs`, `Bytes`, `Record`, `Batch`, `Result`, `InputID`, `Output`, `Chain`; reserved `Call`, `NonText`, `Keep`, `Origin` remain zero |
+| `StructuralEntry` | `Kind`, `ProtocolVersion`, `Text`, `Reason` |
+| `TextParameter` | Either inline `Text` (at most 16 KiB) or a full-content `Hash` |
+| `IndexSegment` | `Prev`, `First`, `Entries`; only the first segment has no predecessor |
+| `ViewRef` | `IndexHead`, `Pending`; reserved `Checkpoint`, `TailFrom`, `ClearedThrough`, `Pinned`, `Budget` remain zero |
+| `RenderBudget` | Reserved user, summary, receipt, framing and preview token budgets |
+| `Origin` | Reserved continuation scope, run, position, ID and carried form |
+
+Entry kinds are stored message, assistant transcript/call batch, tool result,
+clarification, typed input, and structural operation. `Hash` addresses the
+corresponding existing content encoding. `Calls` contains hashes of exactly the
+dispatched `planner.ToolRequest` values, including IDs and normalized metadata.
+Planner activities canonicalize and store ordinary, question, and external calls
+before return. `Output` addresses reference-only planner-output metadata; `Record`
+is server-only and is never rendered. `ResultProjection` contains a preview,
+bounds and optional rendered error. `Batch` groups adjacent results into one user
+message. `Chain` hashes the previous chain and the whole entry except `Chain`
+using domain-separated deterministic JSON. `Walk` verifies content addresses,
+contiguous IDs, predecessor links, and every chain hash; orphans are not committed.
+
+Structural kinds cover unknown tools, policy/confirmation denials, synthesized
+errors, cancellation, finalize results and hint, reminders, and hidden bookkeeping
+calls. Their templates are versioned by protocol 5. Structural text over 16 KiB
+is stored through `RecordContent`. A workflow result batch collects result bytes,
+server data, output metadata, large structural text and reminders into at most
+one `RecordContent` call, with ordered returned hashes. The already-stored call
+supplies original payload content when there is no separately adapted payload.
+
+`HideBookkeeping` is a later entry naming hidden tool-use IDs. It removes matching
+parts from the model view, deletes emptied assistant messages, and suppresses
+all-hidden result messages without changing earlier entries or segment hashes.
+Rendering preserves caller history, assistant batch grouping, confirmation pairs,
+transcript attachment once to the last assistant message of a turn, result order,
+joined reminders, clarification/resume messages, and finalize synthetics/hints.
+Typed entries never render as model messages. Canonical JSON message equality is
+the observable contract on both Temporal and in-memory engines; codec-collapsed
+Go representations are not distinct messages. Resume-only `ValidateBedrock`,
+`HistoryPolicy`, and recovery corrections run after loading as before.
+
+**Breaking planner contract.** `PlanResumeInput.ToolOutputs` retains every
+non-bookkeeping output as hashes, bounded preview, bounds, error, retry hint and
+metadata. `Result`, `ServerData`, and `Payload` are empty. `TypedInputs` retains
+every typed answer as `ID` and `PayloadRef` with empty `Payload`; finalization
+still supplies no typed inputs. Planners use `PlanResumeInput.Content`, a
+root-scoped `planner.ContentLoader`:
+
+```go
+resultJSON, err := input.Content.LoadToolResult(ctx, output.Refs)
+serverJSON, err := input.Content.LoadServerData(ctx, output.Refs)
+payloadJSON, err := input.Content.LoadToolPayload(ctx, output)
+answerJSON, err := input.Content.LoadTypedInput(ctx, answer.PayloadRef)
+```
+
+Each method returns canonical `rawjson.Message` bytes; decode with the generated
+codec when typed values are needed. Request only present content: empty and
+missing hashes are errors. Graph result predicates use this loader. Sequential
+workflows use output identity/error metadata and need no result decode.
+Successful bookkeeping outputs remain excluded. Model-facing messages and hooks
+keep their existing content; server-only content stays out of model messages.
+
+**Content producers.** `RecordContentActivity` (`<agentID>.record_content`) is
+registered by `RegisterAgent` through typed engine methods. It stores ordered
+items before returning any references. It also validates typed answers,
+materializes provided results, and records fixed finalization calls. Planner
+activities store transcript/call/correction content before returning refs.
+Inline and adapted child results are recorded as one batch before index adoption.
+`FinishRunActivity` stores optional final messages as `FinalRef`.
+
+Before content-bearing signals, clients query `root_run_id` and store full
+messages, answers or results in that scope. Signals carry references only:
+`ResumeRequest.MessageRefs`, `ClarificationAnswer.AnswerRef`,
+`ProvidedToolResult.Refs`, and `TypedInputAnswer.PayloadRef`. Workflows never use
+inline signal content or read the run store. Client-only processes must share
+the workers' store. Pause and confirmation decisions have no content storage step.
+
+**Envelope guard.** `enforcePlanActivityInputBudget` measures the entire JSON
+`PlanActivityInput`. Above 1,000,000 bytes it returns exported
+`*runtime.PlanActivityInputBudgetError{Bytes, Limit, RunID}`, discoverable with
+`errors.As`. Exactly 1,000,000 bytes is permitted. The message reports the
+whole envelope, without references to removed history fields.
+
+`make test-payload-growth`, invoked by the normal `make itest` gate, runs the
+full non-short acceptance workload: 1,000 steps with 50 parallel
+100 KiB results and 500 typed-await rounds with 10 KiB answers. `make test` also
+runs the typed workload and the 1,000-step growth case under `-short -race`.
+The 50,000-result workload exceeds the roughly 90-second short-gate budget;
+it and the 5,000-step growth case run without race instrumentation through
+`make itest`. Run the same test selection with `go test -race -timeout=3h` for
+full race measurements.
+`TestIndexPayloadAcceptance` checks every whole input against
+`4096 + 40*models + 400*newEntries + 100*heldCalls` bytes. Its scripted planners
+call no models. The large tool workload retains hook metadata and payload digests
+in its test run log to avoid keeping another 5 GiB of hook bodies; content storage,
+full hook publication and planner loading use the normal paths.
+The fixed part is under 4 KiB with default configuration: the minimal input is
+556 bytes, and the full tool/typed workloads reach 670/657 bytes respectively.
+Caller-configured `RunContext.ToolArgs`, `Labels`, `AllowedTools` and the recovery
+tool catalog remain inline and increase this fixed cost. K7 accepts these
+configuration-dependent overruns; the transcript-growth allowance is unchanged.
+`TestPlanActivityInputFixedFields` asserts the following measured byte counts as
+regression ceilings (each configured field is measured independently):
+
+| Configuration | Fixed bytes |
+| --- | ---: |
+| Default minimal input | 556 |
+| `RunContext.ToolArgs`, 10 KiB | 10,792 |
+| `Labels`, 10 KiB value | 10,809 |
+| `AllowedTools`, 256 names | 8,235 |
+| `Recovery.ToolCatalog`, 256 names | 8,533 |
+
+`TestIndexLoaderGrowth` logs cold/warm store reads, bytes loaded, retained planner
+heap (also measured with the loader cache), final-load allocations, workflow index memory/JSON size, and
+whole input size at 1,000 and 5,000 steps. Its workload has one 100 KiB tool result
+and one 10 KiB typed answer per step. Warm store work depends only on the new
+entries; cold reconstruction, planner projections and workflow index memory
+remain linear in run length. The in-memory engine has no durable Temporal history
+to measure. Workflow event history also grows; `ContinueAsNew` remains follow-up
+work. Terminal sealing, trailing terminal pending entries and new planner/run
+hooks belong to K8; `FinishRunInput.ToolEvents` still contains one ref per call.
 
 **Breaking change: run tool events.** `api.RunOutput` (also aliased as
 `runtime.RunOutput`) replaces `ToolEvents []*api.ToolEvent` with
@@ -538,7 +639,7 @@ Start ──► PlanStart ──► Tool Calls? ──► Execute Tools ──�
 ### Workflow Contracts
 
 - **Workflow protocol versions must match.** `api.WorkflowProtocolVersion` is
-  currently `4` and versions the agent workflow's inputs, outputs, signals, and
+  currently `5` and versions the agent workflow's inputs, outputs, signals, and
   state. The runtime stamps it after caller run options on top-level and child
   inputs. Workflow entry and history replay reject a different or missing
   version before interceptors, activities, or commands, returning
@@ -635,7 +736,9 @@ type PlanResumeInput struct {
     RunContext  run.Context
     Agent       PlannerContext
     Events      PlannerEvents
-    ToolOutputs []*ToolOutput         // Results from previous tool calls
+    ToolOutputs []*ToolOutput         // Reference + preview, no inline result bytes
+    TypedInputs []TypedInputOutput    // ID + PayloadRef, no inline answer
+    Content     ContentLoader         // Load full content in the root scope
     Finalize    *Termination          // Non-nil when runtime forces finalization
     Reminders   []reminder.Reminder
 }
@@ -855,7 +958,7 @@ the smaller ordinary-hook payload limit does not truncate accepted content.
 3. **Runtime decodes payload** — Uses generated codecs to validate and decode
 4. **Executor runs tool** — Receives typed or raw payload depending on configuration
 5. **Runtime encodes result** — Uses generated codecs for consistency
-6. **Planner receives ToolResult** — Gets typed result via `ToolResult.Result`
+6. **Planner receives ToolOutput** — Gets refs and preview; loads result JSON through `PlanResumeInput.Content`
 
 ### ToolsetRegistration
 
@@ -895,6 +998,38 @@ Contract:
 
 For per-consumer wording changes, configure `runtime.WithHintOverrides` on the runtime. Overrides take precedence
 over DSL-authored templates for streamed `tool_start` events.
+
+### Pre-child validation (breaking API change)
+
+`AgentToolConfig.PreChildValidator` runs in the parent's typed
+`<agentID>.child_dispatch` activity before child admission/start. Its
+`AgentToolValidationInput` has `Call`, decoded `Payload`, `ParentRun`, and
+`View runtime.ViewLoader`; the previous `Messages` field is removed.
+
+```go
+cfg.PreChildValidator = func(ctx context.Context, in *runtime.AgentToolValidationInput) *runtime.AgentToolValidationError {
+    messages, err := in.View.LoadMessages(ctx)
+    if err != nil {
+        return runtime.NewAgentToolValidationError("parent evidence unavailable", nil, nil)
+    }
+    return validateEvidence(in.Call, in.Payload, messages)
+}
+```
+
+`LoadMessages` returns an owned canonical snapshot of the parent's supplied view
+in its root scope. It is lazy: validators that need only the call do not load
+messages. Store I/O stays in the activity; parent message bytes never return to
+workflow state. Validators must be retry-safe, like other activity callbacks.
+When a load commits pending entries, the activity returns `IndexHead` on success or structured rejection and the workflow adopts it, so following dispatches and planner steps keep the cache warm.
+A structured rejection becomes the existing tool error/retry hint and prevents
+child start. Activity failures propagate before child admission. A failed view load fails the
+activity even if the validator ignores the load error.
+
+Custom engines must implement `RegisterChildDispatchActivity` and
+`ExecuteChildDispatchActivity` using `engine.ChildDispatchActivityCall`,
+`api.ChildDispatchInput`, and `api.ChildDispatchOutput`. `RegisterAgent` registers
+this activity on the parent's workflow queue. The temporary parent-view loading
+operation on `RecordContent` is removed.
 
 ### Tool Implementation Patterns
 
@@ -1545,8 +1680,10 @@ err := rt.ProvideTypedInput(ctx, &api.TypedInputAnswer{
 })
 ```
 
-The resumed planner receives the answer in `PlanResumeInput.TypedInputs`.
-Typed-input answers are not copied into `ToolOutputs`.
+The resumed planner receives `ID` and `PayloadRef` in `PlanResumeInput.TypedInputs`,
+with empty `Payload`. Load answer JSON with `input.Content.LoadTypedInput(ctx, answer.PayloadRef)`.
+Typed-input answers are not copied into `ToolOutputs` or model messages, and are
+not passed to the finalize planner.
 
 ### Tool Confirmation (Design-Time + Runtime Overrides)
 
@@ -1823,7 +1960,7 @@ logs:
 
 | Surface | Role | Failure behavior |
 | --- | --- | --- |
-| Workflow ledger | Live deterministic planner state for the active run | Owned by the workflow engine; not a general event subscription API |
+| Workflow transcript index | Live deterministic transcript references for the active run | Owned by the workflow engine; loaded into messages in activities |
 | `runlog.Store` | Canonical append-only hook event record | Append or run-metadata update failure fails the hook activity so the engine can retry or stop the run |
 | Session stream sink | Active-session client projection | Best effort; lookup/send failures are logged, ended sessions are skipped, and sessionless one-shot runs do not stream |
 | Hook bus | Local subscriber and derived-projection fanout | Built-in subscribers are best effort; explicitly critical subscribers may propagate an error and fail the hook activity |
@@ -2193,16 +2330,10 @@ migration. New writes go only to the events collection. If
 Keep both collections through the compatibility window, and apply retention or
 deletion to both.
 
-Transcript projection is read-only: `Ledger.BuildMessages` includes the current
-assistant turn without flushing or otherwise mutating the ledger. Workflow query
-handlers such as `ledger_messages` can therefore inspect an in-progress turn
-without splitting later text and tool-use parts into separate messages.
-
-`Ledger` also implements `json.Marshaler` and `json.Unmarshaler`. Its JSON form
-preserves both committed messages and the pending assistant message, including
-typed thinking, text, tool-use, and tool-result parts. A workflow can therefore
-round-trip the ledger itself through JSON-backed state and continue appending to
-the same in-progress turn after restoration.
+The workflow no longer maintains a `transcript.Ledger` or exposes the
+`ledger_messages` query. Parent validation uses a `ViewLoader` in its activity;
+planner activities reconstruct canonical messages from the transcript index.
+Use the run log for introspection rather than querying a live message ledger.
 
 ### Memory Search And Tools
 
@@ -2828,6 +2959,9 @@ type Engine interface {
     RegisterHookActivity(ctx, name, opts, fn) error
     RegisterPlannerActivity(ctx, name, opts, fn) error
     RegisterExecuteToolActivity(ctx, name, opts, fn) error
+    RegisterRecordContentActivity(ctx, name, opts, fn) error
+    RegisterFinishRunActivity(ctx, name, opts, fn) error
+    RegisterChildDispatchActivity(ctx, name, opts, fn) error
     StartWorkflow(ctx, req WorkflowStartRequest) (WorkflowHandle, error)
     QueryRunStatus(ctx, runID string) (RunStatus, error)
 }
@@ -2845,6 +2979,9 @@ type WorkflowContext interface {
     Now() time.Time  // Deterministic time
     PublishHook(ctx, call) error
     ExecutePlannerActivity(ctx, call) (*api.PlanActivityOutput, error)
+    ExecuteRecordContentActivity(ctx, call) (*api.RecordContentOutput, error)
+    ExecuteFinishRunActivity(ctx, call) (*api.FinishRunOutput, error)
+    ExecuteChildDispatchActivity(ctx, call) (*api.ChildDispatchOutput, error)
     ExecuteToolActivity(ctx, call) (*api.ToolOutput, error)
     ExecuteToolActivityAsync(ctx, call) (Future[*api.ToolOutput], error)
     PauseRequests() Receiver[api.PauseRequest]
@@ -2940,8 +3077,9 @@ external `Client`, also supply `ClientOptions` with that client's converter
 external client whose converter configuration was not supplied.
 
 The generated fixture keeps a completed history under
-`integration_tests/fixtures/agent_features/testdata/workflow_protocol_v3.json`.
-The scrubbed recording includes a tool call and terminal finish activity. Run
+`integration_tests/fixtures/agent_features/testdata/workflow_protocol_v5.json`.
+The scrubbed recording includes a tool call, rejected child-dispatch validation,
+seed/result content batches and terminal finish activity. Run
 `go test -C integration_tests/fixtures/agent_features ./... -run '^TestGeneratedFeatureWorkflowReplay$'`
 for offline replay. To re-record it against the pinned Temporal development
 server, run

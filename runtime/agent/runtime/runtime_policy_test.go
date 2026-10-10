@@ -164,14 +164,14 @@ func TestPolicyAllowlistTrimsToolExecution(t *testing.T) {
 		hasPlanResult: true,
 	}
 	input := &RunInput{RootRunID: "run-1", AgentID: "svc.agent", RunID: "run-1"}
-	base := &planner.PlanInput{RunContext: run.Context{RunID: input.RunID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})}
+	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})})
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: tools.Ident("allowed")}, {Name: tools.Ident("blocked")}}}
-	out, err := rt.runLoop(wfCtx, AgentRegistration{
+	out, err := testRunLoop(t, rt, wfCtx, AgentRegistration{
 		ID:                  input.AgentID,
 		Planner:             &stubPlanner{},
 		ExecuteToolActivity: "execute",
 		ResumeActivityName:  "resume",
-	}, input, base, initial, nil, model.TokenUsage{}, policy.CapsState{MaxToolCalls: 5, RemainingToolCalls: 5}, time.Time{}, time.Time{}, 2, "turn-1", nil, nil, 0)
+	}, input, base, initial, nil, policy.CapsState{MaxToolCalls: 5, RemainingToolCalls: 5}, time.Time{}, time.Time{}, 2, "turn-1", nil)
 	require.NoError(t, err)
 	events, err := LoadRunToolEvents(t.Context(), rt.RunStore, input.RootRunID, out.ToolEventsRef)
 	require.NoError(t, err)
@@ -220,7 +220,7 @@ func TestApplyPolicyEnvelopeFiltersStrictly(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			rt := &Runtime{logger: telemetry.NoopLogger{}}
-			base := &planner.PlanInput{RunContext: run.Context{RunID: "run-1"}}
+			base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: "run-1"}})
 			input := &RunInput{AgentID: "svc.agent", RunID: "run-1"}
 			envelope := toolPolicyEnvelope{Active: true, Allowed: tc.allowed}
 			result, err := rt.applyPolicy(context.Background(), base, input, candidates, policy.CapsState{}, "turn-1", nil, envelope)
@@ -232,7 +232,7 @@ func TestApplyPolicyEnvelopeFiltersStrictly(t *testing.T) {
 
 func TestApplyPolicyEnvelopePreservesToolUnavailable(t *testing.T) {
 	rt := &Runtime{logger: telemetry.NoopLogger{}}
-	base := &planner.PlanInput{RunContext: run.Context{RunID: "run-1"}}
+	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: "run-1"}})
 	input := &RunInput{AgentID: "svc.agent", RunID: "run-1"}
 	candidates := []planner.ToolRequest{
 		{Name: tools.Ident("allowed")},
@@ -263,7 +263,7 @@ func TestPreparePrePlanToolPolicyDoesNotCapAdvertisedTools(t *testing.T) {
 		RunID:   "run-1",
 		Policy:  &PolicyOverrides{PerTurnMaxToolCalls: 1},
 	}
-	base := &planner.PlanInput{RunContext: run.Context{RunID: input.RunID}}
+	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID}})
 
 	result, err := rt.preparePrePlanToolPolicy(context.Background(), AgentRegistration{ID: input.AgentID}, input, base, policy.CapsState{
 		MaxToolCalls:       1,
@@ -294,7 +294,7 @@ func TestEmptyPolicyAllowlistBlocksPlanningAndExecution(t *testing.T) {
 				},
 			}
 			input := &RunInput{AgentID: "svc.agent", RunID: "run-1"}
-			base := &planner.PlanInput{RunContext: run.Context{RunID: input.RunID}}
+			base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID}})
 			reg := AgentRegistration{ID: input.AgentID, Planner: &stubPlanner{}, ExecuteToolActivity: "execute", ResumeActivityName: "resume"}
 			initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: "one"}, {Name: "two"}}}
 			ctx := context.Background()
@@ -308,7 +308,7 @@ func TestEmptyPolicyAllowlistBlocksPlanningAndExecution(t *testing.T) {
 			assert.Empty(t, direct.AllowedCalls)
 
 			wfCtx := &testWorkflowContext{ctx: ctx, hookRuntime: rt}
-			out, err := rt.runLoop(wfCtx, reg, input, base, initial, nil, model.TokenUsage{}, got.Caps, time.Time{}, time.Time{}, 2, "turn-1", nil, nil, 0, workflowLoopStart{toolPolicy: got.Envelope})
+			out, err := testRunLoop(t, rt, wfCtx, reg, input, base, initial, nil, got.Caps, time.Time{}, time.Time{}, 2, "turn-1", nil, workflowLoopStart{toolPolicy: got.Envelope})
 			require.ErrorContains(t, err, "no tools allowed for execution")
 			assert.Nil(t, out)
 			assert.Empty(t, wfCtx.lastToolCall.Name, "a blocked tool must never be scheduled")
@@ -322,7 +322,7 @@ func TestApplyRuntimePolicyPreservesToolUnavailable(t *testing.T) {
 			Bus: noopHooks{}, RunEventStore: runloginmem.New(), logger: telemetry.NoopLogger{},
 			Policy: &stubPolicyEngine{decision: policy.Decision{AllowedTools: allowed}},
 		}
-		base := &planner.PlanInput{RunContext: run.Context{RunID: "run-1"}}
+		base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: "run-1"}})
 		input := &RunInput{AgentID: "svc.agent", RunID: "run-1"}
 		calls := []planner.ToolRequest{{Name: "blocked"}, {Name: tools.ToolUnavailable}}
 		got, err := rt.applyPolicy(context.Background(), base, input, calls, policy.CapsState{}, "turn-1", nil, toolPolicyEnvelope{})
@@ -411,7 +411,7 @@ func TestDisableToolsPolicyBlocksToolExecution(t *testing.T) {
 		hookRuntime: rt,
 	}
 	input := &RunInput{AgentID: "svc.agent", RunID: "run-1"}
-	base := &planner.PlanInput{RunContext: run.Context{RunID: input.RunID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})}
+	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})})
 	reg := AgentRegistration{
 		ID:                  input.AgentID,
 		Planner:             &stubPlanner{},
@@ -427,7 +427,7 @@ func TestDisableToolsPolicyBlocksToolExecution(t *testing.T) {
 
 	// A planner that violates DisableTools by emitting tool calls anyway.
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: tools.Ident("allowed")}}}
-	out, err := rt.runLoop(wfCtx, reg, input, base, initial, nil, model.TokenUsage{}, policyResult.Caps, time.Time{}, time.Time{}, 2, "turn-1", nil, nil, 0, workflowLoopStart{toolPolicy: policyResult.Envelope})
+	out, err := testRunLoop(t, rt, wfCtx, reg, input, base, initial, nil, policyResult.Caps, time.Time{}, time.Time{}, 2, "turn-1", nil, workflowLoopStart{toolPolicy: policyResult.Envelope})
 	require.Error(t, err)
 	require.ErrorContains(t, err, "no tools allowed for execution")
 	assert.Nil(t, out)
@@ -512,15 +512,15 @@ func TestAwaitResumeReappliesToolPolicy(t *testing.T) {
 		StartedAt: now,
 		UpdatedAt: now,
 	}))
-	base := &planner.PlanInput{
+	base := testWorkflowInput(t, rt, &planner.PlanInput{
 		RunContext: run.Context{RootRunID: "root", RunID: input.RunID, SessionID: input.SessionID, TurnID: input.TurnID, Attempt: 1},
 		Agent:      newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID}),
-	}
+	})
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: askTool}}}
 
 	// Stale pre-await envelope: broader than what the policy engine now allows.
 	staleEnvelope := toolPolicyEnvelope{Active: true, Allowed: []tools.Ident{askTool, extraTool}}
-	_, err = rt.runLoop(
+	_, err = testRunLoop(t, rt,
 		wfCtx,
 		AgentRegistration{
 			ID:                  input.AgentID,
@@ -528,9 +528,9 @@ func TestAwaitResumeReappliesToolPolicy(t *testing.T) {
 			ExecuteToolActivity: "execute",
 			ResumeActivityName:  "resume",
 		},
-		input, base, initial, nil, model.TokenUsage{},
+		input, base, initial, nil,
 		policy.CapsState{MaxToolCalls: 4, RemainingToolCalls: 4},
-		time.Time{}, time.Time{}, 2, input.TurnID, nil, ctrl, 0, workflowLoopStart{toolPolicy: staleEnvelope},
+		time.Time{}, time.Time{}, 2, input.TurnID, ctrl, workflowLoopStart{toolPolicy: staleEnvelope},
 	)
 	require.NoError(t, err)
 
@@ -567,10 +567,10 @@ func TestPlanStartActivityFiltersModelVisibleTools(t *testing.T) {
 		RunContext:       run.Context{RootRunID: "root", RunID: "run-1"},
 		ToolPolicyActive: true,
 		AllowedTools:     []tools.Ident{"allowed"},
-		Messages: []*model.Message{{
+		View: testSeedView(t, rt, []*model.Message{{
 			Role:  model.ConversationRoleUser,
 			Parts: []model.Part{model.TextPart{Text: "hello"}},
-		}},
+		}}, "root"),
 	})
 
 	require.NoError(t, err)
@@ -606,12 +606,12 @@ func TestRecoveryDisableToolsProducesToolFreeModelRequest(t *testing.T) {
 		RunContext:       run.Context{RootRunID: "root", RunID: "run-1"},
 		ToolPolicyActive: true,
 		AllowedTools:     nil,
-		Recovery: &api.ModelRecovery{
+		Recovery: testRecovery(t, rt, "root", &api.ModelRecovery{
 			Kind:         model.OutputValidationStructuredOutput,
 			Correction:   "replace the invalid final answer",
 			DisableTools: true,
-		},
-		Messages: []*model.Message{{
+		}),
+		View: testSeedView(t, rt, []*model.Message{{
 			Role: model.ConversationRoleAssistant,
 			Parts: []model.Part{model.ToolUsePart{
 				ID:    "call-1",
@@ -625,7 +625,7 @@ func TestRecoveryDisableToolsProducesToolFreeModelRequest(t *testing.T) {
 				Content:   map[string]any{"error": "unavailable"},
 				IsError:   true,
 			}},
-		}},
+		}}, "root"),
 	})
 
 	require.NoError(t, err)
@@ -658,11 +658,11 @@ func TestPlanStartActivityReturnsHistoryPolicyError(t *testing.T) {
 	_, err := rt.PlanStartActivity(context.Background(), &PlanActivityInput{
 		AgentID:    "svc.agent",
 		RunID:      "run-1",
-		RunContext: run.Context{RunID: "run-1"},
-		Messages: []*model.Message{{
+		RunContext: run.Context{RootRunID: "test-root", RunID: "run-1"},
+		View: testSeedView(t, rt, []*model.Message{{
 			Role:  model.ConversationRoleUser,
 			Parts: []model.Part{model.TextPart{Text: "hello"}},
-		}},
+		}}, "test-root"),
 	})
 
 	require.ErrorIs(t, err, sentinel)
@@ -692,11 +692,11 @@ func TestPlanResumeActivityReturnsHistoryPolicyError(t *testing.T) {
 	_, err := rt.PlanResumeActivity(context.Background(), &PlanActivityInput{
 		AgentID:    "svc.agent",
 		RunID:      "run-1",
-		RunContext: run.Context{RunID: "run-1"},
-		Messages: []*model.Message{{
+		RunContext: run.Context{RootRunID: "test-root", RunID: "run-1"},
+		View: testSeedView(t, rt, []*model.Message{{
 			Role:  model.ConversationRoleUser,
 			Parts: []model.Part{model.TextPart{Text: "hello"}},
-		}},
+		}}, "test-root"),
 	})
 
 	require.ErrorIs(t, err, sentinel)

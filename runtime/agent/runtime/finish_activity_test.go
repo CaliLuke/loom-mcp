@@ -87,7 +87,7 @@ func TestFinishPathsStoreEventsOnce(t *testing.T) {
 			defer cancel()
 			wf := &testWorkflowContext{ctx: ctx, runtime: rt}
 			input := &RunInput{AgentID: "agent", RootRunID: "root"}
-			base := &planner.PlanInput{RunContext: run.Context{RootRunID: "root", RunID: "child", Tool: "tool"}}
+			base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "root", RunID: "child", Tool: "tool"}})
 			st := &runLoopState{ToolEvents: []*planner.ToolResult{{Name: "tool", Result: "done"}}, Result: &planner.PlanResult{}}
 			var out *RunOutput
 			var err error

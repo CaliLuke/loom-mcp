@@ -12,6 +12,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,7 +23,7 @@ func TestContentReferencesSurviveTemporalAndJSON(t *testing.T) {
 	for _, value := range []any{
 		&api.RecordContentInput{RootRunID: "root", Items: [][]byte{[]byte("first"), []byte("second")}},
 		&api.RecordContentOutput{Refs: []runstore.Hash{"sha256:first", "sha256:second"}},
-		&api.PlanActivityOutput{Transcript: []*model.Message{message}, TranscriptRef: "sha256:transcript", Result: &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: "test.tool", Payload: rawjson.Message(`{}`)}}}, ToolCallRefs: []runstore.Hash{"sha256:call"}},
+		&api.PlanActivityOutput{IndexHead: "sha256:head", TranscriptRef: "sha256:transcript", Result: &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: "test.tool", Payload: rawjson.Message(`{}`)}}}, ToolCallRefs: []runstore.Hash{"sha256:call"}},
 		&api.PlanActivityOutput{Recovery: &api.ModelRecovery{Correction: "retry", CorrectionRef: "sha256:correction"}},
 		&api.RunOutput{Final: message, FinalRef: "sha256:final"},
 		&api.FinishRunInput{RootRunID: "root", Final: message},
@@ -31,7 +32,7 @@ func TestContentReferencesSurviveTemporalAndJSON(t *testing.T) {
 		&api.ClarificationAnswer{Answer: "yes", AnswerRef: "sha256:answer"},
 		&api.TypedInputAnswer{Payload: rawjson.Message(`{}`), PayloadRef: "sha256:payload"},
 		&api.ToolResultsSet{Results: []*api.ProvidedToolResult{{Result: rawjson.Message(`{}`), Refs: tools.ResultRefs{Result: "sha256:result"}}}},
-		&api.PlanActivityInput{TypedInputs: []planner.TypedInputOutput{{Payload: rawjson.Message(`{}`), PayloadRef: "sha256:typed"}}},
+		&api.PlanActivityInput{View: index.ViewRef{IndexHead: "sha256:head", Pending: []index.MessageEntry{{ID: 2, Kind: index.TypedInput, Hash: "sha256:typed", InputID: "input"}}}},
 	} {
 		t.Run(fmt.Sprintf("%T", value), func(t *testing.T) {
 			payload, err := converter.ToPayload(value)

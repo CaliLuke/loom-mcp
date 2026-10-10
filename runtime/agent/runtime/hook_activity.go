@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"time"
 
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/prompt"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog"
@@ -17,6 +19,10 @@ import (
 // hookActivityName is the engine-registered activity that publishes hook events
 // on behalf of workflow code.
 const hookActivityName = "runtime.publish_hook"
+
+// publishToolContentCommand resolves an already stored activity result at the
+// existing hook boundary, preserving per-result publication without a write activity.
+const publishToolContentCommand = "runtime.publish_tool_content"
 
 // hookActivity publishes workflow-emitted hook events outside of deterministic
 // workflow execution.
@@ -41,6 +47,13 @@ func (r *Runtime) hookActivity(ctx context.Context, input *HookActivityInput) er
 
 	if input != nil && (input.Type == reserveRunCommand || input.Type == rejectRunCommand) {
 		return r.runAdmissionActivity(ctx, input)
+	}
+	if input != nil && input.Type == publishToolContentCommand {
+		var publication api.PublishToolContent
+		if err := json.Unmarshal(input.Payload, &publication); err != nil {
+			return err
+		}
+		return r.publishStoredToolContent(ctx, publication.RunContext.RootRunID, &publication)
 	}
 	evt, payload, err := r.decodeHookActivityEvent(ctx, input)
 	if err != nil {

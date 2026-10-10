@@ -472,15 +472,17 @@ func testTemporalSignalTimeoutRace(t *testing.T, temporalClient client.Client) {
 		require.Eventually(t, func() bool {
 			return fx.recorder.countForRun(hooks.AwaitTypedInput, runID) == 1
 		}, time.Second, 10*time.Millisecond)
+		answerRef, err := fx.rt.RunStore.Put(ctx, runID, []byte(`{"ok":true}`))
+		require.NoError(t, err)
 		var out *api.RunOutput
 		var waitErr error
 		var signalErr error
 		if offset > workflowTimeout {
 			waitErr = handle.Get(ctx, &out)
 			signalErr = temporalClient.SignalWorkflow(ctx, runID, "", api.SignalProvideTypedInput, &api.TypedInputAnswer{
-				RunID:   runID,
-				ID:      "signal-race",
-				Payload: rawjson.Message([]byte(`{"ok":true}`)),
+				RunID:      runID,
+				ID:         "signal-race",
+				PayloadRef: answerRef,
 			})
 		} else {
 			if remaining := offset - time.Since(startedAt); remaining > 0 {
@@ -493,9 +495,9 @@ func testTemporalSignalTimeoutRace(t *testing.T, temporalClient client.Client) {
 				}
 			}
 			signalErr = temporalClient.SignalWorkflow(ctx, runID, "", api.SignalProvideTypedInput, &api.TypedInputAnswer{
-				RunID:   runID,
-				ID:      "signal-race",
-				Payload: rawjson.Message([]byte(`{"ok":true}`)),
+				RunID:      runID,
+				ID:         "signal-race",
+				PayloadRef: answerRef,
 			})
 			waitErr = handle.Get(ctx, &out)
 		}

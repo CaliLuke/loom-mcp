@@ -32,7 +32,7 @@ func (r *Runtime) waitAwaitConfirmation(
 	wfCtx engine.WorkflowContext,
 	reg AgentRegistration,
 	input *RunInput,
-	base *planner.PlanInput,
+	base *workflowPlanInput,
 	st *runLoopState,
 	toolOpts engine.ActivityOptions,
 	expectedChildren int,
@@ -60,7 +60,9 @@ func (r *Runtime) waitAwaitConfirmation(
 	// a provider-visible tool_use + tool_result pair so planners see a deterministic
 	// outcome for the tool call they requested. The streamed thinking/text for the
 	// turn is consumed at most once across all recordings in the same turn.
-	r.recordAssistantTurn(base, st.takeTurnTranscript(), []planner.ToolRequest{it.call}, st.Ledger)
+	if err := base.recordAssistant(st.takeTurnTranscript(), []planner.ToolRequest{it.call}); err != nil {
+		return nil, nil, nil, err
+	}
 
 	if !dec.Approved {
 		res, err := r.handleDeniedConfirmation(ctx, base, st, turnID, expectedChildren, it)
@@ -73,7 +75,7 @@ func (r *Runtime) handleAwaitQueue(
 	wfCtx engine.WorkflowContext,
 	reg AgentRegistration,
 	input *RunInput,
-	base *planner.PlanInput,
+	base *workflowPlanInput,
 	st *runLoopState,
 	resumeOpts engine.ActivityOptions,
 	toolOpts engine.ActivityOptions,
@@ -125,7 +127,7 @@ func validateAwaitQueueInputs(ctrl *interrupt.Controller, deadlines *runDeadline
 	return nil
 }
 
-func (r *Runtime) publishAwaitPrompts(ctx context.Context, input *RunInput, base *planner.PlanInput, st *runLoopState, turnID string, confirmations []confirmationAwait, items []planner.AwaitItem) error {
+func (r *Runtime) publishAwaitPrompts(ctx context.Context, input *RunInput, base *workflowPlanInput, st *runLoopState, turnID string, confirmations []confirmationAwait, items []planner.AwaitItem) error {
 	if err := r.publishAwaitConfirmations(ctx, input, base, turnID, confirmations); err != nil {
 		return err
 	}
@@ -137,7 +139,7 @@ func (r *Runtime) publishAwaitPrompts(ctx context.Context, input *RunInput, base
 	return nil
 }
 
-func (r *Runtime) publishAwaitConfirmations(ctx context.Context, input *RunInput, base *planner.PlanInput, turnID string, confirmations []confirmationAwait) error {
+func (r *Runtime) publishAwaitConfirmations(ctx context.Context, input *RunInput, base *workflowPlanInput, turnID string, confirmations []confirmationAwait) error {
 	for i, it := range confirmations {
 		if it.plan == nil {
 			return fmt.Errorf("await confirmation item %d missing plan", i)
@@ -163,7 +165,7 @@ func (r *Runtime) publishAwaitConfirmations(ctx context.Context, input *RunInput
 	return nil
 }
 
-func (r *Runtime) publishAwaitPause(ctx context.Context, input *RunInput, base *planner.PlanInput, turnID string) error {
+func (r *Runtime) publishAwaitPause(ctx context.Context, input *RunInput, base *workflowPlanInput, turnID string) error {
 	return r.publishHook(
 		ctx,
 		hooks.NewRunPausedEvent(base.RunContext.RunID, input.AgentID, base.RunContext.SessionID, awaitReasonQueue, "runtime", nil, nil),
@@ -171,7 +173,7 @@ func (r *Runtime) publishAwaitPause(ctx context.Context, input *RunInput, base *
 	)
 }
 
-func (r *Runtime) collectAwaitResults(ctx context.Context, wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *planner.PlanInput, st *runLoopState, toolOpts engine.ActivityOptions, expectedChildren int, parentTracker *childTracker, turnID string, ctrl *interrupt.Controller, deadlines *runDeadlines, confirmations []confirmationAwait, items []planner.AwaitItem, priorToolResults []*planner.ToolResult) ([]*planner.ToolResult, []planner.AwaitItem, *RunOutput, error) {
+func (r *Runtime) collectAwaitResults(ctx context.Context, wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *workflowPlanInput, st *runLoopState, toolOpts engine.ActivityOptions, expectedChildren int, parentTracker *childTracker, turnID string, ctrl *interrupt.Controller, deadlines *runDeadlines, confirmations []confirmationAwait, items []planner.AwaitItem, priorToolResults []*planner.ToolResult) ([]*planner.ToolResult, []planner.AwaitItem, *RunOutput, error) {
 	waitTimeout := time.Duration(0)
 	allToolResults := append(make([]*planner.ToolResult, 0, len(priorToolResults)+8), priorToolResults...)
 	extraItems := []planner.AwaitItem(nil)
@@ -194,7 +196,7 @@ func (r *Runtime) collectAwaitResults(ctx context.Context, wfCtx engine.Workflow
 		}
 	}
 	for _, it := range items {
-		res, err := r.waitForAwaitItem(ctx, wfCtx, ctrl, input, base, st, turnID, waitTimeout, deadlines, it)
+		res, err := r.waitForAwaitItem(ctx, wfCtx, ctrl, input, base, st, waitTimeout, deadlines, it)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -210,9 +212,9 @@ func (r *Runtime) collectAwaitResults(ctx context.Context, wfCtx engine.Workflow
 	return allToolResults, extraItems, nil, nil
 }
 
-func (r *Runtime) waitForAwaitItem(ctx context.Context, wfCtx engine.WorkflowContext, ctrl *interrupt.Controller, input *RunInput, base *planner.PlanInput, st *runLoopState, turnID string, timeout time.Duration, deadlines *runDeadlines, it planner.AwaitItem) ([]*planner.ToolResult, error) {
+func (r *Runtime) waitForAwaitItem(ctx context.Context, wfCtx engine.WorkflowContext, ctrl *interrupt.Controller, input *RunInput, base *workflowPlanInput, st *runLoopState, timeout time.Duration, deadlines *runDeadlines, it planner.AwaitItem) ([]*planner.ToolResult, error) {
 	waitStartedAt := wfCtx.Now()
-	res, err := r.waitAwaitQueueItem(ctx, ctrl, input, base, st, turnID, timeout, it)
+	res, err := r.waitAwaitQueueItem(ctx, ctrl, input, base, st, timeout, it)
 	deadlines.pause(wfCtx.Now().Sub(waitStartedAt))
 	return res, err
 }
@@ -220,7 +222,7 @@ func (r *Runtime) waitForAwaitItem(ctx context.Context, wfCtx engine.WorkflowCon
 func (r *Runtime) finishProvidedTerminalResults(
 	ctx context.Context,
 	input *RunInput,
-	base *planner.PlanInput,
+	base *workflowPlanInput,
 	st *runLoopState,
 	turnID string,
 	results []*planner.ToolResult,
@@ -242,7 +244,7 @@ func appendAwaitToolResults(current []*planner.ToolResult, extra []*planner.Tool
 	return append(current, extra...)
 }
 
-func (r *Runtime) handleAwaitPostProcessing(ctx context.Context, wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *planner.PlanInput, st *runLoopState, resumeOpts engine.ActivityOptions, turnID string, ctrl *interrupt.Controller, deadlines *runDeadlines, confirmations []confirmationAwait, items []planner.AwaitItem, allToolResults []*planner.ToolResult) (*RunOutput, error) {
+func (r *Runtime) handleAwaitPostProcessing(ctx context.Context, wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *workflowPlanInput, st *runLoopState, resumeOpts engine.ActivityOptions, turnID string, ctrl *interrupt.Controller, deadlines *runDeadlines, confirmations []confirmationAwait, items []planner.AwaitItem, allToolResults []*planner.ToolResult) (*RunOutput, error) {
 	if out, err := r.applyAwaitFailurePolicy(wfCtx, reg, input, base, st, allToolResults, turnID, ctrl, deadlines); err != nil || out != nil {
 		return out, err
 	}
@@ -255,7 +257,7 @@ func (r *Runtime) handleAwaitPostProcessing(ctx context.Context, wfCtx engine.Wo
 	return r.resumeAfterAwait(wfCtx, reg, input, base, st, resumeOpts, deadlines, turnID)
 }
 
-func (r *Runtime) finalizeProtectedAwaitRun(ctx context.Context, wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *planner.PlanInput, st *runLoopState, turnID string, deadlines *runDeadlines, allToolResults []*planner.ToolResult) (*RunOutput, error) {
+func (r *Runtime) finalizeProtectedAwaitRun(ctx context.Context, wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *workflowPlanInput, st *runLoopState, turnID string, deadlines *runDeadlines, allToolResults []*planner.ToolResult) (*RunOutput, error) {
 	protected, err := r.hardProtectionIfNeeded(ctx, input.AgentID, base, allToolResults, turnID)
 	if err != nil {
 		return nil, err
@@ -263,25 +265,25 @@ func (r *Runtime) finalizeProtectedAwaitRun(ctx context.Context, wfCtx engine.Wo
 	if !protected {
 		return nil, nil
 	}
-	return r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.Caps, st.NextAttempt, turnID, plannerResultNotes(st.Result), planner.TerminationReasonFailureCap, deadlines.Hard)
+	return r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.AggUsage, st.Caps, st.NextAttempt, turnID, plannerResultNotes(st.Result), planner.TerminationReasonFailureCap, deadlines.Hard)
 }
 
 // resumeAfterAwait resumes planning after the await queue is fully satisfied.
 // It shares the tool-turn resume path so the policy engine is re-consulted at
 // this boundary and the resume request carries a fresh tool-policy envelope
 // (allowlist, caps, labels) instead of the stale pre-await state.
-func (r *Runtime) resumeAfterAwait(wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *planner.PlanInput, st *runLoopState, resumeOpts engine.ActivityOptions, deadlines *runDeadlines, turnID string) (*RunOutput, error) {
+func (r *Runtime) resumeAfterAwait(wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *workflowPlanInput, st *runLoopState, resumeOpts engine.ActivityOptions, deadlines *runDeadlines, turnID string) (*RunOutput, error) {
 	return r.resumeAfterToolTurn(wfCtx, reg, input, base, st, resumeOpts, deadlines, turnID)
 }
 
-func (r *Runtime) applyAwaitFailurePolicy(wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *planner.PlanInput, st *runLoopState, allToolResults []*planner.ToolResult, turnID string, ctrl *interrupt.Controller, deadlines *runDeadlines) (*RunOutput, error) {
+func (r *Runtime) applyAwaitFailurePolicy(wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *workflowPlanInput, st *runLoopState, allToolResults []*planner.ToolResult, turnID string, ctrl *interrupt.Controller, deadlines *runDeadlines) (*RunOutput, error) {
 	if out, err := r.applyAwaitFailureCap(wfCtx, reg, input, base, st, allToolResults, turnID, deadlines); err != nil || out != nil {
 		return out, err
 	}
-	return r.handleMissingFieldsPolicy(wfCtx, reg, input, base, allToolResults, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.Caps, &st.NextAttempt, turnID, plannerResultNotes(st.Result), ctrl, deadlines, st)
+	return r.handleMissingFieldsPolicy(wfCtx, reg, input, base, allToolResults, st.ToolEvents, st.AggUsage, st.Caps, &st.NextAttempt, turnID, plannerResultNotes(st.Result), ctrl, deadlines)
 }
 
-func (r *Runtime) applyAwaitFailureCap(wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *planner.PlanInput, st *runLoopState, allToolResults []*planner.ToolResult, turnID string, deadlines *runDeadlines) (*RunOutput, error) {
+func (r *Runtime) applyAwaitFailureCap(wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *workflowPlanInput, st *runLoopState, allToolResults []*planner.ToolResult, turnID string, deadlines *runDeadlines) (*RunOutput, error) {
 	resetRecoveryTurnsAfterResults(r, &st.Caps, allToolResults)
 	if !resultsRequireRecovery(allToolResults) {
 		return nil, nil
@@ -289,10 +291,10 @@ func (r *Runtime) applyAwaitFailureCap(wfCtx engine.WorkflowContext, reg AgentRe
 	if consumeRecoveryTurn(&st.Caps) {
 		return nil, nil
 	}
-	return r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.Caps, st.NextAttempt, turnID, plannerResultNotes(st.Result), planner.TerminationReasonFailureCap, deadlines.Hard)
+	return r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.AggUsage, st.Caps, st.NextAttempt, turnID, plannerResultNotes(st.Result), planner.TerminationReasonFailureCap, deadlines.Hard)
 }
 
-func (r *Runtime) publishAwaitResume(ctx context.Context, input *RunInput, base *planner.PlanInput, turnID string, confirmations []confirmationAwait, items []planner.AwaitItem) error {
+func (r *Runtime) publishAwaitResume(ctx context.Context, input *RunInput, base *workflowPlanInput, turnID string, confirmations []confirmationAwait, items []planner.AwaitItem) error {
 	return r.publishHook(
 		ctx,
 		hooks.NewRunResumedEvent(base.RunContext.RunID, input.AgentID, base.RunContext.SessionID, "await_completed", "runtime", map[string]string{
@@ -327,7 +329,7 @@ func validateConfirmationDecision(dec interrupt.ConfirmationDecision, it confirm
 	return nil
 }
 
-func (r *Runtime) publishAuthorizationDecision(ctx context.Context, input *RunInput, base *planner.PlanInput, turnID string, it confirmationAwait, dec interrupt.ConfirmationDecision) error {
+func (r *Runtime) publishAuthorizationDecision(ctx context.Context, input *RunInput, base *workflowPlanInput, turnID string, it confirmationAwait, dec interrupt.ConfirmationDecision) error {
 	return r.publishHook(ctx, hooks.NewToolAuthorizationEvent(
 		base.RunContext.RunID,
 		input.AgentID,
@@ -340,7 +342,7 @@ func (r *Runtime) publishAuthorizationDecision(ctx context.Context, input *RunIn
 	), turnID)
 }
 
-func (r *Runtime) handleDeniedConfirmation(ctx context.Context, base *planner.PlanInput, st *runLoopState, turnID string, expectedChildren int, it confirmationAwait) ([]*planner.ToolResult, error) {
+func (r *Runtime) handleDeniedConfirmation(ctx context.Context, base *workflowPlanInput, st *runLoopState, turnID string, expectedChildren int, it confirmationAwait) ([]*planner.ToolResult, error) {
 	deniedResult := it.plan.DeniedResult
 	if err := r.publishDeniedConfirmationEvents(ctx, turnID, expectedChildren, it, deniedResult); err != nil {
 		return nil, err
@@ -393,19 +395,18 @@ func (r *Runtime) publishDeniedConfirmationEvents(ctx context.Context, turnID st
 	), turnID)
 }
 
-func (r *Runtime) recordConfirmationToolResult(ctx context.Context, base *planner.PlanInput, st *runLoopState, call planner.ToolRequest, tr *planner.ToolResult) error {
-	st.ToolEvents = append(st.ToolEvents, cloneToolResults([]*planner.ToolResult{tr})...)
-	if err := r.appendToolOutputs(ctx, st, []planner.ToolRequest{call}, []*planner.ToolResult{tr}); err != nil {
+func (r *Runtime) recordConfirmationToolResult(ctx context.Context, base *workflowPlanInput, st *runLoopState, call planner.ToolRequest, tr *planner.ToolResult) error {
+	if err := r.appendIndexResults(ctx, base, []planner.ToolRequest{call}, []*planner.ToolResult{tr}, true); err != nil {
 		return err
 	}
-	r.hideSuccessfulBookkeepingCallsFromPlanner(base, []*planner.ToolResult{tr})
-	return r.appendUserToolResults(base, []planner.ToolRequest{call}, []*planner.ToolResult{tr}, st.Ledger)
+	st.ToolEvents = append(st.ToolEvents, cloneToolResults([]*planner.ToolResult{tr})...)
+	return nil
 }
 
-func (r *Runtime) executeConfirmedToolCall(ctx context.Context, wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *planner.PlanInput, st *runLoopState, toolOpts engine.ActivityOptions, expectedChildren int, parentTracker *childTracker, turnID string, deadlines *runDeadlines, it confirmationAwait) ([]*planner.ToolResult, []*ToolPause, *RunOutput, error) {
+func (r *Runtime) executeConfirmedToolCall(ctx context.Context, wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *workflowPlanInput, st *runLoopState, toolOpts engine.ActivityOptions, expectedChildren int, parentTracker *childTracker, turnID string, deadlines *runDeadlines, it confirmationAwait) ([]*planner.ToolResult, []*ToolPause, *RunOutput, error) {
 	call := it.call
 	if call.ToolCallID == "" {
-		call.ToolCallID = generateDeterministicToolCallID(base.RunContext.RunID, call.TurnID, base.RunContext.Attempt, call.Name, 0)
+		return nil, nil, nil, errors.New("confirmed call is missing its canonical ID")
 	}
 	grouped, timeouts := r.groupToolCallsByTimeout([]planner.ToolRequest{call}, input, toolOpts.StartToCloseTimeout)
 	finishBy := confirmationFinishBy(deadlines)
@@ -437,7 +438,7 @@ func (r *Runtime) executeConfirmedToolCall(ctx context.Context, wfCtx engine.Wor
 		return nil, nil, nil, errors.New("terminal tool must not request a pause")
 	}
 	if timedOut {
-		out, err := r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.Caps, st.NextAttempt, turnID, plannerResultNotes(st.Result), planner.TerminationReasonTimeBudget, deadlines.Hard)
+		out, err := r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.AggUsage, st.Caps, st.NextAttempt, turnID, plannerResultNotes(st.Result), planner.TerminationReasonTimeBudget, deadlines.Hard)
 		return nil, nil, out, err
 	}
 	if terminal {
@@ -454,11 +455,10 @@ func confirmationFinishBy(deadlines *runDeadlines) time.Time {
 	return deadlines.Hard.Add(-deadlines.finalizeReserve())
 }
 
-func (r *Runtime) recordExecutedConfirmationResults(ctx context.Context, base *planner.PlanInput, st *runLoopState, call planner.ToolRequest, vals []*planner.ToolResult) error {
-	st.ToolEvents = append(st.ToolEvents, cloneToolResults(vals)...)
-	if err := r.appendToolOutputs(ctx, st, []planner.ToolRequest{call}, vals); err != nil {
+func (r *Runtime) recordExecutedConfirmationResults(ctx context.Context, base *workflowPlanInput, st *runLoopState, call planner.ToolRequest, vals []*planner.ToolResult) error {
+	if err := r.appendIndexResults(ctx, base, []planner.ToolRequest{call}, vals, false); err != nil {
 		return err
 	}
-	r.hideSuccessfulBookkeepingCallsFromPlanner(base, vals)
-	return r.appendUserToolResults(base, []planner.ToolRequest{call}, vals, st.Ledger)
+	st.ToolEvents = append(st.ToolEvents, cloneToolResults(vals)...)
+	return nil
 }

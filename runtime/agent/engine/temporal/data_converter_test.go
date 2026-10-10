@@ -14,7 +14,9 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 )
 
 func TestNewAgentDataConverter_RoundTripsToolResult(t *testing.T) {
@@ -85,39 +87,19 @@ func TestAgentDataConverterWireHelpersRejectNilBoundaryValues(t *testing.T) {
 	require.ErrorContains(t, decodeRunOutput(nil, &decoded), "payload is nil")
 }
 
-func TestNewAgentDataConverter_RoundTripsPlanActivityInputToolOutputs(t *testing.T) {
+func TestNewAgentDataConverter_RoundTripsPlanActivityView(t *testing.T) {
 	t.Parallel()
 
 	dc := NewAgentDataConverter(func(tools.Ident) (*tools.ToolSpec, bool) { return nil, false })
 	p, err := dc.ToPayload(&api.PlanActivityInput{
-		AgentID: "test.agent",
-		RunID:   "run-123",
-		Messages: []*model.Message{
-			{
-				Role: model.ConversationRoleUser,
-				Parts: []model.Part{
-					model.TextPart{Text: "hello"},
-				},
-			},
-		},
+		CallFilter:           api.PlanToolFilter{RestrictToTool: "test.tool", AllowedTags: []string{"read"}},
+		FinalizeMaxToolCalls: 3,
+		AgentID:              "test.agent",
+		RunID:                "run-123",
+		View:                 index.ViewRef{IndexHead: "sha256:head", Pending: []index.MessageEntry{{ID: 9, Kind: index.TypedInput, Hash: "sha256:answer", InputID: "approval", Chain: "sha256:chain"}}},
 		RunContext: run.Context{
 			RunID:   "run-123",
 			Attempt: 2,
-		},
-		ToolOutputs: []*api.ToolCallOutput{
-			{
-				Name:       "test.tool",
-				ToolCallID: "call-1",
-				Payload:    rawjson.Message([]byte(`{"input":"ok"}`)),
-				Result:     rawjson.Message([]byte(`{"output":"ok"}`)),
-				ServerData: rawjson.Message([]byte(`[{"kind":"evidence"}]`)),
-			},
-		},
-		TypedInputs: []planner.TypedInputOutput{
-			{
-				ID:      "approval",
-				Payload: rawjson.Message([]byte(`{"approved":true}`)),
-			},
 		},
 		Finalize: &planner.Termination{
 			Reason:  planner.TerminationReasonToolCap,
@@ -132,13 +114,13 @@ func TestNewAgentDataConverter_RoundTripsPlanActivityInputToolOutputs(t *testing
 			RemainingRecoveryTurns: 1,
 		},
 		Recovery: &api.ModelRecovery{
-			Kind:         model.OutputValidationOutputBounds,
-			ByteCount:    8192,
-			Usage:        model.TokenUsage{InputTokens: 11, OutputTokens: 17},
-			Attempt:      3,
-			Correction:   "replace with a shorter answer",
-			DisableTools: true,
-			ToolCatalog:  []tools.Ident{"test.tool"},
+			Kind:          model.OutputValidationOutputBounds,
+			ByteCount:     8192,
+			Usage:         model.TokenUsage{InputTokens: 11, OutputTokens: 17},
+			Attempt:       3,
+			CorrectionRef: "sha256:correction",
+			DisableTools:  true,
+			ToolCatalog:   []tools.Ident{"test.tool"},
 		},
 	})
 	require.NoError(t, err)
@@ -146,15 +128,12 @@ func TestNewAgentDataConverter_RoundTripsPlanActivityInputToolOutputs(t *testing
 	var decoded *api.PlanActivityInput
 	require.NoError(t, dc.FromPayload(p, &decoded))
 	require.NotNil(t, decoded)
-	require.Len(t, decoded.ToolOutputs, 1)
-	require.Equal(t, tools.Ident("test.tool"), decoded.ToolOutputs[0].Name)
-	require.Equal(t, "call-1", decoded.ToolOutputs[0].ToolCallID)
-	require.JSONEq(t, `{"input":"ok"}`, string(decoded.ToolOutputs[0].Payload))
-	require.JSONEq(t, `{"output":"ok"}`, string(decoded.ToolOutputs[0].Result))
-	require.JSONEq(t, `[{"kind":"evidence"}]`, string(decoded.ToolOutputs[0].ServerData))
-	require.Len(t, decoded.TypedInputs, 1)
-	require.Equal(t, "approval", decoded.TypedInputs[0].ID)
-	require.JSONEq(t, `{"approved":true}`, string(decoded.TypedInputs[0].Payload))
+	require.Equal(t, api.PlanToolFilter{RestrictToTool: "test.tool", AllowedTags: []string{"read"}}, decoded.CallFilter)
+	require.Equal(t, 3, decoded.FinalizeMaxToolCalls)
+	require.Equal(t, runstore.Hash("sha256:head"), decoded.View.IndexHead)
+	require.Len(t, decoded.View.Pending, 1)
+	require.Equal(t, "approval", decoded.View.Pending[0].InputID)
+	require.Equal(t, runstore.Hash("sha256:answer"), decoded.View.Pending[0].Hash)
 	require.NotNil(t, decoded.Finalize)
 	require.Equal(t, planner.TerminationReasonToolCap, decoded.Finalize.Reason)
 	require.Equal(t, "tool budget exhausted", decoded.Finalize.Message)
@@ -167,13 +146,13 @@ func TestNewAgentDataConverter_RoundTripsPlanActivityInputToolOutputs(t *testing
 		RemainingRecoveryTurns: 1,
 	}, decoded.PolicyCaps)
 	require.Equal(t, &api.ModelRecovery{
-		Kind:         model.OutputValidationOutputBounds,
-		ByteCount:    8192,
-		Usage:        model.TokenUsage{InputTokens: 11, OutputTokens: 17},
-		Attempt:      3,
-		Correction:   "replace with a shorter answer",
-		DisableTools: true,
-		ToolCatalog:  []tools.Ident{"test.tool"},
+		Kind:          model.OutputValidationOutputBounds,
+		ByteCount:     8192,
+		Usage:         model.TokenUsage{InputTokens: 11, OutputTokens: 17},
+		Attempt:       3,
+		CorrectionRef: "sha256:correction",
+		DisableTools:  true,
+		ToolCatalog:   []tools.Ident{"test.tool"},
 	}, decoded.Recovery)
 }
 

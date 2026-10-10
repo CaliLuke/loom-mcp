@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"example.com/agentfeatures/gen/features/agents/coordinator"
+	"example.com/agentfeatures/gen/features/agents/specialist/exports/delegated"
 	"example.com/agentfeatures/gen/features/toolsets/workflow"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	temporalengine "github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine/temporal"
@@ -16,6 +17,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	agentsruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -31,7 +33,7 @@ import (
 type historyReplayPlanner struct{}
 
 const (
-	workflowHistoryFile        = "testdata/workflow_protocol_v4.json"
+	workflowHistoryFile        = "testdata/workflow_protocol_v5.json"
 	workflowHistoryIdentity    = "loom-mcp-history-recorder"
 	workflowHistoryStickyQueue = "loom-mcp-history-recorder-sticky"
 )
@@ -167,14 +169,25 @@ func assertWorkflowHistoryAnonymized(t *testing.T, history *historypb.History) {
 
 func registerHistoryReplayAgent(t *testing.T, fx *featureRuntime) {
 	t.Helper()
-	registerCoordinatorToolsets(t, t.Context(), fx.rt, newRecordingWorkflowExecutor())
+	require.NoError(t, coordinator.RegisterUsedToolsets(t.Context(), fx.rt, coordinator.WithWorkflowExecutor(newRecordingWorkflowExecutor())))
+	reg, err := coordinator.NewCoordinatorDelegatedAgentToolsetRegistration(fx.rt, "", func(cfg *agentsruntime.AgentToolConfig) {
+		cfg.PreChildValidator = func(ctx context.Context, in *agentsruntime.AgentToolValidationInput) *agentsruntime.AgentToolValidationError {
+			messages, err := in.View.LoadMessages(ctx)
+			require.NoError(t, err)
+			require.GreaterOrEqual(t, len(messages), 2)
+			assert.Equal(t, "record this request", messageText(messages[0]))
+			return agentsruntime.NewAgentToolValidationError("topic requires evidence", []*tools.FieldIssue{{Field: "topic", Constraint: "invalid_format"}}, nil)
+		}
+	})
+	require.NoError(t, err)
+	require.NoError(t, fx.rt.RegisterToolset(reg))
 	require.NoError(t, coordinator.RegisterCoordinatorAgent(t.Context(), fx.rt, coordinator.CoordinatorAgentConfig{Planner: historyReplayPlanner{}}))
 }
 
 func (historyReplayPlanner) PlanStart(context.Context, *planner.PlanInput) (*planner.PlanResult, error) {
 	return &planner.PlanResult{ToolCalls: []planner.ToolRequest{{
 		Name: workflow.Draft, ToolCallID: "history-draft", Payload: rawjson.Message(`{"topic":"history replay"}`),
-	}}}, nil
+	}, {Name: delegated.Summarize, ToolCallID: "history-child", Payload: rawjson.Message(`{"topic":"history replay"}`)}}}, nil
 }
 
 func (historyReplayPlanner) PlanResume(context.Context, *planner.PlanResumeInput) (*planner.PlanResult, error) {
@@ -184,50 +197,104 @@ func (historyReplayPlanner) PlanResume(context.Context, *planner.PlanResumeInput
 	}}}, nil
 }
 
-// assertHistoryToolContent checks protocol 4 content recording across boundaries.
+// assertHistoryToolContent checks protocol 5 references and typed activity boundaries.
 func assertHistoryToolContent(t *testing.T, history *historypb.History) {
 	t.Helper()
-	var toolSchedule int64
-	var found bool
-	finishCalls := 0
-	contentCalls := 0
-	var contentSchedule, planSchedule, finishSchedule int64
+	schedules := make(map[int64]string)
+	counts := make(map[string]int)
+	seedCalls, resultBatches, toolCompletions, childValidations := 0, 0, 0, 0
+	var childHead string
 	for _, event := range history.Events {
-		if scheduled := event.GetActivityTaskScheduledEventAttributes(); scheduled != nil && scheduled.ActivityType.Name == "features.coordinator.executetool" {
-			toolSchedule = event.EventId
-			var input api.ToolInput
-			require.NoError(t, json.Unmarshal(scheduled.Input.Payloads[0].Data, &input))
-			assert.Equal(t, "run-protocol-history", input.RootRunID)
-		}
 		if scheduled := event.GetActivityTaskScheduledEventAttributes(); scheduled != nil {
-			switch scheduled.ActivityType.Name {
+			name := scheduled.ActivityType.Name
+			schedules[event.EventId] = name
+			counts[name]++
+			data := scheduled.Input.Payloads[0].Data
+			switch name {
 			case agentsruntime.RecordContentActivityName(coordinator.AgentID):
-				contentCalls++
-				contentSchedule = event.EventId
 				var input api.RecordContentInput
-				require.NoError(t, json.Unmarshal(scheduled.Input.Payloads[0].Data, &input))
+				require.NoError(t, json.Unmarshal(data, &input))
 				assert.Equal(t, "run-protocol-history", input.RootRunID)
-				require.Len(t, input.Items, 1)
-				var message model.Message
-				require.NoError(t, json.Unmarshal(input.Items[0], &message))
-				assert.Equal(t, "record this request", messageText(&message))
-			case "features.coordinator.plan":
-				planSchedule = event.EventId
+				if input.SeedMessages {
+					seedCalls++
+					require.Len(t, input.Items, 1)
+					var message model.Message
+					require.NoError(t, json.Unmarshal(input.Items[0], &message))
+					assert.Equal(t, "record this request", messageText(&message))
+				} else {
+					resultBatches++
+					require.NotEmpty(t, input.Items)
+				}
+			case agentsruntime.ChildDispatchActivityName(coordinator.AgentID):
+				var input api.ChildDispatchInput
+				require.NoError(t, json.Unmarshal(data, &input))
+				assert.Equal(t, delegated.Summarize, input.Call.Name)
+				assert.Equal(t, "run-protocol-history", input.ParentRun.RootRunID)
+				assert.NotEmpty(t, input.View.IndexHead)
+				require.Len(t, input.View.Pending, 1)
+				require.Len(t, input.View.Pending[0].Calls, 2)
+				assert.NotContains(t, string(data), "record this request")
+			case "features.coordinator.executetool":
+				var input api.ToolInput
+				require.NoError(t, json.Unmarshal(data, &input))
+				assert.Equal(t, "run-protocol-history", input.RootRunID)
+			case "features.coordinator.plan", "features.coordinator.resume":
+				var input api.PlanActivityInput
+				require.NoError(t, json.Unmarshal(data, &input))
+				assert.NotEmpty(t, input.View.IndexHead)
+				var fields map[string]jsontext.Value
+				require.NoError(t, json.Unmarshal(data, &fields))
+				for _, removed := range []string{"Messages", "ToolOutputs", "TypedInputs"} {
+					assert.NotContains(t, fields, removed)
+				}
+				if name == "features.coordinator.plan" {
+					assert.Empty(t, input.View.Pending)
+				} else {
+					assert.NotEmpty(t, input.View.Pending)
+					assert.Equal(t, childHead, string(input.View.IndexHead), "resume adopts the head committed by child validation")
+					for _, entry := range input.View.Pending {
+						assert.NotEqual(t, "assistant", string(entry.Kind), "committed assistant entries are no longer pending")
+					}
+				}
 			case agentsruntime.FinishRunActivityName(coordinator.AgentID):
-				finishSchedule = event.EventId
-				finishCalls++
 				var input api.FinishRunInput
-				require.NoError(t, json.Unmarshal(scheduled.Input.Payloads[0].Data, &input))
-				assert.Equal(t, "run-protocol-history", input.RootRunID)
-				require.Len(t, input.ToolEvents, 1)
+				require.NoError(t, json.Unmarshal(data, &input))
+				require.Len(t, input.ToolEvents, 2)
 				assert.NotEmpty(t, input.ToolEvents[0].Refs.Result)
 				assert.Empty(t, input.ToolEvents[0].Result)
+				assert.NotNil(t, input.ToolEvents[1].Error)
+			}
+		}
+		if completed := event.GetActivityTaskCompletedEventAttributes(); completed != nil {
+			if len(completed.GetResult().GetPayloads()) == 0 {
+				continue
+			}
+			data := completed.Result.Payloads[0].Data
+			switch schedules[completed.ScheduledEventId] {
+			case "features.coordinator.executetool":
+				toolCompletions++
+				var output api.ToolOutput
+				require.NoError(t, json.Unmarshal(data, &output))
+				assert.NotEmpty(t, output.Refs.Result)
+				assert.NotEmpty(t, output.Refs.Payload)
+				assert.Empty(t, output.Payload)
+			case agentsruntime.ChildDispatchActivityName(coordinator.AgentID):
+				childValidations++
+				var output api.ChildDispatchOutput
+				require.NoError(t, json.Unmarshal(data, &output))
+				require.NotNil(t, output.RetryHint)
+				assert.Equal(t, "topic requires evidence", output.Error)
+				assert.NotEmpty(t, output.IndexHead)
+				childHead = string(output.IndexHead)
+			case "features.coordinator.plan":
+				var output api.PlanActivityOutput
+				require.NoError(t, json.Unmarshal(data, &output))
+				assert.NotEmpty(t, output.IndexHead)
+				require.Len(t, output.ToolCallRefs, 2)
 			case "features.coordinator.resume":
-				var input api.PlanActivityInput
-				require.NoError(t, json.Unmarshal(scheduled.Input.Payloads[0].Data, &input))
-				require.Len(t, input.ToolOutputs, 1)
-				assert.NotEmpty(t, input.ToolOutputs[0].Refs.Result)
-				assert.Empty(t, input.ToolOutputs[0].Result)
+				var output api.PlanActivityOutput
+				require.NoError(t, json.Unmarshal(data, &output))
+				assert.NotEmpty(t, output.IndexHead)
 			}
 		}
 		if completed := event.GetWorkflowExecutionCompletedEventAttributes(); completed != nil {
@@ -235,37 +302,13 @@ func assertHistoryToolContent(t *testing.T, history *historypb.History) {
 			require.NoError(t, json.Unmarshal(completed.Result.Payloads[0].Data, &output))
 			assert.NotEmpty(t, output.ToolEventsRef)
 			assert.NotEmpty(t, output.FinalRef)
-			assert.Equal(t, 1, output.ToolEventCount)
+			assert.Equal(t, 2, output.ToolEventCount)
 		}
-
-		if completed := event.GetActivityTaskCompletedEventAttributes(); completed != nil {
-			switch completed.ScheduledEventId {
-			case contentSchedule:
-				var output api.RecordContentOutput
-				require.NoError(t, json.Unmarshal(completed.Result.Payloads[0].Data, &output))
-				require.Len(t, output.Refs, 1)
-				assert.NotEmpty(t, output.Refs[0])
-			case planSchedule:
-				var output api.PlanActivityOutput
-				require.NoError(t, json.Unmarshal(completed.Result.Payloads[0].Data, &output))
-				require.Len(t, output.ToolCallRefs, 1)
-				assert.NotEmpty(t, output.ToolCallRefs[0])
-			case finishSchedule:
-				var output api.FinishRunOutput
-				require.NoError(t, json.Unmarshal(completed.Result.Payloads[0].Data, &output))
-				assert.NotEmpty(t, output.FinalRef)
-			}
-		}
-		if completed := event.GetActivityTaskCompletedEventAttributes(); completed != nil && toolSchedule != 0 && completed.ScheduledEventId == toolSchedule {
-			var output api.ToolOutput
-			require.NoError(t, json.Unmarshal(completed.Result.Payloads[0].Data, &output))
-			assert.NotEmpty(t, output.Refs.Result)
-			assert.NotEmpty(t, output.Refs.Payload)
-			assert.NotEmpty(t, output.Payload)
-			found = true
-		}
+		assert.Nil(t, event.GetStartChildWorkflowExecutionInitiatedEventAttributes(), "rejected validation must not start a child")
 	}
-	assert.True(t, found, "recorded history must contain a completed tool activity with stored content")
-	assert.Equal(t, 1, finishCalls)
-	assert.Equal(t, 1, contentCalls)
+	assert.Equal(t, 1, counts[agentsruntime.FinishRunActivityName(coordinator.AgentID)])
+	assert.Equal(t, 1, seedCalls)
+	assert.Equal(t, 1, resultBatches)
+	assert.Equal(t, 1, toolCompletions)
+	assert.Equal(t, 1, childValidations)
 }

@@ -19,7 +19,7 @@ import (
 func TestContentChildOutputUsesRootScope(t *testing.T) {
 	for _, typed := range []bool{false, true} {
 		// Writes: parent call, child input, child events, child Final, parent result.
-		for _, failAt := range []int{0, 4, 5} {
+		for _, failAt := range []int{0, 5, 6} {
 			t.Run(fmt.Sprintf("typed=%v/fail=%d", typed, failAt), func(t *testing.T) {
 				store := &contentPathStore{Store: storeinmem.New(), failAt: func() int {
 					if typed && failAt > 0 {
@@ -58,10 +58,10 @@ func TestContentChildOutputUsesRootScope(t *testing.T) {
 				}, resume: func(_ context.Context, in *planner.PlanResumeInput) (*planner.PlanResult, error) {
 					resumed = true
 					require.Len(t, in.ToolOutputs, 1)
-					if failAt == 4 {
+					if failAt == 5 {
 						assert.Nil(t, childOutput)
 						assert.NotNil(t, in.ToolOutputs[0].Error)
-						assert.Empty(t, in.ToolOutputs[0].Refs)
+						assert.Empty(t, in.ToolOutputs[0].Refs.Result)
 					} else {
 						require.NotNil(t, childOutput)
 						if typed {
@@ -91,7 +91,7 @@ func TestContentChildOutputUsesRootScope(t *testing.T) {
 					return &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: contentMessage("parent final")}}, nil
 				}})
 				_, err := rt.MustClient("content.agent").Run(t.Context(), "session", nil, WithRunID("root"))
-				if failAt == 5 {
+				if failAt == 6 {
 					require.ErrorIs(t, err, runstore.ErrContentTooLarge)
 					assert.False(t, resumed)
 				} else {

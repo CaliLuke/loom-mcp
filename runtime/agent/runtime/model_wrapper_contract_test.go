@@ -276,11 +276,11 @@ func TestPlannerContextModelClientAndConsumeStreamDoNotDuplicateTranscriptOrUsag
 	expectedUsage := usage
 	expectedUsage.Model = ""
 	require.Equal(t, expectedUsage, out.Usage)
-	require.Len(t, out.Transcript, 1)
-	require.Equal(t, "hello", agentMessageText(out.Transcript[0]))
-	require.Len(t, out.Transcript[0].Parts, 2)
+	require.Len(t, testStoredTranscript(t, rt, out, "root"), 1)
+	require.Equal(t, "hello", agentMessageText(testStoredTranscript(t, rt, out, "root")[0]))
+	require.Len(t, testStoredTranscript(t, rt, out, "root")[0].Parts, 2)
 	var textParts, thinkingParts int
-	for _, part := range out.Transcript[0].Parts {
+	for _, part := range testStoredTranscript(t, rt, out, "root")[0].Parts {
 		switch part.(type) {
 		case model.TextPart:
 			textParts++
@@ -365,7 +365,7 @@ func TestRejectedStreamDoesNotPersistPresentationContent(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, out.Recovery)
 	require.Equal(t, model.OutputValidationOutputBounds, out.Recovery.Kind)
-	require.Empty(t, out.Transcript)
+	require.Empty(t, testStoredTranscript(t, rt, out, "root"))
 	for _, event := range runlog.events {
 		require.NotContains(t, string(event.Payload), secret)
 	}

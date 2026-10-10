@@ -71,7 +71,7 @@ func TestNewFromOptionsInstallsSessionAndMemorySubscribers(t *testing.T) {
 	runStarted := hooks.NewRunStartedEvent(
 		"run-1",
 		agent.Ident("agent-1"),
-		run.Context{RunID: "run-1", SessionID: "session-1"},
+		run.Context{RootRunID: "test-root", RunID: "run-1", SessionID: "session-1"},
 		nil,
 	)
 	require.NoError(t, bus.Publish(ctx, runStarted))

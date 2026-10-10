@@ -58,7 +58,7 @@ func TestPlannerTelemetryRecordsStableAttemptsAndOutcome(t *testing.T) {
 			},
 		},
 	}
-	runCtx := run.Context{RunID: "run-1", SessionID: "session-1", TurnID: "turn-1"}
+	runCtx := run.Context{RootRunID: "test-root", RunID: "run-1", SessionID: "session-1", TurnID: "turn-1"}
 
 	_, err := rt.planStart(context.Background(), reg, &planner.PlanInput{RunContext: runCtx})
 	require.NoError(t, err)
@@ -135,7 +135,7 @@ func TestCanonicalEventTelemetryDeduplicatesHookRetries(t *testing.T) {
 func TestCanonicalRunMetricsRecordLifecycleStatus(t *testing.T) {
 	recorder := &runtimeTelemetryRecorder{}
 	rt := New(WithMetrics(recorder), WithTracer(recorder))
-	runCtx := run.Context{RunID: "run-1"}
+	runCtx := run.Context{RootRunID: "test-root", RunID: "run-1"}
 	events := []hooks.Event{
 		hooks.NewRunStartedEvent("run-1", agent.Ident("service.agent"), runCtx, struct{}{}),
 		hooks.NewRunCompletedEvent("run-1", agent.Ident("service.agent"), "", runStatusSuccess, run.PhaseCompleted, nil),

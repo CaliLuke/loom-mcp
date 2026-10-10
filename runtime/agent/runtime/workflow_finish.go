@@ -25,7 +25,7 @@ import (
 func (r *Runtime) finishWithoutToolCalls(
 	ctx context.Context,
 	input *RunInput,
-	base *planner.PlanInput,
+	base *workflowPlanInput,
 	st *runLoopState,
 	turnID string,
 ) (*RunOutput, error) {
@@ -33,7 +33,7 @@ func (r *Runtime) finishWithoutToolCalls(
 	if err := r.validateFinishResult(ctx, result); err != nil {
 		return nil, err
 	}
-	finalMsg := finalPlannerMessage(&PlanActivityOutput{Result: result, Transcript: st.Transcript})
+	finalMsg := finalPlannerMessage(&PlanActivityOutput{Result: result})
 	if err := r.publishFinishArtifacts(ctx, input, base, turnID, result, finalMsg); err != nil {
 		return nil, err
 	}
@@ -79,7 +79,7 @@ func (r *Runtime) validateFinishResult(ctx context.Context, result *planner.Plan
 func (r *Runtime) publishFinishArtifacts(
 	ctx context.Context,
 	input *RunInput,
-	base *planner.PlanInput,
+	base *workflowPlanInput,
 	turnID string,
 	result *planner.PlanResult,
 	finalMsg *model.Message,
@@ -93,7 +93,7 @@ func (r *Runtime) publishFinishArtifacts(
 func (r *Runtime) publishFinishAssistantMessage(
 	ctx context.Context,
 	input *RunInput,
-	base *planner.PlanInput,
+	base *workflowPlanInput,
 	turnID string,
 	result *planner.PlanResult,
 	finalMsg *model.Message,
@@ -123,7 +123,7 @@ func (r *Runtime) publishFinishAssistantMessage(
 func (r *Runtime) publishAssistantTurnCommitted(
 	ctx context.Context,
 	input *RunInput,
-	base *planner.PlanInput,
+	base *workflowPlanInput,
 	turnID string,
 	msg *model.Message,
 ) error {
@@ -162,7 +162,7 @@ func validateTerminalPlanResult(result *planner.PlanResult) error {
 func (r *Runtime) finishAfterTerminalToolCalls(
 	ctx context.Context,
 	input *RunInput,
-	base *planner.PlanInput,
+	base *workflowPlanInput,
 	st *runLoopState,
 	turnID string,
 ) (*RunOutput, error) {
@@ -193,7 +193,7 @@ func (r *Runtime) finishAfterTerminalToolCalls(
 func (r *Runtime) finishAfterCompletionTool(
 	ctx context.Context,
 	input *RunInput,
-	base *planner.PlanInput,
+	base *workflowPlanInput,
 	st *runLoopState,
 	turnID string,
 	completion tools.Ident,

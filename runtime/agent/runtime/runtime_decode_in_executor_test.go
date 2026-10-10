@@ -71,5 +71,5 @@ func TestExecuteToolActivity_DecodeInExecutor_PassesRaw(t *testing.T) {
 	require.NotNil(t, out)
 	require.True(t, called)
 	require.False(t, decoded, "payload codec must not be used when DecodeInExecutor=true")
-	require.NotNil(t, out.Payload)
+	require.NotEmpty(t, out.Refs.Result)
 }

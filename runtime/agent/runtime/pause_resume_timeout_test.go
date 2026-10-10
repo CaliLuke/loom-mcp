@@ -14,6 +14,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	runloginmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog/inmem"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
 	sessioninmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/session/inmem"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
@@ -103,14 +104,14 @@ func TestMissingFieldsClarificationAwaitResumesWhenProvided(t *testing.T) {
 
 	input := &RunInput{AgentID: "svc.agent", RunID: "run-1", SessionID: "sess-1"}
 	seedRunMeta(t, rt, input)
-	base := &planner.PlanInput{
-		RunContext: run.Context{
+	base := testWorkflowInput(t, rt, &planner.PlanInput{
+		RunContext: run.Context{RootRunID: "test-root",
 			RunID:     input.RunID,
 			SessionID: input.SessionID,
 			TurnID:    "turn-1",
 		},
 		Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID}),
-	}
+	})
 	results := []*planner.ToolResult{{
 		Name:       tools.Ident("tool"),
 		ToolCallID: "tool-1",
@@ -122,36 +123,20 @@ func TestMissingFieldsClarificationAwaitResumesWhenProvided(t *testing.T) {
 		},
 	}}
 	baseCtx.clarifyCh <- &api.ClarificationAnswer{
-		Answer: "field=value",
+		AnswerRef: testPutBytes(t, rt, base.RunContext.RootRunID, []byte("field=value")),
 	}
 
 	nextAttempt := 2
 	deadline := wfCtx.Now().Add(1 * time.Hour)
-	out, err := rt.handleMissingFieldsPolicy(
-		wfCtx,
-		AgentRegistration{
-			ID:                 input.AgentID,
-			ResumeActivityName: "resume",
-			Policy:             RunPolicy{OnMissingFields: MissingFieldsAwaitClarification},
-		},
-		input,
-		base,
-		results,
-		results,
-		nil,
-		model.TokenUsage{},
-		policy.CapsState{},
-		&nextAttempt,
-		"turn-1",
-		nil,
-		ctrl,
-		&runDeadlines{Budget: deadline, Hard: deadline},
-		&runLoopState{},
-	)
+	out, err := rt.handleMissingFieldsPolicy(wfCtx, AgentRegistration{
+		ID:                 input.AgentID,
+		ResumeActivityName: "resume",
+		Policy:             RunPolicy{OnMissingFields: MissingFieldsAwaitClarification},
+	}, input, base, results, results, model.TokenUsage{}, policy.CapsState{}, &nextAttempt, "turn-1", nil, ctrl, &runDeadlines{Budget: deadline, Hard: deadline})
 	require.NoError(t, err)
 	require.Nil(t, out)
-	require.NotEmpty(t, base.Messages)
-	last := base.Messages[len(base.Messages)-1]
+	require.NotEmpty(t, testView(t, rt, base).Messages)
+	last := testView(t, rt, base).Messages[len(testView(t, rt, base).Messages)-1]
 	require.Equal(t, model.ConversationRoleUser, last.Role)
 
 	require.Equal(t, []string{
@@ -189,23 +174,23 @@ func TestHandleInterruptsAppliesResumeMessages(t *testing.T) {
 		RunID:       "run-1",
 		Notes:       "resumed_by_operator",
 		RequestedBy: "operator",
-		Messages:    []*model.Message{resumeMsg},
+		MessageRefs: []runstore.Hash{testPutJSON(t, rt, "test-root", resumeMsg)},
 	}
 
 	ctrl := interrupt.NewController(baseCtx)
 	input := &RunInput{AgentID: "svc.agent", RunID: "run-1", SessionID: "sess-1"}
 	seedRunMeta(t, rt, input)
-	base := &planner.PlanInput{
-		RunContext: run.Context{RunID: input.RunID, SessionID: input.SessionID, TurnID: "turn-1"},
-	}
+	base := testWorkflowInput(t, rt, &planner.PlanInput{
+		RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID, SessionID: input.SessionID, TurnID: "turn-1"},
+	})
 	nextAttempt := 2
 	deadline := baseCtx.Now().Add(1 * time.Hour)
 
-	err := rt.handleInterrupts(baseCtx, input, base, "turn-1", ctrl, &nextAttempt, deadline, &runLoopState{})
+	err := rt.handleInterrupts(baseCtx, input, base, "turn-1", ctrl, &nextAttempt, deadline)
 	require.NoError(t, err)
 
-	require.Len(t, base.Messages, 1, "applyResumeMessages should append the resume message to PlanInput.Messages")
-	require.Equal(t, resumeMsg, base.Messages[0])
+	require.Len(t, testView(t, rt, base).Messages, 1, "applyResumeMessages should append the resume message to PlanInput.Messages")
+	require.Equal(t, resumeMsg, testView(t, rt, base).Messages[0])
 	require.Equal(t, 3, nextAttempt, "applyResumeMessages must bump nextAttempt after setting it on the RunContext")
 	require.Equal(t, 2, base.RunContext.Attempt)
 	require.Equal(t, []string{
@@ -237,11 +222,11 @@ func TestHandleInterruptsTimeoutBalancesPauseResume(t *testing.T) {
 
 	input := &RunInput{AgentID: "svc.agent", RunID: "run-1", SessionID: "sess-1"}
 	seedRunMeta(t, rt, input)
-	base := &planner.PlanInput{RunContext: run.Context{RunID: input.RunID, SessionID: input.SessionID, TurnID: "turn-1"}}
+	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID, SessionID: input.SessionID, TurnID: "turn-1"}})
 	nextAttempt := 2
 	deadline := wfCtx.Now().Add(1 * time.Hour)
 
-	err := rt.handleInterrupts(wfCtx, input, base, "turn-1", ctrl, &nextAttempt, deadline, &runLoopState{})
+	err := rt.handleInterrupts(wfCtx, input, base, "turn-1", ctrl, &nextAttempt, deadline)
 	require.NoError(t, err)
 
 	require.Equal(t, []string{

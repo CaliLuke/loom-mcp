@@ -329,6 +329,7 @@ func (r *Runtime) ProvideClarification(ctx context.Context, ans interrupt.Clarif
 	}
 	stored := *ans
 	stored.AnswerRef = refs[0]
+	stored.Answer = ""
 	ans = &stored
 	if s, ok := r.Engine.(engine.Signaler); ok {
 		return r.mapAwaitSignalError(ctx, ans.RunID, s.SignalByID(ctx, ans.RunID, "", interrupt.SignalProvideClarification, ans))
@@ -395,6 +396,7 @@ func (r *Runtime) ProvideTypedInput(ctx context.Context, ans interrupt.TypedInpu
 	}
 	stored := *ans
 	stored.PayloadRef = refs[0]
+	stored.Payload = nil
 	ans = &stored
 	if s, ok := r.Engine.(engine.Signaler); ok {
 		return r.mapAwaitSignalError(ctx, ans.RunID, s.SignalByID(ctx, ans.RunID, "", interrupt.SignalProvideTypedInput, ans))

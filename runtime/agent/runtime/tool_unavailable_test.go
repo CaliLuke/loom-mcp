@@ -83,7 +83,7 @@ func TestPerRunFiltersPreserveInternalToolRecovery(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			input := &RunInput{AgentID: "svc.agent", RunID: "run-recover", Policy: test.policy}
-			base := &planner.PlanInput{RunContext: run.Context{RunID: input.RunID, Attempt: 1}}
+			base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID, Attempt: 1}})
 			st := &runLoopState{
 				Result: &planner.PlanResult{ToolCalls: []planner.ToolRequest{{
 					Name:       tools.ToolUnavailable,
@@ -93,6 +93,11 @@ func TestPerRunFiltersPreserveInternalToolRecovery(t *testing.T) {
 				ToolPolicy: toolPolicyEnvelope{Active: true, Allowed: []tools.Ident{"svc.read"}},
 			}
 
+			req := &PlanActivityInput{AgentID: input.AgentID, RunContext: base.RunContext, ToolPolicyActive: true, AllowedTools: st.ToolPolicy.Allowed}
+			rt.canonicalizePlanActivityToolCalls(st.Result, req)
+			out, err := rt.storePlanActivityOutput(t.Context(), base.RunContext.RootRunID, &PlanActivityOutput{Result: st.Result}, nil, nil)
+			require.NoError(t, err)
+			base.adopt(out)
 			allowed, toExecute, confirmations, _, err := rt.prepareToolTurnCalls(
 				context.Background(), input, base, st, "turn-1", nil, nil,
 			)

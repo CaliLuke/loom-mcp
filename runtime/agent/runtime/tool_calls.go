@@ -2,14 +2,15 @@ package runtime
 
 import (
 	"context"
+	"encoding/json/v2"
 	"fmt"
 	"time"
 
 	agent "github.com/CaliLuke/loom-mcp/v2/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/internal/cancellation"
-	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
@@ -86,7 +87,7 @@ type (
 		sessionID string
 		turnID    string
 		runCtx    *run.Context
-		messages  []*model.Message
+		base      *workflowPlanInput
 
 		expectedChildren int
 		parentTracker    *childTracker
@@ -253,7 +254,26 @@ func (r *Runtime) enforceToolResultContracts(spec tools.ToolSpec, call planner.T
 }
 
 func (e *toolBatchExec) publishToolResultReceived(ctx context.Context, call planner.ToolRequest, tr *planner.ToolResult, resultJSON rawjson.Message, duration time.Duration) error {
+	if wf := engine.WorkflowContextFromContext(ctx); wf != nil && tr.Refs.Result != "" && len(resultJSON) == 0 {
+		events, err := e.r.encodeToolEvents(ctx, []*planner.ToolResult{tr})
+		if err != nil {
+			return err
+		}
+		publication := &api.PublishToolContent{AgentID: e.agentID, RunContext: *e.runCtx, Call: call, Result: events[0], Duration: int64(duration)}
+		data, err := json.Marshal(publication)
+		if err != nil {
+			return err
+		}
+		return wf.PublishHook(ctx, engine.HookActivityCall{Name: hookActivityName, Input: &HookActivityInput{Type: publishToolContentCommand, Payload: rawjson.Message(data)}})
+	}
+	return e.publishToolResultEvent(ctx, call, tr, resultJSON, duration)
+}
+
+func (e *toolBatchExec) publishToolResultEvent(ctx context.Context, call planner.ToolRequest, tr *planner.ToolResult, resultJSON rawjson.Message, duration time.Duration) error {
 	parentID := parentToolCallID(call, e.runCtx)
+	if tr.Refs.Result == "" {
+		tr.Preview = e.r.formatResultPreview(ctx, call.Name, call.Payload, tr.Result, tr.Bounds)
+	}
 	ev := hooks.NewToolResultReceivedEvent(
 		e.runID,
 		e.agentID,
@@ -318,10 +338,28 @@ func minNonZeroDuration(current, candidate time.Duration) time.Duration {
 //
 // expectedChildren indicates how many child tools are expected to be discovered dynamically
 // by the tools in this batch (0 if not tracked).
-func (r *Runtime) executeToolCalls(wfCtx engine.WorkflowContext, activityName string, toolActOptions engine.ActivityOptions, agentID agent.Ident, runCtx *run.Context, messages []*model.Message, calls []planner.ToolRequest, expectedChildren int, parentTracker *childTracker, finishBy time.Time) ([]*ToolExecutionResult, bool, error) {
+func (r *Runtime) executeToolCalls(wfCtx engine.WorkflowContext, activityName string, toolActOptions engine.ActivityOptions, agentID agent.Ident, runCtx *run.Context, base *workflowPlanInput, calls []planner.ToolRequest, expectedChildren int, parentTracker *childTracker, finishBy time.Time) ([]*ToolExecutionResult, bool, error) {
 	if runCtx == nil {
 		return nil, false, fmt.Errorf("missing run context")
 	}
+	batch := contentBatchFromContext(wfCtx.Context())
+	if batch == nil {
+		batch = &workflowContentBatch{}
+		wrapped := contentWorkflowContext{WorkflowContext: wfCtx, batch: batch}
+		results, timedOut, err := r.executeToolCallsInBatch(wrapped, activityName, toolActOptions, agentID, runCtx, base, calls, expectedChildren, parentTracker, finishBy)
+		if err != nil {
+			return nil, false, err
+		}
+		if err := batch.flush(wfCtx.Context(), agentID, runCtx.RootRunID); err != nil {
+			return nil, false, err
+		}
+		return results, timedOut, nil
+	}
+
+	return r.executeToolCallsInBatch(wfCtx, activityName, toolActOptions, agentID, runCtx, base, calls, expectedChildren, parentTracker, finishBy)
+}
+
+func (r *Runtime) executeToolCallsInBatch(wfCtx engine.WorkflowContext, activityName string, toolActOptions engine.ActivityOptions, agentID agent.Ident, runCtx *run.Context, base *workflowPlanInput, calls []planner.ToolRequest, expectedChildren int, parentTracker *childTracker, finishBy time.Time) ([]*ToolExecutionResult, bool, error) {
 	exec := &toolBatchExec{
 		r:                r,
 		activityName:     activityName,
@@ -331,7 +369,7 @@ func (r *Runtime) executeToolCalls(wfCtx engine.WorkflowContext, activityName st
 		sessionID:        runCtx.SessionID,
 		turnID:           runCtx.TurnID,
 		runCtx:           runCtx,
-		messages:         messages,
+		base:             base,
 		expectedChildren: expectedChildren,
 		parentTracker:    parentTracker,
 		finishBy:         finishBy,

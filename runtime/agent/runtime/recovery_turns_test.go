@@ -118,7 +118,7 @@ func TestMixedToolBatchStartsFreshRecoveryAllowanceInBothWorkflowPaths(t *testin
 		}
 	}
 	input := &RunInput{AgentID: "svc.agent", RunID: "run-mixed-recovery"}
-	base := &planner.PlanInput{RunContext: run.Context{RunID: input.RunID}}
+	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID}})
 	deadlines := &runDeadlines{}
 	wfCtx := &testWorkflowContext{ctx: context.Background()}
 	reg := AgentRegistration{ID: input.AgentID}
@@ -229,7 +229,7 @@ func TestRunPlanActivityRecoveringCarriesBoundedRecovery(t *testing.T) {
 		api.PlanActivityInput{
 			AgentID:          "svc.agent",
 			RunID:            "run-1",
-			RunContext:       run.Context{RunID: "run-1", Attempt: 1},
+			RunContext:       run.Context{RootRunID: "test-root", RunID: "run-1", Attempt: 1},
 			ToolPolicyActive: true,
 			AllowedTools:     []tools.Ident{"svc.read"},
 			PolicyCaps:       caps,
@@ -245,7 +245,8 @@ func TestRunPlanActivityRecoveringCarriesBoundedRecovery(t *testing.T) {
 	require.Len(t, wfCtx.plannerCalls, 2)
 	require.Nil(t, wfCtx.plannerCalls[0].Input.Recovery)
 	require.Equal(t, 1, wfCtx.plannerCalls[0].Input.RunContext.Attempt)
-	require.Equal(t, "replace with a shorter answer", wfCtx.plannerCalls[1].Input.Recovery.Correction)
+	require.Empty(t, wfCtx.plannerCalls[1].Input.Recovery.Correction)
+	require.NotEmpty(t, wfCtx.plannerCalls[1].Input.Recovery.CorrectionRef)
 	require.Equal(t, 2, wfCtx.plannerCalls[1].Input.RunContext.Attempt)
 	require.True(t, wfCtx.plannerCalls[1].Input.ToolPolicyActive)
 	require.Empty(t, wfCtx.plannerCalls[1].Input.AllowedTools)
@@ -290,7 +291,7 @@ func TestRunPlanActivityRecoveringReturnsLastRecoveryAtCap(t *testing.T) {
 		api.PlanActivityInput{
 			AgentID:    "svc.agent",
 			RunID:      "run-cap",
-			RunContext: run.Context{RunID: "run-cap", Attempt: 1},
+			RunContext: run.Context{RootRunID: "test-root", RunID: "run-cap", Attempt: 1},
 			PolicyCaps: caps,
 		},
 		time.Time{},
@@ -338,7 +339,7 @@ func TestRunPlanActivityRecoveringRejectsUsageOverflow(t *testing.T) {
 		wfCtx,
 		"plan",
 		engine.ActivityOptions{},
-		api.PlanActivityInput{RunContext: run.Context{Attempt: 1}, PolicyCaps: caps},
+		api.PlanActivityInput{RunContext: run.Context{RootRunID: "test-root", Attempt: 1}, PolicyCaps: caps},
 		time.Time{},
 		&caps,
 		nil,
@@ -397,7 +398,7 @@ func TestExecuteWorkflowRunFinalizesAfterInitialModelRecoveryCap(t *testing.T) {
 		wfCtx,
 		reg,
 		input,
-		run.Context{RunID: input.RunID, Attempt: 1},
+		run.Context{RootRunID: "test-root", RunID: input.RunID, Attempt: 1},
 		"turn-1",
 		nil,
 	)
@@ -451,7 +452,7 @@ func TestResumeAfterToolTurnFinalizesAfterModelRecoveryCap(t *testing.T) {
 	rt := New()
 	wfCtx.finishRuntime = rt
 	input := &RunInput{RootRunID: "run-resume-cap", AgentID: "svc.agent", RunID: "run-resume-cap"}
-	base := &planner.PlanInput{RunContext: run.Context{RunID: input.RunID, Attempt: 1}}
+	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID, Attempt: 1}})
 	st := &runLoopState{
 		Caps:        policy.CapsState{MaxRecoveryTurns: 1, RemainingRecoveryTurns: 1},
 		NextAttempt: 2,
@@ -496,7 +497,7 @@ func TestRunPlanActivityRecoveringUsesExactRejectedRequestCatalog(t *testing.T) 
 		api.PlanActivityInput{
 			AgentID:          "svc.agent",
 			RunID:            "run-exact-catalog",
-			RunContext:       run.Context{RunID: "run-exact-catalog"},
+			RunContext:       run.Context{RootRunID: "test-root", RunID: "run-exact-catalog"},
 			ToolPolicyActive: true,
 			AllowedTools:     []tools.Ident{"svc.read", "svc.write"},
 			PolicyCaps:       caps,
@@ -514,17 +515,17 @@ func TestValidatePlanActivityOutputRejectsInvalidRecovery(t *testing.T) {
 	t.Parallel()
 
 	input := api.PlanActivityInput{
-		RunContext:       run.Context{Attempt: 4},
+		RunContext:       run.Context{RootRunID: "test-root", Attempt: 4},
 		ToolPolicyActive: true,
 		AllowedTools:     []tools.Ident{"svc.read"},
 	}
 	valid := func() *api.ModelRecovery {
 		return &api.ModelRecovery{
-			Kind:        model.OutputValidationToolArguments,
-			ByteCount:   12,
-			Attempt:     4,
-			Correction:  "replace the invalid arguments",
-			ToolCatalog: []tools.Ident{"svc.read", tools.ToolUnavailable},
+			Kind:          model.OutputValidationToolArguments,
+			ByteCount:     12,
+			Attempt:       4,
+			CorrectionRef: "sha256:correction",
+			ToolCatalog:   []tools.Ident{"svc.read", tools.ToolUnavailable},
 		}
 	}
 	require.NoError(t, validatePlanActivityOutput(&api.PlanActivityOutput{Recovery: valid()}, input))
@@ -533,11 +534,7 @@ func TestValidatePlanActivityOutputRejectsInvalidRecovery(t *testing.T) {
 		name   string
 		mutate func(*api.ModelRecovery)
 	}{
-		{name: "blank correction", mutate: func(recovery *api.ModelRecovery) { recovery.Correction = "  " }},
-		{name: "oversized correction", mutate: func(recovery *api.ModelRecovery) {
-			recovery.Correction = strings.Repeat("x", maxRecoveryCorrectionBytes+1)
-		}},
-		{name: "invalid utf8", mutate: func(recovery *api.ModelRecovery) { recovery.Correction = string([]byte{0xff}) }},
+		{name: "missing correction reference", mutate: func(recovery *api.ModelRecovery) { recovery.CorrectionRef = "" }},
 		{name: "negative byte count", mutate: func(recovery *api.ModelRecovery) { recovery.ByteCount = -1 }},
 		{name: "attempt mismatch", mutate: func(recovery *api.ModelRecovery) { recovery.Attempt = 3 }},
 		{name: "invalid usage", mutate: func(recovery *api.ModelRecovery) {
@@ -582,7 +579,7 @@ func TestValidatePlanActivityOutputRejectsInvalidRecovery(t *testing.T) {
 func TestValidatePlanActivityOutputRejectsInvalidTopLevelUsage(t *testing.T) {
 	t.Parallel()
 
-	input := api.PlanActivityInput{RunContext: run.Context{Attempt: 4}}
+	input := api.PlanActivityInput{RunContext: run.Context{RootRunID: "test-root", Attempt: 4}}
 	tests := []struct {
 		name string
 		out  *api.PlanActivityOutput
@@ -625,7 +622,7 @@ func TestRunPlanActivityNormalizesCompatibilityEchoes(t *testing.T) {
 	input := api.PlanActivityInput{
 		AgentID:          "svc.agent",
 		RunID:            "run-owned-state",
-		RunContext:       run.Context{RunID: "run-owned-state", Attempt: 4},
+		RunContext:       run.Context{RootRunID: "test-root", RunID: "run-owned-state", Attempt: 4},
 		ToolPolicyActive: true,
 		AllowedTools:     []tools.Ident{"svc.allowed"},
 		PolicyCaps: policy.CapsState{
@@ -664,13 +661,7 @@ func TestRunPlanActivityRecoveringRechecksInputBudgetAfterRecovery(t *testing.T)
 	input := api.PlanActivityInput{
 		AgentID:    "svc.agent",
 		RunID:      "run-recovery-budget",
-		RunContext: run.Context{RunID: "run-recovery-budget", Attempt: 1},
-		Messages: []*model.Message{{
-			Role: model.ConversationRoleUser,
-			Parts: []model.Part{model.TextPart{
-				Text: strings.Repeat("x", maxPlanActivityInputBytes-3_000),
-			}},
-		}},
+		RunContext: run.Context{RootRunID: "test-root", RunID: "run-recovery-budget", Attempt: 1, Labels: map[string]string{"large": strings.Repeat("x", maxPlanActivityInputBytes-1000)}},
 	}
 	require.NoError(t, enforcePlanActivityInputBudget(input))
 	wfCtx := &testWorkflowContext{
@@ -681,7 +672,7 @@ func TestRunPlanActivityRecoveringRechecksInputBudgetAfterRecovery(t *testing.T)
 				ByteCount:   10,
 				Attempt:     1,
 				Correction:  strings.Repeat("c", maxRecoveryCorrectionBytes),
-				ToolCatalog: []tools.Ident{},
+				ToolCatalog: []tools.Ident{tools.Ident(strings.Repeat("a", 2000))},
 			},
 		}},
 	}
@@ -832,7 +823,7 @@ func TestPlanActivitiesDoNotRecoverHookPersistenceFailure(t *testing.T) {
 			input := &PlanActivityInput{
 				AgentID:    "svc.agent",
 				RunID:      "run-hook-failure",
-				RunContext: run.Context{RunID: "run-hook-failure", Attempt: 1},
+				RunContext: run.Context{RootRunID: "test-root", RunID: "run-hook-failure", Attempt: 1},
 			}
 
 			out, activityErr := test.activity(rt, context.Background(), input)
@@ -881,16 +872,16 @@ func TestPlanActivitiesAppendRecoveryAfterHistoryPolicy(t *testing.T) {
 			input := &PlanActivityInput{
 				AgentID:    "svc.agent",
 				RunID:      "run-history-recovery",
-				RunContext: run.Context{RunID: "run-history-recovery", Attempt: 2},
-				Messages: []*model.Message{{
+				RunContext: run.Context{RootRunID: "test-root", RunID: "run-history-recovery", Attempt: 2},
+				View: testSeedView(t, rt, []*model.Message{{
 					Role:  model.ConversationRoleUser,
 					Parts: []model.Part{model.TextPart{Text: "original history"}},
-				}},
-				Recovery: &api.ModelRecovery{
+				}}, "test-root"),
+				Recovery: testRecovery(t, rt, "test-root", &api.ModelRecovery{
 					Kind:       model.OutputValidationToolArguments,
 					Attempt:    1,
 					Correction: "use the safe field contract",
-				},
+				}),
 			}
 
 			out, activityErr := test.activity(rt, context.Background(), input)
@@ -931,24 +922,13 @@ func TestRunFinalizationPlanRecoversRejectedFinalAnswer(t *testing.T) {
 		},
 	}
 	rt := &Runtime{logger: telemetry.NoopLogger{}}
-	base := &planner.PlanInput{
+	base := testWorkflowInput(t, rt, &planner.PlanInput{
 		Messages:   []*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "finish"}}}},
-		RunContext: run.Context{RunID: "run-finalize", Attempt: 4},
-	}
+		RunContext: run.Context{RootRunID: "test-root", RunID: "run-finalize", Attempt: 4},
+	})
 
-	output, usage, err := rt.runFinalizationPlan(
-		wfCtx,
-		AgentRegistration{ResumeActivityName: "resume"},
-		&RunInput{AgentID: "svc.agent", RunID: "run-finalize"},
-		base,
-		nil,
-		model.TokenUsage{},
-		policy.CapsState{MaxRecoveryTurns: 1, RemainingRecoveryTurns: 1},
-		4,
-		"turn-1",
-		planner.TerminationReasonToolCap,
-		time.Time{},
-	)
+	wfCtx.finishRuntime = rt
+	output, usage, err := rt.runFinalizationPlan(wfCtx, AgentRegistration{ResumeActivityName: "resume"}, &RunInput{AgentID: "svc.agent", RunID: "run-finalize"}, base, model.TokenUsage{}, policy.CapsState{MaxRecoveryTurns: 1, RemainingRecoveryTurns: 1}, 4, "turn-1", planner.TerminationReasonToolCap, time.Time{})
 	require.NoError(t, err)
 	require.Equal(t, model.TokenUsage{InputTokens: 4, OutputTokens: 6}, usage)
 	require.JSONEq(t, `{"status":"done"}`, agentMessageText(output.Result.FinalResponse.Message))
@@ -974,21 +954,10 @@ func TestRunFinalizationPlanStopsWhenToolFreeAnswerIsRejectedAtCap(t *testing.T)
 		}},
 	}
 	rt := New()
-	base := &planner.PlanInput{RunContext: run.Context{RunID: "run-finalizer-cap", Attempt: 3}}
+	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: "run-finalizer-cap", Attempt: 3}})
 
-	output, usage, err := rt.runFinalizationPlan(
-		wfCtx,
-		AgentRegistration{ResumeActivityName: "resume"},
-		&RunInput{AgentID: "svc.agent", RunID: "run-finalizer-cap"},
-		base,
-		nil,
-		model.TokenUsage{InputTokens: 1},
-		policy.CapsState{MaxRecoveryTurns: 1, RemainingRecoveryTurns: 0},
-		4,
-		"turn-1",
-		planner.TerminationReasonFailureCap,
-		time.Time{},
-	)
+	wfCtx.finishRuntime = rt
+	output, usage, err := rt.runFinalizationPlan(wfCtx, AgentRegistration{ResumeActivityName: "resume"}, &RunInput{AgentID: "svc.agent", RunID: "run-finalizer-cap"}, base, model.TokenUsage{InputTokens: 1}, policy.CapsState{MaxRecoveryTurns: 1, RemainingRecoveryTurns: 0}, 4, "turn-1", planner.TerminationReasonFailureCap, time.Time{})
 	require.Nil(t, output)
 	require.Equal(t, model.TokenUsage{InputTokens: 1}, usage)
 	require.ErrorIs(t, err, errRecoveryTurnCapExceeded)

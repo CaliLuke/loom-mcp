@@ -83,8 +83,8 @@ func TestContentRunStartRecordsEffectiveMessagesBeforePlanner(t *testing.T) {
 			registerContentAgent(t, rt, &stubPlanner{start: func(_ context.Context, in *planner.PlanInput) (*planner.PlanResult, error) {
 				called = true
 				writes := store.snapshot()
-				if assert.Len(t, writes, 3) {
-					for i, w := range writes {
+				if assert.Len(t, writes, 4) {
+					for i, w := range writes[:3] {
 						data, err := json.Marshal(effective[i])
 						require.NoError(t, err)
 						assert.Equal(t, "root", w.scope)
@@ -131,7 +131,7 @@ func TestContentPlannerCallsStoredBeforeReturn(t *testing.T) {
 				writes := store.snapshot()
 				require.Len(t, writes, 3)
 				require.NotEmpty(t, out.TranscriptRef)
-				transcriptJSON, err := json.Marshal(out.Transcript)
+				transcriptJSON, err := json.Marshal(testStoredTranscript(t, rt, out, "root"))
 				require.NoError(t, err)
 				assert.JSONEq(t, string(transcriptJSON), string(writes[0].data))
 				assert.Equal(t, writes[0].hash, out.TranscriptRef)

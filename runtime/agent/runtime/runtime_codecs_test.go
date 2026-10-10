@@ -60,6 +60,6 @@ func TestExecuteToolActivity_UsesGeneratedCodecs(t *testing.T) {
 	require.True(t, decodedCalled, "expected payload codec FromJSON to be called")
 	// Result encoding must come from the result codec ("encoded_result")
 	var got any
-	require.NoError(t, json.Unmarshal(out.Payload, &got))
+	require.NoError(t, json.Unmarshal(testStoredBytes(t, rt, "run", out.Refs.Result), &got))
 	require.Equal(t, "encoded_result", got)
 }

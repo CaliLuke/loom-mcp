@@ -32,6 +32,7 @@ const (
 	defaultResumeActivityTimeout      = 2 * time.Minute
 	defaultExecuteToolActivityTimeout = 2 * time.Minute
 	defaultHookActivityTimeout        = 15 * time.Second
+	defaultViewCacheRuns              = 256
 )
 
 var (
@@ -106,6 +107,18 @@ func WithRunStore(s runstore.Store) RuntimeOption {
 	}
 }
 
+// WithViewCacheRuns sets the maximum number of worker-local cached run views.
+// The default is 256. Evicted views rebuild from the run store on their next load.
+// It panics if n is not greater than zero.
+func WithViewCacheRuns(n int) RuntimeOption {
+	if n <= 0 {
+		panic("runtime: view cache runs must be greater than zero")
+	}
+	return func(o *Options) {
+		o.ViewCacheRuns = n
+	}
+}
+
 // WithPolicy sets the policy engine.
 func WithPolicy(p policy.Engine) RuntimeOption { return func(o *Options) { o.Policy = p } }
 
@@ -175,11 +188,7 @@ func WithQueue(name string) WorkerOption {
 
 // newFromOptions constructs a Runtime using the provided options.
 func newFromOptions(opts Options) *Runtime {
-	if opts.ToolConfirmation != nil {
-		if err := opts.ToolConfirmation.validate(); err != nil {
-			panic(err)
-		}
-	}
+	opts = resolveRuntimeOptions(opts)
 	bus := resolveRuntimeBus(opts.Hooks)
 	eng := resolveRuntimeEngine(opts.Engine)
 	metrics := resolveRuntimeMetrics(opts.Metrics)
@@ -199,6 +208,7 @@ func newFromOptions(opts Options) *Runtime {
 		Policy:               opts.Policy,
 		RunEventStore:        runEventStore,
 		RunStore:             resolveRunStore(opts.RunStore),
+		viewCacheRuns:        opts.ViewCacheRuns,
 		Bus:                  bus,
 		Stream:               opts.Stream,
 		hookActivityTimeout:  opts.HookActivityTimeout,
@@ -224,6 +234,23 @@ func newFromOptions(opts Options) *Runtime {
 	rt.PromptRegistry.SetObserver(rt.onPromptRendered)
 	rt.installRuntimeSubscribers(bus)
 	return rt
+}
+
+// resolveRuntimeOptions defaults the cache bound and validates configuration
+// before construction, preserving validation order and panic behavior.
+func resolveRuntimeOptions(opts Options) Options {
+	if opts.ViewCacheRuns < 0 {
+		panic("runtime: view cache runs must be greater than zero")
+	}
+	if opts.ViewCacheRuns == 0 {
+		opts.ViewCacheRuns = defaultViewCacheRuns
+	}
+	if opts.ToolConfirmation != nil {
+		if err := opts.ToolConfirmation.validate(); err != nil {
+			panic(err)
+		}
+	}
+	return opts
 }
 
 func resolveMemoryScopeResolver(resolver memory.ScopeResolver) memory.ScopeResolver {

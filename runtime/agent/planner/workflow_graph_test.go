@@ -30,15 +30,15 @@ func TestGraphWorkflowPlannerResumeDoesNotRerunCompletedParallelNode(t *testing.
 		},
 	})
 
-	result, err := p.PlanResume(context.Background(), &PlanResumeInput{
+	result, err := p.PlanResume(context.Background(), referencedGraphInput(t, &PlanResumeInput{
 		ToolOutputs: []*ToolOutput{{ToolCallID: "draft"}},
-	})
+	}))
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{"review"}, toolCallIDs(result.ToolCalls))
 
-	result, err = p.PlanResume(context.Background(), &PlanResumeInput{
+	result, err = p.PlanResume(context.Background(), referencedGraphInput(t, &PlanResumeInput{
 		ToolOutputs: []*ToolOutput{{ToolCallID: "draft"}, {ToolCallID: "review"}},
-	})
+	}))
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{"publish"}, toolCallIDs(result.ToolCalls))
 }
@@ -63,15 +63,15 @@ func TestGraphWorkflowPlannerLoopStopsAtMaxIterations(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"retry#1"}, toolCallIDs(first.ToolCalls))
 
-	second, err := p.PlanResume(context.Background(), &PlanResumeInput{
+	second, err := p.PlanResume(context.Background(), referencedGraphInput(t, &PlanResumeInput{
 		ToolOutputs: []*ToolOutput{{ToolCallID: "retry#1"}},
-	})
+	}))
 	require.NoError(t, err)
 	require.Equal(t, []string{"retry#2"}, toolCallIDs(second.ToolCalls))
 
-	final, err := p.PlanResume(context.Background(), &PlanResumeInput{
+	final, err := p.PlanResume(context.Background(), referencedGraphInput(t, &PlanResumeInput{
 		ToolOutputs: []*ToolOutput{{ToolCallID: "retry#1"}, {ToolCallID: "retry#2"}},
-	})
+	}))
 	require.NoError(t, err)
 	require.NotNil(t, final.FinalResponse)
 }
@@ -92,15 +92,15 @@ func TestGraphWorkflowPlannerLoopDependentsWaitUntilLoopDone(t *testing.T) {
 		},
 	})
 
-	second, err := p.PlanResume(context.Background(), &PlanResumeInput{
+	second, err := p.PlanResume(context.Background(), referencedGraphInput(t, &PlanResumeInput{
 		ToolOutputs: []*ToolOutput{{ToolCallID: "retry#1"}},
-	})
+	}))
 	require.NoError(t, err)
 	require.Equal(t, []string{"retry#2"}, toolCallIDs(second.ToolCalls))
 
-	next, err := p.PlanResume(context.Background(), &PlanResumeInput{
+	next, err := p.PlanResume(context.Background(), referencedGraphInput(t, &PlanResumeInput{
 		ToolOutputs: []*ToolOutput{{ToolCallID: "retry#1"}, {ToolCallID: "retry#2"}},
-	})
+	}))
 	require.NoError(t, err)
 	require.Equal(t, []string{"publish"}, toolCallIDs(next.ToolCalls))
 }
@@ -121,18 +121,18 @@ func TestGraphWorkflowPlannerRetriesFailedLoopAttempt(t *testing.T) {
 		},
 	})
 
-	next, err := p.PlanResume(context.Background(), &PlanResumeInput{
+	next, err := p.PlanResume(context.Background(), referencedGraphInput(t, &PlanResumeInput{
 		ToolOutputs: []*ToolOutput{{ToolCallID: "retry#1", Error: NewToolError("try again")}},
-	})
+	}))
 	require.NoError(t, err)
 	require.Equal(t, []string{"retry#2"}, toolCallIDs(next.ToolCalls))
 
-	final, err := p.PlanResume(context.Background(), &PlanResumeInput{
+	final, err := p.PlanResume(context.Background(), referencedGraphInput(t, &PlanResumeInput{
 		ToolOutputs: []*ToolOutput{
 			{ToolCallID: "retry#1", Error: NewToolError("try again")},
 			{ToolCallID: "retry#2", Result: rawjson.Message([]byte(`{"ok":true}`))},
 		},
-	})
+	}))
 	require.NoError(t, err)
 	require.Equal(t, []string{"publish"}, toolCallIDs(final.ToolCalls))
 }
@@ -151,12 +151,12 @@ func TestGraphWorkflowPlannerReportsLastFailureWhenAllLoopIterationsFail(t *test
 		},
 	})
 
-	result, err := p.PlanResume(context.Background(), &PlanResumeInput{
+	result, err := p.PlanResume(context.Background(), referencedGraphInput(t, &PlanResumeInput{
 		ToolOutputs: []*ToolOutput{
 			{ToolCallID: "retry#1", Error: NewToolError("first failure")},
 			{ToolCallID: "retry#2", Error: NewToolError("last failure")},
 		},
-	})
+	}))
 
 	require.Nil(t, result)
 	require.EqualError(t, err, `workflow node "retry" failed at "retry#2": last failure`)
@@ -178,12 +178,12 @@ func TestGraphWorkflowPlannerBranchAfterJoinSelectsTarget(t *testing.T) {
 		},
 	})
 
-	next, err := p.PlanResume(context.Background(), &PlanResumeInput{
+	next, err := p.PlanResume(context.Background(), referencedGraphInput(t, &PlanResumeInput{
 		ToolOutputs: []*ToolOutput{
 			{ToolCallID: "draft", Result: rawjson.Message([]byte(`{"ok":true}`))},
 			{ToolCallID: "review", Result: rawjson.Message([]byte(`{"approved":true}`))},
 		},
-	})
+	}))
 	require.NoError(t, err)
 	require.Equal(t, []string{"publish"}, toolCallIDs(next.ToolCalls))
 }
@@ -204,9 +204,9 @@ func TestGraphWorkflowPlannerTypedInputFeedsLaterNodes(t *testing.T) {
 	require.Equal(t, AwaitItemKindTypedInput, start.Await.Items[0].Kind)
 	require.Equal(t, "approval", start.Await.Items[0].TypedInput.ID)
 
-	next, err := p.PlanResume(context.Background(), &PlanResumeInput{
+	next, err := p.PlanResume(context.Background(), referencedGraphInput(t, &PlanResumeInput{
 		TypedInputs: []TypedInputOutput{{ID: "approval", Payload: rawjson.Message([]byte(`{"approved":true}`))}},
-	})
+	}))
 	require.NoError(t, err)
 	require.Equal(t, []string{"publish"}, toolCallIDs(next.ToolCalls))
 }
@@ -225,9 +225,9 @@ func TestGraphWorkflowPlannerBranchCanUseTypedInputPayload(t *testing.T) {
 		},
 	})
 
-	next, err := p.PlanResume(context.Background(), &PlanResumeInput{
+	next, err := p.PlanResume(context.Background(), referencedGraphInput(t, &PlanResumeInput{
 		TypedInputs: []TypedInputOutput{{ID: "approval", Payload: rawjson.Message([]byte(`{"content-type":"application/json"}`))}},
-	})
+	}))
 	require.NoError(t, err)
 	require.Equal(t, []string{"publish"}, toolCallIDs(next.ToolCalls))
 }
@@ -379,9 +379,9 @@ func TestGraphWorkflowPlannerStopsOnFailedToolOutput(t *testing.T) {
 		},
 	})
 
-	result, err := p.PlanResume(context.Background(), &PlanResumeInput{
+	result, err := p.PlanResume(context.Background(), referencedGraphInput(t, &PlanResumeInput{
 		ToolOutputs: []*ToolOutput{{ToolCallID: "draft", Error: NewToolError("boom")}},
-	})
+	}))
 
 	require.Nil(t, result)
 	require.ErrorContains(t, err, `workflow node "draft" failed at "draft": boom`)
@@ -417,12 +417,12 @@ func TestGraphWorkflowPlannerBranchSkipsUnselectedTargetsForLaterDependencies(t 
 		},
 	})
 
-	next, err := p.PlanResume(context.Background(), &PlanResumeInput{
+	next, err := p.PlanResume(context.Background(), referencedGraphInput(t, &PlanResumeInput{
 		TypedInputs: []TypedInputOutput{{ID: "approval", Payload: rawjson.Message([]byte(`{"approved":true}`))}},
 		ToolOutputs: []*ToolOutput{
 			{ToolCallID: "publish", Result: rawjson.Message([]byte(`{"ok":true}`))},
 		},
-	})
+	}))
 
 	require.NoError(t, err)
 	require.Equal(t, []string{"notify"}, toolCallIDs(next.ToolCalls))
@@ -509,14 +509,14 @@ func TestGraphWorkflowPlannerNestedBranchOnUnselectedPathDoesNotFire(t *testing.
 			p := NewGraphWorkflowPlanner(WorkflowGraphConfig{Nodes: nodes, FinalMessage: "done"})
 			typedInputs := []TypedInputOutput{{ID: "approval", Payload: rawjson.Message([]byte(tc.approval))}}
 
-			next, err := p.PlanResume(context.Background(), &PlanResumeInput{TypedInputs: typedInputs})
+			next, err := p.PlanResume(context.Background(), referencedGraphInput(t, &PlanResumeInput{TypedInputs: typedInputs}))
 			require.NoError(t, err)
 			require.ElementsMatch(t, tc.wantCalls, toolCallIDs(next.ToolCalls))
 
-			final, err := p.PlanResume(context.Background(), &PlanResumeInput{
+			final, err := p.PlanResume(context.Background(), referencedGraphInput(t, &PlanResumeInput{
 				TypedInputs: typedInputs,
 				ToolOutputs: tc.completionOutputs,
-			})
+			}))
 			require.NoError(t, err)
 			require.Empty(t, toolCallIDs(final.ToolCalls))
 			require.NotNil(t, final.FinalResponse)
@@ -541,9 +541,9 @@ func TestGraphWorkflowPlannerLoopUntilUsesLatestLoopIterationOutput(t *testing.T
 		FinalMessage: "done",
 	})
 
-	final, err := p.PlanResume(context.Background(), &PlanResumeInput{
+	final, err := p.PlanResume(context.Background(), referencedGraphInput(t, &PlanResumeInput{
 		ToolOutputs: []*ToolOutput{{ToolCallID: "retry#1", Result: rawjson.Message([]byte(`{"next-cursor":"complete"}`))}},
-	})
+	}))
 
 	require.NoError(t, err)
 	require.NotNil(t, final.FinalResponse)

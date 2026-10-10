@@ -39,7 +39,7 @@ func TestExecuteToolCalls_CancelsInFlightToolsWhenTimeBudgetReached(t *testing.T
 		toolFutures: map[string]*controlledToolFuture{"call-slow": fut},
 	}
 
-	runCtx := &run.Context{RunID: "run-1", SessionID: "sess-1", TurnID: "turn-1"}
+	runCtx := &run.Context{RootRunID: "test-root", RunID: "run-1", SessionID: "sess-1", TurnID: "turn-1"}
 	calls := []planner.ToolRequest{
 		{Name: tools.Ident("svc.tools.slow"), RunID: runCtx.RunID, SessionID: runCtx.SessionID, TurnID: runCtx.TurnID, ToolCallID: "call-slow"},
 	}

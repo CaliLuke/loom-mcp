@@ -10,7 +10,6 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
-	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
@@ -39,7 +38,7 @@ func (r *Runtime) executeGroupedToolCalls(
 	wfCtx engine.WorkflowContext,
 	reg AgentRegistration,
 	agentID agent.Ident,
-	base *planner.PlanInput,
+	base *workflowPlanInput,
 	expectedChildren int,
 	parentTracker *childTracker,
 	finishBy time.Time,
@@ -47,6 +46,10 @@ func (r *Runtime) executeGroupedToolCalls(
 	timeouts []time.Duration,
 	toolOpts engine.ActivityOptions,
 ) ([]*ToolExecutionResult, bool, error) {
+	if base.content == nil {
+		base.content = &workflowContentBatch{}
+	}
+	wfCtx = contentWorkflowContext{WorkflowContext: wfCtx, batch: base.content}
 	var out []*ToolExecutionResult
 	timedOutAny := false
 	for i := range grouped {
@@ -54,7 +57,7 @@ func (r *Runtime) executeGroupedToolCalls(
 		if timeouts[i] > 0 {
 			opt.StartToCloseTimeout = timeouts[i]
 		}
-		sub, timedOut, err := r.executeToolCalls(wfCtx, reg.ExecuteToolActivity, opt, agentID, &base.RunContext, base.Messages, grouped[i], expectedChildren, parentTracker, finishBy)
+		sub, timedOut, err := r.executeToolCalls(wfCtx, reg.ExecuteToolActivity, opt, agentID, &base.RunContext, base, grouped[i], expectedChildren, parentTracker, finishBy)
 		if err != nil {
 			return nil, false, err
 		}
@@ -64,57 +67,6 @@ func (r *Runtime) executeGroupedToolCalls(
 		}
 	}
 	return out, timedOutAny, nil
-}
-
-// appendUserToolResults appends a user message with tool_result blocks for the
-// executed tools and updates the ledger. Tool results are ordered to match the
-// assistant tool_use IDs from the allowed calls slice so that provider
-// handshakes remain deterministic regardless of execution timing.
-//
-// If any tool has a ResultReminder configured in its spec, a system message
-// with the reminder text is appended after the tool results to provide
-// backstage guidance to the model.
-func (r *Runtime) appendUserToolResults(
-	base *planner.PlanInput,
-	allowed []planner.ToolRequest,
-	vals []*planner.ToolResult,
-	led *transcript.Ledger,
-) error {
-	if len(vals) == 0 {
-		return nil
-	}
-	parts, specs, reminders, err := r.buildToolResultArtifacts(allowed, vals)
-	if err != nil {
-		return err
-	}
-	if len(specs) > 0 {
-		led.AppendUserToolResults(specs)
-	}
-	if len(parts) == 0 {
-		return nil
-	}
-
-	base.Messages = append(base.Messages, &model.Message{
-		Role:  model.ConversationRoleUser,
-		Parts: parts,
-	})
-
-	if len(reminders) > 0 {
-		var reminderText strings.Builder
-		for i, rem := range reminders {
-			if i > 0 {
-				reminderText.WriteString("\n\n")
-			}
-			reminderText.WriteString("<system-reminder>")
-			reminderText.WriteString(rem)
-			reminderText.WriteString("</system-reminder>")
-		}
-		base.Messages = append(base.Messages, &model.Message{
-			Role:  model.ConversationRoleSystem,
-			Parts: []model.Part{model.TextPart{Text: reminderText.String()}},
-		})
-	}
-	return nil
 }
 
 type timeoutRule struct {
@@ -189,76 +141,6 @@ func resolvedToolTimeout(name tools.Ident, rules *toolTimeoutRules, defaultTimeo
 	return defaultTimeout
 }
 
-func (r *Runtime) buildToolResultArtifacts(
-	allowed []planner.ToolRequest,
-	vals []*planner.ToolResult,
-) ([]model.Part, []transcript.ToolResultSpec, []string, error) {
-	resultsByID := make(map[string]*planner.ToolResult, len(vals))
-	for _, tr := range vals {
-		if tr == nil || tr.ToolCallID == "" {
-			continue
-		}
-		resultsByID[tr.ToolCallID] = tr
-	}
-	parts := make([]model.Part, 0, len(resultsByID))
-	specs := make([]transcript.ToolResultSpec, 0, len(resultsByID))
-	var reminders []string
-	for _, call := range allowed {
-		tr, ok := resultsByID[call.ToolCallID]
-		if !ok || tr == nil || tr.ToolCallID == "" {
-			continue
-		}
-		content, err := r.toolResultContent(tr)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		resultSpec := transcript.ToolResultSpec{ToolUseID: tr.ToolCallID, Content: content, IsError: tr.Error != nil}
-		specs = append(specs, resultSpec)
-		if tr.Error == nil && r.isBookkeeping(tr.Name) {
-			continue
-		}
-		parts = append(parts, model.ToolResultPart{ToolUseID: tr.ToolCallID, Content: content, IsError: tr.Error != nil})
-		reminders = append(reminders, r.toolResultReminders(tr)...)
-	}
-	return parts, specs, reminders, nil
-}
-
-func (r *Runtime) hideSuccessfulBookkeepingCallsFromPlanner(base *planner.PlanInput, vals []*planner.ToolResult) {
-	hidden := make(map[string]struct{})
-	for _, result := range vals {
-		if result != nil && result.Error == nil && result.ToolCallID != "" && r.isBookkeeping(result.Name) {
-			hidden[result.ToolCallID] = struct{}{}
-		}
-	}
-	if len(hidden) == 0 {
-		return
-	}
-	for i := len(base.Messages) - 1; i >= 0; i-- {
-		message := base.Messages[i]
-		if message == nil || message.Role != model.ConversationRoleAssistant {
-			continue
-		}
-		parts := message.Parts[:0]
-		for _, part := range message.Parts {
-			toolUse, ok := part.(model.ToolUsePart)
-			if ok {
-				if _, hide := hidden[toolUse.ID]; hide {
-					delete(hidden, toolUse.ID)
-					continue
-				}
-			}
-			parts = append(parts, part)
-		}
-		message.Parts = parts
-		if len(message.Parts) == 0 {
-			base.Messages = append(base.Messages[:i], base.Messages[i+1:]...)
-		}
-		if len(hidden) == 0 {
-			return
-		}
-	}
-}
-
 func (r *Runtime) toolResultReminders(tr *planner.ToolResult) []string {
 	var reminders []string
 	if spec, ok := r.toolSpec(tr.Name); ok && spec.ResultReminder != "" {
@@ -306,7 +188,7 @@ func (r *Runtime) toolResultContent(tr *planner.ToolResult) (any, error) {
 func (r *Runtime) hardProtectionIfNeeded(
 	ctx context.Context,
 	agentID agent.Ident,
-	base *planner.PlanInput,
+	base *workflowPlanInput,
 	vals []*planner.ToolResult,
 	turnID string,
 ) (bool, error) {
@@ -343,59 +225,11 @@ func (r *Runtime) hardProtectionIfNeeded(
 	return false, nil
 }
 
-// appendToolOutputs records canonical planner tool outputs in run-loop state.
-//
-// Contract:
-//   - Calls must already have deterministic ToolCallIDs.
-//   - Results are matched back to calls by ToolCallID so await-provided results
-//     preserve the requested call order.
-func (r *Runtime) appendToolOutputs(ctx context.Context, st *runLoopState, calls []planner.ToolRequest, results []*planner.ToolResult) error {
-	if len(calls) == 0 {
-		return nil
-	}
-	outputs, err := r.buildPlannerToolOutputs(ctx, calls, results)
-	if err != nil {
-		return err
-	}
-	for _, output := range outputs {
-		if output == nil || output.Error != nil || !r.isBookkeeping(output.Name) {
-			st.ToolOutputs = append(st.ToolOutputs, output)
-		}
-	}
-
-	return nil
-}
-
-// buildNextResumeRequest converts the base plan input into provider-ready
-// messages and builds the next PlanActivityInput.
-func (r *Runtime) buildNextResumeRequest(
-	agentID agent.Ident,
-	base *planner.PlanInput,
-	toolOutputs []*planner.ToolOutput,
-	typedInputs []planner.TypedInputOutput,
-	nextAttempt *int,
-) (PlanActivityInput, error) {
+// buildNextResumeRequest carries only the committed head and one step's entries.
+func (r *Runtime) buildNextResumeRequest(agentID agent.Ident, base *workflowPlanInput, nextAttempt *int) (PlanActivityInput, error) {
 	resumeCtx := base.RunContext
 	resumeCtx.Attempt = *nextAttempt
 	*nextAttempt++
-	plannerMsgs := cloneMessages(base.Messages)
-	if err := transcript.ValidateBedrock(plannerMsgs, false); err != nil {
-		return PlanActivityInput{}, fmt.Errorf("invalid Bedrock transcript for run %s: %w", base.RunContext.RunID, err)
-	}
-	encodedToolOutputs, err := encodePlannerToolOutputs(toolOutputs)
-	if err != nil {
-		return PlanActivityInput{}, err
-	}
-	out := PlanActivityInput{
-		AgentID:     agentID,
-		RunID:       base.RunContext.RunID,
-		Messages:    plannerMsgs,
-		RunContext:  resumeCtx,
-		ToolOutputs: encodedToolOutputs,
-		TypedInputs: cloneTypedInputOutputs(typedInputs),
-	}
-	if err := enforcePlanActivityInputBudget(out); err != nil {
-		return PlanActivityInput{}, err
-	}
-	return out, nil
+	out := PlanActivityInput{AgentID: agentID, RunID: resumeCtx.RunID, RunContext: resumeCtx, View: base.view()}
+	return out, enforcePlanActivityInputBudget(out)
 }

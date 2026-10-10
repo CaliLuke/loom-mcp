@@ -11,9 +11,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
@@ -114,8 +112,8 @@ func validateModelRecovery(recovery *ModelRecovery, input PlanActivityInput) err
 	if recovery == nil {
 		return errors.New("recovery is required")
 	}
-	if strings.TrimSpace(recovery.Correction) == "" || len(recovery.Correction) > maxRecoveryCorrectionBytes || !utf8.ValidString(recovery.Correction) {
-		return errors.New("correction must be non-empty, valid UTF-8, and within the recovery bound")
+	if recovery.CorrectionRef == "" {
+		return errors.New("correction reference is required")
 	}
 	if recovery.ByteCount < 0 {
 		return errors.New("byte count must be non-negative")
@@ -239,6 +237,8 @@ func (r *Runtime) runPlanActivityRecovering(
 			out.Usage = recoveryUsage
 			return out, errRecoveryTurnCapExceeded
 		}
+		input.View.IndexHead = out.IndexHead
+		input.View.Pending = nil
 		input.Recovery = out.Recovery
 		input.PolicyCaps = *caps
 		input.RunContext.Attempt++
@@ -289,7 +289,7 @@ func (r *Runtime) logPlanActivityResult(ctx context.Context, out *PlanActivityOu
 	)
 }
 
-func (r *Runtime) publishPlannerNotes(ctx context.Context, base *planner.PlanInput, input *RunInput, turnID string, notes []planner.PlannerAnnotation) error {
+func (r *Runtime) publishPlannerNotes(ctx context.Context, base *workflowPlanInput, input *RunInput, turnID string, notes []planner.PlannerAnnotation) error {
 	for _, note := range notes {
 		if err := r.publishHook(ctx, hooks.NewPlannerNoteEvent(
 			base.RunContext.RunID, input.AgentID, base.RunContext.SessionID, note.Text, note.Labels,

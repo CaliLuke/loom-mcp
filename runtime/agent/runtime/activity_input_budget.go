@@ -18,7 +18,19 @@ import (
 	"fmt"
 )
 
+// PlanActivityInputBudgetError reports an oversized planner activity envelope.
+type PlanActivityInputBudgetError struct {
+	Bytes int
+	Limit int
+	RunID string
+}
+
 const maxPlanActivityInputBytes = 1_000_000
+
+// Error describes the serialized envelope size and configured limit.
+func (e *PlanActivityInputBudgetError) Error() string {
+	return fmt.Sprintf("runtime: plan activity input exceeds budget (%d > %d bytes, run_id=%s)", e.Bytes, e.Limit, e.RunID)
+}
 
 func enforcePlanActivityInputBudget(input PlanActivityInput) error {
 	b, err := json.Marshal(input)
@@ -28,12 +40,5 @@ func enforcePlanActivityInputBudget(input PlanActivityInput) error {
 	if len(b) <= maxPlanActivityInputBytes {
 		return nil
 	}
-	return fmt.Errorf(
-		"runtime: plan activity input exceeds budget (%d > %d bytes, run_id=%s, messages=%d, tool_outputs=%d)",
-		len(b),
-		maxPlanActivityInputBytes,
-		input.RunID,
-		len(input.Messages),
-		len(input.ToolOutputs),
-	)
+	return &PlanActivityInputBudgetError{Bytes: len(b), Limit: maxPlanActivityInputBytes, RunID: input.RunID}
 }

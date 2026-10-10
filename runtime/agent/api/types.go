@@ -4,7 +4,6 @@ package api
 
 import (
 	"encoding/hex"
-	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"fmt"
 	"time"
@@ -20,6 +19,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 )
 
 type (
@@ -258,6 +258,8 @@ type (
 	// - This is required for agent-as-tool: child workflow outputs cross a workflow boundary,
 	//   and `any` fields would otherwise rehydrate as map[string]any.
 	ToolEvent struct {
+		// Preview is the planner-visible result summary.
+		Preview string
 		// Refs addresses stored activity content in the root run scope. ServerData and
 		// Payload are server-only and must never enter model-facing messages.
 		Refs tools.ResultRefs
@@ -330,6 +332,9 @@ type (
 	// - This preserves the exact executed tool boundary for planners that need
 	//   authoritative execution history.
 	ToolCallOutput struct {
+		// Call addresses the stored dispatched call when Refs.Payload is empty.
+		Call runstore.Hash
+
 		// Refs addresses stored activity content in the root run scope. ServerData and
 		// Payload are server-only and must never enter model-facing messages.
 		Refs tools.ResultRefs
@@ -385,22 +390,13 @@ type (
 		// RunID identifies the run being planned.
 		RunID string
 
-		// Messages is the current conversation transcript provided to the planner.
-		Messages []*model.Message
+		// CallFilter preserves per-run filtering before canonical IDs are assigned.
+		CallFilter PlanToolFilter
 
-		// RunContext carries nested-run metadata (parent IDs, tool identifiers, etc.).
+		// View addresses the committed transcript plus one step's pending entries.
+		View index.ViewRef
+		// RunContext carries nested-run metadata.
 		RunContext run.Context
-
-		// ToolOutputs is the accumulated executed tool-call history for the run so far.
-		//
-		// Contract:
-		// - This is the sole planner-facing execution-history field across the
-		//   workflow/activity boundary.
-		// - Entries preserve the canonical tool input, output, and server data bytes.
-		ToolOutputs []*ToolCallOutput
-
-		// TypedInputs is the accumulated schema-typed human input history for the run so far.
-		TypedInputs []planner.TypedInputOutput
 
 		// Finalize requests a final turn with no further tool calls.
 		Finalize *planner.Termination
@@ -415,6 +411,8 @@ type (
 
 		// PolicyCaps carries the cap state used to derive AllowedTools.
 		PolicyCaps policy.CapsState
+		// FinalizeMaxToolCalls preserves the per-turn cap while preparing terminal calls.
+		FinalizeMaxToolCalls int
 
 		// Recovery carries bounded correction guidance from the rejected activity
 		// this planner invocation replaces. It never contains rejected model output.
@@ -444,14 +442,17 @@ type (
 		// Result is the planner output describing next tool calls, await requests, or final response.
 		Result *planner.PlanResult
 
-		// Transcript contains the provider-visible transcript produced by the planner.
-		Transcript []*model.Message
+		// IndexHead is returned only after the input pending entries have been stored.
+		IndexHead runstore.Hash
 
 		// TranscriptRef addresses the encoded non-empty Transcript in the root scope.
 		TranscriptRef runstore.Hash
 
 		// ToolCallRefs addresses each returned Result.ToolCalls entry, in order.
 		ToolCallRefs []runstore.Hash
+
+		// AwaitCallRefs contains canonical question/external call refs by ToolCallID.
+		AwaitCallRefs map[string]runstore.Hash
 
 		// Usage is the token usage reported by the model provider when available.
 		Usage model.TokenUsage
@@ -514,6 +515,10 @@ type (
 
 	// ToolOutput is returned by tool executors after invoking the tool implementation.
 	ToolOutput struct {
+		// Preview is the planner-visible result summary.
+		Preview string
+		// ResultBytes is the stored eligible result size.
+		ResultBytes int
 		// Refs addresses stored activity content in the root run scope. ServerData and
 		// Payload are server-only and must never enter model-facing messages.
 		Refs tools.ResultRefs
@@ -765,7 +770,6 @@ func (r ModelRecovery) MarshalJSON() ([]byte, error) {
 		ByteCount     int
 		Usage         model.TokenUsage
 		Attempt       int
-		Correction    string
 		CorrectionRef runstore.Hash
 		DisableTools  bool
 		ToolCatalog   []tools.Ident
@@ -776,7 +780,6 @@ func (r ModelRecovery) MarshalJSON() ([]byte, error) {
 		ByteCount:     r.ByteCount,
 		Usage:         r.Usage,
 		Attempt:       r.Attempt,
-		Correction:    r.Correction,
 		CorrectionRef: r.CorrectionRef,
 		DisableTools:  r.DisableTools,
 		ToolCatalog:   r.ToolCatalog,
@@ -794,7 +797,6 @@ func (r *ModelRecovery) UnmarshalJSON(data []byte) error {
 		ByteCount     int
 		Usage         model.TokenUsage
 		Attempt       int
-		Correction    string
 		CorrectionRef runstore.Hash
 		DisableTools  bool
 		ToolCatalog   []tools.Ident
@@ -815,7 +817,7 @@ func (r *ModelRecovery) UnmarshalJSON(data []byte) error {
 	r.ByteCount = decoded.ByteCount
 	r.Usage = decoded.Usage
 	r.Attempt = decoded.Attempt
-	r.Correction = decoded.Correction
+	r.Correction = ""
 	r.CorrectionRef = decoded.CorrectionRef
 	r.DisableTools = decoded.DisableTools
 	r.ToolCatalog = decoded.ToolCatalog
@@ -917,51 +919,4 @@ func decodePolicyToolTimeouts(timeouts map[tools.Ident]int64) map[tools.Ident]ti
 		decoded[name] = time.Duration(timeout)
 	}
 	return decoded
-}
-
-// UnmarshalJSON handles decoding PlanActivityOutput so that Transcript entries are
-// deserialized through the richer model.Message decoder (which materializes Part
-// implementations). This keeps workflows resilient to legacy payloads.
-func (o *PlanActivityOutput) UnmarshalJSON(data []byte) error {
-	type alias struct {
-		Result           *planner.PlanResult `json:"Result"` //nolint:tagliatelle
-		TranscriptRef    runstore.Hash
-		ToolCallRefs     []runstore.Hash
-		Transcript       []jsontext.Value `json:"Transcript"`       //nolint:tagliatelle
-		Usage            model.TokenUsage `json:"Usage"`            //nolint:tagliatelle
-		ToolPolicyActive bool             `json:"ToolPolicyActive"` //nolint:tagliatelle
-		AllowedTools     []tools.Ident    `json:"AllowedTools"`     //nolint:tagliatelle
-		PolicyCaps       policy.CapsState `json:"PolicyCaps"`       //nolint:tagliatelle
-		Recovery         *ModelRecovery   `json:"Recovery"`         //nolint:tagliatelle
-		Attempt          int              `json:"Attempt"`          //nolint:tagliatelle
-	}
-	var tmp alias
-	if err := json.Unmarshal(data, &tmp); err != nil {
-		return err
-	}
-
-	o.Result = tmp.Result
-	o.TranscriptRef = tmp.TranscriptRef
-	o.ToolCallRefs = tmp.ToolCallRefs
-	o.Usage = tmp.Usage
-	o.ToolPolicyActive = tmp.ToolPolicyActive
-	o.AllowedTools = tmp.AllowedTools
-	o.PolicyCaps = tmp.PolicyCaps
-	o.Recovery = tmp.Recovery
-	o.Attempt = tmp.Attempt
-	if len(tmp.Transcript) == 0 {
-		o.Transcript = nil
-		return nil
-	}
-
-	out := make([]*model.Message, 0, len(tmp.Transcript))
-	for i, raw := range tmp.Transcript {
-		var msg model.Message
-		if err := json.Unmarshal(raw, &msg); err != nil {
-			return fmt.Errorf("decode Transcript[%d]: %w", i, err)
-		}
-		out = append(out, &msg)
-	}
-	o.Transcript = out
-	return nil
 }

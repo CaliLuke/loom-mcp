@@ -14,8 +14,10 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 	"github.com/stretchr/testify/require"
 )
 
@@ -95,14 +97,14 @@ func TestPlanStartActivityInvokesPlanner(t *testing.T) {
 	pl := &stubPlanner{start: func(ctx context.Context, input *planner.PlanInput) (*planner.PlanResult, error) {
 		called = true
 		require.NotNil(t, input)
-		require.Equal(t, run.Context{RunID: "run-123"}, input.RunContext)
+		require.Equal(t, run.Context{RootRunID: "test-root", RunID: "run-123"}, input.RunContext)
 		require.Len(t, input.Messages, 1)
 		require.Equal(t, "hello", agentMessageText(input.Messages[0]))
 		require.NotNil(t, input.Agent)
 		return &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: &model.Message{Role: "assistant", Parts: []model.Part{model.TextPart{Text: "ok"}}}}}, nil
 	}}
 	rt := newTestRuntimeWithPlanner("service.agent", pl)
-	input := PlanActivityInput{AgentID: "service.agent", RunID: "run-123", Messages: []*model.Message{{Role: "user", Parts: []model.Part{model.TextPart{Text: "hello"}}}}, RunContext: run.Context{RunID: "run-123"}}
+	input := PlanActivityInput{AgentID: "service.agent", RunID: "run-123", View: testSeedView(t, rt, []*model.Message{{Role: "user", Parts: []model.Part{model.TextPart{Text: "hello"}}}}, "test-root"), RunContext: run.Context{RootRunID: "test-root", RunID: "run-123"}}
 	out, err := rt.PlanStartActivity(context.Background(), &input)
 	require.NoError(t, err)
 	require.True(t, called)
@@ -136,17 +138,17 @@ func TestPlanResumeActivityPassesToolOutputs(t *testing.T) {
 		require.Len(t, input.ToolOutputs, 1)
 		require.Equal(t, tools.Ident("svc.ts.tool"), input.ToolOutputs[0].Name)
 		require.Equal(t, "call-1", input.ToolOutputs[0].ToolCallID)
-		require.JSONEq(t, `{"from":"test"}`, string(input.ToolOutputs[0].Payload))
-		require.JSONEq(t, `{"status":"ok"}`, string(input.ToolOutputs[0].Result))
-		require.JSONEq(t, `[{"kind":"evidence"}]`, string(input.ToolOutputs[0].ServerData))
+		require.JSONEq(t, `{"from":"test"}`, string(testLoadToolPayload(t, ctx, input)))
+		require.JSONEq(t, `{"status":"ok"}`, string(testLoadToolResult(t, ctx, input)))
+		require.JSONEq(t, `[{"kind":"evidence"}]`, string(testLoadServerData(t, ctx, input)))
 		return &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: "svc.other.tool"}}}, nil
 	}}
 	rt := newTestRuntimeWithPlanner("service.agent", pl)
 	input := PlanActivityInput{
-		AgentID:     "service.agent",
-		RunID:       "run-123",
-		RunContext:  run.Context{RootRunID: "root", RunID: "run-123", Attempt: 3},
-		ToolOutputs: toolOutputs,
+		AgentID:    "service.agent",
+		RunID:      "run-123",
+		RunContext: run.Context{RootRunID: "root", RunID: "run-123", Attempt: 3},
+		View:       testOutputView(t, rt, toolOutputs),
 	}
 	out, err := rt.PlanResumeActivity(context.Background(), &input)
 	require.NoError(t, err)
@@ -195,27 +197,12 @@ func TestBuildPlannerToolOutputsPreservesOmittedResultMetadata(t *testing.T) {
 	require.JSONEq(t, `[{"kind":"evidence"}]`, string(outputs[0].ServerData))
 }
 
-func TestBuildNextResumeRequestRejectsNilToolOutputEntry(t *testing.T) {
-	t.Parallel()
-
-	rt := &Runtime{}
-	base := &planner.PlanInput{
-		RunContext: run.Context{
-			RunID:     "run-123",
-			SessionID: "sess-1",
-		},
-	}
-	nextAttempt := 1
-
-	_, err := rt.buildNextResumeRequest(
-		"svc.agent",
-		base,
-		[]*planner.ToolOutput{nil},
-		nil,
-		&nextAttempt,
-	)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "nil tool output")
+func TestPlannerViewRejectsMissingOutputMetadata(t *testing.T) {
+	rt := New()
+	base := &workflowPlanInput{}
+	require.NoError(t, base.appendEntry(index.MessageEntry{Kind: index.Structural, Structural: &index.StructuralEntry{Kind: index.PolicyDenial, ProtocolVersion: index.TemplateProtocolVersion}, Output: "sha256:missing"}))
+	_, err := rt.loadView(t.Context(), "root", "run", base.view())
+	require.ErrorIs(t, err, runstore.ErrNotFound)
 }
 
 func TestPlanResumeActivityPreservesEmptyRawJSONPayloads(t *testing.T) {

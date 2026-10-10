@@ -38,7 +38,7 @@ func TestContentInlineResultBeforeResume(t *testing.T) {
 				data, err = store.Get(t.Context(), "root", result.Refs.ServerData)
 				require.NoError(t, err)
 				assert.JSONEq(t, `{"private":true}`, string(data))
-				assert.Len(t, store.snapshot(), 3)
+				assert.Len(t, store.snapshot(), 5)
 				return &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: &model.Message{Role: model.ConversationRoleAssistant}}}, nil
 			}})
 			_, err := rt.MustClient("content.agent").Run(t.Context(), "session", nil, WithRunID("root"))
@@ -64,8 +64,8 @@ func TestContentErrorOnlyInlineDoesNotStoreResult(t *testing.T) {
 		return &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: spec.Name, ToolCallID: "error", Payload: rawjson.Message(`{}`)}}}, nil
 	}, resume: func(_ context.Context, in *planner.PlanResumeInput) (*planner.PlanResult, error) {
 		require.Len(t, in.ToolOutputs, 1)
-		assert.Empty(t, in.ToolOutputs[0].Refs)
-		assert.Len(t, store.snapshot(), 1, "only the planner call is stored")
+		assert.Empty(t, in.ToolOutputs[0].Refs.Result)
+		assert.Len(t, store.snapshot(), 3, "call, output metadata, and segment")
 		return &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: contentMessage("done")}}, nil
 	}})
 	_, err := rt.MustClient("content.agent").Run(t.Context(), "session", nil, WithRunID("root"))

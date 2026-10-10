@@ -530,9 +530,9 @@ func TestExecuteToolActivitySearchMemoryPreservesRuntimeLabels(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, out)
-	require.Contains(t, string(out.Payload), "activity tenant memory")
-	require.NotContains(t, string(out.Payload), "visibility")
-	require.NotContains(t, string(out.Payload), "memory.namespace")
+	require.Contains(t, string(testStoredBytes(t, rt, "run-1", out.Refs.Result)), "activity tenant memory")
+	require.NotContains(t, string(testStoredBytes(t, rt, "run-1", out.Refs.Result)), "visibility")
+	require.NotContains(t, string(testStoredBytes(t, rt, "run-1", out.Refs.Result)), "memory.namespace")
 }
 
 func TestPlanStartActivityInjectsPreloadedMemory(t *testing.T) {
@@ -558,7 +558,7 @@ func TestPlanStartActivityInjectsPreloadedMemory(t *testing.T) {
 	out, err := rt.PlanStartActivity(ctx, &PlanActivityInput{
 		AgentID: "service.agent",
 		RunID:   "run-123",
-		RunContext: run.Context{
+		RunContext: run.Context{RootRunID: "test-root",
 			RunID:  "run-123",
 			Labels: map[string]string{"tenant": "acme"},
 		},
@@ -594,7 +594,7 @@ func TestPlanStartActivityPreloadCurrentRunWithSessionIDReturnsRunEvents(t *test
 	out, err := rt.PlanStartActivity(ctx, &PlanActivityInput{
 		AgentID: "service.agent",
 		RunID:   "run-123",
-		RunContext: run.Context{
+		RunContext: run.Context{RootRunID: "test-root",
 			RunID:     "run-123",
 			SessionID: "sess-1",
 		},
@@ -636,10 +636,10 @@ func TestPlanStartActivityInjectsLongTermMemoryFromHistoryFilteredLatestUserText
 	out, err := rt.PlanStartActivity(ctx, &PlanActivityInput{
 		AgentID: "service.agent",
 		RunID:   "run-123",
-		Messages: []*model.Message{
+		View: testSeedView(t, rt, []*model.Message{
 			{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "unfiltered question"}}},
-		},
-		RunContext: run.Context{
+		}, "test-root"),
+		RunContext: run.Context{RootRunID: "test-root",
 			RunID:  "run-123",
 			Labels: map[string]string{"memory.user_id": "user-1"},
 		},
@@ -668,10 +668,10 @@ func TestPlanResumeActivitySkipsLongTermPreloadForToolResultOnlyUserMessage(t *t
 	out, err := rt.PlanResumeActivity(ctx, &PlanActivityInput{
 		AgentID: "service.agent",
 		RunID:   "run-123",
-		Messages: []*model.Message{
+		View: testSeedView(t, rt, []*model.Message{
 			{Role: model.ConversationRoleUser, Parts: []model.Part{model.ToolResultPart{ToolUseID: "call-1", Content: map[string]any{"ok": true}}}},
-		},
-		RunContext: run.Context{
+		}, "test-root"),
+		RunContext: run.Context{RootRunID: "test-root",
 			RunID:  "run-123",
 			Labels: map[string]string{"memory.user_id": "user-1"},
 		},
@@ -699,10 +699,10 @@ func TestPlanStartActivityLongTermPreloadRejectsInvalidResolvedScope(t *testing.
 	_, err := rt.PlanStartActivity(ctx, &PlanActivityInput{
 		AgentID: "service.agent",
 		RunID:   "run-123",
-		Messages: []*model.Message{
+		View: testSeedView(t, rt, []*model.Message{
 			{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "find saved memory"}}},
-		},
-		RunContext: run.Context{RunID: "run-123"},
+		}, "test-root"),
+		RunContext: run.Context{RootRunID: "test-root", RunID: "run-123"},
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "user-scoped memory requires a user id")

@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json/v2"
 	"fmt"
-	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 	"testing"
 	"text/template"
 
@@ -17,6 +16,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/prompt"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	runloginmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog/inmem"
+	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 	sessioninmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/session/inmem"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
@@ -212,12 +212,13 @@ func TestDefaultAgentToolExecute_PreChildValidatorReturnsToolResult(t *testing.T
 	}
 	exec := defaultAgentToolExecute(rt, cfg)
 	call := planner.ToolRequest{
-		Name:      tools.Ident("tool"),
+		Name: tools.Ident("tool"), RootRunID: "run",
 		RunID:     "run",
 		SessionID: "sess-1",
 		Payload:   rawjson.Message([]byte(`{"sources":["x"]}`)),
 	}
 	rt.toolSpecs[call.Name] = newAnyJSONSpec(call.Name, "svc.tools")
+	rt.toolsets = map[string]ToolsetRegistration{"svc.tools": NewAgentToolsetRegistration(rt, cfg)}
 	seedParentRun(t, rt.SessionStore, call.RunID, call.SessionID)
 
 	result, err := exec(ctx, &call)
@@ -528,7 +529,7 @@ func TestBuildAgentChildRequest_PreservesCanonicalToolArgs(t *testing.T) {
 		},
 	}
 
-	_, nestedRunCtx, err := rt.buildAgentChildRequest(context.Background(), cfg, call, nil, nil)
+	_, nestedRunCtx, err := rt.buildAgentChildRequest(context.Background(), cfg, call)
 	require.NoError(t, err)
 	require.Equal(t, payload, nestedRunCtx.ToolArgs)
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/reminder"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript"
 )
 
 const plannerThoughtCodeKey = "code"
@@ -31,13 +32,32 @@ func (r *Runtime) PlanStartActivity(ctx context.Context, input *PlanActivityInpu
 	stopHeartbeat := startActivityHeartbeat(ctx)
 	defer stopHeartbeat()
 
+	view, err := r.loadView(ctx, input.RunContext.RootRunID, input.RunID, input.View)
+	if err != nil {
+		return nil, err
+	}
+	owned := *input
+	input = &owned
+	input.View.IndexHead, input.View.Pending = view.Head, nil
+	if input.Recovery != nil {
+		copy := *input.Recovery
+		data, err := r.RunStore.Get(ctx, input.RunContext.RootRunID, copy.CorrectionRef)
+		if err != nil {
+			return nil, err
+		}
+		copy.Correction = string(data)
+		if err := validateRecoveryCorrection(copy.Correction); err != nil {
+			return nil, err
+		}
+		input.Recovery = &copy
+	}
 	events := newPlannerEvents(r, input.AgentID, input.RunID, input.RunContext.SessionID, input.RunContext.TurnID)
 	recoveryRecorder := &modelRecoveryRecorder{}
 	reg, agentCtx, err := r.plannerContext(ctx, input, events, recoveryRecorder)
 	if err != nil {
 		return nil, err
 	}
-	planInput, err := r.startPlanInput(ctx, reg, agentCtx, events, input)
+	planInput, err := r.startPlanInput(ctx, reg, agentCtx, events, input, view)
 	if err != nil {
 		return nil, err
 	}
@@ -55,12 +75,13 @@ func (r *Runtime) startPlanInput(
 	agentCtx planner.PlannerContext,
 	events planner.PlannerEvents,
 	input *PlanActivityInput,
+	view *loadedView,
 ) (*planner.PlanInput, error) {
 	preloadedMemory, err := r.preloadMemory(ctx, reg.Policy.PreloadMemory, string(input.AgentID), input.RunContext, agentCtx.Memory())
 	if err != nil {
 		return nil, err
 	}
-	messages, err := r.applyHistoryPolicy(ctx, reg, input.Messages)
+	messages, err := r.applyHistoryPolicy(ctx, reg, view.Messages)
 	if err != nil {
 		return nil, err
 	}
@@ -94,17 +115,32 @@ func (r *Runtime) PlanResumeActivity(ctx context.Context, input *PlanActivityInp
 	stopHeartbeat := startActivityHeartbeat(ctx)
 	defer stopHeartbeat()
 
+	view, err := r.loadView(ctx, input.RunContext.RootRunID, input.RunID, input.View)
+	if err != nil {
+		return nil, err
+	}
+	owned := *input
+	input = &owned
+	input.View.IndexHead, input.View.Pending = view.Head, nil
+	if input.Recovery != nil {
+		copy := *input.Recovery
+		data, err := r.RunStore.Get(ctx, input.RunContext.RootRunID, copy.CorrectionRef)
+		if err != nil {
+			return nil, err
+		}
+		copy.Correction = string(data)
+		if err := validateRecoveryCorrection(copy.Correction); err != nil {
+			return nil, err
+		}
+		input.Recovery = &copy
+	}
 	events := newPlannerEvents(r, input.AgentID, input.RunID, input.RunContext.SessionID, input.RunContext.TurnID)
 	recoveryRecorder := &modelRecoveryRecorder{}
 	reg, agentCtx, err := r.plannerContext(ctx, input, events, recoveryRecorder)
 	if err != nil {
 		return nil, err
 	}
-	toolOutputs, err := r.decodeToolOutputs(ctx, input.RunContext.RootRunID, input.ToolOutputs)
-	if err != nil {
-		return nil, err
-	}
-	planInput, err := r.resumePlanInput(ctx, reg, agentCtx, events, input, toolOutputs)
+	planInput, err := r.resumePlanInput(ctx, reg, agentCtx, events, input, view)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +165,7 @@ func (r *Runtime) resolvePlanActivityRecovery(
 		if err != nil {
 			return nil, true, err
 		}
-		out, err := r.storePlanActivityOutput(ctx, input.RunContext.RootRunID, recoveryPlanActivityOutput(input, recovery, usage))
+		out, err := r.storePlanActivityOutput(ctx, input.RunContext.RootRunID, recoveryPlanActivityOutput(input, recovery, usage), nil, nil)
 		return out, true, err
 	}
 	if recoveryErr != nil {
@@ -148,7 +184,9 @@ func (r *Runtime) completePlanActivity(
 	events *runtimePlannerEvents,
 	recorder *modelRecoveryRecorder,
 ) (*PlanActivityOutput, error) {
-	r.canonicalizePlanActivityToolCalls(result, input)
+	if err := r.preparePlanActivityCalls(ctx, input, result); err != nil {
+		return nil, err
+	}
 	if err := events.hookError(); err != nil {
 		events.discardModelPresentations(ctx)
 		return nil, err
@@ -166,26 +204,44 @@ func (r *Runtime) completePlanActivity(
 	}
 	transcript := events.exportTranscript()
 	normalizeTranscriptRawJSON(transcript)
+	if result.Streamed && result.FinalResponse != nil && agentMessageText(result.FinalResponse.Message) == "" {
+		if text := transcriptText(transcript); text != "" {
+			result.FinalResponse.Message = newTextAgentMessage(model.ConversationRoleAssistant, text)
+		}
+	}
 	return r.storePlanActivityOutput(ctx, input.RunContext.RootRunID, &PlanActivityOutput{
 		Result:           result,
-		Transcript:       transcript,
+		IndexHead:        input.View.IndexHead,
 		Usage:            usage,
 		ToolPolicyActive: input.ToolPolicyActive,
 		AllowedTools:     cloneToolIdents(input.AllowedTools),
 		PolicyCaps:       input.PolicyCaps,
 		Attempt:          input.RunContext.Attempt,
-	})
+	}, transcript, canonicalAwaitCalls(result))
 }
 
 func (r *Runtime) canonicalizePlanActivityToolCalls(result *planner.PlanResult, input *PlanActivityInput) {
-	if result == nil || len(result.ToolCalls) == 0 {
+	if result == nil {
 		return
 	}
-	calls := r.rewriteUnknownToolCalls(result.ToolCalls, toolPolicyEnvelope{
+	calls := r.applyPerRunOverrides(context.Background(), &RunInput{Policy: &PolicyOverrides{RestrictToTool: input.CallFilter.RestrictToTool, AllowedTags: input.CallFilter.AllowedTags, DeniedTags: input.CallFilter.DeniedTags}}, result.ToolCalls)
+	calls = r.rewriteUnknownToolCalls(calls, toolPolicyEnvelope{
 		Active:  input.ToolPolicyActive,
 		Allowed: cloneToolIdents(input.AllowedTools),
 	})
-	result.ToolCalls = calls
+	base := &workflowPlanInput{RunContext: input.RunContext}
+	parent := newChildTracker(input.RunContext.ParentToolCallID)
+	result.ToolCalls = r.prepareAllowedCallsMetadata(input.AgentID, base, calls, parent)
+	if input.Finalize != nil {
+		for i := range result.ToolCalls {
+			call := &result.ToolCalls[i]
+			call.ToolCallID = generateDeterministicToolCallID(input.RunContext.RunID, input.RunContext.TurnID, input.RunContext.Attempt, call.Name, i)
+			if call.Labels == nil {
+				call.Labels = make(map[string]string)
+			}
+			call.Labels[FinalizationReasonLabel] = string(input.Finalize.Reason)
+		}
+	}
 }
 
 func plannerActivityError(ctx context.Context, events *runtimePlannerEvents, err error) error {
@@ -209,13 +265,21 @@ func (r *Runtime) resumePlanInput(
 	agentCtx planner.PlannerContext,
 	events planner.PlannerEvents,
 	input *PlanActivityInput,
-	toolOutputs []*planner.ToolOutput,
+	view *loadedView,
 ) (*planner.PlanResumeInput, error) {
+	if input.Finalize != nil {
+		view.Typed = nil
+	} else {
+		view.Messages = cloneMessages(view.Messages)
+		if err := transcript.ValidateBedrock(view.Messages, false); err != nil {
+			return nil, err
+		}
+	}
 	preloadedMemory, err := r.preloadMemory(ctx, reg.Policy.PreloadMemory, string(input.AgentID), input.RunContext, agentCtx.Memory())
 	if err != nil {
 		return nil, err
 	}
-	messages, err := r.applyHistoryPolicy(ctx, reg, input.Messages)
+	messages, err := r.applyHistoryPolicy(ctx, reg, view.Messages)
 	if err != nil {
 		return nil, err
 	}
@@ -229,28 +293,14 @@ func (r *Runtime) resumePlanInput(
 		RunContext:             input.RunContext,
 		Agent:                  agentCtx,
 		Events:                 events,
-		ToolOutputs:            toolOutputs,
-		TypedInputs:            cloneTypedInputOutputs(input.TypedInputs),
+		ToolOutputs:            view.Outputs,
+		Content:                viewContent{store: r.RunStore, scope: input.RunContext.RootRunID},
+		TypedInputs:            view.Typed,
 		Finalize:               input.Finalize,
 		Reminders:              r.reminderSnapshot(input.RunID),
 		PreloadedMemory:        preloadedMemory,
 		PreloadedMemoryEntries: preloadedEntries,
 	}, nil
-}
-
-func cloneTypedInputOutputs(in []planner.TypedInputOutput) []planner.TypedInputOutput {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make([]planner.TypedInputOutput, len(in))
-	for i, item := range in {
-		out[i] = planner.TypedInputOutput{
-			ID:         item.ID,
-			PayloadRef: item.PayloadRef,
-			Payload:    append(item.Payload[:0:0], item.Payload...),
-		}
-	}
-	return out
 }
 
 func (r *Runtime) reminderSnapshot(runID string) []reminder.Reminder {
@@ -335,6 +385,7 @@ func (r *Runtime) plannerContext(ctx context.Context, input *PlanActivityInput, 
 func recoveryPlanActivityOutput(input *PlanActivityInput, recovery *ModelRecovery, usage model.TokenUsage) *PlanActivityOutput {
 	return &PlanActivityOutput{
 		Recovery:         recovery,
+		IndexHead:        input.View.IndexHead,
 		Usage:            usage,
 		ToolPolicyActive: input.ToolPolicyActive,
 		AllowedTools:     cloneToolIdents(input.AllowedTools),
@@ -385,4 +436,18 @@ func normalizeAnyRawMessage(value any) any {
 	default:
 		return value
 	}
+}
+
+// preparePlanActivityCalls completes policy and identity changes before storage.
+func (r *Runtime) preparePlanActivityCalls(ctx context.Context, input *PlanActivityInput, result *planner.PlanResult) error {
+	if input.Finalize != nil && len(result.ToolCalls) > 0 {
+		calls, err := r.finalizationActivityCalls(ctx, input, result.ToolCalls)
+		if err != nil {
+			return err
+		}
+		result.ToolCalls = calls
+	} else {
+		r.canonicalizePlanActivityToolCalls(result, input)
+	}
+	return nil
 }

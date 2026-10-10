@@ -10,7 +10,6 @@ import (
 	"text/template"
 
 	agent "github.com/CaliLuke/loom-mcp/v2/runtime/agent"
-	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/prompt"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
@@ -56,7 +55,7 @@ type (
 	AgentToolValidationInput struct {
 		Call      *planner.ToolRequest
 		Payload   any
-		Messages  []*model.Message
+		View      ViewLoader
 		ParentRun *run.Context
 	}
 
