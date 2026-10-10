@@ -3,12 +3,14 @@ module example.com/agentfeatures
 go 1.27.2
 
 require (
-	github.com/CaliLuke/loom v1.10.0-alpha.7
+	github.com/CaliLuke/loom v1.10.0-alpha.8
 	github.com/CaliLuke/loom-mcp/v2 v2.0.1
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go v0.44.0
 	go.mongodb.org/mongo-driver/v2 v2.9.2
+	go.temporal.io/api v1.63.6
 	go.temporal.io/sdk v1.49.0
+	google.golang.org/protobuf v1.36.12
 )
 
 require (
@@ -101,7 +103,6 @@ require (
 	go.opentelemetry.io/otel/log v1.47.0 // indirect
 	go.opentelemetry.io/otel/metric v1.47.0 // indirect
 	go.opentelemetry.io/otel/trace v1.47.0 // indirect
-	go.temporal.io/api v1.63.6 // indirect
 	go.temporal.io/sdk/contrib/opentelemetry v0.8.1 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
@@ -119,7 +120,6 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20261005182115-fad411399dd8 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20261005182115-fad411399dd8 // indirect
 	google.golang.org/grpc v1.84.0 // indirect
-	google.golang.org/protobuf v1.36.12 // indirect
 )
 
 replace github.com/CaliLuke/loom-mcp/v2 => ../../..

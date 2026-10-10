@@ -3,7 +3,7 @@ module example.com/sdkbridgeconsumer
 go 1.27.2
 
 require (
-	github.com/CaliLuke/loom v1.10.0-alpha.7
+	github.com/CaliLuke/loom v1.10.0-alpha.8
 	github.com/CaliLuke/loom-mcp/v2 v2.0.1
 	github.com/modelcontextprotocol/go-sdk v1.8.1-0.20260922085944-8075fb3cf313
 	github.com/sahilm/fuzzy v0.1.3
