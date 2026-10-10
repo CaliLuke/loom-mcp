@@ -247,7 +247,7 @@ func (e *toolBatchExec) recordInlineAgentRequestFailure(ctx context.Context, b *
 }
 
 func buildInlineAgentRunInput(agentID agent.Ident, nestedRunCtx run.Context, messages []*model.Message) RunInput {
-	return RunInput{
+	input := RunInput{
 		AgentID:          agentID,
 		RunID:            nestedRunCtx.RunID,
 		SessionID:        nestedRunCtx.SessionID,
@@ -260,6 +260,8 @@ func buildInlineAgentRunInput(agentID agent.Ident, nestedRunCtx run.Context, mes
 		Labels:           nestedRunCtx.Labels,
 		Messages:         messages,
 	}
+	stampWorkflowProtocol(&input)
+	return input
 }
 
 func startInlineAgentChildWorkflow(

@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/internal/cancellation"
@@ -145,6 +146,9 @@ func (r *Runtime) setupWorkflowExecution(
 func validateWorkflowInput(input *RunInput) error {
 	if input == nil {
 		return fmt.Errorf("%w: run input is required", ErrInvalidConfig)
+	}
+	if input.WorkflowProtocolVersion != api.WorkflowProtocolVersion {
+		return &api.WorkflowProtocolMismatchError{Want: api.WorkflowProtocolVersion, Got: input.WorkflowProtocolVersion}
 	}
 	if input.AgentID == "" {
 		return errors.New("agent id is required")

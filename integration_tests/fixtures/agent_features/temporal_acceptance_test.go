@@ -66,6 +66,13 @@ func TestGeneratedFeatureRealTemporalContracts(t *testing.T) {
 		require.NoError(t, server.Stop())
 	})
 
+	t.Run("record workflow history", func(t *testing.T) {
+		if os.Getenv("LOOM_MCP_RECORD_WORKFLOW_HISTORY") != "1" {
+			t.Skip("set LOOM_MCP_RECORD_WORKFLOW_HISTORY=1 to re-record")
+		}
+		recordWorkflowHistory(t, server.Client())
+	})
+
 	t.Run("generated coordinator matches in-memory behavior", func(t *testing.T) {
 		ctx, cancel := temporalScenarioContext(t)
 		defer cancel()
@@ -282,7 +289,8 @@ func TestFileEffectLedger(t *testing.T) {
 func newTemporalAcceptanceEngine(t *testing.T, temporalClient client.Client) *temporalengine.Engine {
 	t.Helper()
 	eng, err := temporalengine.NewWorker(temporalengine.Options{
-		Client: temporalClient,
+		Client:        temporalClient,
+		ClientOptions: &client.Options{DataConverter: temporalengine.NewAgentDataConverter(nil)},
 		WorkerOptions: temporalengine.WorkerOptions{
 			TaskQueue: "agent-features-acceptance",
 		},
@@ -447,10 +455,11 @@ func testTemporalSignalTimeoutRace(t *testing.T, temporalClient client.Client) {
 			TaskQueue:          coordinator.DefaultTaskQueue,
 			WorkflowRunTimeout: workflowTimeout,
 		}, coordinator.WorkflowName, &agentsruntime.RunInput{
-			AgentID:   coordinator.AgentID,
-			RunID:     runID,
-			SessionID: sessionID,
-			Messages:  []*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "race"}}}},
+			WorkflowProtocolVersion: api.WorkflowProtocolVersion,
+			AgentID:                 coordinator.AgentID,
+			RunID:                   runID,
+			SessionID:               sessionID,
+			Messages:                []*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "race"}}}},
 		})
 		require.NoError(t, err)
 		require.Eventually(t, func() bool {

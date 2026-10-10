@@ -8,6 +8,7 @@ import (
 	"time"
 
 	agent "github.com/CaliLuke/loom-mcp/v2/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/interrupt"
@@ -59,6 +60,7 @@ func (r *Runtime) executeReservedAgentChild(wfCtx engine.WorkflowContext, route 
 		Messages:         messages,
 		Labels:           nestedRunCtx.Labels,
 	}
+	stampWorkflowProtocol(&input)
 	handle, err := wfCtx.StartChildWorkflow(wfCtx.Context(), engine.ChildWorkflowRequest{
 		ID:        input.RunID,
 		Workflow:  route.WorkflowName,
@@ -129,6 +131,7 @@ func (r *Runtime) startOneShotRunWithRoute(ctx context.Context, input *RunInput,
 // startRunOn contains common start logic for both locally-registered and
 // remote-route clients.
 func (r *Runtime) startRunOn(ctx context.Context, input *RunInput, workflowName, defaultQueue string, requireSession bool) (engine.WorkflowHandle, error) {
+	stampWorkflowProtocol(input)
 	if err := validateWorkflowInput(input); err != nil {
 		return nil, err
 	}
@@ -539,4 +542,11 @@ func repairedTailNeedsCompletionDelta(original, repaired runlog.Page) bool {
 		return false
 	}
 	return repaired.Events[len(repaired.Events)-1].Type != hooks.RunCompleted
+}
+
+// stampWorkflowProtocol owns the version for every runtime-built workflow input.
+func stampWorkflowProtocol(input *RunInput) {
+	if input != nil {
+		input.WorkflowProtocolVersion = api.WorkflowProtocolVersion
+	}
 }

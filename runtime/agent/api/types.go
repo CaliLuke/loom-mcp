@@ -26,6 +26,10 @@ type (
 	// It includes the full conversational context plus caller-provided labels and
 	// metadata.
 	RunInput struct {
+		// WorkflowProtocolVersion is stamped by the runtime and must match the
+		// worker's WorkflowProtocolVersion, including when replaying history.
+		WorkflowProtocolVersion int
+
 		// AgentID identifies which agent should process the run.
 		AgentID agent.Ident
 

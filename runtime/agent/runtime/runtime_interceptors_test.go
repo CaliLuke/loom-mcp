@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/internal/cancellation"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
@@ -218,9 +219,10 @@ func TestExecuteWorkflowAfterRunInterceptorCanClearError(t *testing.T) {
 	}
 
 	out, err := rt.ExecuteWorkflow(wfCtx, &RunInput{
-		AgentID: "svc.agent",
-		RunID:   "run-1",
-		TurnID:  "turn-1",
+		WorkflowProtocolVersion: api.WorkflowProtocolVersion,
+		AgentID:                 "svc.agent",
+		RunID:                   "run-1",
+		TurnID:                  "turn-1",
 	})
 
 	require.NoError(t, err)
@@ -258,9 +260,10 @@ func TestExecuteWorkflowAfterRunInterceptorClearsCanceledStatus(t *testing.T) {
 	}
 
 	out, err := rt.ExecuteWorkflow(wfCtx, &RunInput{
-		AgentID: "svc.agent",
-		RunID:   "run-1",
-		TurnID:  "turn-1",
+		WorkflowProtocolVersion: api.WorkflowProtocolVersion,
+		AgentID:                 "svc.agent",
+		RunID:                   "run-1",
+		TurnID:                  "turn-1",
 	})
 
 	require.NoError(t, err)
@@ -296,9 +299,10 @@ func TestExecuteWorkflowPublishesCanceledStatus(t *testing.T) {
 	}
 
 	out, err := rt.ExecuteWorkflow(wfCtx, &RunInput{
-		AgentID: "svc.agent",
-		RunID:   "run-1",
-		TurnID:  "turn-1",
+		WorkflowProtocolVersion: api.WorkflowProtocolVersion,
+		AgentID:                 "svc.agent",
+		RunID:                   "run-1",
+		TurnID:                  "turn-1",
 	})
 
 	require.ErrorIs(t, err, context.Canceled)
@@ -338,9 +342,10 @@ func TestExecuteWorkflowSanitizesHostileCompletionError(t *testing.T) {
 	result := make(chan error, 1)
 	go func() {
 		_, err := rt.ExecuteWorkflow(wfCtx, &RunInput{
-			AgentID: "svc.agent",
-			RunID:   "run-hostile",
-			TurnID:  "turn-hostile",
+			WorkflowProtocolVersion: api.WorkflowProtocolVersion,
+			AgentID:                 "svc.agent",
+			RunID:                   "run-hostile",
+			TurnID:                  "turn-hostile",
 		})
 		result <- err
 	}()
@@ -407,9 +412,10 @@ func TestExecuteWorkflowSanitizesErrorsBetweenAfterRunInterceptors(t *testing.T)
 			}
 
 			out, err := rt.ExecuteWorkflow(wfCtx, &RunInput{
-				AgentID: "svc.agent",
-				RunID:   "run-hostile-interceptor",
-				TurnID:  "turn-hostile-interceptor",
+				WorkflowProtocolVersion: api.WorkflowProtocolVersion,
+				AgentID:                 "svc.agent",
+				RunID:                   "run-hostile-interceptor",
+				TurnID:                  "turn-hostile-interceptor",
 			})
 
 			require.Nil(t, out)
@@ -469,9 +475,10 @@ func TestExecuteWorkflowEmptyAfterRunDecisionPreservesRunError(t *testing.T) {
 	}
 
 	out, err := rt.ExecuteWorkflow(wfCtx, &RunInput{
-		AgentID: "svc.agent",
-		RunID:   "run-1",
-		TurnID:  "turn-1",
+		WorkflowProtocolVersion: api.WorkflowProtocolVersion,
+		AgentID:                 "svc.agent",
+		RunID:                   "run-1",
+		TurnID:                  "turn-1",
 	})
 
 	require.ErrorIs(t, err, planErr)

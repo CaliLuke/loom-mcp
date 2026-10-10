@@ -65,6 +65,10 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 
 ## Current Product Rules
 
+- Every workflow-code change must bump `api.WorkflowProtocolVersion` and add a
+  recorded-history replay test. Drain running workflows before deploying the
+  new version; mismatched and unstamped inputs fail before workflow effects.
+
 - Codex `ReasoningEffort` is a native provider/runtime factory option. Empty
   preserves provider defaults. Applications validate model-specific supported
   efforts from Codex `model/list`; the SDK only validates identifier syntax.

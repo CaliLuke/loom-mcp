@@ -360,6 +360,18 @@ Start ──► PlanStart ──► Tool Calls? ──► Execute Tools ──�
 
 ### Workflow Contracts
 
+- **Workflow protocol versions must match.** `api.WorkflowProtocolVersion` is
+  currently `1` and versions the agent workflow's inputs, outputs, signals, and
+  state. The runtime stamps it after caller run options on top-level and child
+  inputs. Workflow entry and history replay reject a different or missing
+  version before interceptors, activities, or commands, returning
+  `*api.WorkflowProtocolMismatchError` (matching
+  `api.ErrWorkflowProtocolMismatch`). Temporal reports the original message as
+  the non-retryable application failure `loom_mcp.workflow_protocol_mismatch`,
+  regardless of workflow retry policy. Every workflow-code change must bump the
+  version and add a replay test. **Drain running workflows before deploying a
+  new version**; there is no migration of running executions.
+
 - **SessionID is required.** `Start` fails fast if `SessionID` is empty.
 - **Run IDs have one owner.** Sessionful starts reserve their run ID before asking
   the engine to start. Another start cannot overwrite an existing run's metadata.
@@ -2682,6 +2694,24 @@ In this split:
   attempt budget.
 - `temporal.Options.ActivityDefaults` sets Temporal-only queue-wait and
   heartbeat liveness behavior.
+
+**Replaying recorded histories** — After registering agents on a Temporal worker
+engine, load the recorded JSON with `client.HistoryFromJSON` and call
+`eng.ReplayWorkflowHistory(logger, history)`. No running worker or
+Temporal server is needed. The replayer snapshots registered workflow names and
+uses the same handler wrapping and data converter as live execution. Configure
+`Options.ClientOptions.DataConverter` as for the worker; when supplying an
+external `Client`, also supply `ClientOptions` with that client's converter
+(an explicit nil converter means the SDK default). The harness rejects an
+external client whose converter configuration was not supplied.
+
+The generated fixture keeps a completed history under
+`integration_tests/fixtures/agent_features/testdata/`. Run
+`go test -C integration_tests/fixtures/agent_features ./... -run '^TestGeneratedFeatureWorkflowReplay$'`
+for offline replay. To re-record it against the pinned Temporal development
+server, run
+`LOOM_MCP_RECORD_WORKFLOW_HISTORY=1 go test -C integration_tests/fixtures/agent_features . -run '^TestGeneratedFeatureRealTemporalContracts/record_workflow_history$' -count=1`.
+Review and check in the resulting history with each protocol bump.
 
 **In-memory** — Fast iteration, no durability:
 

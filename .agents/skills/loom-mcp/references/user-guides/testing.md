@@ -24,6 +24,34 @@ runtime output, runlog, session state, hooks, and streams together.
 
 Prefer table-driven tests, deterministic inputs, explicit error assertions, and generated constants/types over stringly typed fixtures.
 
+## Recorded workflow histories
+
+`temporal.Engine.ReplayWorkflowHistory(logger, history)` replays against every
+registered workflow with the worker's handler wrapping and data converter.
+Register all agents first; do not seal or start workers for offline replay.
+Set `Options.ClientOptions.DataConverter` to the worker's converter. When
+passing an external `Client`, also supply `ClientOptions` with the same
+converter (explicit nil selects the SDK default); replay fails if that
+configuration is unknown.
+
+Load recorded JSON with `client.HistoryFromJSON`. Activities are read from
+history, not executed. Replay must succeed for the current protocol and reject
+future or absent `WorkflowProtocolVersion` stamps. The harness preserves the
+protocol error if the SDK subsequently reports a command/history mismatch.
+
+The generated agent-feature fixture records a simple completed agent run through
+`client.GetWorkflowHistory` and protobuf JSON. Re-record and replay it with:
+
+```bash
+LOOM_MCP_RECORD_WORKFLOW_HISTORY=1 go test -C integration_tests/fixtures/agent_features . -run '^TestGeneratedFeatureRealTemporalContracts/record_workflow_history$' -count=1
+go test -C integration_tests/fixtures/agent_features ./... -run '^TestGeneratedFeatureWorkflowReplay$' -count=1
+```
+
+Only recording needs the pinned Temporal development server. Offline replay
+always runs. Review and check in `testdata/workflow_protocol_v1.json` in that
+fixture module. Every workflow-code change bumps `api.WorkflowProtocolVersion`
+and adds a replay test; operators must drain running workflows before upgrading.
+
 ## Generated-code changes
 
 Design packages and generator templates are authoritative; generated `gen/` files are not.

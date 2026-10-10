@@ -16,9 +16,9 @@ import (
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	temporalotel "go.temporal.io/sdk/contrib/opentelemetry"
+	"go.temporal.io/sdk/converter"
 	temporalsdk "go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
-	"go.temporal.io/sdk/workflow"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
@@ -43,6 +43,10 @@ type Options struct {
 	// ClientOptions describe how to construct the Temporal client when Client is nil.
 	// Required when Client is nil. Only connection-related fields (HostPort, Namespace,
 	// etc.) need to be set; OTEL interceptors are configured automatically.
+	// When Client is supplied, also provide ClientOptions to enable history
+	// replay, with the same DataConverter used to create that client. An explicit
+	// nil DataConverter selects the SDK default. These options do not reconfigure
+	// an externally supplied Client.
 	ClientOptions *client.Options
 
 	// WorkerOptions configures worker defaults for task queue, concurrency, and
@@ -167,8 +171,9 @@ type InstrumentationOptions struct {
 //   - Call Close() to gracefully stop workers and release the Temporal client when
 //     owned here.
 type Engine struct {
-	client      client.Client
-	closeClient bool
+	client              client.Client
+	closeClient         bool
+	replayDataConverter converter.DataConverter
 
 	workerMode bool
 
@@ -240,6 +245,12 @@ func newEngine(opts Options, workerMode bool) (*Engine, error) {
 		pendingWorkflows:        make(map[string]struct{}),
 		activityOptions:         make(map[string]engine.ActivityOptions),
 		pendingActivities:       make(map[string]struct{}),
+	}
+	if opts.ClientOptions != nil {
+		e.replayDataConverter = opts.ClientOptions.DataConverter
+		if e.replayDataConverter == nil {
+			e.replayDataConverter = converter.GetDefaultDataConverter()
+		}
 	}
 	return e, nil
 }
@@ -317,12 +328,8 @@ func (e *Engine) RegisterWorkflow(_ context.Context, def engine.WorkflowDefiniti
 	}()
 	bundle := e.workerForQueue(queue)
 
-	bundle.registerWorkflow(def.Name, func(tctx workflow.Context, input *api.RunInput) (*api.RunOutput, error) {
-		wfCtx := newTemporalWorkflowContext(e, tctx)
-		defer e.releaseWorkflowContext(wfCtx.runID, wfCtx)
-		out, err := def.Handler(wfCtx, input)
-		return out, classifyTemporalCancellation(err)
-	})
+	bundle.registerWorkflow(def.Name, e.wrapWorkflowHandler(def))
+
 	e.finishWorkflowRegistration(def)
 	registered = true
 	return nil
@@ -541,8 +548,9 @@ const (
 	activityKindPlanner activityKind = "planner"
 	activityKindTool    activityKind = "tool"
 
-	mixedCancellationFailureType = "loom_mcp.mixed_cancellation_failure"
-	invalidErrorGraphFailureType = "loom_mcp.invalid_error_graph"
+	mixedCancellationFailureType        = "loom_mcp.mixed_cancellation_failure"
+	invalidErrorGraphFailureType        = "loom_mcp.invalid_error_graph"
+	workflowProtocolMismatchFailureType = "loom_mcp.workflow_protocol_mismatch"
 )
 
 // classifyTemporalCancellation translates cancellation-only graphs into the
