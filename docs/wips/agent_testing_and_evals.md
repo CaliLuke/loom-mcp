@@ -1,6 +1,7 @@
 # Agent Testing and Development Evals
 
-Status: draft for peer review, revision 3. Date: 2026-10-08.
+Status: draft for peer review, revision 4. Date: 2026-10-09. Revision 4 aligns
+the plan with context compaction revision 9's record.
 
 This document plans two related capabilities for loom-mcp:
 
@@ -365,10 +366,14 @@ serves concurrent runs. So T0 adds a runtime change:
 - the runtime places an exported `model.CallInfo{AgentID, RunID, SessionID,
   TurnID, ModelID, Seq, Attempt}` in the context of every model call, in the planner's
   model-client path (`simplePlannerContext.ModelClient`);
-- `model.CallInfoFrom(ctx)` reads it. `Seq` orders the calls of one run and
-  is unique across retries and parallel calls; `Attempt` is the planner
-  activity attempt. Once the compaction plan's run store exists, the store
-  assigns `Seq` (`context_compaction.md` 4.13).
+- `model.CallInfoFrom(ctx)` reads it. `Seq` orders the calls of one run and is
+  unique across retries and parallel calls; `Attempt` is the planner activity
+  attempt, which T0 exposes through the engine (today the engine reads
+  `activity.GetInfo` only for the heartbeat timeout and run ID; `temporaltrace`
+  puts the attempt on spans but does not expose it to runtime code). `Seq` comes from the
+  compaction plan's run store (`NextSeq`, ticket K2), the only source unique
+  across retries and parallel calls under Temporal, so T0 follows K2
+  (`context_compaction.md` 4.13).
 
 T0 is a small, general runtime change. It also helps provider logging and
 tracing. It blocks T2.
@@ -379,7 +384,9 @@ tracing. It blocks T2.
 > (`context_compaction.md` 4.13, ticket K8): the runtime records every model
 > call (request parts, response, error kind, usage) in the run store, keyed by
 > `(RunID, Seq, Attempt)` from `CallInfo`. The trajectory reads it through
-> `RunRecord`. The decorator below remains only for calls made outside a run,
+> `RunRecord`. Unlike the decorator, it also holds responses that runtime
+> validation later rejected, rejected summaries, and the content each index
+> entry adopted. The decorator below remains only for calls made outside a run,
 > such as `Decide`. The text is kept until the two plans are merged into the
 > roadmap.
 
@@ -415,8 +422,12 @@ Package `trajectory` (home per D1) builds a `Trajectory` for one run from:
 
 1. the **run log**, listed by run ID after the run ends: tool calls
    (`tool_call_scheduled`, `tool_result_received`), committed assistant
-   messages, thinking, planner notes, retry hints, policy decisions, awaits and
-   their answers, phase changes, child links, prompt references;
+   messages, thinking, planner notes, retry hints, policy decisions, awaits,
+   phase changes, child links, prompt references, and the compaction steps
+   (`context_compacted`, `context_compaction_skipped`, `context_recalled`,
+   `context_overflow`). Await and
+   clarification answers and typed inputs are not in the run log; they come
+   from `RunRecord` (`context_compaction.md` 4.4);
 2. **captured model calls** (5.3): the model call steps, with the tool calls
    each one chose, usage, and latency;
 3. **`RunOutput`**: the final answer (`Final`) and aggregate usage.
@@ -447,15 +458,12 @@ Rules:
   concurrent child runs interleave.
 - A trajectory is built only for a run in a terminal phase. This rule is new;
   goa-ai's collector does not enforce it.
-- Model-call steps are present only when capture was installed. Without it, the
-  trajectory still holds tool calls, awaits, and the answer.
-- A tool result compacted by the run log (over 1 MB) is marked truncated. Typed
-  result predicates on it fail with a "result truncated" diagnostic instead of
-  decoding partial data.
-  The context compaction plan (`context_compaction_plan.md`, slice 1) stores tool
-  results in a content-addressed run store and removes this truncation; once
-  K8 lands, the trajectory reads through its `RunRecord` reader and this case
-  disappears.
+- Model-call steps of an agent run come from the call record (compaction K8),
+  which is always on; calls outside a run appear only when the capture
+  decorator was installed.
+- Tool results are read at full size through `RunRecord` (compaction K8),
+  which replaces the run log's 1 MB truncation, so typed result predicates
+  always decode the whole result.
 - The harness fails at construction when an application `BeforeEvent`
   interceptor is registered, because it could drop or rewrite events the
   trajectory depends on. An explicit option allows it, and the trajectory is
@@ -687,8 +695,9 @@ Identity of an experiment:
   fingerprint, and the prompt references it resolved.
 
 Each attempt records: scenario, item, repeat index, the trajectory, captured
-model calls, checks, judgments, scores, tokens, latency, trace ID, and any
-infrastructure error.
+model calls, `RunRecord`'s self-contained export (`context_compaction.md` 4.5,
+so compaction replay and `show` work after the run's store is gone), checks,
+judgments, scores, tokens, latency, trace ID, and any infrastructure error.
 
 Storage: an experiment directory with `experiment.json` and `attempts.jsonl`
 under a gitignored path (D2). The schema is documented and versioned.
@@ -827,10 +836,10 @@ One ticket is one commit. Each ticket includes its tests and documentation.
 
 | Phase | Ticket | Blocked by |
 |---|---|---|
-| 1. Foundation | T0 Model-call identity in the runtime (5.2) | D1 |
+| 1. Foundation | T0 Model-call identity in the runtime (5.2) | D1, compaction K2 |
 | | T1 `TypedTool` descriptors, `tools.Named`, codegen (5.1) | D1 |
 | | T2 Model-call capture and request codec (5.3) | T0, D1 |
-| | T3 Trajectory from run log, captured calls, and `RunOutput` (5.4) | T2 |
+| | T3 Trajectory from run log, captured calls, and `RunOutput` (5.4) | T2, compaction K8 |
 | | T4 Trajectory rendering and JSON schema (5.4) | T3 |
 | | T5 `expect` package, including `ExpectedTools` (5.5) | T1, T3 |
 | 2. Testing | T6 Harness: runtime, models, sessions, tracer, `Run`, await responder (A1) | T2, T3 |
@@ -840,7 +849,7 @@ One ticket is one commit. Each ticket includes its tests and documentation.
 | | T10 Docs, skill, fixture (A5) | T6–T9 |
 | 3. Dev loop | T11 Scenarios, items, JSONL datasets (B1) | T5, T6 |
 | | T12 Runner (B2) | T11 |
-| | T13 Experiment store (B3) | T12, D2 |
+| | T13 Experiment store (B3) | T12, D2, compaction K8 |
 | | T14 `show` and `compare` (B4, B5) | T4, T13 |
 | | T15 `evalcli` (B10, without replay and export) | T14 |
 | 4. Judge | T16 Judge core and calibration (B6) | T4, D3 |
@@ -916,8 +925,10 @@ verification ladder.
 Trajectories and captured model calls contain full prompts, model text, tool
 arguments, and tool results, which can include customer data. Experiments are
 stored locally under a gitignored path. Export to Opik (B9) is explicit and
-sends the same data to the shared instance. Neither is telemetry, and neither
-exposes rejected provider output.
+sends the same data to the shared instance. Neither is telemetry. Both hold
+what the compaction record holds: responses that runtime validation rejected,
+rejected summaries, and server-only data (`ServerData`, injected arguments).
+Output that never reaches the runtime model wrapper is not recorded.
 
 ---
 
@@ -949,9 +960,6 @@ stays the source of truth for status.
 - Model check of tool choice against available tools.
 - Carrying pending calls across successor runs, when cross-workflow
   continuations land.
-- Context compaction (`context_compaction.md`): its call record (K8)
-  replaces this plan's model-call capture (5.3, T2) for agent runs, keyed by
-  `(RunID, Seq, Attempt)` from `model.CallInfo`; build it once. Trajectories then show
-  exactly what the model received at each call, and scenarios should cover
-  runs that cross the compaction threshold, including offline compaction
-  replay (its section 7.1).
+- Scenarios that cross the context compaction threshold, including offline
+  compaction replay (`context_compaction.md` 7.1). The call record itself
+  (K8) is a dependency of T3 and T13, not a follow-up.
