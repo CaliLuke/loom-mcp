@@ -176,7 +176,8 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   Production worker and client runtimes must explicitly share persistent
   `runlog.Store`, `runstore.Store`, and `session.Store` implementations when run introspection and
   session metadata must survive process replacement; configure memory and
-  stream projections independently.
+  stream projections independently. Tool activity workers must share the run
+  store: they write result and server-only content before returning references.
 - If you register a Temporal workflow outside `Engine.RegisterWorkflow`, call
   `NewWorkflowContext`. Immediately defer the returned release function. The
   release function removes the completed workflow from the process-local context

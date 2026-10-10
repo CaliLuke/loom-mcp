@@ -577,6 +577,9 @@ func emitToolProviderDispatchers(stmt *jen.Statement, data toolProviderFileData)
 						}), jen.Nil()),
 					),
 				)
+				g.If(jen.Id("err").Op(":=").Id("runtime").Dot("RecordToolPayload").Call(jen.Id("ctx"), jen.Id("methodIn")), jen.Id("err").Op("!=").Nil()).Block(
+					jen.Return(jen.Nil(), jen.Id("err")),
+				)
 				if tool.HasResult {
 					g.List(jen.Id("methodOut"), jen.Id("err")).Op(":=").Id("opts").Dot("Call").Call(jen.Id("ctx"), jen.Id("methodIn"))
 				} else {
@@ -977,6 +980,9 @@ func emitMCPExecutorConstructor(stmt *jen.Statement, data serviceToolsetFileData
 										),
 										jen.Nil(),
 									),
+								),
+								jen.If(jen.Id("err").Op(":=").Id("runtime").Dot("RecordToolPayload").Call(jen.Id("ctx"), jen.Id("jsontext").Dot("Value").Call(jen.Id("payload"))), jen.Id("err").Op("!=").Nil()).Block(
+									jen.Return(jen.Nil(), jen.Id("err")),
 								),
 								jen.List(jen.Id("resp"), jen.Id("err")).Op(":=").Id("caller").Dot("CallTool").Call(
 									jen.Id("ctx"),

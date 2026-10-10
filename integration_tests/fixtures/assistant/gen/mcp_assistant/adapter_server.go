@@ -1844,6 +1844,9 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		if err := sdkbridge.ValidateToolArguments(arguments, "{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to analyze\"}},\"additionalProperties\":false}"); err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", analyzeSentimentInputRecovery(err, arguments)))
 		}
+		if err := agentruntime.RecordToolPayload(ctx, payload); err != nil {
+			return false, err
+		}
 		result, err := a.service.AnalyzeSentiment(ctx, payload)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
@@ -1879,6 +1882,9 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		if err := sdkbridge.ValidateToolArguments(arguments, "{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text\"}},\"additionalProperties\":false}"); err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", extractKeywordsInputRecovery(err, arguments)))
 		}
+		if err := agentruntime.RecordToolPayload(ctx, payload); err != nil {
+			return false, err
+		}
 		result, err := a.service.ExtractKeywords(ctx, payload)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
@@ -1913,6 +1919,9 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		}
 		if err := sdkbridge.ValidateToolArguments(arguments, "{\"type\":\"object\",\"required\":[\"text\"],\"properties\":{\"text\":{\"type\":\"string\",\"description\":\"Input text to summarize\"}},\"additionalProperties\":false}"); err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", summarizeTextInputRecovery(err, arguments)))
+		}
+		if err := agentruntime.RecordToolPayload(ctx, payload); err != nil {
+			return false, err
 		}
 		result, err := a.service.SummarizeText(ctx, payload)
 		if err != nil {
@@ -1954,6 +1963,9 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		if err := sdkbridge.ValidateToolArguments(arguments, "{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of results\",\"default\":50,\"minimum\":1,\"maximum\":200},\"nullable_limit\":{\"anyOf\":[{\"type\":\"integer\",\"description\":\"Optional nullable limit\",\"minimum\":1,\"maximum\":200},{\"type\":\"null\"}]},\"query\":{\"type\":\"string\",\"description\":\"Search query\"},\"ratio\":{\"type\":\"number\",\"description\":\"Optional result sampling ratio\",\"exclusiveMinimum\":0,\"exclusiveMaximum\":1}},\"additionalProperties\":false}"); err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", searchInputRecovery(err, arguments)))
 		}
+		if err := agentruntime.RecordToolPayload(ctx, payload); err != nil {
+			return false, err
+		}
 		result, err := a.service.Search(ctx, payload)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
@@ -1988,6 +2000,9 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		}
 		if err := sdkbridge.ValidateToolArguments(arguments, "{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of records\",\"default\":10,\"minimum\":1,\"maximum\":200},\"query\":{\"type\":\"string\",\"description\":\"Search query\"}},\"additionalProperties\":false}"); err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", searchRecordsInputRecovery(err, arguments)))
+		}
+		if err := agentruntime.RecordToolPayload(ctx, payload); err != nil {
+			return false, err
 		}
 		result, err := a.service.SearchRecords(ctx, payload)
 		if err != nil {
@@ -2032,6 +2047,9 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		if err := sdkbridge.ValidateToolArguments(arguments, "{\"type\":\"object\",\"required\":[\"language\",\"code\"],\"properties\":{\"code\":{\"type\":\"string\",\"description\":\"Code to execute\"},\"language\":{\"type\":\"string\",\"description\":\"Language to execute\",\"enum\":[\"python\",\"javascript\"]}},\"additionalProperties\":false}"); err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", executeCodeInputRecovery(err, arguments)))
 		}
+		if err := agentruntime.RecordToolPayload(ctx, payload); err != nil {
+			return false, err
+		}
 		result, err := a.service.ExecuteCode(ctx, payload)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
@@ -2072,6 +2090,9 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		if err := sdkbridge.ValidateToolArguments(arguments, "{\"type\":\"object\",\"required\":[\"items\"],\"properties\":{\"blob\":{\"type\":\"string\",\"description\":\"Base64 blob\"},\"format\":{\"type\":\"string\",\"description\":\"Output format\",\"enum\":[\"json\",\"text\",\"blob\",\"uri\"]},\"items\":{\"type\":\"array\",\"description\":\"Items to process\",\"items\":{\"type\":\"string\"}},\"mimeType\":{\"type\":\"string\",\"description\":\"MIME type\"},\"uri\":{\"type\":\"string\",\"description\":\"Resource URI\"}},\"additionalProperties\":false}"); err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", processBatchInputRecovery(err, arguments)))
 		}
+		if err := agentruntime.RecordToolPayload(ctx, payload); err != nil {
+			return false, err
+		}
 		result, err := a.service.ProcessBatch(ctx, payload)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
@@ -2091,6 +2112,9 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		})
 		return false, stream.SendAndClose(ctx, final)
 	case "report_progress":
+		if err := agentruntime.RecordToolPayload(ctx, nil); err != nil {
+			return false, err
+		}
 		result, err := a.service.ReportProgress(ctx)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
@@ -2125,6 +2149,9 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		}
 		if err := sdkbridge.ValidateToolArguments(arguments, "{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Number of content items to return\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807}},\"additionalProperties\":false}"); err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", multiContentInputRecovery(err, arguments)))
+		}
+		if err := agentruntime.RecordToolPayload(ctx, payload); err != nil {
+			return false, err
 		}
 		result, err := a.service.MultiContent(ctx, payload)
 		if err != nil {
@@ -2181,6 +2208,9 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		if err := sdkbridge.ValidateToolArguments(arguments, "{\"type\":\"object\",\"required\":[\"screen_title\",\"platform\",\"density\",\"primary_cta\",\"sections\"],\"properties\":{\"density\":{\"type\":\"string\",\"description\":\"Layout density\",\"enum\":[\"compact\",\"comfortable\"]},\"include_dev_notes\":{\"type\":\"boolean\",\"description\":\"Whether to include implementation notes\"},\"platform\":{\"type\":\"string\",\"description\":\"Target platform\",\"enum\":[\"ios\",\"web\"]},\"primary_cta\":{\"type\":\"string\",\"description\":\"Primary call to action\"},\"screen_title\":{\"type\":\"string\",\"description\":\"Name of the frame or screen\"},\"sections\":{\"type\":\"array\",\"description\":\"Ordered screen sections\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}"); err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", generateDpiSpecInputRecovery(err, arguments)))
 		}
+		if err := agentruntime.RecordToolPayload(ctx, payload); err != nil {
+			return false, err
+		}
 		result, err := a.service.GenerateDpiSpec(ctx, payload)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
@@ -2216,6 +2246,9 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		if err := sdkbridge.ValidateToolArguments(arguments, "{\"type\":\"object\",\"required\":[\"request\"],\"properties\":{\"request\":{\"type\":\"object\",\"description\":\"Action envelope\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"list\"]},\"value\":{\"type\":\"object\",\"properties\":{\"limit\":{\"type\":\"integer\",\"description\":\"Maximum number of items to list\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"value\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"create\"]},\"value\":{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Name to create\"}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}"); err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", dispatchActionInputRecovery(err, arguments)))
 		}
+		if err := agentruntime.RecordToolPayload(ctx, payload); err != nil {
+			return false, err
+		}
 		result, err := a.service.DispatchAction(ctx, payload)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
@@ -2250,6 +2283,9 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		}
 		if err := sdkbridge.ValidateToolArguments(arguments, "{\"type\":\"object\",\"required\":[\"command\"],\"properties\":{\"command\":{\"type\":\"object\",\"description\":\"Command envelope with custom branch key\",\"oneOf\":[{\"type\":\"object\",\"required\":[\"action\",\"args\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"foo\"]},\"args\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"Foo label\"}},\"additionalProperties\":false}},\"additionalProperties\":false},{\"type\":\"object\",\"required\":[\"action\",\"args\"],\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"bar\"]},\"args\":{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Bar count\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807}},\"additionalProperties\":false}},\"additionalProperties\":false}],\"discriminator\":{\"propertyName\":\"action\"}}},\"additionalProperties\":false}"); err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", dispatchCommandInputRecovery(err, arguments)))
+		}
+		if err := agentruntime.RecordToolPayload(ctx, payload); err != nil {
+			return false, err
 		}
 		result, err := a.service.DispatchCommand(ctx, payload)
 		if err != nil {

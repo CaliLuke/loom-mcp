@@ -111,6 +111,9 @@ func (e *toolBatchExec) normalizeToolCall(call planner.ToolRequest, i int) plann
 }
 
 func (e *toolBatchExec) applyDefaultToolCallContext(call planner.ToolRequest) planner.ToolRequest {
+	if e.runCtx != nil {
+		call.RootRunID = e.runCtx.RootRunID
+	}
 	if call.SessionID == "" {
 		call.SessionID = e.sessionID
 	}

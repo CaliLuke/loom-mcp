@@ -1531,6 +1531,9 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		if err := sdkbridge.ValidateToolArguments(arguments, "{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Lookup query\"}},\"additionalProperties\":false}"); err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", lookupInputRecovery(err, arguments)))
 		}
+		if err := agentruntime.RecordToolPayload(ctx, payload); err != nil {
+			return false, err
+		}
 		result, err := a.service.Lookup(ctx, payload)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)
@@ -1550,6 +1553,9 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		})
 		return false, stream.SendAndClose(ctx, final)
 	case "stream_chunks":
+		if err := agentruntime.RecordToolPayload(ctx, nil); err != nil {
+			return false, err
+		}
 		bridge := &StreamChunksStreamBridge{
 			adapter: a,
 			out:     stream,
@@ -1559,6 +1565,9 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		}
 		return false, nil
 	case "wait_for_cancel":
+		if err := agentruntime.RecordToolPayload(ctx, nil); err != nil {
+			return false, err
+		}
 		result, err := a.service.WaitForCancel(ctx)
 		if err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, err)

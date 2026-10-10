@@ -23,6 +23,7 @@ func defaultAgentToolExecute(rt *Runtime, cfg AgentToolConfig) func(context.Cont
 		}
 		parentRun := &run.Context{
 			RunID:     call.RunID,
+			RootRunID: call.RootRunID,
 			SessionID: call.SessionID,
 			TurnID:    call.TurnID,
 		}
@@ -106,6 +107,7 @@ func buildNestedAgentRunContext(call planner.ToolRequest) run.Context {
 	nestedRunCtx := run.Context{
 		Tool:             call.Name,
 		RunID:            NestedRunIDForToolCall(call.RunID, call.Name, call.ToolCallID),
+		RootRunID:        call.RootRunID,
 		SessionID:        call.SessionID,
 		TurnID:           call.TurnID,
 		ParentToolCallID: call.ToolCallID,

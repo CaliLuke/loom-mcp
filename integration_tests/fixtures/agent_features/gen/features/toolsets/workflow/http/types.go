@@ -55,6 +55,8 @@ type (
 	MethodEchoPayloadTransport struct {
 		// Topic to send to the service method
 		Topic *string `json:"topic"`
+		// Injected session identity
+		SessionID *string `json:"-"`
 	}
 
 	// MethodEchoResultTransport is the internal JSON transport type for MethodEchoResult.

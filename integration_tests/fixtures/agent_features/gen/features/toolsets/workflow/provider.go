@@ -79,6 +79,16 @@ func DispatchMethodEchoMethod(ctx context.Context, meta *runtime.ToolCallMeta, r
 	} else {
 		methodIn = InitMethodEchoMethodPayload(toolArgs.(*MethodEchoPayload))
 	}
+	payload, ok := methodIn.(*features.MethodEchoPayload)
+	if !ok || payload == nil {
+		err := fmt.Errorf("invalid mapped payload type for %q: %T", MethodEcho, methodIn)
+		return &planner.ToolResult{
+			Error: planner.ToolErrorFromError(err),
+			Name:  MethodEcho,
+		}, nil
+	}
+	payload.SessionID = meta.SessionID
+	methodIn = payload
 	for _, inject := range opts.Injectors {
 		if inject == nil {
 			continue
@@ -89,6 +99,9 @@ func DispatchMethodEchoMethod(ctx context.Context, meta *runtime.ToolCallMeta, r
 				Name:  MethodEcho,
 			}, nil
 		}
+	}
+	if err := runtime.RecordToolPayload(ctx, methodIn); err != nil {
+		return nil, err
 	}
 	methodOut, err := opts.Call(ctx, methodIn)
 	if err != nil {
@@ -165,6 +178,7 @@ func (p *Provider) HandleToolCall(ctx context.Context, msg toolregistry.ToolCall
 			return toolregistry.NewToolResultErrorMessage(msg.RegistrationToken, msg.ToolUseID, toolregistry.ToolErrorCodeInvalidArguments, "tool arguments failed validation"), nil
 		}
 		methodIn := InitMethodEchoMethodPayload(args)
+		methodIn.SessionID = msg.Meta.SessionID
 		methodOut, err := p.svc.EchoTopic(ctx, methodIn)
 		if err != nil {
 			if issues := toolregistry.ValidationIssues(err); len(issues) > 0 {

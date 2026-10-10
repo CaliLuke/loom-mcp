@@ -41,6 +41,7 @@ func (r *Runtime) encodeToolEvents(ctx context.Context, events []*planner.ToolRe
 			return nil, fmt.Errorf("encode tool result for %s: %w", ev.Name, err)
 		}
 		out = append(out, &api.ToolEvent{
+			Refs:          ev.Refs,
 			Name:          ev.Name,
 			Result:        rawjson.Message(result),
 			ResultBytes:   len(result),
@@ -91,6 +92,7 @@ func (r *Runtime) encodeToolEventsForPlanning(ctx context.Context, events []*pla
 			result = nil
 		}
 		out = append(out, &api.ToolEvent{
+			Refs:                ev.Refs,
 			Name:                ev.Name,
 			Result:              rawjson.Message(result),
 			ResultBytes:         resultBytes,
@@ -177,6 +179,7 @@ func (r *Runtime) buildPlannerToolOutput(
 		return nil, err
 	}
 	output := &planner.ToolOutput{
+		Refs:                result.Refs,
 		Name:                call.Name,
 		ToolCallID:          call.ToolCallID,
 		Payload:             append(rawjson.Message(nil), call.Payload...),
@@ -214,6 +217,7 @@ func (r *Runtime) decodeToolOutputs(events []*api.ToolCallOutput) ([]*planner.To
 			return nil, fmt.Errorf("nil tool output entry")
 		}
 		out = append(out, &planner.ToolOutput{
+			Refs:                ev.Refs,
 			Name:                ev.Name,
 			ToolCallID:          ev.ToolCallID,
 			Payload:             append(rawjson.Message(nil), ev.Payload...),
@@ -244,6 +248,7 @@ func encodePlannerToolOutputs(outputs []*planner.ToolOutput) ([]*api.ToolCallOut
 			return nil, fmt.Errorf("encode planner tool outputs: nil tool output")
 		}
 		out = append(out, &api.ToolCallOutput{
+			Refs:                output.Refs,
 			Name:                output.Name,
 			ToolCallID:          output.ToolCallID,
 			Payload:             append(rawjson.Message(nil), output.Payload...),

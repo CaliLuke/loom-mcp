@@ -207,6 +207,9 @@ type ToolRequest struct {
 	// RunID is the identifier of the run that owns this tool call.
 	RunID string
 
+	// RootRunID identifies the root run of the run tree; it is the run store scope.
+	RootRunID string
+
 	// SessionID is the logical session identifier (for example, a chat conversation).
 	SessionID string
 
@@ -227,6 +230,10 @@ type ToolRequest struct {
 
 // ToolResult captures the outcome of a tool invocation.
 type ToolResult struct {
+	// Refs addresses stored activity content in the root run scope. ServerData and
+	// Payload are server-only and must never enter model-facing messages.
+	Refs tools.ResultRefs
+
 	// Name is the canonical <toolset>.<tool> identifier that produced this result.
 	Name tools.Ident
 
@@ -308,6 +315,10 @@ type ToolResult struct {
 //   - This type must remain workflow-boundary safe; it intentionally does not
 //     carry decoded `any` values.
 type ToolOutput struct {
+	// Refs addresses stored activity content in the root run scope. ServerData and
+	// Payload are server-only and must never enter model-facing messages.
+	Refs tools.ResultRefs
+
 	// Name is the canonical <toolset>.<tool> identifier that was executed.
 	Name tools.Ident
 

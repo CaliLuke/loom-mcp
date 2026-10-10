@@ -1523,6 +1523,14 @@ func emitToolCase(g *jen.Group, tool *ToolAdapter) {
 		)
 	}
 
+	payload := jen.Nil()
+	if tool.HasPayload {
+		payload = jen.Id("payload")
+	}
+	g.If(jen.Id("err").Op(":=").Id("agentruntime").Dot("RecordToolPayload").Call(jen.Id("ctx"), payload), jen.Id("err").Op("!=").Nil()).Block(
+		jen.Return(jen.False(), jen.Id("err")),
+	)
+
 	if tool.IsStreaming {
 		g.Id("bridge").Op(":=").Op("&").Id(streamBridgeTypeName(tool)).Values(jen.Dict{
 			jen.Id("out"):     jen.Id("stream"),

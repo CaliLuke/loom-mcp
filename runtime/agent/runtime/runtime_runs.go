@@ -50,6 +50,7 @@ func (r *Runtime) executeReservedAgentChild(wfCtx engine.WorkflowContext, route 
 	input := RunInput{
 		AgentID:          route.ID,
 		RunID:            nestedRunCtx.RunID,
+		RootRunID:        nestedRunCtx.RootRunID,
 		SessionID:        nestedRunCtx.SessionID,
 		TurnID:           nestedRunCtx.TurnID,
 		ParentToolCallID: nestedRunCtx.ParentToolCallID,
@@ -131,15 +132,18 @@ func (r *Runtime) startOneShotRunWithRoute(ctx context.Context, input *RunInput,
 // startRunOn contains common start logic for both locally-registered and
 // remote-route clients.
 func (r *Runtime) startRunOn(ctx context.Context, input *RunInput, workflowName, defaultQueue string, requireSession bool) (engine.WorkflowHandle, error) {
+	if input != nil {
+		if input.RunID == "" {
+			input.RunID = generateRunID(string(input.AgentID))
+		}
+		input.RootRunID = input.RunID
+	}
 	stampWorkflowProtocol(input)
 	if err := validateWorkflowInput(input); err != nil {
 		return nil, err
 	}
 	if err := r.Seal(ctx); err != nil {
 		return nil, err
-	}
-	if input.RunID == "" {
-		input.RunID = generateRunID(string(input.AgentID))
 	}
 	if err := r.validateRunSession(ctx, input, requireSession); err != nil {
 		return nil, err

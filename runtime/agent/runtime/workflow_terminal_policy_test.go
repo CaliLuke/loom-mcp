@@ -423,7 +423,7 @@ func TestConfirmedTerminalToolFinishesOrRejectsPause(t *testing.T) {
 				})
 			}
 			wfCtx, base, input := terminalPolicyRunInputs(t, rt)
-			call := planner.ToolRequest{Name: terminal.Name, ToolCallID: "complete-1", Payload: rawjson.Message(`{}`)}
+			call := planner.ToolRequest{RootRunID: "root", Name: terminal.Name, ToolCallID: "complete-1", Payload: rawjson.Message(`{}`)}
 			ledger := transcript.NewLedger()
 			st := &runLoopState{
 				Result: &planner.PlanResult{Notes: []planner.PlannerAnnotation{{Text: "confirmed completion"}}},
@@ -931,10 +931,12 @@ func terminalPolicyRunInputs(t *testing.T, rt *Runtime) (*testWorkflowContext, *
 	}))
 	wfCtx := &testWorkflowContext{ctx: ctx, runtime: rt}
 	base := &planner.PlanInput{RunContext: run.Context{
-		RunID: "run-1", SessionID: "sess-1", TurnID: "turn-1", Attempt: 1,
+		RootRunID: "run-1",
+		RunID:     "run-1", SessionID: "sess-1", TurnID: "turn-1", Attempt: 1,
 	}}
 	input := &RunInput{
-		AgentID: agent.Ident("agent-1"), RunID: "run-1", SessionID: "sess-1", TurnID: "turn-1",
+		RootRunID: "run-1",
+		AgentID:   agent.Ident("agent-1"), RunID: "run-1", SessionID: "sess-1", TurnID: "turn-1",
 	}
 	return wfCtx, base, input
 }

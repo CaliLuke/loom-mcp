@@ -236,7 +236,7 @@ func adapterImports(genpkg string, svc *expr.ServiceExpr, svcName string, data *
 			Name: "mcpskills",
 		})
 	}
-	if adapterDataHasProjectedTools(data) {
+	if len(data.Tools) > 0 {
 		imports = append(imports, &codegen.ImportSpec{
 			Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime",
 			Name: "agentruntime",
@@ -257,18 +257,6 @@ func adapterImports(genpkg string, svc *expr.ServiceExpr, svcName string, data *
 		}
 	}
 	return append(imports, adapterAttributeImports(genpkg, svc, imports)...)
-}
-
-func adapterDataHasProjectedTools(data *AdapterData) bool {
-	if data == nil {
-		return false
-	}
-	for _, tool := range data.Tools {
-		if tool != nil && tool.Projected != nil {
-			return true
-		}
-	}
-	return false
 }
 
 func adapterAttributeImports(genpkg string, svc *expr.ServiceExpr, imports []*codegen.ImportSpec) []*codegen.ImportSpec {

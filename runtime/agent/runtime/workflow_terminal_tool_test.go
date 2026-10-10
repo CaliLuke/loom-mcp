@@ -39,6 +39,7 @@ func TestRunLoopStopsAfterTerminalTool(t *testing.T) {
 	}
 	base := &planner.PlanInput{
 		RunContext: run.Context{
+			RootRunID: "run-1",
 			RunID:     "run-1",
 			SessionID: "sess-1",
 			TurnID:    "turn-1",
@@ -46,6 +47,7 @@ func TestRunLoopStopsAfterTerminalTool(t *testing.T) {
 		},
 	}
 	input := &RunInput{
+		RootRunID: "run-1",
 		AgentID:   agent.Ident("agent-1"),
 		RunID:     "run-1",
 		SessionID: "sess-1",

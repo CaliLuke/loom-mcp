@@ -312,6 +312,7 @@ func (r *Runtime) budgetedToolCallCount(calls []planner.ToolRequest) int {
 func (r *Runtime) prepareAllowedCallsMetadata(agentID agent.Ident, base *planner.PlanInput, allowed []planner.ToolRequest, parentTracker *childTracker) []planner.ToolRequest {
 	delete(base.RunContext.Labels, FinalizationReasonLabel)
 	for i := range allowed {
+		allowed[i].RootRunID = base.RunContext.RootRunID
 		if allowed[i].RunID == "" {
 			allowed[i].RunID = base.RunContext.RunID
 		}

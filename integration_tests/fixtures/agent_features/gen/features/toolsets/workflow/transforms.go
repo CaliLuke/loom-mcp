@@ -15,6 +15,9 @@ func InitMethodEchoMethodPayload(in *MethodEchoPayload) *features.MethodEchoPayl
 	out = &features.MethodEchoPayload{
 		Topic: in.Topic,
 	}
+	if in.SessionID != nil {
+		out.SessionID = *in.SessionID
+	}
 	return out
 }
 

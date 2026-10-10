@@ -321,6 +321,7 @@ func TestExecuteWorkflow_TerminalHookUsesDetachedContext(t *testing.T) {
 	}
 
 	_, err := rt.ExecuteWorkflow(wfCtx, &RunInput{
+		RootRunID:               testRunID,
 		WorkflowProtocolVersion: api.WorkflowProtocolVersion,
 		AgentID:                 agent.Ident("agent"),
 		RunID:                   testRunID,

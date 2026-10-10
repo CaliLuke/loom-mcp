@@ -9,10 +9,12 @@ import (
 	"testing"
 
 	"example.com/agentfeatures/gen/features/agents/coordinator"
+	"example.com/agentfeatures/gen/features/toolsets/workflow"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	temporalengine "github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine/temporal"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	agentsruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,7 +31,7 @@ import (
 type historyReplayPlanner struct{}
 
 const (
-	workflowHistoryFile        = "testdata/workflow_protocol_v1.json"
+	workflowHistoryFile        = "testdata/workflow_protocol_v2.json"
 	workflowHistoryIdentity    = "loom-mcp-history-recorder"
 	workflowHistoryStickyQueue = "loom-mcp-history-recorder-sticky"
 )
@@ -50,6 +52,7 @@ func TestGeneratedFeatureWorkflowReplay(t *testing.T) {
 			history, err := client.HistoryFromJSON(bytes.NewReader(data), client.HistoryJSONOptions{})
 			require.NoError(t, err)
 			assertWorkflowHistoryAnonymized(t, history)
+			assertHistoryToolContent(t, history)
 			started := history.Events[0].GetWorkflowExecutionStartedEventAttributes()
 			require.NotNil(t, started)
 			require.Len(t, started.Input.Payloads, 1)
@@ -169,12 +172,38 @@ func registerHistoryReplayAgent(t *testing.T, fx *featureRuntime) {
 }
 
 func (historyReplayPlanner) PlanStart(context.Context, *planner.PlanInput) (*planner.PlanResult, error) {
+	return &planner.PlanResult{ToolCalls: []planner.ToolRequest{{
+		Name: workflow.Draft, ToolCallID: "history-draft", Payload: rawjson.Message(`{"topic":"history replay"}`),
+	}}}, nil
+}
+
+func (historyReplayPlanner) PlanResume(context.Context, *planner.PlanResumeInput) (*planner.PlanResult, error) {
 	return &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: &model.Message{
 		Role:  model.ConversationRoleAssistant,
 		Parts: []model.Part{model.TextPart{Text: "history replay complete"}},
 	}}}, nil
 }
 
-func (historyReplayPlanner) PlanResume(context.Context, *planner.PlanResumeInput) (*planner.PlanResult, error) {
-	return nil, assert.AnError
+// assertHistoryToolContent prevents a planner-only recording from satisfying K4 replay.
+func assertHistoryToolContent(t *testing.T, history *historypb.History) {
+	t.Helper()
+	var toolSchedule int64
+	var found bool
+	for _, event := range history.Events {
+		if scheduled := event.GetActivityTaskScheduledEventAttributes(); scheduled != nil && scheduled.ActivityType.Name == "features.coordinator.executetool" {
+			toolSchedule = event.EventId
+			var input api.ToolInput
+			require.NoError(t, json.Unmarshal(scheduled.Input.Payloads[0].Data, &input))
+			assert.Equal(t, "run-protocol-history", input.RootRunID)
+		}
+		if completed := event.GetActivityTaskCompletedEventAttributes(); completed != nil && toolSchedule != 0 && completed.ScheduledEventId == toolSchedule {
+			var output api.ToolOutput
+			require.NoError(t, json.Unmarshal(completed.Result.Payloads[0].Data, &output))
+			assert.NotEmpty(t, output.Refs.Result)
+			assert.NotEmpty(t, output.Refs.Payload)
+			assert.NotEmpty(t, output.Payload)
+			found = true
+		}
+	}
+	assert.True(t, found, "recorded history must contain a completed tool activity with stored content")
 }

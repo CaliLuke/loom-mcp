@@ -49,7 +49,8 @@ var StatusResult = Type("StatusResult", func() {
 
 var MethodEchoPayload = Type("MethodEchoPayload", func() {
 	Attribute("topic", String, "Topic to echo through the service method")
-	Required("topic")
+	Attribute("session_id", String, "Injected session identity")
+	Required("topic", "session_id")
 })
 
 var MethodEchoResult = Type("MethodEchoResult", func() {
@@ -60,7 +61,8 @@ var MethodEchoResult = Type("MethodEchoResult", func() {
 
 var MethodToolPayload = Type("MethodToolPayload", func() {
 	Attribute("topic", String, "Topic to send to the service method")
-	Required("topic")
+	Attribute("session_id", String, "Injected session identity")
+	Required("topic", "session_id")
 })
 
 var MethodToolResult = Type("MethodToolResult", func() {
@@ -127,6 +129,7 @@ var _ = Service("features", func() {
 			Tool("method_echo", "Echo a topic through the generated method dispatcher", func() {
 				Args(MethodToolPayload)
 				Return(MethodToolResult)
+				Inject("session_id")
 				BindTo("features", "echo_topic")
 			})
 		})

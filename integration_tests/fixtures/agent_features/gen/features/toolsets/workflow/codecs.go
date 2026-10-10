@@ -287,7 +287,8 @@ var FinalizeResultFieldDescs = map[string]string{
 	"ok":       "Whether the operation succeeded",
 }
 var MethodEchoPayloadFieldDescs = map[string]string{
-	"topic": "Topic to send to the service method",
+	"session_id": "Injected session identity",
+	"topic":      "Topic to send to the service method",
 }
 var MethodEchoResultFieldDescs = map[string]string{
 	"message": "Message returned to the agent runtime",
@@ -767,7 +768,8 @@ func MarshalMethodEchoPayload(v *MethodEchoPayload) ([]byte, error) {
 	_ = in
 	var out *toolhttp.MethodEchoPayloadTransport
 	out = &toolhttp.MethodEchoPayloadTransport{
-		Topic: &in.Topic,
+		Topic:     &in.Topic,
+		SessionID: in.SessionID,
 	}
 	return json.Marshal(out)
 }
@@ -790,7 +792,8 @@ func UnmarshalMethodEchoPayload(data []byte) (*MethodEchoPayload, error) {
 	_ = in
 	var out *MethodEchoPayload
 	out = &MethodEchoPayload{
-		Topic: *in.Topic,
+		Topic:     *in.Topic,
+		SessionID: in.SessionID,
 	}
 	return out, nil
 }

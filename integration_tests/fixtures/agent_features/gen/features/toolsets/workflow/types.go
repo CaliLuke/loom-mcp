@@ -40,6 +40,8 @@ type (
 	MethodEchoPayload = struct {
 		// Topic to send to the service method
 		Topic string `json:"topic"`
+		// Injected session identity
+		SessionID *string `json:"-"`
 	}
 
 	// MethodEchoResult defines the JSON result for the workflow.method_echo tool.

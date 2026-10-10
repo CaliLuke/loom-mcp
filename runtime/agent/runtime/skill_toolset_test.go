@@ -29,6 +29,7 @@ func TestSkillToolsetRegistrationExposesSkillsAsModelTools(t *testing.T) {
 	require.NoError(t, rt.RegisterToolset(reg))
 
 	listOut, err := rt.ExecuteToolActivity(context.Background(), &ToolInput{
+		RootRunID:   "root",
 		ToolsetName: "assistant.skills",
 		ToolName:    tools.Ident("assistant.skills.list_skills"),
 		ToolCallID:  "call-list",
@@ -38,6 +39,7 @@ func TestSkillToolsetRegistrationExposesSkillsAsModelTools(t *testing.T) {
 	require.JSONEq(t, `{"skills":[{"id":"code-review","name":"Code Review","description":"Review code.","uri":"skill://code-review/SKILL.md","allowed_tools":["shell"],"preload":"on_start","reload":"per_call","metadata":{"id":"code-review","name":"Code Review","description":"Review code.","allowed_tools":["shell"],"preload":"on_start","reload":"per_call"},"preloaded":true}]}`, string(listOut.Payload))
 
 	loadOut, err := rt.ExecuteToolActivity(context.Background(), &ToolInput{
+		RootRunID:   "root",
 		ToolsetName: "assistant.skills",
 		ToolName:    tools.Ident("assistant.skills.load_skill_resource"),
 		ToolCallID:  "call-load",
@@ -63,6 +65,7 @@ func TestSkillToolsetHonorsPerSkillReloadMetadata(t *testing.T) {
 
 	payload := rawjson.Message([]byte(`{"skill":"code-review"}`))
 	first, err := rt.ExecuteToolActivity(context.Background(), &ToolInput{
+		RootRunID:   "root",
 		ToolsetName: "assistant.skills",
 		ToolName:    tools.Ident("assistant.skills.load_skill"),
 		ToolCallID:  "call-first",
@@ -73,6 +76,7 @@ func TestSkillToolsetHonorsPerSkillReloadMetadata(t *testing.T) {
 
 	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nid: code-review\nname: Code Review\nreload: per_call\n---\n# Second\n"), 0o600))
 	second, err := rt.ExecuteToolActivity(context.Background(), &ToolInput{
+		RootRunID:   "root",
 		ToolsetName: "assistant.skills",
 		ToolName:    tools.Ident("assistant.skills.load_skill"),
 		ToolCallID:  "call-second",
@@ -107,6 +111,7 @@ func TestSkillToolsetCacheSupportsConcurrentListAndLoad(t *testing.T) {
 			defer wg.Done()
 			<-start
 			_, err := rt.ExecuteToolActivity(ctx, &ToolInput{
+				RootRunID:   "root",
 				ToolsetName: "assistant.skills",
 				ToolName:    tools.Ident("assistant.skills.list_skills"),
 				ToolCallID:  "call-list",
@@ -118,6 +123,7 @@ func TestSkillToolsetCacheSupportsConcurrentListAndLoad(t *testing.T) {
 			defer wg.Done()
 			<-start
 			_, err := rt.ExecuteToolActivity(ctx, &ToolInput{
+				RootRunID:   "root",
 				ToolsetName: "assistant.skills",
 				ToolName:    tools.Ident("assistant.skills.load_skill"),
 				ToolCallID:  "call-load",

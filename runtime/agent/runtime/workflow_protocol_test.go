@@ -8,7 +8,7 @@ import (
 	agent "github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
-	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,7 +24,7 @@ func TestValidateWorkflowProtocolVersion(t *testing.T) {
 		{"previous", api.WorkflowProtocolVersion - 1},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			err := validateWorkflowInput(&RunInput{AgentID: "svc.agent", WorkflowProtocolVersion: test.version})
+			err := validateWorkflowInput(&RunInput{RootRunID: "root", AgentID: "svc.agent", WorkflowProtocolVersion: test.version})
 			if test.version == api.WorkflowProtocolVersion {
 				assert.NoError(t, err)
 				return
@@ -48,11 +48,14 @@ func TestStartStampsWorkflowProtocolAfterOptions(t *testing.T) {
 			require.NoError(t, err)
 			handle, err := rt.MustClient(agent.Ident("svc.agent")).Start(t.Context(), "session", nil, func(input *RunInput) {
 				input.WorkflowProtocolVersion = version
+				input.RootRunID = "forged"
 			})
 			require.NoError(t, err)
 			_, err = handle.Wait(t.Context())
 			require.NoError(t, err)
 			assert.Equal(t, api.WorkflowProtocolVersion, eng.last.Input.WorkflowProtocolVersion)
+			assert.Equal(t, eng.last.Input.RunID, eng.last.Input.RootRunID)
+			assert.NotEmpty(t, eng.last.Input.RootRunID)
 		})
 	}
 }
@@ -60,7 +63,7 @@ func TestStartStampsWorkflowProtocolAfterOptions(t *testing.T) {
 func TestChildInputsStampWorkflowProtocol(t *testing.T) {
 	for _, kind := range []string{"agent-as-tool", "inline"} {
 		t.Run(kind, func(t *testing.T) {
-			nested := run.Context{RunID: "child", ParentRunID: "parent", SessionID: "session"}
+			nested := buildNestedAgentRunContext(planner.ToolRequest{RunID: "parent", RootRunID: "root", SessionID: "session", Name: "child.tool", ToolCallID: "child-call"})
 			var input *RunInput
 			if kind == "inline" {
 				built := buildInlineAgentRunInput("child.agent", nested, nil)
@@ -73,6 +76,10 @@ func TestChildInputsStampWorkflowProtocol(t *testing.T) {
 				input = wf.childRequests[0].Input
 			}
 			assert.Equal(t, api.WorkflowProtocolVersion, input.WorkflowProtocolVersion)
+			assert.Equal(t, "root", input.RootRunID)
+			assert.NotEqual(t, input.RunID, input.RootRunID)
+			assert.Equal(t, "parent", input.ParentRunID)
+			assert.Equal(t, "root", workflowRunContext(input).RootRunID)
 		})
 	}
 }
@@ -90,7 +97,7 @@ func TestExecuteWorkflowRejectsProtocolBeforeEffects(t *testing.T) {
 			}))
 			rt.agents["svc.agent"] = AgentRegistration{ID: "svc.agent", PlanActivityName: "plan"}
 			wf := &testWorkflowContext{ctx: t.Context(), runtime: rt}
-			out, err := rt.ExecuteWorkflow(wf, &RunInput{AgentID: "svc.agent", RunID: "run", WorkflowProtocolVersion: version})
+			out, err := rt.ExecuteWorkflow(wf, &RunInput{RootRunID: "run", AgentID: "svc.agent", RunID: "run", WorkflowProtocolVersion: version})
 			var mismatch *api.WorkflowProtocolMismatchError
 			require.ErrorAs(t, err, &mismatch)
 			require.ErrorIs(t, err, api.ErrWorkflowProtocolMismatch)

@@ -153,6 +153,9 @@ func validateWorkflowInput(input *RunInput) error {
 	if input.AgentID == "" {
 		return errors.New("agent id is required")
 	}
+	if input.RootRunID == "" {
+		return errors.New("root run id is required")
+	}
 	if input.Policy != nil && input.Policy.MaxRecoveryTurns < 0 {
 		return fmt.Errorf("%w: MaxRecoveryTurns must not be negative", ErrInvalidConfig)
 	}
@@ -170,6 +173,7 @@ func workflowRunContext(input *RunInput) run.Context {
 	delete(labels, FinalizationReasonLabel)
 	return run.Context{
 		RunID:            input.RunID,
+		RootRunID:        input.RootRunID,
 		SessionID:        input.SessionID,
 		TurnID:           input.TurnID,
 		ParentToolCallID: input.ParentToolCallID,

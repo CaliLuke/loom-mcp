@@ -73,6 +73,7 @@ func TestExecuteToolActivityRunsInterceptorsAroundTool(t *testing.T) {
 	}
 
 	out, err := rt.ExecuteToolActivity(context.Background(), &ToolInput{
+		RootRunID:   "root",
 		ToolsetName: "svc.tools",
 		ToolName:    "svc.tools.echo",
 		ToolCallID:  "call-1",
@@ -129,6 +130,7 @@ func TestExecuteToolActivityRunsAgentInterceptors(t *testing.T) {
 	}
 
 	out, err := rt.ExecuteToolActivity(context.Background(), &ToolInput{
+		RootRunID:   "root",
 		AgentID:     "svc.agent",
 		ToolsetName: "svc.tools",
 		ToolName:    "svc.tools.echo",
@@ -219,6 +221,7 @@ func TestExecuteWorkflowAfterRunInterceptorCanClearError(t *testing.T) {
 	}
 
 	out, err := rt.ExecuteWorkflow(wfCtx, &RunInput{
+		RootRunID:               "run-1",
 		WorkflowProtocolVersion: api.WorkflowProtocolVersion,
 		AgentID:                 "svc.agent",
 		RunID:                   "run-1",
@@ -260,6 +263,7 @@ func TestExecuteWorkflowAfterRunInterceptorClearsCanceledStatus(t *testing.T) {
 	}
 
 	out, err := rt.ExecuteWorkflow(wfCtx, &RunInput{
+		RootRunID:               "run-1",
 		WorkflowProtocolVersion: api.WorkflowProtocolVersion,
 		AgentID:                 "svc.agent",
 		RunID:                   "run-1",
@@ -299,6 +303,7 @@ func TestExecuteWorkflowPublishesCanceledStatus(t *testing.T) {
 	}
 
 	out, err := rt.ExecuteWorkflow(wfCtx, &RunInput{
+		RootRunID:               "run-1",
 		WorkflowProtocolVersion: api.WorkflowProtocolVersion,
 		AgentID:                 "svc.agent",
 		RunID:                   "run-1",
@@ -342,6 +347,7 @@ func TestExecuteWorkflowSanitizesHostileCompletionError(t *testing.T) {
 	result := make(chan error, 1)
 	go func() {
 		_, err := rt.ExecuteWorkflow(wfCtx, &RunInput{
+			RootRunID:               "run-hostile",
 			WorkflowProtocolVersion: api.WorkflowProtocolVersion,
 			AgentID:                 "svc.agent",
 			RunID:                   "run-hostile",
@@ -412,6 +418,7 @@ func TestExecuteWorkflowSanitizesErrorsBetweenAfterRunInterceptors(t *testing.T)
 			}
 
 			out, err := rt.ExecuteWorkflow(wfCtx, &RunInput{
+				RootRunID:               "run-hostile-interceptor",
 				WorkflowProtocolVersion: api.WorkflowProtocolVersion,
 				AgentID:                 "svc.agent",
 				RunID:                   "run-hostile-interceptor",
@@ -475,6 +482,7 @@ func TestExecuteWorkflowEmptyAfterRunDecisionPreservesRunError(t *testing.T) {
 	}
 
 	out, err := rt.ExecuteWorkflow(wfCtx, &RunInput{
+		RootRunID:               "run-1",
 		WorkflowProtocolVersion: api.WorkflowProtocolVersion,
 		AgentID:                 "svc.agent",
 		RunID:                   "run-1",
@@ -522,6 +530,7 @@ func TestRetryAndReflectInterceptorConvertsToolErrorToRetryHint(t *testing.T) {
 	}
 
 	out, err := rt.ExecuteToolActivity(context.Background(), &ToolInput{
+		RootRunID:   "root",
 		ToolsetName: "svc.tools",
 		ToolName:    "svc.tools.search",
 		ToolCallID:  "call-1",

@@ -102,6 +102,9 @@ func DispatchProjectedBoundedLookupToolMethod(ctx context.Context, meta *runtime
 			}, nil
 		}
 	}
+	if err := runtime.RecordToolPayload(ctx, methodIn); err != nil {
+		return nil, err
+	}
 	methodOut, err := opts.Call(ctx, methodIn)
 	if err != nil {
 		tr := &planner.ToolResult{
@@ -203,6 +206,9 @@ func DispatchProjectedLookupToolMethod(ctx context.Context, meta *runtime.ToolCa
 			}, nil
 		}
 	}
+	if err := runtime.RecordToolPayload(ctx, methodIn); err != nil {
+		return nil, err
+	}
 	methodOut, err := opts.Call(ctx, methodIn)
 	if err != nil {
 		tr := &planner.ToolResult{
@@ -294,6 +300,9 @@ func DispatchProjectedStatusToolMethod(ctx context.Context, meta *runtime.ToolCa
 				Name:  ProjectedStatusTool,
 			}, nil
 		}
+	}
+	if err := runtime.RecordToolPayload(ctx, methodIn); err != nil {
+		return nil, err
 	}
 	methodOut, err := opts.Call(ctx, methodIn)
 	if err != nil {

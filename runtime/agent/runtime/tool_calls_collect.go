@@ -161,6 +161,7 @@ func (e *toolBatchExec) decodeActivityToolResult(ctx context.Context, info futur
 	toolRes := &planner.ToolResult{
 		Name:       info.call.Name,
 		Result:     decoded,
+		Refs:       out.Refs,
 		Bounds:     out.Bounds,
 		ServerData: out.ServerData,
 		ToolCallID: info.call.ToolCallID,

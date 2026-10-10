@@ -7,6 +7,7 @@ import (
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
+	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 	"github.com/stretchr/testify/require"
 )
@@ -37,6 +38,7 @@ func TestExecuteToolActivity_UsesGeneratedCodecs(t *testing.T) {
 	}
 
 	rt := &Runtime{
+		RunStore: runstoreinmem.New(),
 		toolsets: map[string]ToolsetRegistration{
 			"svc.ts": {
 				Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
@@ -50,7 +52,7 @@ func TestExecuteToolActivity_UsesGeneratedCodecs(t *testing.T) {
 	}
 	rt.toolSpecs = map[tools.Ident]tools.ToolSpec{spec.Name: spec}
 
-	input := ToolInput{AgentID: "agent", RunID: "run", ToolName: spec.Name, Payload: rawjson.Message([]byte("{}"))}
+	input := ToolInput{RootRunID: "run", AgentID: "agent", RunID: "run", ToolName: spec.Name, Payload: rawjson.Message([]byte("{}"))}
 	out, err := rt.ExecuteToolActivity(context.Background(), &input)
 	require.NoError(t, err)
 	require.NotNil(t, out)

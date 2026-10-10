@@ -105,6 +105,7 @@ func TestAgentTool_DefaultContentFromPayload(t *testing.T) {
 	ctx := engine.WithWorkflowContext(context.Background(), wf)
 	// String payload path (canonical JSON)
 	call := planner.ToolRequest{
+		RootRunID: "r1",
 		RunID:     "r1",
 		SessionID: "s1",
 		Name:      tools.Ident("svc.tools.do"),
@@ -158,6 +159,7 @@ func TestAgentTool_TextContent(t *testing.T) {
 	wf := &testWorkflowContext{ctx: context.Background(), runtime: rt}
 	ctx := engine.WithWorkflowContext(context.Background(), wf)
 	call := planner.ToolRequest{
+		RootRunID: "r1",
 		RunID:     "r1",
 		SessionID: "s1",
 		Name:      tools.Ident("svc.tools.do"),
@@ -214,6 +216,7 @@ func TestAgentTool_PromptBuilderOverrides(t *testing.T) {
 	wf := &testWorkflowContext{ctx: context.Background(), runtime: rt}
 	ctx := engine.WithWorkflowContext(context.Background(), wf)
 	call := planner.ToolRequest{
+		RootRunID: "r1",
 		RunID:     "r1",
 		SessionID: "s1",
 		Name:      tools.Ident("svc.tools.do"),
@@ -275,6 +278,7 @@ func TestAgentTool_SystemPromptPrepended(t *testing.T) {
 	wf := &testWorkflowContext{ctx: context.Background(), runtime: rt}
 	ctx := engine.WithWorkflowContext(context.Background(), wf)
 	call := planner.ToolRequest{
+		RootRunID: "r1",
 		RunID:     "r1",
 		SessionID: "s1",
 		Name:      tools.Ident("svc.tools.do"),

@@ -250,6 +250,7 @@ func buildInlineAgentRunInput(agentID agent.Ident, nestedRunCtx run.Context, mes
 	input := RunInput{
 		AgentID:          agentID,
 		RunID:            nestedRunCtx.RunID,
+		RootRunID:        nestedRunCtx.RootRunID,
 		SessionID:        nestedRunCtx.SessionID,
 		TurnID:           nestedRunCtx.TurnID,
 		ParentToolCallID: nestedRunCtx.ParentToolCallID,
@@ -282,6 +283,7 @@ func (e *toolBatchExec) dispatchActivityToolCall(ctx context.Context, wfCtx engi
 	toolInput := ToolInput{
 		AgentID:          e.agentID,
 		RunID:            e.runID,
+		RootRunID:        call.RootRunID,
 		ToolsetName:      spec.Toolset,
 		ToolName:         call.Name,
 		ToolCallID:       call.ToolCallID,

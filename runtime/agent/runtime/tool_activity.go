@@ -39,9 +39,14 @@ func (r *Runtime) ExecuteToolActivity(ctx context.Context, req *ToolInput) (*Too
 	if err != nil {
 		return nil, err
 	}
+	recorder := &toolPayloadRecorder{}
+	ctx = context.WithValue(ctx, toolPayloadRecorderKey{}, recorder)
 	start := time.Now()
 	execResult := interceptedResult
 	if execResult == nil {
+		if err := recordActivityRequest(ctx, call.Payload); err != nil {
+			return nil, err
+		}
 		execResult, err = reg.Execute(ctx, &call)
 	}
 	duration := time.Since(start)
@@ -56,11 +61,7 @@ func (r *Runtime) ExecuteToolActivity(ctx context.Context, req *ToolInput) (*Too
 	if err != nil {
 		return nil, err
 	}
-	out = newToolActivityOutput(resultJSON, result)
-	if pause != nil {
-		out.Pause = pause
-	}
-	return out, nil
+	return r.storedToolActivityOutput(ctx, req.RootRunID, resultJSON, result, pause, recorder.payload)
 }
 
 func (r *Runtime) interceptorsForAgent(agentID agent.Ident) []Interceptor {
@@ -82,6 +83,7 @@ func toolActivityRequest(req *ToolInput, raw rawjson.Message) planner.ToolReques
 		Name:             req.ToolName,
 		Payload:          raw,
 		RunID:            req.RunID,
+		RootRunID:        req.RootRunID,
 		AgentID:          req.AgentID,
 		SessionID:        req.SessionID,
 		Labels:           req.Labels,

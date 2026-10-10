@@ -1063,6 +1063,7 @@ func TestAgentAsToolNestedUpdates(t *testing.T) {
 			}
 			msgs := []*model.Message{{Role: "user", Parts: []model.Part{model.TextPart{Text: "go"}}}}
 			nestedCtx := run.Context{
+				RootRunID:        call.RootRunID,
 				RunID:            NestedRunIDForToolCall(call.RunID, call.Name, call.ToolCallID),
 				ParentToolCallID: call.ToolCallID,
 				ParentRunID:      call.RunID,
@@ -1092,9 +1093,9 @@ func TestAgentAsToolNestedUpdates(t *testing.T) {
 	rt.mu.Unlock()
 
 	// Parent run requests a single agent-tool invocation
-	parentInput := &RunInput{AgentID: "parent.agent", RunID: "run-parent", SessionID: "session-1", TurnID: "turn-1"}
+	parentInput := &RunInput{RootRunID: "run-parent", AgentID: "parent.agent", RunID: "run-parent", SessionID: "session-1", TurnID: "turn-1"}
 	seedParentRun(t, rt.SessionStore, parentInput.RunID, parentInput.SessionID)
-	base := &planner.PlanInput{RunContext: run.Context{RunID: parentInput.RunID, SessionID: parentInput.SessionID, TurnID: parentInput.TurnID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: parentInput.AgentID, runID: parentInput.RunID})}
+	base := &planner.PlanInput{RunContext: run.Context{RootRunID: parentInput.RunID, RunID: parentInput.RunID, SessionID: parentInput.SessionID, TurnID: parentInput.TurnID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: parentInput.AgentID, runID: parentInput.RunID})}
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: tools.Ident("invoke")}}}
 
 	_, err = rt.runLoop(wfCtx, parentReg, parentInput, base, initial, nil, model.TokenUsage{}, policy.CapsState{MaxToolCalls: 3, RemainingToolCalls: 3}, time.Time{}, time.Time{}, 2, parentInput.TurnID, nil, nil, 0)

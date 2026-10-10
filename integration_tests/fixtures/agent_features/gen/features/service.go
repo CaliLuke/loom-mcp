@@ -46,6 +46,8 @@ type LimitPayload struct {
 type MethodEchoPayload struct {
 	// Topic to echo through the service method
 	Topic string `json:"topic"`
+	// Injected session identity
+	SessionID string `json:"session_id"`
 }
 
 // MethodEchoResult is the result type of the features service echo_topic
@@ -60,6 +62,8 @@ type MethodEchoResult struct {
 type MethodToolPayload struct {
 	// Topic to send to the service method
 	Topic string `json:"topic"`
+	// Injected session identity
+	SessionID string `json:"session_id"`
 }
 
 type MethodToolResult struct {

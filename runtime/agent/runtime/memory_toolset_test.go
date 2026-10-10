@@ -519,6 +519,7 @@ func TestExecuteToolActivitySearchMemoryPreservesRuntimeLabels(t *testing.T) {
 	})))
 
 	out, err := rt.ExecuteToolActivity(ctx, &ToolInput{
+		RootRunID:   "run-1",
 		AgentID:     "svc.agent",
 		RunID:       "run-1",
 		ToolsetName: "memory",

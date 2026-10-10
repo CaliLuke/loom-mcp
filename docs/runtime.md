@@ -156,10 +156,41 @@ surfaces. Configure `memory.Store` and `stream.Sink` separately when their
 derived projection or delivery state must also survive worker replacement.
 
 The Mongo run store uses explicit majority write concern and primary reads.
-`runtime.WithRunStore` exposes the store on `Runtime.RunStore`. Runtime execution
-does not read or write it yet. The store accepts a required root run ID as its
-scope. Each Mongo content item has a 15 MiB limit. `DeleteScope` deletes all
+`runtime.WithRunStore` exposes the store on `Runtime.RunStore`. `RootRunID` on
+`api.RunInput`, `run.Context`, and `api.ToolInput` identifies the root of the run
+tree and the run store scope. The runtime sets it to the top-level `RunID` after
+caller options; child agents inherit it. Workflow input requires a non-empty
+root ID. Each Mongo content item has a 15 MiB limit. `DeleteScope` deletes all
 content, call records, and sequence counters in that scope.
+
+Before returning, tool activities store the full canonical result JSON, the
+non-empty `ServerData` sidecar, and the executed payload under separate content
+hashes in the root scope. The executed payload includes changes from payload
+adapters, `BeforeTool` interceptors, method mapping, and injected values.
+**Every worker that executes tools must share the run store.** A failed write,
+including the size limit, fails the activity without returning any references.
+An error-only outcome has no eligible result hash.
+
+`ToolOutput.Refs`, `planner.ToolResult.Refs`, `api.ToolEvent.Refs`,
+`planner.ToolOutput.Refs`, and `api.ToolCallOutput.Refs` carry `tools.ResultRefs`
+(also available as `api.ToolResultRefs`). `Result` addresses the full eligible
+result; `ServerData` and `Payload` address server-only content. Never put the
+server-only hashes or bytes into model messages. Existing result bytes, typed
+results, hook payloads, and model-facing previews remain unchanged. Inline,
+child-agent, and externally provided results do not populate these references.
+
+Typed consumers can call
+`runtime.LoadToolResult(ctx, store, rootRunID, toolSpec, refs.Result)` to load the
+eligible bytes and decode them with the generated result codec. Empty or missing
+hashes fail; workflow-side decoding still uses inline bytes.
+
+Generated method dispatchers and local MCP adapters call
+`runtime.RecordToolPayload(ctx, payload)` immediately before invoking the
+implementation. Custom executors that transform or inject payloads must call
+this helper after those changes. Otherwise, the activity records the JSON passed
+to the executor. For remote MCP tools, only the outgoing request is available;
+server-side transformations across the MCP connection cannot be recorded here.
+The recorder is inactive outside tool activities.
 
 The run log and run store each use a client constructor and a store wrapper:
 
@@ -402,7 +433,7 @@ Start ──► PlanStart ──► Tool Calls? ──► Execute Tools ──�
 ### Workflow Contracts
 
 - **Workflow protocol versions must match.** `api.WorkflowProtocolVersion` is
-  currently `1` and versions the agent workflow's inputs, outputs, signals, and
+  currently `2` and versions the agent workflow's inputs, outputs, signals, and
   state. The runtime stamps it after caller run options on top-level and child
   inputs. Workflow entry and history replay reject a different or missing
   version before interceptors, activities, or commands, returning

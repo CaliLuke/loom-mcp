@@ -458,6 +458,7 @@ func testTemporalSignalTimeoutRace(t *testing.T, temporalClient client.Client) {
 			WorkflowProtocolVersion: api.WorkflowProtocolVersion,
 			AgentID:                 coordinator.AgentID,
 			RunID:                   runID,
+			RootRunID:               runID,
 			SessionID:               sessionID,
 			Messages:                []*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "race"}}}},
 		})

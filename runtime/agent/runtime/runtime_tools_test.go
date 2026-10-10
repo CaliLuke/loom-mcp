@@ -20,6 +20,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	runloginmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog/inmem"
+	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 	rthints "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime/hints"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
 	sessioninmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/session/inmem"
@@ -63,7 +64,7 @@ func newProjectedResultSpec() tools.ToolSpec {
 }
 
 func TestExecuteToolActivityReturnsErrorAndHint(t *testing.T) {
-	rt := &Runtime{toolsets: map[string]ToolsetRegistration{"svc.ts": {Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
+	rt := &Runtime{RunStore: runstoreinmem.New(), toolsets: map[string]ToolsetRegistration{"svc.ts": {Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
 		require.Equal(t, "tool-1", call.ToolCallID)
 		require.Equal(t, "parent-1", call.ParentToolCallID)
 		require.Equal(t, "run", call.RunID)
@@ -79,7 +80,7 @@ func TestExecuteToolActivityReturnsErrorAndHint(t *testing.T) {
 	rt.toolSpecs = map[tools.Ident]tools.ToolSpec{
 		tools.Ident("tool"): newAnyJSONSpec("tool", "svc.ts"),
 	}
-	input := ToolInput{AgentID: "agent", RunID: "run", ToolName: "tool", ToolCallID: "tool-1", ParentToolCallID: "parent-1", Payload: []byte("null")}
+	input := ToolInput{RootRunID: "run", AgentID: "agent", RunID: "run", ToolName: "tool", ToolCallID: "tool-1", ParentToolCallID: "parent-1", Payload: []byte("null")}
 	out, err := rt.ExecuteToolActivity(context.Background(), &input)
 	require.NoError(t, err)
 	require.NotNil(t, out)
@@ -166,7 +167,7 @@ func TestEnforceToolResultContractsRejectsNilToolResultWithoutCriticalPrefix(t *
 }
 
 func TestExecuteToolActivityPropagatesServerData(t *testing.T) {
-	rt := &Runtime{toolsets: map[string]ToolsetRegistration{"svc.ts": {Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
+	rt := &Runtime{RunStore: runstoreinmem.New(), toolsets: map[string]ToolsetRegistration{"svc.ts": {Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
 		return Executed(&planner.ToolResult{
 			Name:       call.Name,
 			ToolCallID: call.ToolCallID,
@@ -177,7 +178,7 @@ func TestExecuteToolActivityPropagatesServerData(t *testing.T) {
 	rt.toolSpecs = map[tools.Ident]tools.ToolSpec{
 		tools.Ident("tool"): newAnyJSONSpec("tool", "svc.ts"),
 	}
-	input := ToolInput{AgentID: "agent", RunID: "run", ToolName: "tool", ToolCallID: "tool-1", Payload: []byte("null")}
+	input := ToolInput{RootRunID: "run", AgentID: "agent", RunID: "run", ToolName: "tool", ToolCallID: "tool-1", Payload: []byte("null")}
 	out, err := rt.ExecuteToolActivity(context.Background(), &input)
 	require.NoError(t, err)
 	require.NotNil(t, out)
@@ -185,7 +186,7 @@ func TestExecuteToolActivityPropagatesServerData(t *testing.T) {
 }
 
 func TestExecuteToolActivityRunsResultMaterializer(t *testing.T) {
-	rt := &Runtime{toolsets: map[string]ToolsetRegistration{"svc.ts": {
+	rt := &Runtime{RunStore: runstoreinmem.New(), toolsets: map[string]ToolsetRegistration{"svc.ts": {
 		Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
 			return Executed(&planner.ToolResult{
 				Name:       call.Name,
@@ -205,7 +206,7 @@ func TestExecuteToolActivityRunsResultMaterializer(t *testing.T) {
 	rt.toolSpecs = map[tools.Ident]tools.ToolSpec{
 		tools.Ident("tool"): newAnyJSONSpec("tool", "svc.ts"),
 	}
-	input := ToolInput{AgentID: "agent", RunID: "run", ToolName: "tool", ToolCallID: "tool-1", Payload: []byte(`{"input":"ok"}`)}
+	input := ToolInput{RootRunID: "run", AgentID: "agent", RunID: "run", ToolName: "tool", ToolCallID: "tool-1", Payload: []byte(`{"input":"ok"}`)}
 	out, err := rt.ExecuteToolActivity(context.Background(), &input)
 	require.NoError(t, err)
 	require.NotNil(t, out)
@@ -214,7 +215,7 @@ func TestExecuteToolActivityRunsResultMaterializer(t *testing.T) {
 
 func TestExecuteToolActivityPropagatesBounds(t *testing.T) {
 	total := 9
-	rt := &Runtime{toolsets: map[string]ToolsetRegistration{"svc.ts": {Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
+	rt := &Runtime{RunStore: runstoreinmem.New(), toolsets: map[string]ToolsetRegistration{"svc.ts": {Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
 		return Executed(&planner.ToolResult{
 			Name:       call.Name,
 			ToolCallID: call.ToolCallID,
@@ -231,7 +232,7 @@ func TestExecuteToolActivityPropagatesBounds(t *testing.T) {
 	rt.toolSpecs = map[tools.Ident]tools.ToolSpec{
 		tools.Ident("tool"): spec,
 	}
-	input := ToolInput{AgentID: "agent", RunID: "run", ToolName: "tool", ToolCallID: "tool-1", Payload: []byte("null")}
+	input := ToolInput{RootRunID: "run", AgentID: "agent", RunID: "run", ToolName: "tool", ToolCallID: "tool-1", Payload: []byte("null")}
 	out, err := rt.ExecuteToolActivity(context.Background(), &input)
 	require.NoError(t, err)
 	require.NotNil(t, out)
@@ -286,7 +287,7 @@ func TestEncodeCanonicalToolResultRejectsRuntimeRawJSONResult(t *testing.T) {
 func TestExecuteToolActivityProjectsBoundsIntoEncodedResult(t *testing.T) {
 	total := 9
 	cursor := "next-page"
-	rt := &Runtime{toolsets: map[string]ToolsetRegistration{"svc.ts": {Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
+	rt := &Runtime{RunStore: runstoreinmem.New(), toolsets: map[string]ToolsetRegistration{"svc.ts": {Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
 		return Executed(&planner.ToolResult{
 			Name:       call.Name,
 			ToolCallID: call.ToolCallID,
@@ -305,7 +306,7 @@ func TestExecuteToolActivityProjectsBoundsIntoEncodedResult(t *testing.T) {
 	rt.toolSpecs = map[tools.Ident]tools.ToolSpec{
 		tools.Ident("tool"): newProjectedResultSpec(),
 	}
-	input := ToolInput{AgentID: "agent", RunID: "run", ToolName: "tool", ToolCallID: "tool-1", Payload: []byte("null")}
+	input := ToolInput{RootRunID: "run", AgentID: "agent", RunID: "run", ToolName: "tool", ToolCallID: "tool-1", Payload: []byte("null")}
 	out, err := rt.ExecuteToolActivity(context.Background(), &input)
 	require.NoError(t, err)
 	require.NotNil(t, out)
@@ -320,7 +321,7 @@ func TestExecuteToolActivityProjectsBoundsIntoEncodedResult(t *testing.T) {
 }
 
 func TestExecuteToolActivityDropsStaleOptionalBoundFieldsFromSemanticResult(t *testing.T) {
-	rt := &Runtime{toolsets: map[string]ToolsetRegistration{"svc.ts": {Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
+	rt := &Runtime{RunStore: runstoreinmem.New(), toolsets: map[string]ToolsetRegistration{"svc.ts": {Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
 		return Executed(&planner.ToolResult{
 			Name:       call.Name,
 			ToolCallID: call.ToolCallID,
@@ -339,7 +340,7 @@ func TestExecuteToolActivityDropsStaleOptionalBoundFieldsFromSemanticResult(t *t
 	rt.toolSpecs = map[tools.Ident]tools.ToolSpec{
 		tools.Ident("tool"): newProjectedResultSpec(),
 	}
-	input := ToolInput{AgentID: "agent", RunID: "run", ToolName: "tool", ToolCallID: "tool-1", Payload: []byte("null")}
+	input := ToolInput{RootRunID: "run", AgentID: "agent", RunID: "run", ToolName: "tool", ToolCallID: "tool-1", Payload: []byte("null")}
 	out, err := rt.ExecuteToolActivity(context.Background(), &input)
 	require.NoError(t, err)
 	require.NotNil(t, out)

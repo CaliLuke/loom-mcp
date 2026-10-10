@@ -55,6 +55,7 @@ func TestDefaultAgentToolExecute_TemplatePreferredOverText(t *testing.T) {
 		if input == nil {
 			return &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: &model.Message{Role: "assistant", Parts: []model.Part{model.TextPart{Text: "ok"}}}}}, nil
 		}
+		require.Equal(t, "tree-root", input.RunContext.RootRunID)
 		got = append([]*model.Message{}, input.Messages...)
 		return &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: &model.Message{Role: "assistant", Parts: []model.Part{model.TextPart{Text: "ok"}}}}}, nil
 	})
@@ -76,6 +77,7 @@ func TestDefaultAgentToolExecute_TemplatePreferredOverText(t *testing.T) {
 
 	exec := defaultAgentToolExecute(rt, cfg)
 	call := planner.ToolRequest{
+		RootRunID: "tree-root",
 		Name:      tools.Ident("tool"),
 		RunID:     "run",
 		SessionID: "sess-1",
@@ -130,7 +132,7 @@ func TestDefaultAgentToolExecute_UsesTextWhenNoTemplate(t *testing.T) {
 		},
 	}
 	exec := defaultAgentToolExecute(rt, cfg)
-	call := planner.ToolRequest{Name: tools.Ident("tool"), RunID: "run", SessionID: "sess-1"}
+	call := planner.ToolRequest{RootRunID: "run", Name: tools.Ident("tool"), RunID: "run", SessionID: "sess-1"}
 	seedParentRun(t, rt.SessionStore, call.RunID, call.SessionID)
 	res, err := exec(ctx, &call)
 	require.NoError(t, err)
@@ -163,6 +165,7 @@ func TestDefaultAgentToolExecute_DefaultContentFromPayload(t *testing.T) {
 	}
 	exec := defaultAgentToolExecute(rt, cfg)
 	call := planner.ToolRequest{
+		RootRunID: "run",
 		Name:      tools.Ident("tool"),
 		RunID:     "run",
 		SessionID: "sess-1",
@@ -283,6 +286,7 @@ func TestDefaultAgentToolExecute_PromptSpecPreferredOverTemplateTextPromptBuilde
 	}
 	exec := defaultAgentToolExecute(rt, cfg)
 	call := planner.ToolRequest{
+		RootRunID: "run",
 		Name:      tools.Ident("tool"),
 		RunID:     "run",
 		SessionID: "sess-1",
@@ -387,6 +391,7 @@ func TestDefaultAgentToolExecute_PromptSpecRendersWithSchemaKeys(t *testing.T) {
 		},
 	}
 	call := planner.ToolRequest{
+		RootRunID: "run",
 		Name:      tools.Ident("tool"),
 		RunID:     "run",
 		SessionID: "sess-1",

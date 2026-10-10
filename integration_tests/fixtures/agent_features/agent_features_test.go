@@ -104,7 +104,7 @@ func TestAgentFeatureMethodBackedDispatcher(t *testing.T) {
 	registerCoordinatorToolsets(t, ctx, fx.rt, exec)
 	require.NoError(t, coordinator.RegisterCoordinatorAgent(ctx, fx.rt, coordinator.CoordinatorAgentConfig{}))
 
-	out, err := fx.rt.ExecuteToolActivity(ctx, &agentsruntime.ToolInput{
+	out, err := fx.rt.ExecuteToolActivity(ctx, &agentsruntime.ToolInput{RootRunID: "run-method-backed-dispatcher",
 		AgentID:    coordinator.AgentID,
 		RunID:      "run-method-backed-dispatcher",
 		SessionID:  "sess-method-backed-dispatcher",
@@ -286,7 +286,7 @@ func TestGeneratedFeatureRunPersistsArtifactsMemorySkillsAndDebugState(t *testin
 	refs := publishArtifacts(out.ToolEvents)
 	require.Len(t, refs, 1)
 
-	listArtifacts, err := rt.ExecuteToolActivity(ctx, &agentsruntime.ToolInput{
+	listArtifacts, err := rt.ExecuteToolActivity(ctx, &agentsruntime.ToolInput{RootRunID: runID,
 		AgentID:    coordinator.AgentID,
 		RunID:      runID,
 		SessionID:  "sess-state",
@@ -298,7 +298,7 @@ func TestGeneratedFeatureRunPersistsArtifactsMemorySkillsAndDebugState(t *testin
 	require.Contains(t, string(listArtifacts.Payload), refs[0].ID)
 	require.NotContains(t, string(listArtifacts.Payload), "published")
 
-	loadArtifact, err := rt.ExecuteToolActivity(ctx, &agentsruntime.ToolInput{
+	loadArtifact, err := rt.ExecuteToolActivity(ctx, &agentsruntime.ToolInput{RootRunID: runID,
 		AgentID:    coordinator.AgentID,
 		RunID:      runID,
 		SessionID:  "sess-state",
@@ -309,7 +309,7 @@ func TestGeneratedFeatureRunPersistsArtifactsMemorySkillsAndDebugState(t *testin
 	require.NoError(t, err)
 	require.JSONEq(t, `{"content":"publi","mime_type":"text/plain","truncated":true,"size_bytes":9}`, string(loadArtifact.Payload))
 
-	loadMemory, err := rt.ExecuteToolActivity(ctx, &agentsruntime.ToolInput{
+	loadMemory, err := rt.ExecuteToolActivity(ctx, &agentsruntime.ToolInput{RootRunID: runID,
 		AgentID:    coordinator.AgentID,
 		RunID:      runID,
 		SessionID:  "sess-state",
@@ -320,7 +320,7 @@ func TestGeneratedFeatureRunPersistsArtifactsMemorySkillsAndDebugState(t *testin
 	require.NoError(t, err)
 	require.Contains(t, string(loadMemory.Payload), "seed memory")
 
-	indexedMemory, err := rt.ExecuteToolActivity(ctx, &agentsruntime.ToolInput{
+	indexedMemory, err := rt.ExecuteToolActivity(ctx, &agentsruntime.ToolInput{RootRunID: runID,
 		AgentID:    coordinator.AgentID,
 		RunID:      runID,
 		SessionID:  "sess-state",
@@ -348,7 +348,7 @@ func TestGeneratedFeatureRunPersistsArtifactsMemorySkillsAndDebugState(t *testin
 		Labels:  map[string]string{"tenant": "acme"},
 	})
 	require.NoError(t, err)
-	longTermMemory, err := rt.ExecuteToolActivity(ctx, &agentsruntime.ToolInput{
+	longTermMemory, err := rt.ExecuteToolActivity(ctx, &agentsruntime.ToolInput{RootRunID: runID,
 		AgentID:    coordinator.AgentID,
 		RunID:      runID,
 		SessionID:  "sess-state",
@@ -359,7 +359,7 @@ func TestGeneratedFeatureRunPersistsArtifactsMemorySkillsAndDebugState(t *testin
 	require.NoError(t, err)
 	require.Contains(t, string(longTermMemory.Payload), "long-term fixture memory")
 
-	listSkills, err := rt.ExecuteToolActivity(ctx, &agentsruntime.ToolInput{
+	listSkills, err := rt.ExecuteToolActivity(ctx, &agentsruntime.ToolInput{RootRunID: runID,
 		AgentID:    coordinator.AgentID,
 		RunID:      runID,
 		SessionID:  "sess-state",
@@ -374,7 +374,7 @@ func TestGeneratedFeatureRunPersistsArtifactsMemorySkillsAndDebugState(t *testin
 	require.Contains(t, string(listSkills.Payload), `"reload":"per_call"`)
 	require.Contains(t, string(listSkills.Payload), `"preloaded":true`)
 
-	loadSkill, err := rt.ExecuteToolActivity(ctx, &agentsruntime.ToolInput{
+	loadSkill, err := rt.ExecuteToolActivity(ctx, &agentsruntime.ToolInput{RootRunID: runID,
 		AgentID:    coordinator.AgentID,
 		RunID:      runID,
 		SessionID:  "sess-state",
@@ -462,7 +462,7 @@ func TestGeneratedFeatureRunAppliesNamedInterceptorsAndRetryReflect(t *testing.T
 	_, err = rt.CreateSession(ctx, "sess-interceptors")
 	require.NoError(t, err)
 
-	retryOut, err := rt.ExecuteToolActivity(ctx, &agentsruntime.ToolInput{
+	retryOut, err := rt.ExecuteToolActivity(ctx, &agentsruntime.ToolInput{RootRunID: "run-interceptors",
 		AgentID:    coordinator.AgentID,
 		RunID:      "run-interceptors",
 		SessionID:  "sess-interceptors",

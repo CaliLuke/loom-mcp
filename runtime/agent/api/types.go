@@ -22,6 +22,9 @@ import (
 )
 
 type (
+	// ToolResultRefs addresses the eligible result and server-only activity content.
+	ToolResultRefs = tools.ResultRefs
+
 	// RunInput captures everything a workflow needs to start or resume a run.
 	// It includes the full conversational context plus caller-provided labels and
 	// metadata.
@@ -35,6 +38,9 @@ type (
 
 		// RunID is the durable workflow execution identifier.
 		RunID string
+
+		// RootRunID identifies the root run of the run tree; it is the run store scope.
+		RootRunID string
 
 		// SessionID groups related runs (for example, multi-turn conversations).
 		SessionID string
@@ -246,6 +252,10 @@ type (
 	// - This is required for agent-as-tool: child workflow outputs cross a workflow boundary,
 	//   and `any` fields would otherwise rehydrate as map[string]any.
 	ToolEvent struct {
+		// Refs addresses stored activity content in the root run scope. ServerData and
+		// Payload are server-only and must never enter model-facing messages.
+		Refs tools.ResultRefs
+
 		// Name is the canonical <toolset>.<tool> identifier that produced this result.
 		Name tools.Ident
 
@@ -314,6 +324,10 @@ type (
 	// - This preserves the exact executed tool boundary for planners that need
 	//   authoritative execution history.
 	ToolCallOutput struct {
+		// Refs addresses stored activity content in the root run scope. ServerData and
+		// Payload are server-only and must never enter model-facing messages.
+		Refs tools.ResultRefs
+
 		// Name is the canonical <toolset>.<tool> identifier that was executed.
 		Name tools.Ident
 
@@ -453,6 +467,9 @@ type (
 		// RunID identifies the run that owns this tool call.
 		RunID string
 
+		// RootRunID identifies the root run of the run tree; it is the run store scope.
+		RootRunID string
+
 		// AgentID identifies the agent that owns this tool call.
 		AgentID agent.Ident
 
@@ -483,6 +500,10 @@ type (
 
 	// ToolOutput is returned by tool executors after invoking the tool implementation.
 	ToolOutput struct {
+		// Refs addresses stored activity content in the root run scope. ServerData and
+		// Payload are server-only and must never enter model-facing messages.
+		Refs tools.ResultRefs
+
 		// Payload is the tool result encoded as JSON. The runtime decodes it using the registered tool codec.
 		Payload rawjson.Message
 

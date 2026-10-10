@@ -58,6 +58,9 @@ type (
 		// Temporal WorkflowID). Used for workflow operations, replay, and observability.
 		RunID string
 
+		// RootRunID identifies the root run of the run tree; it is the run store scope.
+		RootRunID string
+
 		// ParentToolCallID identifies the parent tool call when this run represents a
 		// nested agent execution (agent-as-tool). Empty for top-level runs. Used to
 		// correlate ToolCallUpdated events and propagate parent-child relationships.
