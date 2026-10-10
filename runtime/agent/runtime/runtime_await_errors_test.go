@@ -93,8 +93,9 @@ func TestProvideTypedInput_MapsCompletedRunToTypedError(t *testing.T) {
 		err:    engine.ErrWorkflowCompleted,
 	}))
 	err := rt.ProvideTypedInput(context.Background(), &api.TypedInputAnswer{
-		RunID: "run-4",
-		ID:    "approval",
+		RunID:   "run-4",
+		Payload: []byte(`{}`),
+		ID:      "approval",
 	})
 	require.Error(t, err)
 	require.True(t, IsRunNotAwaitable(err))
@@ -104,4 +105,8 @@ func TestProvideTypedInput_MapsCompletedRunToTypedError(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "run-4", typed.RunID)
 	require.Equal(t, RunNotAwaitableCompletedRun, typed.Reason)
+}
+
+func (e *signalByIDEngine) QueryRootRunID(_ context.Context, id string) (string, error) {
+	return id, nil
 }

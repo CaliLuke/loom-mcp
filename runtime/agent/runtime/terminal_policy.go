@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-
 	"time"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
@@ -339,7 +338,7 @@ func (r *Runtime) executeFinalizationToolCalls(
 	if err != nil {
 		return nil, err
 	}
-	finished, err := r.finishRun(wfCtx.Context(), input, events, events[len(events)-1])
+	finished, err := r.finishRun(wfCtx.Context(), input, events, events[len(events)-1], nil)
 	if err != nil {
 		return nil, err
 	}

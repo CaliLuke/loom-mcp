@@ -23,8 +23,14 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
 )
+
+type workflowLoopStart struct {
+	toolPolicy  toolPolicyEnvelope
+	messageRefs []runstore.Hash
+}
 
 type workflowStartState struct {
 	planInput   *planner.PlanInput
@@ -68,6 +74,9 @@ func (r *Runtime) ExecuteWorkflow(wfCtx engine.WorkflowContext, input *RunInput)
 	}
 	input, err = r.prepareEffectiveRunInput(wfCtx.Context(), reg, input, runCtx)
 	if err != nil {
+		return nil, err
+	}
+	if err := setRootRunIDQuery(wfCtx, input.RootRunID); err != nil {
 		return nil, err
 	}
 	runCtx = workflowRunContext(input)
@@ -242,6 +251,10 @@ func (r *Runtime) executeWorkflowRun(
 	turnID string,
 	ctrl *interrupt.Controller,
 ) (*RunOutput, string, error) {
+	messageRefs, err := recordWorkflowMessages(wfCtx.Context(), input.AgentID, input.RootRunID, input.Messages)
+	if err != nil {
+		return nil, runStatusFailed, err
+	}
 	state, err := r.startWorkflowRun(wfCtx, reg, input, runCtx, turnID)
 	if err != nil {
 		return r.handleWorkflowStartError(wfCtx, reg, input, state, turnID, err)
@@ -256,6 +269,7 @@ func (r *Runtime) executeWorkflowRun(
 		state.deadlines,
 		turnID,
 		ctrl,
+		messageRefs,
 	)
 }
 
@@ -313,6 +327,7 @@ func (r *Runtime) continueWorkflowRun(
 	deadlines runDeadlines,
 	turnID string,
 	ctrl *interrupt.Controller,
+	messageRefs []runstore.Hash,
 ) (*RunOutput, string, error) {
 	caps, nextAttempt, parentTracker, err := r.prepareWorkflowLoopState(wfCtx.Context(), reg, input, planInput, firstOutput.Result, firstOutput)
 	if err != nil {
@@ -338,10 +353,10 @@ func (r *Runtime) continueWorkflowRun(
 		parentTracker,
 		ctrl,
 		timing.FinalizerGrace,
-		toolPolicyEnvelope{
+		workflowLoopStart{messageRefs: messageRefs, toolPolicy: toolPolicyEnvelope{
 			Active:  firstOutput.ToolPolicyActive,
 			Allowed: cloneToolIdents(firstOutput.AllowedTools),
-		},
+		}},
 	)
 	if err != nil {
 		return nil, terminalRunStatusForError(err), err
@@ -535,7 +550,7 @@ func (r *Runtime) runLoop(
 	parentTracker *childTracker,
 	ctrl *interrupt.Controller,
 	finalizerGrace time.Duration,
-	initialToolPolicies ...toolPolicyEnvelope,
+	initialStates ...workflowLoopStart,
 ) (*RunOutput, error) {
 	if err := r.validateRunLoopInputs(base, initialResult); err != nil {
 		return nil, err
@@ -543,11 +558,12 @@ func (r *Runtime) runLoop(
 	ctx := wfCtx.Context()
 	r.ensureWorkflowLogger()
 	r.logRunLoopStart(ctx, initialResult)
-	var initialToolPolicy toolPolicyEnvelope
-	if len(initialToolPolicies) > 0 {
-		initialToolPolicy = initialToolPolicies[0]
+	var initial workflowLoopStart
+	if len(initialStates) > 0 {
+		initial = initialStates[0]
 	}
-	st := newRunLoopState(initialResult, initialTranscript, initialUsage, caps, nextAttempt, initialToolPolicy)
+	st := newRunLoopState(initialResult, initialTranscript, initialUsage, caps, nextAttempt, initial.toolPolicy)
+	st.InitialMessageRefs = initial.messageRefs
 	if err := setLedgerMessagesQuery(wfCtx, st); err != nil {
 		return nil, err
 	}
@@ -595,6 +611,12 @@ func (r *Runtime) ensureWorkflowLogger() {
 
 func (r *Runtime) logRunLoopStart(ctx context.Context, initialResult *planner.PlanResult) {
 	r.logger.Info(ctx, "runLoop starting iteration", "tool_calls", len(initialResult.ToolCalls), "final_response", initialResult.FinalResponse != nil, "final_tool_result", initialResult.FinalToolResult != nil, "await", initialResult.Await != nil)
+}
+
+func setRootRunIDQuery(wfCtx engine.WorkflowContext, rootRunID string) error {
+	return wfCtx.SetQueryHandler(api.QueryRootRunID, func() (string, error) {
+		return rootRunID, nil
+	})
 }
 
 func setLedgerMessagesQuery(wfCtx engine.WorkflowContext, st *runLoopState) error {

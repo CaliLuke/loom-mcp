@@ -146,6 +146,7 @@ func TestMissingFieldsClarificationAwaitResumesWhenProvided(t *testing.T) {
 		nil,
 		ctrl,
 		&runDeadlines{Budget: deadline, Hard: deadline},
+		&runLoopState{},
 	)
 	require.NoError(t, err)
 	require.Nil(t, out)
@@ -200,7 +201,7 @@ func TestHandleInterruptsAppliesResumeMessages(t *testing.T) {
 	nextAttempt := 2
 	deadline := baseCtx.Now().Add(1 * time.Hour)
 
-	err := rt.handleInterrupts(baseCtx, input, base, "turn-1", ctrl, &nextAttempt, deadline)
+	err := rt.handleInterrupts(baseCtx, input, base, "turn-1", ctrl, &nextAttempt, deadline, &runLoopState{})
 	require.NoError(t, err)
 
 	require.Len(t, base.Messages, 1, "applyResumeMessages should append the resume message to PlanInput.Messages")
@@ -240,7 +241,7 @@ func TestHandleInterruptsTimeoutBalancesPauseResume(t *testing.T) {
 	nextAttempt := 2
 	deadline := wfCtx.Now().Add(1 * time.Hour)
 
-	err := rt.handleInterrupts(wfCtx, input, base, "turn-1", ctrl, &nextAttempt, deadline)
+	err := rt.handleInterrupts(wfCtx, input, base, "turn-1", ctrl, &nextAttempt, deadline, &runLoopState{})
 	require.NoError(t, err)
 
 	require.Equal(t, []string{

@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 	"reflect"
 	"testing"
 	"text/template"
@@ -22,6 +21,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	runloginmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog/inmem"
+	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
 	sessioninmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/session/inmem"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
@@ -572,7 +572,7 @@ func TestRuntimePauseRunSignalsWorkflow(t *testing.T) {
 }
 
 func TestRuntimeResumeRunSignalsWorkflow(t *testing.T) {
-	rt := &Runtime{
+	rt := &Runtime{Engine: &stubEngine{}, RunStore: runstoreinmem.New(),
 		runHandles: make(map[string]engine.WorkflowHandle),
 	}
 	handle := &stubWorkflowHandle{}

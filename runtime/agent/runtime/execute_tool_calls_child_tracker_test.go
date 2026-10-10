@@ -11,15 +11,15 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	runloginmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog/inmem"
+	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
-
 	"github.com/stretchr/testify/require"
 )
 
 func TestExecuteToolCalls_ChildTrackerUpdateEmittedOnIncrease(t *testing.T) {
 	recorder := &recordingHooks{}
-	rt := &Runtime{
+	rt := &Runtime{RunStore: runstoreinmem.New(),
 		toolsets: map[string]ToolsetRegistration{
 			"inline.ts": {
 				Inline:       true,
@@ -49,7 +49,7 @@ func TestExecuteToolCalls_ChildTrackerUpdateEmittedOnIncrease(t *testing.T) {
 	}
 
 	parentTracker := newChildTracker("parent-tool")
-	runCtx := &run.Context{
+	runCtx := &run.Context{RootRunID: "root",
 		RunID:         "child-run",
 		SessionID:     "sess-1",
 		TurnID:        "turn-1",

@@ -248,6 +248,9 @@ func (e *toolBatchExec) collectChildResult(wfCtx engine.WorkflowContext, ctx con
 	if err != nil {
 		return nil, err
 	}
+	if err := e.r.recordWorkflowToolResult(ctx, e.agentID, e.runCtx.RootRunID, tr, resultJSON); err != nil {
+		return nil, err
+	}
 	if err := e.publishToolResultReceived(ctx, info.call, tr, resultJSON, duration); err != nil {
 		return nil, err
 	}

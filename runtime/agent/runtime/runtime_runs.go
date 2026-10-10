@@ -300,6 +300,11 @@ func (r *Runtime) ResumeRun(ctx context.Context, req interrupt.ResumeRequest) er
 	if req.RunID == "" {
 		return errors.New("run id is required")
 	}
+	stored, err := r.storeResumeRequest(ctx, req)
+	if err != nil {
+		return err
+	}
+	req = stored
 	if s, ok := r.Engine.(engine.Signaler); ok {
 		return s.SignalByID(ctx, req.RunID, "", interrupt.SignalResume, req)
 	}
@@ -318,6 +323,13 @@ func (r *Runtime) ProvideClarification(ctx context.Context, ans interrupt.Clarif
 	if ans.RunID == "" {
 		return errors.New("run id is required")
 	}
+	refs, err := r.storeSignalContent(ctx, ans.RunID, [][]byte{[]byte(ans.Answer)})
+	if err != nil {
+		return r.mapAwaitSignalError(ctx, ans.RunID, err)
+	}
+	stored := *ans
+	stored.AnswerRef = refs[0]
+	ans = &stored
 	if s, ok := r.Engine.(engine.Signaler); ok {
 		return r.mapAwaitSignalError(ctx, ans.RunID, s.SignalByID(ctx, ans.RunID, "", interrupt.SignalProvideClarification, ans))
 	}
@@ -336,6 +348,11 @@ func (r *Runtime) ProvideToolResults(ctx context.Context, rs interrupt.ToolResul
 	if rs.RunID == "" {
 		return errors.New("run id is required")
 	}
+	stored, err := r.storeProvidedResults(ctx, rs)
+	if err != nil {
+		return r.mapAwaitSignalError(ctx, rs.RunID, err)
+	}
+	rs = stored
 	if s, ok := r.Engine.(engine.Signaler); ok {
 		return r.mapAwaitSignalError(ctx, rs.RunID, s.SignalByID(ctx, rs.RunID, "", interrupt.SignalProvideToolResults, rs))
 	}
@@ -372,6 +389,13 @@ func (r *Runtime) ProvideTypedInput(ctx context.Context, ans interrupt.TypedInpu
 	if strings.TrimSpace(ans.RunID) == "" {
 		return errors.New("run id is required")
 	}
+	refs, err := r.storeSignalContent(ctx, ans.RunID, [][]byte{ans.Payload})
+	if err != nil {
+		return r.mapAwaitSignalError(ctx, ans.RunID, err)
+	}
+	stored := *ans
+	stored.PayloadRef = refs[0]
+	ans = &stored
 	if s, ok := r.Engine.(engine.Signaler); ok {
 		return r.mapAwaitSignalError(ctx, ans.RunID, s.SignalByID(ctx, ans.RunID, "", interrupt.SignalProvideTypedInput, ans))
 	}

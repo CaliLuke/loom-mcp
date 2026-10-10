@@ -6,13 +6,12 @@ import (
 	"io"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type consumeStreamPlanner struct{}
@@ -271,7 +270,7 @@ func TestPlannerContextModelClientAndConsumeStreamDoNotDuplicateTranscriptOrUsag
 	out, err := rt.PlanStartActivity(context.Background(), &PlanActivityInput{
 		AgentID:    "svc.agent",
 		RunID:      "run-consume-stream",
-		RunContext: run.Context{RunID: "run-consume-stream", Attempt: 1},
+		RunContext: run.Context{RootRunID: "root", RunID: "run-consume-stream", Attempt: 1},
 	})
 	require.NoError(t, err)
 	expectedUsage := usage
@@ -361,7 +360,7 @@ func TestRejectedStreamDoesNotPersistPresentationContent(t *testing.T) {
 	out, err := rt.PlanStartActivity(context.Background(), &PlanActivityInput{
 		AgentID:    "svc.agent",
 		RunID:      "run-rejected-stream",
-		RunContext: run.Context{RunID: "run-rejected-stream", Attempt: 1},
+		RunContext: run.Context{RootRunID: "root", RunID: "run-rejected-stream", Attempt: 1},
 	})
 	require.NoError(t, err)
 	require.NotNil(t, out.Recovery)
@@ -445,7 +444,7 @@ func TestDirectInternalToolUsesNarrowModelCatalogUnderBroadPolicy(t *testing.T) 
 	out, err := rt.PlanStartActivity(context.Background(), &PlanActivityInput{
 		AgentID:          "svc.agent",
 		RunID:            "run-narrow-catalog",
-		RunContext:       run.Context{RunID: "run-narrow-catalog", Attempt: 1},
+		RunContext:       run.Context{RootRunID: "root", RunID: "run-narrow-catalog", Attempt: 1},
 		ToolPolicyActive: true,
 		AllowedTools:     []tools.Ident{"svc.read", "svc.write", tools.ToolUnavailable},
 	})
@@ -479,7 +478,7 @@ func TestStreamResponseInternalToolUsesNarrowModelCatalogUnderBroadPolicy(t *tes
 	out, err := rt.PlanStartActivity(context.Background(), &PlanActivityInput{
 		AgentID:          "svc.agent",
 		RunID:            "run-stream-narrow-catalog",
-		RunContext:       run.Context{RunID: "run-stream-narrow-catalog", Attempt: 1},
+		RunContext:       run.Context{RootRunID: "root", RunID: "run-stream-narrow-catalog", Attempt: 1},
 		ToolPolicyActive: true,
 		AllowedTools:     []tools.Ident{"svc.read", "svc.write", tools.ToolUnavailable},
 	})

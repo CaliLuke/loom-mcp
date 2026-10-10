@@ -219,6 +219,9 @@ type (
 		// Final is the assistant reply returned to the caller.
 		Final *model.Message
 
+		// FinalRef addresses the encoded Final message in the root run scope.
+		FinalRef runstore.Hash
+
 		// FinalToolResult is the canonical parent tool_result for nested agent runs
 		// when the child planner/runtime owns the outer tool contract directly.
 		//
@@ -422,13 +425,15 @@ type (
 	// Fingerprint and byte count identify the rejected response without retaining
 	// its body; Correction is framework-authored and bounded.
 	ModelRecovery struct {
-		Kind         model.OutputValidationKind
-		Fingerprint  [32]byte
-		ByteCount    int
-		Usage        model.TokenUsage
-		Attempt      int
-		Correction   string
-		DisableTools bool
+		Kind        model.OutputValidationKind
+		Fingerprint [32]byte
+		ByteCount   int
+		Usage       model.TokenUsage
+		Attempt     int
+		Correction  string
+		// CorrectionRef addresses Correction text stored in the root run scope.
+		CorrectionRef runstore.Hash
+		DisableTools  bool
 		// ToolCatalog is the exact model-visible catalog from the rejected
 		// request. Replacement output must stay within this snapshot.
 		ToolCatalog []tools.Ident
@@ -441,6 +446,12 @@ type (
 
 		// Transcript contains the provider-visible transcript produced by the planner.
 		Transcript []*model.Message
+
+		// TranscriptRef addresses the encoded non-empty Transcript in the root scope.
+		TranscriptRef runstore.Hash
+
+		// ToolCallRefs addresses each returned Result.ToolCalls entry, in order.
+		ToolCallRefs []runstore.Hash
 
 		// Usage is the token usage reported by the model provider when available.
 		Usage model.TokenUsage
@@ -603,6 +614,9 @@ type (
 
 		// Messages allows human or policy actors to inject new conversational messages before the planner resumes execution.
 		Messages []*model.Message
+
+		// MessageRefs addresses each encoded Messages entry in the root scope.
+		MessageRefs []runstore.Hash
 	}
 
 	// ClarificationAnswer carries a typed answer for a paused clarification request.
@@ -615,6 +629,9 @@ type (
 
 		// Answer is the free-form clarification text provided by the actor.
 		Answer string
+
+		// AnswerRef addresses the answer text in the root scope.
+		AnswerRef runstore.Hash
 
 		// Labels carries optional metadata associated with the clarification answer.
 		Labels map[string]string
@@ -649,6 +666,9 @@ type (
 		// ID is the typed input await identifier.
 		ID string
 
+		// PayloadRef addresses the canonical answer JSON in the root scope.
+		PayloadRef runstore.Hash
+
 		// Payload is the canonical JSON answer payload.
 		Payload rawjson.Message
 
@@ -666,6 +686,9 @@ type (
 	//   canonical JSON, but server-only sidecars are never provided here; the
 	//   runtime materializes them after decoding.
 	ProvidedToolResult struct {
+		// Refs addresses provided result content stored in the root scope before signalling.
+		Refs tools.ResultRefs
+
 		// Name is the canonical <toolset>.<tool> identifier that produced this result.
 		Name tools.Ident
 
@@ -737,24 +760,26 @@ const (
 // representation, so the workflow boundary owns this explicit wire contract.
 func (r ModelRecovery) MarshalJSON() ([]byte, error) {
 	type wire struct {
-		Kind         model.OutputValidationKind
-		Fingerprint  string
-		ByteCount    int
-		Usage        model.TokenUsage
-		Attempt      int
-		Correction   string
-		DisableTools bool
-		ToolCatalog  []tools.Ident
+		Kind          model.OutputValidationKind
+		Fingerprint   string
+		ByteCount     int
+		Usage         model.TokenUsage
+		Attempt       int
+		Correction    string
+		CorrectionRef runstore.Hash
+		DisableTools  bool
+		ToolCatalog   []tools.Ident
 	}
 	return json.Marshal(wire{
-		Kind:         r.Kind,
-		Fingerprint:  hex.EncodeToString(r.Fingerprint[:]),
-		ByteCount:    r.ByteCount,
-		Usage:        r.Usage,
-		Attempt:      r.Attempt,
-		Correction:   r.Correction,
-		DisableTools: r.DisableTools,
-		ToolCatalog:  r.ToolCatalog,
+		Kind:          r.Kind,
+		Fingerprint:   hex.EncodeToString(r.Fingerprint[:]),
+		ByteCount:     r.ByteCount,
+		Usage:         r.Usage,
+		Attempt:       r.Attempt,
+		Correction:    r.Correction,
+		CorrectionRef: r.CorrectionRef,
+		DisableTools:  r.DisableTools,
+		ToolCatalog:   r.ToolCatalog,
 	})
 }
 
@@ -764,14 +789,15 @@ func (r *ModelRecovery) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("api: cannot decode ModelRecovery into nil receiver")
 	}
 	type wire struct {
-		Kind         model.OutputValidationKind
-		Fingerprint  string
-		ByteCount    int
-		Usage        model.TokenUsage
-		Attempt      int
-		Correction   string
-		DisableTools bool
-		ToolCatalog  []tools.Ident
+		Kind          model.OutputValidationKind
+		Fingerprint   string
+		ByteCount     int
+		Usage         model.TokenUsage
+		Attempt       int
+		Correction    string
+		CorrectionRef runstore.Hash
+		DisableTools  bool
+		ToolCatalog   []tools.Ident
 	}
 	var decoded wire
 	if err := json.Unmarshal(data, &decoded); err != nil {
@@ -790,6 +816,7 @@ func (r *ModelRecovery) UnmarshalJSON(data []byte) error {
 	r.Usage = decoded.Usage
 	r.Attempt = decoded.Attempt
 	r.Correction = decoded.Correction
+	r.CorrectionRef = decoded.CorrectionRef
 	r.DisableTools = decoded.DisableTools
 	r.ToolCatalog = decoded.ToolCatalog
 	return nil
@@ -897,14 +924,16 @@ func decodePolicyToolTimeouts(timeouts map[tools.Ident]int64) map[tools.Ident]ti
 // implementations). This keeps workflows resilient to legacy payloads.
 func (o *PlanActivityOutput) UnmarshalJSON(data []byte) error {
 	type alias struct {
-		Result           *planner.PlanResult `json:"Result"`           //nolint:tagliatelle
-		Transcript       []jsontext.Value    `json:"Transcript"`       //nolint:tagliatelle
-		Usage            model.TokenUsage    `json:"Usage"`            //nolint:tagliatelle
-		ToolPolicyActive bool                `json:"ToolPolicyActive"` //nolint:tagliatelle
-		AllowedTools     []tools.Ident       `json:"AllowedTools"`     //nolint:tagliatelle
-		PolicyCaps       policy.CapsState    `json:"PolicyCaps"`       //nolint:tagliatelle
-		Recovery         *ModelRecovery      `json:"Recovery"`         //nolint:tagliatelle
-		Attempt          int                 `json:"Attempt"`          //nolint:tagliatelle
+		Result           *planner.PlanResult `json:"Result"` //nolint:tagliatelle
+		TranscriptRef    runstore.Hash
+		ToolCallRefs     []runstore.Hash
+		Transcript       []jsontext.Value `json:"Transcript"`       //nolint:tagliatelle
+		Usage            model.TokenUsage `json:"Usage"`            //nolint:tagliatelle
+		ToolPolicyActive bool             `json:"ToolPolicyActive"` //nolint:tagliatelle
+		AllowedTools     []tools.Ident    `json:"AllowedTools"`     //nolint:tagliatelle
+		PolicyCaps       policy.CapsState `json:"PolicyCaps"`       //nolint:tagliatelle
+		Recovery         *ModelRecovery   `json:"Recovery"`         //nolint:tagliatelle
+		Attempt          int              `json:"Attempt"`          //nolint:tagliatelle
 	}
 	var tmp alias
 	if err := json.Unmarshal(data, &tmp); err != nil {
@@ -912,6 +941,8 @@ func (o *PlanActivityOutput) UnmarshalJSON(data []byte) error {
 	}
 
 	o.Result = tmp.Result
+	o.TranscriptRef = tmp.TranscriptRef
+	o.ToolCallRefs = tmp.ToolCallRefs
 	o.Usage = tmp.Usage
 	o.ToolPolicyActive = tmp.ToolPolicyActive
 	o.AllowedTools = tmp.AllowedTools

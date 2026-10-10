@@ -340,3 +340,11 @@ func (panicWorkflowContext) ExecuteFinishRunActivity(context.Context, engine.Fin
 func (*cancelOnPlannerWorkflowContext) ExecuteFinishRunActivity(context.Context, engine.FinishRunActivityCall) (*api.FinishRunOutput, error) {
 	panic("unexpected finish activity")
 }
+
+func (panicWorkflowContext) ExecuteRecordContentActivity(context.Context, engine.RecordContentActivityCall) (*api.RecordContentOutput, error) {
+	panic("unexpected record content activity")
+}
+
+func (*cancelOnPlannerWorkflowContext) ExecuteRecordContentActivity(context.Context, engine.RecordContentActivityCall) (*api.RecordContentOutput, error) {
+	panic("unexpected record content activity")
+}

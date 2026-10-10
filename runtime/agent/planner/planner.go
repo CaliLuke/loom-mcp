@@ -40,6 +40,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/reminder"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
@@ -600,6 +601,8 @@ type AwaitTypedInput struct {
 
 // TypedInputOutput carries a typed human input answer into PlanResume.
 type TypedInputOutput struct {
+	// PayloadRef addresses the original answer JSON in the root run scope.
+	PayloadRef runstore.Hash
 	// ID identifies the awaited typed input request.
 	ID string
 	// Payload is the canonical JSON answer payload.

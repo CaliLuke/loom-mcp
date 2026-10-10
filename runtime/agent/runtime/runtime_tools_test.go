@@ -918,7 +918,7 @@ func TestInlineToolsetEmitsParentToolEvents(t *testing.T) {
 	}
 	input := &RunInput{RootRunID: "run-inline", AgentID: "parent.agent", RunID: "run-inline", SessionID: "sess-1", TurnID: "turn-1"}
 	base := &planner.PlanInput{
-		RunContext: run.Context{RunID: input.RunID, SessionID: input.SessionID, TurnID: input.TurnID},
+		RunContext: run.Context{RootRunID: "root", RunID: input.RunID, SessionID: input.SessionID, TurnID: input.TurnID},
 		Agent:      newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID}),
 	}
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{

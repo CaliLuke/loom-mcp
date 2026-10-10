@@ -30,6 +30,7 @@ func (r *Runtime) handleInterrupts(
 	ctrl *interrupt.Controller,
 	nextAttempt *int,
 	budgetDeadline time.Time,
+	st *runLoopState,
 ) error {
 	if ctrl == nil {
 		return nil
@@ -45,6 +46,7 @@ func (r *Runtime) handleInterrupts(
 			return err
 		}
 		applyResumeMessages(base, nextAttempt, resumeReq)
+		st.SignalMessageRefs = append(st.SignalMessageRefs, resumeReq.MessageRefs...)
 		if err := r.publishResumed(ctx, input, turnID, resumeReq); err != nil {
 			return err
 		}

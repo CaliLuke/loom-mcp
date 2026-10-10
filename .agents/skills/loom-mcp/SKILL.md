@@ -69,13 +69,29 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   recorded-history replay test. Drain running workflows before deploying the
   new version; mismatched and unstamped inputs fail before workflow effects.
 
-- Workflow protocol 3 stores `RunOutput.ToolEvents` behind `ToolEventsRef` and
+- Workflow protocol 4 stores `RunOutput.ToolEvents` behind `ToolEventsRef` and
   `ToolEventCount`. Use `runtime.LoadRunToolEvents` outside workflows to load
   full events in the root run scope. Planner inputs omit referenced result and
   server-data bytes; `PlanResumeActivity` restores them before planner invocation.
   `RegisterAgent` registers `FinishRunActivity` on the agent queue to store the
   terminal event list and decode/bound typed final results. Manual registrations
   and custom engines must provide the finish activity too.
+  Protocol 4 also registers `RecordContentActivity` (`<agentID>.record_content`)
+  through the typed engine activity API. It accepts `api.RecordContentInput`
+  (`RootRunID`, ordered `Items`) and returns `RecordContentOutput.Refs` only after
+  every Put succeeds. Effective caller messages are recorded after BeforeRun and
+  before planning; `runLoopState.InitialMessageRefs` retains their ordered hashes
+  for K7. Planner activities store transcript JSON, each returned tool request,
+  and recovery correction text before returning `TranscriptRef`, `ToolCallRefs`,
+  and `CorrectionRef`. Arguments and other inline bytes remain available.
+  Content signal clients query `root_run_id` via `Engine.QueryRootRunID` and
+  store messages/answers/results before signalling. Client-only processes must
+  share workers' run store. Workflows copy signal refs without store reads.
+  Inline content-bearing results (including tool_unavailable) and adapted child
+  results use RecordContent before entering state. FinishRun stores optional Final
+  messages as FinalRef in the root scope. Error-only synthesized results and
+  structural denials, reminders, and finalization hints create no content writes.
+  Do not add the K7 index/segments/ViewRef/loader or K8 hook changes here.
 
 - Codex `ReasoningEffort` is a native provider/runtime factory option. Empty
   preserves provider defaults. Applications validate model-specific supported

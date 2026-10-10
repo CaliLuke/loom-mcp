@@ -215,6 +215,7 @@ func (l *workflowLoop) handlePendingInterrupts() error {
 		l.ctrl,
 		&l.st.NextAttempt,
 		l.deadlines.Budget,
+		l.st,
 	)
 }
 

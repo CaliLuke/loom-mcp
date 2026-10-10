@@ -74,7 +74,12 @@ func TestActivityContentTypedLargeRoundTrip(t *testing.T) {
 func TestActivityContentGeneratedDispatchAndWorkflow(t *testing.T) {
 	for _, failAt := range []int{0, 1, 2, 3} {
 		t.Run([]string{"success", "result put fails", "server data put fails", "payload put fails"}[failAt], func(t *testing.T) {
-			store := &recordingContentStore{Store: runstoreinmem.New(), failAt: failAt}
+			store := &recordingContentStore{Store: runstoreinmem.New(), failAt: func() int {
+				if failAt > 0 {
+					return failAt + 1
+				}
+				return 0
+			}()}
 			before := agentsruntime.RuntimeInterceptorFuncs{BeforeToolFunc: func(_ context.Context, input *agentsruntime.BeforeToolInput) (*agentsruntime.BeforeToolDecision, error) {
 				assert.JSONEq(t, `{"topic":"adapter"}`, string(input.Call.Payload))
 				return &agentsruntime.BeforeToolDecision{Payload: rawjson.Message(`{"topic":"interceptor"}`)}, nil

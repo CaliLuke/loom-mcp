@@ -401,7 +401,7 @@ func TestPlanActivityKeepsValidAfterModelRecoveryReplacement(t *testing.T) {
 	out, err := rt.PlanStartActivity(context.Background(), &PlanActivityInput{
 		AgentID:    "svc.agent",
 		RunID:      "run-after-model-repair",
-		RunContext: run.Context{RunID: "run-after-model-repair"},
+		RunContext: run.Context{RootRunID: "root", RunID: "run-after-model-repair"},
 	})
 	require.NoError(t, err)
 	require.Nil(t, out.Recovery)
@@ -437,7 +437,7 @@ func TestBeforeModelShortCircuitUsesEffectiveToolPolicyForRecovery(t *testing.T)
 	out, err := rt.PlanStartActivity(context.Background(), &PlanActivityInput{
 		AgentID:          "svc.agent",
 		RunID:            "run-before-model-policy",
-		RunContext:       run.Context{RunID: "run-before-model-policy"},
+		RunContext:       run.Context{RootRunID: "root", RunID: "run-before-model-policy"},
 		ToolPolicyActive: true,
 		AllowedTools:     []tools.Ident{"allowed"},
 	})
@@ -469,7 +469,7 @@ func TestBeforeModelShortCircuitSeesToolFreeFinalAnswerRecovery(t *testing.T) {
 	out, err := rt.PlanStartActivity(context.Background(), &PlanActivityInput{
 		AgentID:          "svc.agent",
 		RunID:            "run-before-model-tool-free",
-		RunContext:       run.Context{RunID: "run-before-model-tool-free"},
+		RunContext:       run.Context{RootRunID: "root", RunID: "run-before-model-tool-free"},
 		ToolPolicyActive: true,
 		Recovery: &api.ModelRecovery{
 			Kind:         model.OutputValidationStructuredOutput,
@@ -516,7 +516,7 @@ func TestBeforeModelReplacementCannotBroadenEffectiveToolPolicy(t *testing.T) {
 			out, err := rt.PlanStartActivity(context.Background(), &PlanActivityInput{
 				AgentID:          "svc.agent",
 				RunID:            "run-interceptor-policy",
-				RunContext:       run.Context{RunID: "run-interceptor-policy"},
+				RunContext:       run.Context{RootRunID: "root", RunID: "run-interceptor-policy"},
 				ToolPolicyActive: true,
 				AllowedTools:     test.allowed,
 			})

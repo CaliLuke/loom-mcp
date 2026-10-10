@@ -145,7 +145,7 @@ func TestPlanResumeActivityPassesToolOutputs(t *testing.T) {
 	input := PlanActivityInput{
 		AgentID:     "service.agent",
 		RunID:       "run-123",
-		RunContext:  run.Context{RunID: "run-123", Attempt: 3},
+		RunContext:  run.Context{RootRunID: "root", RunID: "run-123", Attempt: 3},
 		ToolOutputs: toolOutputs,
 	}
 	out, err := rt.PlanResumeActivity(context.Background(), &input)
@@ -254,7 +254,7 @@ func TestPlanResumeActivityPreservesEmptyRawJSONPayloads(t *testing.T) {
 	input := PlanActivityInput{
 		AgentID:    "service.agent",
 		RunID:      "run-123",
-		RunContext: run.Context{RunID: "run-123"},
+		RunContext: run.Context{RootRunID: "root", RunID: "run-123"},
 	}
 	out, err := rt.PlanResumeActivity(context.Background(), &input)
 	require.NoError(t, err)

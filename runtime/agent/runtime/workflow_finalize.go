@@ -159,7 +159,7 @@ func (r *Runtime) finalizeWithModelPlan(
 	if err != nil {
 		return nil, err
 	}
-	finished, err := r.finishRun(wfCtx.Context(), input, toolEvents, finalToolResultEvent(base.RunContext.Tool, output.Result.FinalToolResult))
+	finished, err := r.finishRun(wfCtx.Context(), input, toolEvents, finalToolResultEvent(base.RunContext.Tool, output.Result.FinalToolResult), finalPlannerMessage(output))
 	if err != nil {
 		return nil, err
 	}
@@ -249,6 +249,7 @@ func buildFinalizedRunOutput(
 		RunID:           base.RunContext.RunID,
 		Final:           finalPlannerMessage(output),
 		FinalToolResult: finished.FinalToolResult,
+		FinalRef:        finished.FinalRef,
 		ToolEventsRef:   finished.ToolEventsRef,
 		ToolEventCount:  finished.ToolEventCount,
 		ToolSummary:     finished.ToolSummary,

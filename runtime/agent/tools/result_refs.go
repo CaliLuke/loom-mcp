@@ -2,9 +2,11 @@ package tools
 
 import "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 
-// ResultRefs addresses content written by a tool activity in the root run scope.
-// Empty hashes mean that the corresponding content was not stored. Inline,
-// child-agent, and externally provided results do not populate these references.
+// ResultRefs addresses content committed in the root run scope before a result
+// enters workflow state. Tool activities, inline tools, adapted child outputs,
+// and externally provided results populate these references. Empty hashes mean
+// no corresponding stored content. Error-only and structural results have no
+// eligible result reference; Payload is populated only by tool activities.
 type ResultRefs struct {
 	// Result addresses the full canonical result JSON eligible for model access.
 	Result runstore.Hash

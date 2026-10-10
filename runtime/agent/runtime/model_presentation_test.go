@@ -9,8 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-
 	agent "github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	engineinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine/inmem"
@@ -21,6 +19,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	runloginmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog/inmem"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/stream"
+	"github.com/stretchr/testify/require"
 )
 
 type failAfterConsumedStreamPlanner struct {
@@ -111,7 +110,7 @@ func TestModelPresentationStreamsLiveThenAcceptsCanonicalContent(t *testing.T) {
 	out, err := rt.PlanStartActivity(context.Background(), &PlanActivityInput{
 		AgentID: "svc.agent",
 		RunID:   "run-presentation",
-		RunContext: run.Context{
+		RunContext: run.Context{RootRunID: "root",
 			RunID:     "run-presentation",
 			SessionID: "session-presentation",
 			Attempt:   1,
@@ -780,7 +779,7 @@ func presentationPlanInput(runID, sessionID string) *PlanActivityInput {
 	return &PlanActivityInput{
 		AgentID: "svc.agent",
 		RunID:   runID,
-		RunContext: run.Context{
+		RunContext: run.Context{RootRunID: runID,
 			RunID:     runID,
 			SessionID: sessionID,
 			Attempt:   1,

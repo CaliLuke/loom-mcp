@@ -196,6 +196,9 @@ func (e *toolBatchExec) dispatchInlineToolCall(wfCtx engine.WorkflowContext, b *
 	if err != nil {
 		return err
 	}
+	if err := e.r.recordWorkflowToolResult(ctx, e.agentID, e.runCtx.RootRunID, result, resultJSON); err != nil {
+		return err
+	}
 	if err := e.publishToolResultReceived(ctx, call, result, resultJSON, duration); err != nil {
 		return err
 	}

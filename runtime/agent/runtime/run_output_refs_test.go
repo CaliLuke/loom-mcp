@@ -159,7 +159,7 @@ func TestPlannerMissingToolOutputReference(t *testing.T) {
 	assert.ErrorContains(t, err, "test.result")
 }
 
-func TestInlineToolOutputsStayInline(t *testing.T) {
+func TestInlineToolOutputsRetainBytesAndReferences(t *testing.T) {
 	rt := New()
 	spec := newAnyJSONSpec("inline.result", "inline")
 	result := rawjson.Message(`{"inline":true}`)
@@ -176,7 +176,7 @@ func TestInlineToolOutputsStayInline(t *testing.T) {
 		},
 		resume: func(_ context.Context, in *planner.PlanResumeInput) (*planner.PlanResult, error) {
 			require.Len(t, in.ToolOutputs, 1)
-			assert.Empty(t, in.ToolOutputs[0].Refs)
+			assert.NotEmpty(t, in.ToolOutputs[0].Refs.Result)
 			assert.Equal(t, result, in.ToolOutputs[0].Result)
 			assert.Equal(t, serverData, in.ToolOutputs[0].ServerData)
 			return &planner.PlanResult{FinalToolResult: &planner.FinalToolResult{Result: rawjson.Message(`"done"`)}}, nil
@@ -190,12 +190,10 @@ func TestInlineToolOutputsStayInline(t *testing.T) {
 	require.NoError(t, err)
 	out, err := rt.MustClient("inline.agent").Run(t.Context(), "session", nil, WithRunID("root"))
 	require.NoError(t, err)
-	data, err := rt.RunStore.Get(t.Context(), "root", out.ToolEventsRef)
+	events, err := LoadRunToolEvents(t.Context(), rt.RunStore, "root", out.ToolEventsRef)
 	require.NoError(t, err)
-	var events []*api.ToolEvent
-	require.NoError(t, json.Unmarshal(data, &events))
 	require.Len(t, events, 1)
-	assert.Empty(t, events[0].Refs)
+	assert.NotEmpty(t, events[0].Refs.Result)
 	assert.Equal(t, result, events[0].Result)
 	assert.Equal(t, serverData, events[0].ServerData)
 }

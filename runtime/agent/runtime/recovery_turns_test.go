@@ -739,7 +739,7 @@ func TestPlanActivitiesPreserveUsageAcrossModelRecovery(t *testing.T) {
 			input := &PlanActivityInput{
 				AgentID:    "svc.agent",
 				RunID:      "run-recovery-usage",
-				RunContext: run.Context{RunID: "run-recovery-usage", Attempt: 1},
+				RunContext: run.Context{RootRunID: "root", RunID: "run-recovery-usage", Attempt: 1},
 			}
 
 			out, activityErr := test.activity(rt, context.Background(), input)
@@ -788,7 +788,7 @@ func TestPlanActivitiesAccountCaughtUnaryRejections(t *testing.T) {
 				out, activityErr := activity.run(rt, context.Background(), &PlanActivityInput{
 					AgentID:    "svc.agent",
 					RunID:      "run-caught-rejection",
-					RunContext: run.Context{RunID: "run-caught-rejection", Attempt: 1},
+					RunContext: run.Context{RootRunID: "root", RunID: "run-caught-rejection", Attempt: 1},
 				})
 				require.NoError(t, activityErr)
 				if secondRejected {

@@ -6,12 +6,11 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
+	"github.com/stretchr/testify/require"
 )
 
 type unsafeToolCallPlanner struct {
@@ -174,7 +173,7 @@ func TestPlanActivityCanonicalizesUnsafeToolCallsBeforePersistence(t *testing.T)
 			input := &PlanActivityInput{
 				AgentID:          "svc.agent",
 				RunID:            "run-unsafe-tool",
-				RunContext:       run.Context{RunID: "run-unsafe-tool"},
+				RunContext:       run.Context{RootRunID: "root", RunID: "run-unsafe-tool"},
 				ToolPolicyActive: true,
 				AllowedTools:     []tools.Ident{"svc.read"},
 			}

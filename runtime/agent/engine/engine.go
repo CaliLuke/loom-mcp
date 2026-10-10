@@ -124,6 +124,12 @@ type (
 		// RegisterFinishRunActivity registers terminal event storage and typed-result finishing.
 		RegisterFinishRunActivity(ctx context.Context, name string, opts ActivityOptions, fn func(context.Context, *api.FinishRunInput) (*api.FinishRunOutput, error)) error
 
+		// RegisterRecordContentActivity registers ordered workflow content storage.
+		RegisterRecordContentActivity(ctx context.Context, name string, opts ActivityOptions, fn func(context.Context, *api.RecordContentInput) (*api.RecordContentOutput, error)) error
+
+		// QueryRootRunID resolves the workflow run tree storage scope.
+		QueryRootRunID(ctx context.Context, workflowID string) (string, error)
+
 		// StartWorkflow initiates a new workflow execution and returns a handle for
 		// interacting with it. The workflow ID in req must be unique for the engine
 		// instance. Errors may describe a definite rejection or an uncertain outcome;
@@ -246,6 +252,9 @@ type (
 
 		// ExecuteFinishRunActivity stores terminal events outside workflow execution.
 		ExecuteFinishRunActivity(ctx context.Context, call FinishRunActivityCall) (*api.FinishRunOutput, error)
+
+		// ExecuteRecordContentActivity stores ordered content outside workflow execution.
+		ExecuteRecordContentActivity(ctx context.Context, call RecordContentActivityCall) (*api.RecordContentOutput, error)
 
 		// ExecuteToolActivity schedules a tool execution activity and blocks until it
 		// completes. This is useful for sequential execution (finalizers, single tools).
@@ -523,5 +532,12 @@ type (
 type FinishRunActivityCall struct {
 	Name    string
 	Input   *api.FinishRunInput
+	Options ActivityOptions
+}
+
+// RecordContentActivityCall schedules the runtime content storage activity.
+type RecordContentActivityCall struct {
+	Name    string
+	Input   *api.RecordContentInput
 	Options ActivityOptions
 }

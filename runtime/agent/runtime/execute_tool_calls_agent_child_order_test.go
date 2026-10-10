@@ -11,10 +11,10 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	runloginmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog/inmem"
+	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 	sessioninmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/session/inmem"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
-
 	"github.com/stretchr/testify/require"
 )
 
@@ -22,7 +22,7 @@ const invokePromptText = "invoke"
 
 func TestExecuteToolCalls_AgentToolsPublishResultsAsComplete(t *testing.T) {
 	recorder := &recordingHooks{ch: make(chan hooks.Event, 64)}
-	rt := &Runtime{
+	rt := &Runtime{RunStore: runstoreinmem.New(),
 		agents:        make(map[agent.Ident]AgentRegistration),
 		toolsets:      make(map[string]ToolsetRegistration),
 		toolSpecs:     make(map[tools.Ident]tools.ToolSpec),
@@ -69,7 +69,7 @@ func TestExecuteToolCalls_AgentToolsPublishResultsAsComplete(t *testing.T) {
 		controlledChildHandles: childHandles,
 	}
 
-	runCtx := &run.Context{
+	runCtx := &run.Context{RootRunID: "root",
 		RunID:     "run-parent",
 		SessionID: "session-1",
 		TurnID:    "turn-1",

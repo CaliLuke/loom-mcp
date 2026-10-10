@@ -32,6 +32,7 @@ type (
 		hookActivities    map[string]hookActivityDef
 		plannerActivities map[string]plannerActivityDef
 		finishActivities  map[string]finishActivityDef
+		contentActivities map[string]contentActivityDef
 		toolActivities    map[string]toolActivityDef
 
 		// statuses tracks workflow status by run ID (inmem uses workflow ID as run ID).
@@ -41,10 +42,11 @@ type (
 
 	// wfCtx adapts context.Context plus in-memory signal channels into engine.WorkflowContext.
 	wfCtx struct {
-		ctx   context.Context
-		id    string
-		runID string
-		eng   *eng
+		ctx     context.Context
+		id      string
+		runID   string
+		eng     *eng
+		queries map[string]any
 
 		pauseCh       chan *api.PauseRequest
 		resumeCh      chan *api.ResumeRequest
@@ -76,6 +78,10 @@ type (
 
 	plannerActivityDef struct {
 		handler func(context.Context, *api.PlanActivityInput) (*api.PlanActivityOutput, error)
+		opts    engine.ActivityOptions
+	}
+	contentActivityDef struct {
+		handler func(context.Context, *api.RecordContentInput) (*api.RecordContentOutput, error)
 		opts    engine.ActivityOptions
 	}
 	finishActivityDef struct {
@@ -198,6 +204,29 @@ func (e *eng) RegisterFinishRunActivity(_ context.Context, name string, opts eng
 		return fmt.Errorf("finish activity %q already registered", name)
 	}
 	e.finishActivities[name] = finishActivityDef{
+		handler: fn,
+		opts:    opts,
+	}
+	return nil
+}
+
+// RegisterRecordContentActivity registers ordered content storage.
+func (e *eng) RegisterRecordContentActivity(_ context.Context, name string, opts engine.ActivityOptions, fn func(context.Context, *api.RecordContentInput) (*api.RecordContentOutput, error)) error {
+	if name == "" {
+		return errors.New("record content activity name is required")
+	}
+	if fn == nil {
+		return errors.New("record content activity handler is required")
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.contentActivities == nil {
+		e.contentActivities = make(map[string]contentActivityDef)
+	}
+	if _, dup := e.contentActivities[name]; dup {
+		return fmt.Errorf("record content activity %q already registered", name)
+	}
+	e.contentActivities[name] = contentActivityDef{
 		handler: fn,
 		opts:    opts,
 	}
@@ -491,8 +520,14 @@ func (w *wfCtx) Context() context.Context {
 	return engine.WithWorkflowContext(w.ctx, w)
 }
 
-// SetQueryHandler is a no-op for the in-memory engine.
+// SetQueryHandler retains read-only query handlers for this execution.
 func (w *wfCtx) SetQueryHandler(name string, handler any) error {
+	w.eng.mu.Lock()
+	defer w.eng.mu.Unlock()
+	if w.queries == nil {
+		w.queries = make(map[string]any)
+	}
+	w.queries[name] = handler
 	return nil
 }
 
@@ -632,6 +667,29 @@ func (w *wfCtx) ExecuteFinishRunActivity(ctx context.Context, call engine.Finish
 	w.eng.mu.RUnlock()
 	if !ok {
 		return nil, fmt.Errorf("finish activity %q not registered", call.Name)
+	}
+	timeout := call.Options.StartToCloseTimeout
+	if timeout == 0 {
+		timeout = def.opts.StartToCloseTimeout
+	}
+	actCtx, cancel := withOptionalTimeout(ctx, timeout)
+	defer cancel()
+	return def.handler(actCtx, call.Input)
+}
+
+// ExecuteRecordContentActivity stores content through the registered handler.
+func (w *wfCtx) ExecuteRecordContentActivity(ctx context.Context, call engine.RecordContentActivityCall) (*api.RecordContentOutput, error) {
+	if call.Name == "" {
+		return nil, errors.New("record content activity name is required")
+	}
+	if call.Input == nil {
+		return nil, errors.New("record content activity input is required")
+	}
+	w.eng.mu.RLock()
+	def, ok := w.eng.contentActivities[call.Name]
+	w.eng.mu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("record content activity %q not registered", call.Name)
 	}
 	timeout := call.Options.StartToCloseTimeout
 	if timeout == 0 {
@@ -791,4 +849,42 @@ func withOptionalTimeout(parent context.Context, timeout time.Duration) (context
 	}
 	ctx, cancel := context.WithTimeout(parent, timeout)
 	return ctx, cancel
+}
+
+// QueryRootRunID returns the immutable scope registered by the workflow.
+func (e *eng) QueryRootRunID(ctx context.Context, workflowID string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	if workflowID == "" {
+		return "", errors.New("workflow id is required")
+	}
+	e.mu.RLock()
+	h, ok := e.handles[workflowID]
+	if !ok {
+		e.mu.RUnlock()
+		return "", engine.ErrWorkflowNotFound
+	}
+	handler := h.wfCtx.queries[api.QueryRootRunID]
+	e.mu.RUnlock()
+	query, ok := handler.(func() (string, error))
+	if !ok {
+		return "", fmt.Errorf("workflow %q: root_run_id query not registered", workflowID)
+	}
+	return query()
+}
+
+// SignalByID delivers a signal without requiring the caller's runtime to retain
+// a handle, including when the target is an agent child workflow.
+func (e *eng) SignalByID(ctx context.Context, workflowID, runID, name string, payload any) error {
+	e.mu.RLock()
+	h, ok := e.handles[workflowID]
+	e.mu.RUnlock()
+	if !ok {
+		return engine.ErrWorkflowNotFound
+	}
+	if runID != "" && runID != h.wfCtx.runID {
+		return engine.ErrWorkflowNotFound
+	}
+	return h.Signal(ctx, name, payload)
 }

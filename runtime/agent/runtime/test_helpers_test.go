@@ -1026,3 +1026,28 @@ func (t *testWorkflowContext) ExecuteFinishRunActivity(ctx context.Context, call
 func (r *routeWorkflowContext) ExecuteFinishRunActivity(ctx context.Context, call engine.FinishRunActivityCall) (*api.FinishRunOutput, error) {
 	return r.hookRuntime.FinishRunActivity(ctx, call.Input)
 }
+
+func (s *stubEngine) RegisterRecordContentActivity(context.Context, string, engine.ActivityOptions, func(context.Context, *api.RecordContentInput) (*api.RecordContentOutput, error)) error {
+	return nil
+}
+
+func (t *testWorkflowContext) ExecuteRecordContentActivity(ctx context.Context, call engine.RecordContentActivityCall) (*api.RecordContentOutput, error) {
+	rt := t.finishRuntime
+	if rt == nil {
+		rt = t.runtime
+	}
+	if rt == nil {
+		rt = t.hookRuntime
+	}
+	if rt == nil {
+		return nil, fmt.Errorf("test finish runtime is required")
+	}
+	return rt.RecordContentActivity(ctx, call.Input)
+}
+
+func (r *routeWorkflowContext) ExecuteRecordContentActivity(ctx context.Context, call engine.RecordContentActivityCall) (*api.RecordContentOutput, error) {
+	return r.hookRuntime.RecordContentActivity(ctx, call.Input)
+}
+func (s *stubEngine) QueryRootRunID(_ context.Context, id string) (string, error) {
+	return id, nil
+}

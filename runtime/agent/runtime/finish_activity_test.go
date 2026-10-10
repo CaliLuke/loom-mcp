@@ -3,14 +3,14 @@ package runtime
 import (
 	"context"
 	"encoding/json/v2"
-	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
-	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	"strings"
 	"testing"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 	"github.com/stretchr/testify/assert"
@@ -104,7 +104,7 @@ func TestFinishPathsStoreEventsOnce(t *testing.T) {
 				out, err = rt.finishAfterTerminalToolCalls(wf.Context(), input, base, st, "")
 			case "canceled scope":
 				cancel()
-				finished, finishErr := rt.finishRun(wf.Context(), input, []*api.ToolEvent{{Name: "tool"}}, nil)
+				finished, finishErr := rt.finishRun(wf.Context(), input, []*api.ToolEvent{{Name: "tool"}}, nil, nil)
 				require.NoError(t, finishErr)
 				out = &RunOutput{ToolEventsRef: finished.ToolEventsRef, ToolEventCount: finished.ToolEventCount}
 			}

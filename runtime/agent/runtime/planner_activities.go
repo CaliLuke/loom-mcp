@@ -42,7 +42,7 @@ func (r *Runtime) PlanStartActivity(ctx context.Context, input *PlanActivityInpu
 		return nil, err
 	}
 	result, err := r.planStart(ctx, reg, planInput)
-	if out, handled, err := resolvePlanActivityRecovery(ctx, events, recoveryRecorder, input, err); handled {
+	if out, handled, err := r.resolvePlanActivityRecovery(ctx, events, recoveryRecorder, input, err); handled {
 		return out, err
 	}
 	r.logger.Info(ctx, "PlanStartActivity returning PlanResult", "tool_calls", len(result.ToolCalls), "final_response", result.FinalResponse != nil, "await", result.Await != nil)
@@ -109,13 +109,13 @@ func (r *Runtime) PlanResumeActivity(ctx context.Context, input *PlanActivityInp
 		return nil, err
 	}
 	result, err := r.planResume(ctx, reg, planInput)
-	if out, handled, err := resolvePlanActivityRecovery(ctx, events, recoveryRecorder, input, err); handled {
+	if out, handled, err := r.resolvePlanActivityRecovery(ctx, events, recoveryRecorder, input, err); handled {
 		return out, err
 	}
 	return r.completePlanActivity(ctx, result, input, events, recoveryRecorder)
 }
 
-func resolvePlanActivityRecovery(
+func (r *Runtime) resolvePlanActivityRecovery(
 	ctx context.Context,
 	events *runtimePlannerEvents,
 	recorder *modelRecoveryRecorder,
@@ -129,7 +129,8 @@ func resolvePlanActivityRecovery(
 		if err != nil {
 			return nil, true, err
 		}
-		return recoveryPlanActivityOutput(input, recovery, usage), true, nil
+		out, err := r.storePlanActivityOutput(ctx, input.RunContext.RootRunID, recoveryPlanActivityOutput(input, recovery, usage))
+		return out, true, err
 	}
 	if recoveryErr != nil {
 		return nil, true, recoveryErr
@@ -165,7 +166,7 @@ func (r *Runtime) completePlanActivity(
 	}
 	transcript := events.exportTranscript()
 	normalizeTranscriptRawJSON(transcript)
-	return &PlanActivityOutput{
+	return r.storePlanActivityOutput(ctx, input.RunContext.RootRunID, &PlanActivityOutput{
 		Result:           result,
 		Transcript:       transcript,
 		Usage:            usage,
@@ -173,7 +174,7 @@ func (r *Runtime) completePlanActivity(
 		AllowedTools:     cloneToolIdents(input.AllowedTools),
 		PolicyCaps:       input.PolicyCaps,
 		Attempt:          input.RunContext.Attempt,
-	}, nil
+	})
 }
 
 func (r *Runtime) canonicalizePlanActivityToolCalls(result *planner.PlanResult, input *PlanActivityInput) {
@@ -244,8 +245,9 @@ func cloneTypedInputOutputs(in []planner.TypedInputOutput) []planner.TypedInputO
 	out := make([]planner.TypedInputOutput, len(in))
 	for i, item := range in {
 		out[i] = planner.TypedInputOutput{
-			ID:      item.ID,
-			Payload: append(item.Payload[:0:0], item.Payload...),
+			ID:         item.ID,
+			PayloadRef: item.PayloadRef,
+			Payload:    append(item.Payload[:0:0], item.Payload...),
 		}
 	}
 	return out

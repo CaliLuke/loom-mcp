@@ -8,20 +8,19 @@ import (
 	"strings"
 	"time"
 
-	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
-
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/interrupt"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
+	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 func (r *Runtime) waitAwaitQueueItem(ctx context.Context, ctrl *interrupt.Controller, input *RunInput, base *planner.PlanInput, st *runLoopState, turnID string, timeout time.Duration, it planner.AwaitItem) ([]*planner.ToolResult, error) {
 	switch it.Kind {
 	case planner.AwaitItemKindClarification:
-		return waitAwaitClarification(ctx, ctrl, base, timeout, it.Clarification)
+		return waitAwaitClarification(ctx, ctrl, base, timeout, it.Clarification, st)
 	case planner.AwaitItemKindQuestions:
 		return r.waitAwaitQuestions(ctx, ctrl, input, base, st, turnID, timeout, it.Questions)
 	case planner.AwaitItemKindExternalTools:
@@ -60,7 +59,7 @@ func (r *Runtime) consumeProvidedToolResults(ctx context.Context, input *RunInpu
 	return decoded, nil
 }
 
-func waitAwaitClarification(ctx context.Context, ctrl *interrupt.Controller, base *planner.PlanInput, timeout time.Duration, clarification *planner.AwaitClarification) ([]*planner.ToolResult, error) {
+func waitAwaitClarification(ctx context.Context, ctrl *interrupt.Controller, base *planner.PlanInput, timeout time.Duration, clarification *planner.AwaitClarification, st *runLoopState) ([]*planner.ToolResult, error) {
 	if clarification == nil {
 		return nil, errors.New("await clarification missing payload")
 	}
@@ -74,6 +73,7 @@ func waitAwaitClarification(ctx context.Context, ctrl *interrupt.Controller, bas
 	if clarification.ID != "" && ans.ID != "" && ans.ID != clarification.ID {
 		return nil, errors.New("unexpected await ID for clarification")
 	}
+	st.ClarificationRefs = append(st.ClarificationRefs, ans.AnswerRef)
 	if ans.Answer != "" {
 		base.Messages = append(base.Messages, &model.Message{
 			Role:  model.ConversationRoleUser,
@@ -110,8 +110,9 @@ func waitAwaitTypedInput(ctx context.Context, ctrl *interrupt.Controller, st *ru
 		return nil, err
 	}
 	st.TypedInputs = append(st.TypedInputs, planner.TypedInputOutput{
-		ID:      typedInput.ID,
-		Payload: append(ans.Payload[:0:0], ans.Payload...),
+		ID:         typedInput.ID,
+		PayloadRef: ans.PayloadRef,
+		Payload:    append(ans.Payload[:0:0], ans.Payload...),
 	})
 	return nil, nil
 }

@@ -8,7 +8,9 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 )
 
 const maxFinalToolResultBytes = 1_000_000
@@ -40,9 +42,21 @@ func (r *Runtime) FinishRunActivity(ctx context.Context, input *api.FinishRunInp
 	if err != nil {
 		return nil, err
 	}
+	var finalRef runstore.Hash
+	if input.Final != nil {
+		data, err := json.Marshal(input.Final)
+		if err != nil {
+			return nil, fmt.Errorf("encode final message: %w", err)
+		}
+		finalRef, err = r.RunStore.Put(ctx, input.RootRunID, data)
+		if err != nil {
+			return nil, fmt.Errorf("store final message: %w", err)
+		}
+	}
 	summary := summarizeChildToolEvents(input.ToolEvents)
 	return &api.FinishRunOutput{
 		ToolEventsRef:  ref,
+		FinalRef:       finalRef,
 		ToolEventCount: len(input.ToolEvents),
 		ToolSummary: api.ToolEventSummary{
 			FailedCount: summary.failedCount,
@@ -55,7 +69,7 @@ func (r *Runtime) FinishRunActivity(ctx context.Context, input *api.FinishRunInp
 
 // finishRun schedules terminal storage in a detached scope so cancellation does
 // not prevent the existing terminal-output paths from retaining their events.
-func (r *Runtime) finishRun(ctx context.Context, input *RunInput, events []*api.ToolEvent, final *api.ToolEvent) (*api.FinishRunOutput, error) {
+func (r *Runtime) finishRun(ctx context.Context, input *RunInput, events []*api.ToolEvent, final *api.ToolEvent, message *model.Message) (*api.FinishRunOutput, error) {
 	wf := engine.WorkflowContextFromContext(ctx)
 	if wf == nil {
 		return nil, fmt.Errorf("finish run: workflow context is required")
@@ -63,7 +77,7 @@ func (r *Runtime) finishRun(ctx context.Context, input *RunInput, events []*api.
 	wf = wf.Detached()
 	return wf.ExecuteFinishRunActivity(wf.Context(), engine.FinishRunActivityCall{
 		Name:  FinishRunActivityName(input.AgentID),
-		Input: &api.FinishRunInput{RootRunID: input.RootRunID, ToolEvents: events, FinalToolResult: final},
+		Input: &api.FinishRunInput{RootRunID: input.RootRunID, ToolEvents: events, FinalToolResult: final, Final: message},
 	})
 }
 

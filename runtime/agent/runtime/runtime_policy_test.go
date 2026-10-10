@@ -3,7 +3,6 @@ package runtime
 import (
 	"context"
 	"errors"
-	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 	"io"
 	"testing"
 	"time"
@@ -18,6 +17,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	runloginmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog/inmem"
+	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
 	sessioninmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/session/inmem"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
@@ -308,7 +308,7 @@ func TestEmptyPolicyAllowlistBlocksPlanningAndExecution(t *testing.T) {
 			assert.Empty(t, direct.AllowedCalls)
 
 			wfCtx := &testWorkflowContext{ctx: ctx, hookRuntime: rt}
-			out, err := rt.runLoop(wfCtx, reg, input, base, initial, nil, model.TokenUsage{}, got.Caps, time.Time{}, time.Time{}, 2, "turn-1", nil, nil, 0, got.Envelope)
+			out, err := rt.runLoop(wfCtx, reg, input, base, initial, nil, model.TokenUsage{}, got.Caps, time.Time{}, time.Time{}, 2, "turn-1", nil, nil, 0, workflowLoopStart{toolPolicy: got.Envelope})
 			require.ErrorContains(t, err, "no tools allowed for execution")
 			assert.Nil(t, out)
 			assert.Empty(t, wfCtx.lastToolCall.Name, "a blocked tool must never be scheduled")
@@ -427,7 +427,7 @@ func TestDisableToolsPolicyBlocksToolExecution(t *testing.T) {
 
 	// A planner that violates DisableTools by emitting tool calls anyway.
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: tools.Ident("allowed")}}}
-	out, err := rt.runLoop(wfCtx, reg, input, base, initial, nil, model.TokenUsage{}, policyResult.Caps, time.Time{}, time.Time{}, 2, "turn-1", nil, nil, 0, policyResult.Envelope)
+	out, err := rt.runLoop(wfCtx, reg, input, base, initial, nil, model.TokenUsage{}, policyResult.Caps, time.Time{}, time.Time{}, 2, "turn-1", nil, nil, 0, workflowLoopStart{toolPolicy: policyResult.Envelope})
 	require.Error(t, err)
 	require.ErrorContains(t, err, "no tools allowed for execution")
 	assert.Nil(t, out)
@@ -513,7 +513,7 @@ func TestAwaitResumeReappliesToolPolicy(t *testing.T) {
 		UpdatedAt: now,
 	}))
 	base := &planner.PlanInput{
-		RunContext: run.Context{RunID: input.RunID, SessionID: input.SessionID, TurnID: input.TurnID, Attempt: 1},
+		RunContext: run.Context{RootRunID: "root", RunID: input.RunID, SessionID: input.SessionID, TurnID: input.TurnID, Attempt: 1},
 		Agent:      newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID}),
 	}
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: askTool}}}
@@ -530,7 +530,7 @@ func TestAwaitResumeReappliesToolPolicy(t *testing.T) {
 		},
 		input, base, initial, nil, model.TokenUsage{},
 		policy.CapsState{MaxToolCalls: 4, RemainingToolCalls: 4},
-		time.Time{}, time.Time{}, 2, input.TurnID, nil, ctrl, 0, staleEnvelope,
+		time.Time{}, time.Time{}, 2, input.TurnID, nil, ctrl, 0, workflowLoopStart{toolPolicy: staleEnvelope},
 	)
 	require.NoError(t, err)
 
@@ -544,7 +544,7 @@ func TestAwaitResumeReappliesToolPolicy(t *testing.T) {
 
 func TestPlanStartActivityFiltersModelVisibleTools(t *testing.T) {
 	modelClient := &captureModelClient{}
-	rt := &Runtime{
+	rt := &Runtime{RunStore: runstoreinmem.New(),
 		agents: map[agent.Ident]AgentRegistration{
 			"svc.agent": {
 				ID:      "svc.agent",
@@ -564,7 +564,7 @@ func TestPlanStartActivityFiltersModelVisibleTools(t *testing.T) {
 	out, err := rt.PlanStartActivity(context.Background(), &PlanActivityInput{
 		AgentID:          "svc.agent",
 		RunID:            "run-1",
-		RunContext:       run.Context{RunID: "run-1"},
+		RunContext:       run.Context{RootRunID: "root", RunID: "run-1"},
 		ToolPolicyActive: true,
 		AllowedTools:     []tools.Ident{"allowed"},
 		Messages: []*model.Message{{
@@ -583,7 +583,7 @@ func TestPlanStartActivityFiltersModelVisibleTools(t *testing.T) {
 
 func TestRecoveryDisableToolsProducesToolFreeModelRequest(t *testing.T) {
 	modelClient := &captureModelClient{}
-	rt := &Runtime{
+	rt := &Runtime{RunStore: runstoreinmem.New(),
 		agents: map[agent.Ident]AgentRegistration{
 			"svc.agent": {
 				ID:      "svc.agent",
@@ -603,7 +603,7 @@ func TestRecoveryDisableToolsProducesToolFreeModelRequest(t *testing.T) {
 	out, err := rt.PlanStartActivity(context.Background(), &PlanActivityInput{
 		AgentID:          "svc.agent",
 		RunID:            "run-1",
-		RunContext:       run.Context{RunID: "run-1"},
+		RunContext:       run.Context{RootRunID: "root", RunID: "run-1"},
 		ToolPolicyActive: true,
 		AllowedTools:     nil,
 		Recovery: &api.ModelRecovery{

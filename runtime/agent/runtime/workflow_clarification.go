@@ -51,6 +51,7 @@ func (r *Runtime) handleMissingFieldsPolicy(
 	notes []planner.PlannerAnnotation,
 	ctrl *interrupt.Controller,
 	deadlines *runDeadlines,
+	st *runLoopState,
 ) (*RunOutput, error) {
 	if ctrl == nil || reg.Policy.OnMissingFields == "" {
 		return nil, nil
@@ -64,7 +65,7 @@ func (r *Runtime) handleMissingFieldsPolicy(
 		out, err := r.finalizeWithPlanner(wfCtx, reg, input, base, allResults, allToolOutputs, aggUsage, caps, *nextAttempt, turnID, notes, planner.TerminationReasonFailureCap, time.Time{})
 		return out, err
 	case MissingFieldsAwaitClarification:
-		return r.awaitMissingFieldClarification(wfCtx, input, base, turnID, ctrl, deadlines, mf, triggerTool, triggerCall)
+		return r.awaitMissingFieldClarification(wfCtx, input, base, turnID, ctrl, deadlines, mf, triggerTool, triggerCall, st)
 	case MissingFieldsResume:
 		return nil, nil
 	default:
@@ -94,6 +95,7 @@ func (r *Runtime) awaitMissingFieldClarification(
 	mf *planner.RetryHint,
 	triggerTool tools.Ident,
 	triggerCall string,
+	st *runLoopState,
 ) (*RunOutput, error) {
 	ctx := wfCtx.Context()
 	awaitID := generateDeterministicAwaitID(base.RunContext.RunID, base.RunContext.TurnID, triggerTool, triggerCall)
@@ -114,6 +116,7 @@ func (r *Runtime) awaitMissingFieldClarification(
 		return nil, fmt.Errorf("unexpected await ID for clarification")
 	}
 	appendClarificationAnswer(base, ans.Answer)
+	st.ClarificationRefs = append(st.ClarificationRefs, ans.AnswerRef)
 	if err := r.publishClarificationResumed(ctx, input, base, turnID, ans); err != nil {
 		return nil, err
 	}

@@ -13,10 +13,10 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	runloginmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog/inmem"
+	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 	sessioninmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/session/inmem"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
-
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,7 +25,7 @@ import (
 // results are merged deterministically in tool_call_id order during fan-in.
 func TestExecuteToolCalls_AgentToolsFanOut(t *testing.T) {
 	recorder := &recordingHooks{}
-	rt := &Runtime{
+	rt := &Runtime{RunStore: runstoreinmem.New(),
 		agents:        make(map[agent.Ident]AgentRegistration),
 		toolsets:      make(map[string]ToolsetRegistration),
 		toolSpecs:     make(map[tools.Ident]tools.ToolSpec),
@@ -75,7 +75,7 @@ func TestExecuteToolCalls_AgentToolsFanOut(t *testing.T) {
 		runtime:     nil, // child handle Get will not execute a real nested workflow
 	}
 
-	runCtx := &run.Context{
+	runCtx := &run.Context{RootRunID: "root",
 		RunID:     "run-parent",
 		SessionID: "session-1",
 		TurnID:    "turn-1",

@@ -11,16 +11,16 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	runloginmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog/inmem"
+	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 	sessioninmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/session/inmem"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
-
 	"github.com/stretchr/testify/require"
 )
 
 func TestExecuteToolCalls_MixedBatch_DoesNotRegressOrderingWithinCategories(t *testing.T) {
 	recorder := &recordingHooks{ch: make(chan hooks.Event, 128)}
-	rt := &Runtime{
+	rt := &Runtime{RunStore: runstoreinmem.New(),
 		toolsets: map[string]ToolsetRegistration{
 			"svc.tools": {},
 			"inline.ts": {
@@ -82,7 +82,7 @@ func TestExecuteToolCalls_MixedBatch_DoesNotRegressOrderingWithinCategories(t *t
 		controlledChildHandles: childHandles,
 	}
 
-	runCtx := &run.Context{RunID: "run-1", SessionID: "sess-1", TurnID: "turn-1"}
+	runCtx := &run.Context{RootRunID: "root", RunID: "run-1", SessionID: "sess-1", TurnID: "turn-1"}
 	seedParentRun(t, rt.SessionStore, runCtx.RunID, runCtx.SessionID)
 	calls := []planner.ToolRequest{
 		{Name: tools.Ident("inline.ts.inline"), RunID: runCtx.RunID, SessionID: runCtx.SessionID, TurnID: runCtx.TurnID, ToolCallID: "call-inline"},

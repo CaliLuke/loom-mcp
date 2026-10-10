@@ -278,7 +278,7 @@ func (r *Runtime) applyAwaitFailurePolicy(wfCtx engine.WorkflowContext, reg Agen
 	if out, err := r.applyAwaitFailureCap(wfCtx, reg, input, base, st, allToolResults, turnID, deadlines); err != nil || out != nil {
 		return out, err
 	}
-	return r.handleMissingFieldsPolicy(wfCtx, reg, input, base, allToolResults, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.Caps, &st.NextAttempt, turnID, plannerResultNotes(st.Result), ctrl, deadlines)
+	return r.handleMissingFieldsPolicy(wfCtx, reg, input, base, allToolResults, st.ToolEvents, st.ToolOutputs, st.AggUsage, st.Caps, &st.NextAttempt, turnID, plannerResultNotes(st.Result), ctrl, deadlines, st)
 }
 
 func (r *Runtime) applyAwaitFailureCap(wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, base *planner.PlanInput, st *runLoopState, allToolResults []*planner.ToolResult, turnID string, deadlines *runDeadlines) (*RunOutput, error) {

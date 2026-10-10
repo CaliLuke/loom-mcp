@@ -75,6 +75,7 @@ type (
 		AgentID         agent.Ident
 		RunID           string
 		Final           *model.Message
+		FinalRef        runstore.Hash
 		FinalToolResult *api.ToolEvent
 		ToolEventsRef   runstore.Hash
 		ToolEventCount  int
@@ -207,6 +208,7 @@ func decodeRunOutput(p *commonpb.Payload, valuePtr any) error {
 	dst.AgentID = w.AgentID
 	dst.RunID = w.RunID
 	dst.Final = w.Final
+	dst.FinalRef = w.FinalRef
 	dst.FinalToolResult = w.FinalToolResult
 	dst.ToolEventsRef = w.ToolEventsRef
 	dst.ToolEventCount = w.ToolEventCount
@@ -266,6 +268,7 @@ func encodeRunOutputWire(in *api.RunOutput) (*runOutputWire, error) {
 		AgentID:         in.AgentID,
 		RunID:           in.RunID,
 		Final:           in.Final,
+		FinalRef:        in.FinalRef,
 		FinalToolResult: in.FinalToolResult,
 		ToolEventsRef:   in.ToolEventsRef,
 		ToolEventCount:  in.ToolEventCount,

@@ -129,3 +129,16 @@ func mapSignalError(err error) error {
 
 	return err
 }
+
+// QueryRootRunID resolves the run tree scope through the workflow query.
+func (e *Engine) QueryRootRunID(ctx context.Context, workflowID string) (string, error) {
+	value, err := e.QueryWorkflow(ctx, workflowID, api.QueryRootRunID)
+	if err != nil {
+		return "", err
+	}
+	var root string
+	if err := value.Get(&root); err != nil {
+		return "", err
+	}
+	return root, nil
+}

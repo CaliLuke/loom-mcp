@@ -302,6 +302,11 @@ func (r *Runtime) registerAgentActivities(ctx context.Context, reg AgentRegistra
 			return err
 		}
 	}
+	if err := r.Engine.RegisterRecordContentActivity(ctx, RecordContentActivityName(reg.ID), engine.ActivityOptions{
+		Queue: reg.Workflow.TaskQueue, StartToCloseTimeout: defaultExecuteToolActivityTimeout, RetryPolicy: engine.RetryPolicy{MaxAttempts: 3},
+	}, r.RecordContentActivity); err != nil {
+		return err
+	}
 	return r.Engine.RegisterFinishRunActivity(ctx, FinishRunActivityName(reg.ID), engine.ActivityOptions{
 		Queue:               reg.Workflow.TaskQueue,
 		StartToCloseTimeout: defaultExecuteToolActivityTimeout,

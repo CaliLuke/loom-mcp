@@ -12,6 +12,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/internal/cancellation"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
@@ -19,11 +23,6 @@ import (
 	"go.temporal.io/sdk/converter"
 	temporalsdk "go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
-
-	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
-	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
-	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/internal/cancellation"
-	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
 )
 
 // Options configures the Temporal engine adapter. Either a pre-configured Client
@@ -384,6 +383,21 @@ func (e *Engine) RegisterFinishRunActivity(_ context.Context, name string, opts 
 	// Wrap to inject originating WorkflowContext into activity context so runtime code
 	// can start child workflows (agent-as-tool) with engine-owned context.
 	wrapped := func(ctx context.Context, in *api.FinishRunInput) (*api.FinishRunOutput, error) {
+		out, err := fn(e.injectWorkflowContextIntoActivity(ctx), in)
+		return out, classifyTemporalCancellation(err)
+	}
+	return e.registerActivityWithCtx(name, opts, wrapped)
+}
+
+// RegisterRecordContentActivity registers content storage on the agent queue.
+func (e *Engine) RegisterRecordContentActivity(_ context.Context, name string, opts engine.ActivityOptions, fn func(context.Context, *api.RecordContentInput) (*api.RecordContentOutput, error)) error {
+	if err := e.requireWorkerMode("register content activities"); err != nil {
+		return err
+	}
+	opts = e.applyActivityClassDefaults(activityKindHook, opts)
+	// Wrap to inject originating WorkflowContext into activity context so runtime code
+	// can start child workflows (agent-as-tool) with engine-owned context.
+	wrapped := func(ctx context.Context, in *api.RecordContentInput) (*api.RecordContentOutput, error) {
 		out, err := fn(e.injectWorkflowContextIntoActivity(ctx), in)
 		return out, classifyTemporalCancellation(err)
 	}

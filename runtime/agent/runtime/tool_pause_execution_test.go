@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"context"
-	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 	"testing"
 	"time"
 
@@ -16,12 +15,12 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	runloginmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog/inmem"
+	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
 	sessioninmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/session/inmem"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript"
-
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,7 +32,7 @@ import (
 // queue. The Pause itself must never land in cumulative ToolOutputs history.
 func TestExecuteToolCalls_RuntimeOwnedPauseFlowsThroughBatch(t *testing.T) {
 	recorder := &recordingHooks{}
-	rt := &Runtime{
+	rt := &Runtime{RunStore: runstoreinmem.New(),
 		toolsets: map[string]ToolsetRegistration{
 			"inline.ts": {
 				Inline:       true,
@@ -70,7 +69,7 @@ func TestExecuteToolCalls_RuntimeOwnedPauseFlowsThroughBatch(t *testing.T) {
 		hookRuntime: rt,
 	}
 
-	runCtx := &run.Context{
+	runCtx := &run.Context{RootRunID: "root",
 		RunID:     "run-1",
 		SessionID: "sess-1",
 		TurnID:    "turn-1",
@@ -278,7 +277,7 @@ func TestRunLoopBudgetedToolPauseRecordsResultBeforeUserAnswer(t *testing.T) {
 		UpdatedAt: now,
 	}))
 	base := &planner.PlanInput{
-		RunContext: run.Context{RunID: input.RunID, SessionID: input.SessionID, TurnID: input.TurnID, Attempt: 1},
+		RunContext: run.Context{RootRunID: "root", RunID: input.RunID, SessionID: input.SessionID, TurnID: input.TurnID, Attempt: 1},
 		Agent:      newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID}),
 	}
 	initial := &planner.PlanResult{

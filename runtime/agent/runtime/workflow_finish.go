@@ -43,7 +43,7 @@ func (r *Runtime) finishWithoutToolCalls(
 	}
 
 	finalToolResult := finalToolResultEvent(base.RunContext.Tool, result.FinalToolResult)
-	finished, err := r.finishRun(ctx, input, toolEvents, finalToolResult)
+	finished, err := r.finishRun(ctx, input, toolEvents, finalToolResult, finalMsg)
 	if err != nil {
 		return nil, err
 	}
@@ -52,6 +52,7 @@ func (r *Runtime) finishWithoutToolCalls(
 		RunID:           base.RunContext.RunID,
 		Final:           finalMsg,
 		FinalToolResult: finished.FinalToolResult,
+		FinalRef:        finished.FinalRef,
 		ToolEventsRef:   finished.ToolEventsRef,
 		ToolEventCount:  finished.ToolEventCount,
 		ToolSummary:     finished.ToolSummary,
@@ -172,7 +173,7 @@ func (r *Runtime) finishAfterTerminalToolCalls(
 	if err != nil {
 		return nil, err
 	}
-	finished, err := r.finishRun(ctx, input, toolEvents, nil)
+	finished, err := r.finishRun(ctx, input, toolEvents, nil, &model.Message{Role: model.ConversationRoleAssistant})
 	if err != nil {
 		return nil, err
 	}
@@ -180,6 +181,7 @@ func (r *Runtime) finishAfterTerminalToolCalls(
 		AgentID:        input.AgentID,
 		RunID:          base.RunContext.RunID,
 		Final:          &model.Message{Role: model.ConversationRoleAssistant},
+		FinalRef:       finished.FinalRef,
 		ToolEventsRef:  finished.ToolEventsRef,
 		ToolEventCount: finished.ToolEventCount,
 		ToolSummary:    finished.ToolSummary,
@@ -213,7 +215,7 @@ func (r *Runtime) finishAfterCompletionTool(
 	if finalToolResult == nil {
 		return nil, fmt.Errorf("completion tool %q produced no successful result", completion)
 	}
-	finished, err := r.finishRun(ctx, input, toolEvents, finalToolResult)
+	finished, err := r.finishRun(ctx, input, toolEvents, finalToolResult, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -221,6 +223,7 @@ func (r *Runtime) finishAfterCompletionTool(
 		AgentID:         input.AgentID,
 		RunID:           base.RunContext.RunID,
 		FinalToolResult: finished.FinalToolResult,
+		FinalRef:        finished.FinalRef,
 		ToolEventsRef:   finished.ToolEventsRef,
 		ToolEventCount:  finished.ToolEventCount,
 		ToolSummary:     finished.ToolSummary,

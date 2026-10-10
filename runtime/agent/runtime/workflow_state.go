@@ -12,11 +12,17 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript"
 )
 
 type (
 	runLoopState struct {
+		// InitialMessageRefs records effective caller messages in order for K7 indexing.
+		InitialMessageRefs []runstore.Hash
+		// SignalMessageRefs and ClarificationRefs retain adopted signal content for K7.
+		SignalMessageRefs []runstore.Hash
+		ClarificationRefs []runstore.Hash
 		// Caps is the current runtime policy cap state (remaining tool budget, failure budget, etc.).
 		Caps policy.CapsState
 

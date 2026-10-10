@@ -176,14 +176,62 @@ An error-only outcome has no eligible result hash.
 (also available as `api.ToolResultRefs`). `Result` addresses the full eligible
 result; `ServerData` and `Payload` address server-only content. Never put the
 server-only hashes or bytes into model messages. Typed results remain in workflow
-state; hook payloads and model-facing previews remain unchanged. Inline,
-child-agent, and externally provided results do not populate these references.
+state; hook payloads and model-facing previews remain unchanged. Inline tools,
+adapted child results, and externally provided results also carry result references.
 
 Typed consumers can call
 `runtime.LoadToolResult(ctx, store, rootRunID, toolSpec, refs.Result)` to load the
 eligible bytes and decode them with the generated result codec. Empty or missing
 hashes fail. Tool execution still decodes inline activity results in workflow
 state; terminal completion decoding runs in the finish activity.
+
+**Content recording (workflow protocol 4).** Content references are `runstore.Hash`
+values in the root run scope. Producers finish every `Put` before returning or
+signalling references. A failed write fails that path without publishing partial
+references; earlier successful writes may remain unreferenced. Retries may repeat
+writes, which are content-addressed and idempotent. K6 adds these references beside
+inline content; it does not build the transcript index or remove inline bytes.
+The existing K5 planner-input and terminal-event omission rules still apply.
+
+| Content | Producer and boundary | Reference |
+| --- | --- | --- |
+| Effective caller messages, after `BeforeRun` rewrites | Workflow calls `RecordContent` before the first planner activity; no messages skips it | Private `runLoopState.InitialMessageRefs`, in message order, for K7 |
+| Non-empty planner transcript | Planner activity stores JSON-encoded `PlanActivityOutput.Transcript` before return | `PlanActivityOutput.TranscriptRef` |
+| Each returned planner tool call | Planner activity stores each JSON-encoded `planner.ToolRequest`; arguments remain inline for dispatch | `PlanActivityOutput.ToolCallRefs`, parallel to `Result.ToolCalls` |
+| Recovery correction text | Rejected planner activity stores UTF-8 correction bytes before return | `ModelRecovery.CorrectionRef` |
+| Resume messages | Runtime client stores each encoded `model.Message` before signalling | `ResumeRequest.MessageRefs` |
+| Clarification answer | Runtime client stores UTF-8 answer bytes before signalling | `ClarificationAnswer.AnswerRef` |
+| Provided tool result | Runtime client stores present, non-null result JSON before signalling | `ProvidedToolResult.Refs.Result`, copied to the adopted `planner.ToolResult.Refs` |
+| Typed input | Runtime client stores the answer JSON before signalling | `TypedInputAnswer.PayloadRef`, copied to `planner.TypedInputOutput.PayloadRef` |
+| Inline result, including `tool_unavailable` | Workflow calls `RecordContent` with eligible result JSON and any `ServerData` before retaining the result | `planner.ToolResult.Refs` |
+| Child final message, when present | Child `FinishRunActivity` stores encoded `model.Message` before completion | `FinishRunOutput.FinalRef` and `RunOutput.FinalRef` |
+| Adapted child output, typed result or text | Parent calls `RecordContent` after adaptation/materialization and before retaining it | `planner.ToolResult.Refs.Result` (plus server data when present) |
+
+`Runtime.RecordContentActivity` accepts `api.RecordContentInput{RootRunID, Items}`
+and returns `api.RecordContentOutput{Refs}` with one hash per item, in order.
+`RegisterAgent` registers it on the workflow queue as
+`runtime.RecordContentActivityName(agentID)` (`<agentID>.record_content`). Manual
+registrations must register it too. Custom engines implement
+`Engine.RegisterRecordContentActivity` and
+`WorkflowContext.ExecuteRecordContentActivity`, using
+`engine.RecordContentActivityCall`. Workflow code never reads the store.
+
+Before each content-bearing signal, the client calls `Engine.QueryRootRunID`,
+which queries the target workflow's `root_run_id` handler (`api.QueryRootRunID`).
+The handler returns `RunInput.RootRunID`, including for child runs. Query or store
+failure returns an error and sends no signal. **Client-only processes must share
+the run store with workers.** The workflow adopts signal references without store
+reads; `SignalMessageRefs` and `ClarificationRefs` retain adopted message/answer
+references in run-loop state for K7. `PauseRun` and `ProvideConfirmation` have no
+content storage step.
+
+Error-only synthesized results (`synthesizeToolError`, dispatch/request failures,
+and unknown-tool results) have no eligible content to store. Structural policy or
+confirmation denials, reminders, and finalization hints do not create content
+writes. A value returned by an inline tool is content even when the tool is the
+runtime's `tool_unavailable` tool. Eligibility is determined by content kind, not
+size. Structural rendering remains versioned by the workflow protocol; the K7
+index is outside this change.
 
 **Planner activity boundary.** Every `PlanActivityInput.ToolOutputs` entry omits
 `Result` when `Refs.Result` is set and omits `ServerData` when
@@ -222,7 +270,8 @@ to the root scope because the returned events include server-only content.
 **Finish activity.** Every runtime path that produces a `RunOutput` schedules
 `Runtime.FinishRunActivity` once, including terminal-tool and policy-finalization
 paths. Its `api.FinishRunInput` carries the omitted-bytes event list and the
-selected final-result envelope. The activity stores the list, resolves a
+selected final-result envelope and optional `Final` message. The activity stores
+the message as `FinalRef` in the root scope, stores the list, resolves a
 referenced completion result through `LoadToolResult` and the generated result
 codec, restores its server data, enforces the final-result bound, and returns
 `api.FinishRunOutput`. Unreferenced final results keep their inline bytes.
@@ -489,7 +538,7 @@ Start ──► PlanStart ──► Tool Calls? ──► Execute Tools ──�
 ### Workflow Contracts
 
 - **Workflow protocol versions must match.** `api.WorkflowProtocolVersion` is
-  currently `3` and versions the agent workflow's inputs, outputs, signals, and
+  currently `4` and versions the agent workflow's inputs, outputs, signals, and
   state. The runtime stamps it after caller run options on top-level and child
   inputs. Workflow entry and history replay reject a different or missing
   version before interceptors, activities, or commands, returning

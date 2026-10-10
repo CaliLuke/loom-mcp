@@ -18,14 +18,13 @@ import (
 	"errors"
 	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/sdk/temporal"
-	"go.temporal.io/sdk/workflow"
-
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/internal/cancellation"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
 )
 
 type (
@@ -235,6 +234,24 @@ func (w *temporalWorkflowContext) ExecuteFinishRunActivity(ctx context.Context, 
 	actx := workflow.WithActivityOptions(w.ctx, w.activityOptionsFor(call.Name, call.Options))
 	fut := workflow.ExecuteActivity(actx, call.Name, call.Input)
 	var out *api.FinishRunOutput
+	if err := fut.Get(actx, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ExecuteRecordContentActivity schedules content storage with recorded results.
+func (w *temporalWorkflowContext) ExecuteRecordContentActivity(ctx context.Context, call engine.RecordContentActivityCall) (*api.RecordContentOutput, error) {
+	if call.Name == "" {
+		return nil, errors.New("record content activity name is required")
+	}
+	if call.Input == nil {
+		return nil, errors.New("record content activity input is required")
+	}
+
+	actx := workflow.WithActivityOptions(w.ctx, w.activityOptionsFor(call.Name, call.Options))
+	fut := workflow.ExecuteActivity(actx, call.Name, call.Input)
+	var out *api.RecordContentOutput
 	if err := fut.Get(actx, &out); err != nil {
 		return nil, err
 	}

@@ -215,6 +215,7 @@ func (r *Runtime) decodeProvidedToolResult(ctx context.Context, spec tools.ToolS
 	result := &planner.ToolResult{
 		Name:       call.Name,
 		Result:     decoded,
+		Refs:       item.Refs,
 		ServerData: nil,
 		Bounds:     bounds,
 		Error:      item.Error,
