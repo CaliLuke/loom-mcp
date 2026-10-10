@@ -103,16 +103,8 @@ type Client struct {
 	maxTok         int
 	temp           float32
 	think          int
-	ledger         ledgerSource
 	logger         telemetry.Logger
 	converseStream converseStreamFunc
-}
-
-// ledgerSource provides provider-ready messages for a given run when available.
-// This interface is internal to the loom-mcp bedrock client and implemented by the
-// runtime using engine-specific mechanisms (e.g., Temporal workflow queries).
-type ledgerSource interface {
-	Messages(ctx context.Context, runID string) ([]*model.Message, error)
 }
 
 type requestParts struct {
@@ -134,10 +126,8 @@ type thinkingConfig struct {
 }
 
 // New initializes a Bedrock-powered model client configured for chat completion
-// and streaming requests. The provided ledgerSource allows the client to prepend
-// provider-verified messages for a specific run ID during request encoding,
-// ensuring transcript continuity across completions.
-func New(aws *bedrockruntime.Client, opts Options, ledger ledgerSource) (*Client, error) {
+// and streaming requests. Requests are encoded from the planner's messages only.
+func New(aws *bedrockruntime.Client, opts Options) (*Client, error) {
 	opts.Runtime = aws
 	if opts.Runtime == nil {
 		return nil, errors.New("bedrock runtime client is required")
@@ -157,7 +147,6 @@ func New(aws *bedrockruntime.Client, opts Options, ledger ledgerSource) (*Client
 	}
 	c := &Client{
 		runtime:      opts.Runtime,
-		ledger:       ledger,
 		defaultModel: opts.DefaultModel,
 		highModel:    opts.HighModel,
 		smallModel:   opts.SmallModel,
@@ -249,11 +238,7 @@ func (c *Client) Stream(ctx context.Context, req *model.Request) (model.Streamer
 }
 
 func (c *Client) prepareRequest(ctx context.Context, req *model.Request) (*requestParts, error) {
-	merged, err := c.mergedRequestMessages(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	if err := validateBedrockRequestMessages(merged); err != nil {
+	if err := validateBedrockRequestMessages(req.Messages); err != nil {
 		return nil, err
 	}
 	modelID := c.resolveModelID(req)
@@ -264,42 +249,25 @@ func (c *Client) prepareRequest(ctx context.Context, req *model.Request) (*reque
 	if err != nil {
 		return nil, err
 	}
-	if err := validateBedrockThinking(req, modelID, merged); err != nil {
+	if err := validateBedrockThinking(req, modelID, req.Messages); err != nil {
 		return nil, err
 	}
 	toolConfig, canonToSan, sanToCanon, err := encodeTools(ctx, req.Tools, req.ToolChoice, cacheAfterTools, c.logger)
 	if err != nil {
 		return nil, err
 	}
-	if err := validateBedrockToolConfig(req, merged, toolConfig); err != nil {
+	if err := validateBedrockToolConfig(req, req.Messages, toolConfig); err != nil {
 		return nil, err
 	}
 	outputConfig, err := encodeOutputConfig(req.StructuredOutput)
 	if err != nil {
 		return nil, err
 	}
-	messages, system, err := encodeMessages(ctx, merged, canonToSan, cacheAfterSystem, c.logger)
+	messages, system, err := encodeMessages(ctx, req.Messages, canonToSan, cacheAfterSystem, c.logger)
 	if err != nil {
 		return nil, err
 	}
 	return buildRequestParts(modelID, req.ModelClass, messages, system, toolConfig, outputConfig, canonToSan, sanToCanon), nil
-}
-
-func (c *Client) mergedRequestMessages(ctx context.Context, req *model.Request) ([]*model.Message, error) {
-	var merged []*model.Message
-	if c.ledger != nil && req.RunID != "" {
-		msgs, err := c.ledger.Messages(ctx, req.RunID)
-		if err != nil {
-			return nil, fmt.Errorf("bedrock: merge ledger messages for run %s: %w", req.RunID, err)
-		}
-		if len(msgs) > 0 {
-			merged = append(merged, msgs...)
-		}
-	}
-	if len(req.Messages) > 0 {
-		merged = append(merged, req.Messages...)
-	}
-	return merged, nil
 }
 
 func validateBedrockRequestMessages(messages []*model.Message) error {

@@ -182,6 +182,9 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - Provider packages under `features/model/*` implement raw `model.Provider`.
   Runtime helpers construct the provider and wrap it with `model.NewClient`.
   Direct callers must do the same before registration.
+- `bedrock.New(awsClient, opts)` no longer takes a ledger source. Bedrock
+  encodes only the planner's `model.Request.Messages`, including when
+  `RunID` is set. It does not query the workflow or prepend ledger messages.
 - `Provider.Stream` returns raw `model.Streamer`; `Client.Stream` returns
   `model.ValidatedStreamer`. This difference prevents provider adapters from
   satisfying the consumer-facing client interface accidentally.

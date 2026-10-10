@@ -128,8 +128,8 @@ func (r *Runtime) ModelClient(id string) (model.Client, bool) {
 	return m, ok
 }
 
-// NewBedrockModelClient constructs a model.Client backed by AWS Bedrock using the
-// runtime's own ledger access.
+// NewBedrockModelClient constructs a model.Client backed by AWS Bedrock that
+// encodes requests from the planner's messages only.
 func (r *Runtime) NewBedrockModelClient(awsrt *bedrockruntime.Client, cfg BedrockConfig) (model.Client, error) {
 	opts := bedrock.Options{
 		Runtime:        awsrt,
@@ -141,14 +141,7 @@ func (r *Runtime) NewBedrockModelClient(awsrt *bedrockruntime.Client, cfg Bedroc
 		Temperature:    cfg.Temperature,
 		Logger:         r.logger,
 	}
-	if querier, ok := r.Engine.(bedrock.WorkflowQuerier); ok {
-		provider, err := bedrock.New(awsrt, opts, bedrock.NewTemporalLedgerSource(querier))
-		if err != nil {
-			return nil, err
-		}
-		return model.NewClient(provider)
-	}
-	provider, err := bedrock.New(awsrt, opts, nil)
+	provider, err := bedrock.New(awsrt, opts)
 	if err != nil {
 		return nil, err
 	}

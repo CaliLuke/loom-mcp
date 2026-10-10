@@ -2331,6 +2331,10 @@ client, err := rt.NewBedrockModelClient(awsClient, runtime.BedrockConfig{
 })
 ```
 
+Bedrock compatibility: `bedrock.New(awsClient, opts)` no longer takes a ledger
+source. Requests carry only the planner's `model.Request.Messages`; Bedrock does
+not query the workflow or prepend ledger messages.
+
 Model lookup is immutable after registration closes. Loom does not define
 post-`Seal` credential/client rotation or in-flight hot-swap semantics; build a
 new runtime and move traffic to it when replacing a model client.
