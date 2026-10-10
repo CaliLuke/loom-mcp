@@ -1045,12 +1045,8 @@ func normalizeUsage(usage wireUsage, modelID string, modelClass model.ModelClass
 }
 
 func (s *codexStreamState) providerEventError(value wireError) error {
-	code := value.Code
-	if code == "" {
-		code = value.Type
-	}
 	cause := errors.New("codex provider stream error")
-	return normalizeStreamProviderError(value.Status, code, value.RequestID, cause, s.credentials)
+	return normalizeStreamProviderError(value, cause, s.credentials)
 }
 
 func (i *itemState) reasoningBuilder(key reasoningPartKey) *strings.Builder {

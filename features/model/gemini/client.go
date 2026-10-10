@@ -201,6 +201,9 @@ func (c *Client) Complete(ctx context.Context, req *model.Request) (*model.Respo
 	}
 	resp, err := c.models.GenerateContent(ctx, modelID, contents, config)
 	if err != nil {
+		if overflow := geminiContextOverflow(err); overflow != nil {
+			return nil, overflow
+		}
 		if isRateLimited(err) {
 			return nil, fmt.Errorf("%w: %w", model.ErrRateLimited, err)
 		}

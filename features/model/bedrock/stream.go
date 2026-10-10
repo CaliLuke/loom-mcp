@@ -256,6 +256,9 @@ func (p *chunkProcessor) resetMessageState() {
 }
 
 func (p *chunkProcessor) handleMessageStop(ev *brtypes.ConverseStreamOutputMemberMessageStop) error {
+	if ev.Value.StopReason == brtypes.StopReasonModelContextWindowExceeded {
+		return bedrockContextWindowStop("converse_stream.recv")
+	}
 	p.completed = true
 	outputLimited := bedrockOutputLimited(ev.Value.StopReason)
 	if p.completion != nil {

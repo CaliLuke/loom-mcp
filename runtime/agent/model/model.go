@@ -510,7 +510,7 @@ type (
 		StopReason string
 
 		// OutputLimited reports that the provider stopped because generated
-		// output reached its configured token or context limit. A validated
+		// output reached its configured token limit. A validated
 		// client never exposes such a response as successful completed work.
 		OutputLimited bool
 	}

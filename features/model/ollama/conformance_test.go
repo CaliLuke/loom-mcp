@@ -39,7 +39,8 @@ func TestClientConformance(t *testing.T) {
 	}
 
 	testutil.RunProviderConformance(t, testutil.ProviderConformanceSuite{
-		Provider: "ollama",
+		Provider:        "ollama",
+		ContextOverflow: testContextOverflow,
 		OrdinaryProviderError: func(t *testing.T) {
 			client := newClient(t, func(w http.ResponseWriter, _ *http.Request) {
 				assert.NoError(t, json.MarshalWrite(w, map[string]any{"error": "model runner crashed"}))
@@ -213,6 +214,7 @@ func TestClientConformance(t *testing.T) {
 			require.Equal(t, canonical, response.ToolCalls[0].Name.String())
 		}},
 		Streaming: testutil.ProviderStreamingConformance{
+			ContextOverflow: testStreamContextOverflow,
 			SetupError: func(t *testing.T) {
 				client := newClient(t, func(w http.ResponseWriter, _ *http.Request) {
 					http.Error(w, "unavailable", http.StatusServiceUnavailable)

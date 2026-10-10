@@ -14,7 +14,7 @@ func TestBedrockOutputLimited(t *testing.T) {
 		want   bool
 	}{
 		{name: "maximum tokens", reason: brtypes.StopReasonMaxTokens, want: true},
-		{name: "context window", reason: brtypes.StopReasonModelContextWindowExceeded, want: true},
+		{name: "context window", reason: brtypes.StopReasonModelContextWindowExceeded},
 		{name: "end turn", reason: brtypes.StopReasonEndTurn},
 		{name: "tool use", reason: brtypes.StopReasonToolUse},
 	}

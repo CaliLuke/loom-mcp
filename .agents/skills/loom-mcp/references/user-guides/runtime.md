@@ -2,6 +2,39 @@
 
 Understand how the loom-mcp runtime orchestrates agents, enforces policies, and manages state.
 
+## Provider errors and context overflow
+
+`model.ProviderError` kinds are `auth`, `invalid_request`, `context_overflow`,
+`rate_limited`, `unavailable`, and `unknown`. Use `errors.As` or
+`model.AsProviderError` to inspect the kind, provider code, HTTP status, request
+ID, and retryability when the adapter supplies them.
+
+`ProviderErrorKindContextOverflow` (`context_overflow`) means the request exceeded
+the model's context window. It is not retryable with the same request. Complete
+returns an error instead of a response; a streaming overflow terminates the
+stream without a canonical response, even if provisional chunks were delivered.
+
+| Adapter | Overflow signal |
+| --- | --- |
+| Anthropic | HTTP 400 `invalid_request_error` with a message starting `prompt is too long`; `model_context_window_exceeded` in Complete or Stream. [Context-window documentation](https://platform.claude.com/docs/en/build-with-claude/context-windows). |
+| Bedrock | `ValidationException` with `Input is too long for requested model`, `prompt is too long`, or `too many input tokens`, including receive-time stream errors; `model_context_window_exceeded` stops. Sources: [AWS validation guide](https://repost.aws/knowledge-center/bedrock-validation-exception-errors), [Claude context windows](https://platform.claude.com/docs/en/build-with-claude/context-windows), [captured Titan error](https://www.philschmid.de/amazon-titan-embeddings), [AWS stop reasons](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-anthropic-claude-messages-request-response.html). |
+| OpenAI | `context_length_exceeded` in SDK errors or streamed `response.failed` / `error` events. Sources: [Responses events](https://developers.openai.com/api/reference/resources/responses/streaming-events), [OpenAI's recorded overflow fixture](https://github.com/openai/codex/blob/main/codex-rs/codex-api/src/sse/responses.rs). |
+| Gemini / Vertex | HTTP 400 `INVALID_ARGUMENT` with `exceeds the maximum number of tokens`, with or without the input count. Sources: [captured SDK error](https://github.com/googleapis/python-genai/issues/2050), [message variant](https://github.com/google-gemini/gemini-cli/issues/22609), [Google API errors](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-reference/api-errors). Streaming remains unsupported. |
+| Codex | The code `context_length_exceeded` in HTTP errors or streamed `response.failed` / `error` events. Detection uses the code only and keeps the fixed redacted message. [Recorded provider fixture](https://github.com/openai/codex/blob/main/codex-rs/codex-api/src/sse/responses.rs). |
+| Ollama | No documented chat overflow error is mapped. Chat truncates input to `num_ctx`; see [Ollama's prompt implementation](https://github.com/ollama/ollama/blob/main/server/prompt.go). |
+| Gateway | No mapping: this transport-agnostic wrapper has no provider wire error contract. |
+
+Bedrock's context-window stop no longer sets `Response.OutputLimited` or triggers
+`OutputBounds` recovery (the shorter-answer retry with tools disabled).
+Anthropic's `model_context_window_exceeded` stop previously returned a successful
+`Response` with that `StopReason`; it now fails with `context_overflow`.
+`max_tokens` still means output-limited. Until overflow recovery lands in K14,
+`context_overflow` fails the planner activity; K9 adds no recovery.
+Other errors keep their existing behavior: ordinary Bedrock and Codex 400s remain
+`invalid_request`; Anthropic, OpenAI, Gemini, and Ollama retain their existing
+error wrapping rather than gaining new classifications.
+
+
 ## Architecture Overview
 
 The loom-mcp runtime orchestrates the plan/execute/resume loop, enforces policies, manages state, and coordinates with engines, planners, tools, memory, hooks, and feature modules.

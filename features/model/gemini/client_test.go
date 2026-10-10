@@ -36,7 +36,8 @@ func TestClientConformance(t *testing.T) {
 	}
 
 	testutil.RunProviderConformance(t, testutil.ProviderConformanceSuite{
-		Provider: "gemini",
+		Provider:        "gemini",
+		ContextOverflow: testContextOverflow,
 		OrdinaryProviderError: func(t *testing.T) {
 			providerErr := errors.New("provider unavailable")
 			response, err := newClient(t, &mockModelsClient{generateErr: providerErr}).Complete(context.Background(), request())

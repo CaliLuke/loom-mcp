@@ -262,6 +262,14 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   cancellation, normalized errors, and canonical/provider tool-name round
   trips. Rate limits that surface during stream receive must still wrap
   `model.ErrRateLimited`.
+- Provider error kinds include `context_overflow` for documented context-window
+  failures. Adapters must prove Complete and supported Stream mappings on
+  recorded bodies in the shared conformance suite. This error is not retryable
+  with the same request. Bedrock context-window stops no longer set
+  `OutputLimited`; only `max_tokens` does. Until K14, overflow fails the planner
+  activity without shorter-answer/tools-disabled recovery. Ollama truncates to
+  `num_ctx` and has no mapping; the gateway has no wire contract to classify.
+
 - Provider adapters implement raw `model.Provider`, not consumer-facing
   `model.Client`. Construct clients with `model.NewClient`; never pass a raw
   provider to a planner or runtime.

@@ -223,6 +223,9 @@ func (p *anthropicChunkProcessor) Handle(event sdk.MessageStreamEventUnion) erro
 	case sdk.ContentBlockStopEvent:
 		return p.handleContentBlockStop(ev)
 	case sdk.MessageDeltaEvent:
+		if ev.Delta.StopReason == sdk.StopReasonModelContextWindowExceeded {
+			return anthropicContextWindowStop("messages.new stream")
+		}
 		p.stopReason = string(ev.Delta.StopReason)
 		p.mergeUsage(
 			ev.Usage.InputTokens,

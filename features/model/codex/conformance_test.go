@@ -27,7 +27,8 @@ func TestClientConformance(t *testing.T) {
 	}
 
 	testutil.RunProviderConformance(t, testutil.ProviderConformanceSuite{
-		Provider: "codex",
+		Provider:        "codex",
+		ContextOverflow: testContextOverflow,
 		OrdinaryProviderError: func(t *testing.T) {
 			client := newSSETestClient(t, roundTripFunc(func(*http.Request) (*http.Response, error) {
 				response := sseResponse(http.StatusBadRequest, `{"error":{"code":"invalid_request","message":"secret-token account-1"}}`)
@@ -140,6 +141,7 @@ func TestClientConformance(t *testing.T) {
 			assert.Equal(t, "catalog.lookup", string(response.ToolCalls[0].Name))
 		}},
 		Streaming: testutil.ProviderStreamingConformance{
+			ContextOverflow: testStreamContextOverflow,
 			SetupError: func(t *testing.T) {
 				client := newSSETestClient(t, roundTripFunc(func(*http.Request) (*http.Response, error) {
 					return nil, errors.New("network down")

@@ -12,6 +12,8 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 )
 
+const contextLengthExceededCode = "context_length_exceeded"
+
 var safeProviderValue = regexp.MustCompile(`^[A-Za-z0-9._:/-]{1,128}$`)
 
 type transportFailure struct {
@@ -52,27 +54,52 @@ func normalizeHTTPError(status int, header http.Header, body []byte, cause error
 		retryable = true
 		message = "provider is unavailable"
 	}
-	code := redactProviderValue(safeErrorCode(body), credentials)
+	code, contextOverflow := safeErrorCode(body)
+	code = redactProviderValue(code, credentials)
+	if contextOverflow {
+		kind = model.ProviderErrorKindContextOverflow
+		retryable = false
+		message = "provider rejected the request"
+	}
 	requestID := redactProviderValue(safeHeaderValue(header.Get("x-request-id")), credentials)
 	if requestID == "" {
 		requestID = redactProviderValue(safeHeaderValue(header.Get("request-id")), credentials)
 	}
 	providerErr := model.NewProviderError(codexProvider, "responses", status, kind, code, message, requestID, retryable, cause)
-	if status == http.StatusTooManyRequests {
+	if status == http.StatusTooManyRequests && !contextOverflow {
 		return errors.Join(model.ErrRateLimited, providerErr)
 	}
 	return providerErr
 }
 
-func normalizeStreamProviderError(status int, code, requestID string, cause error, credentials Credentials) error {
+func normalizeStreamProviderError(value wireError, cause error, credentials Credentials) error {
+	status := value.Status
 	if status == 0 {
+		code := value.Code
+		if code == "" {
+			code = value.Type
+		}
 		status = statusFromCode(code)
+		if value.Code == contextLengthExceededCode {
+			status = http.StatusBadRequest
+		}
 	}
 	header := make(http.Header)
-	if safe := redactProviderValue(safeHeaderValue(requestID), credentials); safe != "" {
+	if safe := redactProviderValue(safeHeaderValue(value.RequestID), credentials); safe != "" {
 		header.Set("x-request-id", safe)
 	}
-	body, _ := json.Marshal(map[string]any{"error": map[string]any{"code": redactProviderValue(safeHeaderValue(code), credentials)}})
+	// Preserve the type fallback only when the wire code is absent.
+	errorType := ""
+	if value.Code == "" {
+		errorType = value.Type
+	}
+	body, err := json.Marshal(map[string]any{"error": map[string]any{
+		"code": redactProviderValue(safeHeaderValue(value.Code), credentials),
+		"type": redactProviderValue(safeHeaderValue(errorType), credentials),
+	}})
+	if err != nil {
+		return fmt.Errorf("codex: encode stream error: %w", err)
+	}
 	return normalizeHTTPError(status, header, body, cause, credentials)
 }
 
@@ -96,7 +123,9 @@ func normalizeTransportError(operation string, err error) error {
 	)
 }
 
-func safeErrorCode(body []byte) string {
+// safeErrorCode preserves the existing type fallback for diagnostics, but only
+// the actual error code identifies overflow. Message text is never inspected.
+func safeErrorCode(body []byte) (code string, contextOverflow bool) {
 	var envelope struct {
 		Error struct {
 			Code string `json:"code"`
@@ -104,12 +133,12 @@ func safeErrorCode(body []byte) string {
 		} `json:"error"`
 	}
 	if json.Unmarshal(body, &envelope) != nil {
-		return ""
+		return "", false
 	}
 	if code := safeHeaderValue(envelope.Error.Code); code != "" {
-		return code
+		return code, envelope.Error.Code == contextLengthExceededCode
 	}
-	return safeHeaderValue(envelope.Error.Type)
+	return safeHeaderValue(envelope.Error.Type), false
 }
 
 func safeHeaderValue(value string) string {

@@ -19,6 +19,10 @@ const (
 	// without changing the request will not succeed.
 	ProviderErrorKindInvalidRequest ProviderErrorKind = "invalid_request"
 
+	// ProviderErrorKindContextOverflow indicates the request exceeded the model's
+	// context window. Retrying the same request will not succeed.
+	ProviderErrorKindContextOverflow ProviderErrorKind = "context_overflow"
+
 	// ProviderErrorKindRateLimited indicates the provider is throttling requests.
 	ProviderErrorKindRateLimited ProviderErrorKind = "rate_limited"
 

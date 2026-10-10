@@ -582,6 +582,10 @@ func wrapBedrockError(operation string, err error) error {
 		status = respErr.HTTPStatusCode()
 	}
 
+	if code == "ValidationException" && (status == 0 || status == http.StatusBadRequest) && bedrockContextOverflowMessage(msg) {
+		return model.NewProviderError(bedrockProviderName, operation, status, model.ProviderErrorKindContextOverflow, code, msg, "", false, err)
+	}
+
 	kind := model.ProviderErrorKindUnknown
 	retryable := false
 	switch {
@@ -837,6 +841,9 @@ func translateResponse(output *bedrockruntime.ConverseOutput, nameMap map[string
 	if output == nil {
 		return nil, errors.New("bedrock: response is nil")
 	}
+	if output.StopReason == brtypes.StopReasonModelContextWindowExceeded {
+		return nil, bedrockContextWindowStop("converse")
+	}
 	if bedrockOutputLimited(output.StopReason) {
 		return &model.Response{
 			Usage:         bedrockUsage(output.Usage, modelID, modelClass),
@@ -859,7 +866,7 @@ func translateResponse(output *bedrockruntime.ConverseOutput, nameMap map[string
 }
 
 func bedrockOutputLimited(reason brtypes.StopReason) bool {
-	return reason == brtypes.StopReasonMaxTokens || reason == brtypes.StopReasonModelContextWindowExceeded
+	return reason == brtypes.StopReasonMaxTokens
 }
 
 func appendBedrockResponseBlock(resp *model.Response, block brtypes.ContentBlock, nameMap map[string]string) error {

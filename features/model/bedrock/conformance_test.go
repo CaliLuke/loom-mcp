@@ -106,7 +106,8 @@ func TestClientConformance(t *testing.T) {
 	}
 
 	testutil.RunProviderConformance(t, testutil.ProviderConformanceSuite{
-		Provider: "bedrock",
+		Provider:        "bedrock",
+		ContextOverflow: testContextOverflow,
 		OrdinaryProviderError: func(t *testing.T) {
 			providerErr := errors.New("provider unavailable")
 			runtime := &conformanceRuntimeClient{converse: func(context.Context, *bedrockruntime.ConverseInput) (*bedrockruntime.ConverseOutput, error) {
@@ -250,6 +251,7 @@ func TestClientConformance(t *testing.T) {
 			require.Equal(t, canonical, response.ToolCalls[0].Name.String())
 		}},
 		Streaming: testutil.ProviderStreamingConformance{
+			ContextOverflow: testStreamContextOverflow,
 			SetupError: func(t *testing.T) {
 				providerErr := errors.New("stream setup failed")
 				client := newClient(&conformanceRuntimeClient{})

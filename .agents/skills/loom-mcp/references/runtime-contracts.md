@@ -247,6 +247,18 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - Provider changes must extend the shared conformance matrix for applicable
   complete/streaming, multimodal, tool-call, structured-output, typed-thinking,
   token-counting, cancellation, normalized-error, and name-codec behavior.
+- `model.ProviderError` kinds are `auth`, `invalid_request`, `context_overflow`,
+  `rate_limited`, `unavailable`, and `unknown`. `context_overflow` is not retryable
+  with the same request. Anthropic and Bedrock map documented prompt-too-long
+  errors and `model_context_window_exceeded`; OpenAI and Codex map the
+  `context_length_exceeded` code, including streamed failure/error events;
+  Gemini/Vertex map HTTP 400 `INVALID_ARGUMENT` token-overflow messages.
+  Recorded-body conformance covers Complete and supported Stream paths.
+  Bedrock context stops no longer set `OutputLimited` or enter `OutputBounds`
+  shorter-answer/tools-disabled recovery. Until K14, overflow fails the planner
+  activity. Ollama truncates to `num_ctx`, so no chat overflow is mapped; the
+  gateway has no provider wire contract. Other error classifications stay intact.
+
 - Setup-time and receive-time provider throttling must preserve
   `model.ErrRateLimited` in the error chain. Adaptive rate limiting probes only
   after a stream reaches `io.EOF`; a successful stream setup is not completion.

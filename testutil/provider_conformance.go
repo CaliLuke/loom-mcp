@@ -35,6 +35,7 @@ type ProviderStreamingConformance struct {
 	CloseError       ProviderConformanceCase
 	Terminal         ProviderConformanceCase
 	OutputLimited    ProviderConformanceCase
+	ContextOverflow  ProviderConformanceCase
 }
 
 // ProviderConformanceSuite is the minimum behavioral matrix every model
@@ -50,6 +51,7 @@ type ProviderConformanceSuite struct {
 	StructuredOutputAndToolChoice ProviderConformanceCase
 	UsageAccounting               ProviderConformanceCase
 	OutputLimited                 ProviderConformanceCase
+	ContextOverflow               ProviderConformanceCase
 	MultimodalInput               ProviderCapabilityConformance
 	TypedThinking                 ProviderCapabilityConformance
 	ExactTokenCounting            ProviderCapabilityConformance
@@ -79,6 +81,7 @@ func RunProviderConformance(t *testing.T, suite ProviderConformanceSuite) {
 		{name: "structured output and tool choice", run: suite.StructuredOutputAndToolChoice},
 		{name: "usage accounting", run: suite.UsageAccounting},
 		{name: "output limited", run: suite.OutputLimited},
+		{name: "context overflow", run: suite.ContextOverflow},
 	}
 	for _, tc := range cases {
 		if tc.run == nil {
@@ -141,6 +144,7 @@ func validateStreamingConformance(t *testing.T, provider string, streaming Provi
 		{name: "close error", run: streaming.CloseError},
 		{name: "terminal", run: streaming.Terminal},
 		{name: "output limited", run: streaming.OutputLimited},
+		{name: "context overflow", run: streaming.ContextOverflow},
 	}
 	if streaming.Unsupported != nil {
 		if err := validateUnsupportedStreaming(streaming); err != nil {
@@ -186,6 +190,7 @@ func runStreamingConformance(t *testing.T, streaming ProviderStreamingConformanc
 	t.Run("stream close error", streaming.CloseError)
 	t.Run("stream terminal", streaming.Terminal)
 	t.Run("stream output limited", streaming.OutputLimited)
+	t.Run("stream context overflow", streaming.ContextOverflow)
 }
 
 func validateCapabilityConformance(t *testing.T, provider, name string, capability ProviderCapabilityConformance) {

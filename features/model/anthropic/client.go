@@ -127,6 +127,9 @@ func (c *Client) Complete(ctx context.Context, req *model.Request) (*model.Respo
 	}
 	msg, err := c.msg.New(ctx, *params)
 	if err != nil {
+		if overflow := anthropicContextOverflow("messages.new", err); overflow != nil {
+			return nil, overflow
+		}
 		if isRateLimited(err) {
 			return nil, fmt.Errorf("%w: %w", model.ErrRateLimited, err)
 		}
@@ -696,6 +699,9 @@ func isRateLimited(err error) bool {
 }
 
 func wrapAnthropicStreamError(err error) error {
+	if overflow := anthropicContextOverflow("messages.new stream", err); overflow != nil {
+		return overflow
+	}
 	if isRateLimited(err) {
 		return fmt.Errorf("%w: %w", model.ErrRateLimited, err)
 	}
@@ -708,6 +714,9 @@ func translateResponse(msg *sdk.Message, nameMap map[string]string, toolUseIDs *
 	}
 	if msg.Model != "" {
 		modelID = msg.Model
+	}
+	if msg.StopReason == sdk.StopReasonModelContextWindowExceeded {
+		return nil, anthropicContextWindowStop("messages.new")
 	}
 	stopReason := string(msg.StopReason)
 	if anthropicOutputLimited(stopReason) {

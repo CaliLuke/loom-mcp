@@ -90,6 +90,9 @@ func (c *Client) Complete(ctx context.Context, req *model.Request) (*model.Respo
 	}
 	response, err := c.resp.New(ctx, request)
 	if err != nil {
+		if overflow := openAIContextOverflow("responses", err); overflow != nil {
+			return nil, overflow
+		}
 		if isRateLimited(err) {
 			return nil, fmt.Errorf("%w: %w", model.ErrRateLimited, err)
 		}
@@ -424,6 +427,9 @@ func (c *Client) Stream(ctx context.Context, req *model.Request) (model.Streamer
 }
 
 func wrapResponsesStreamError(err error) error {
+	if overflow := openAIContextOverflow("responses stream", err); overflow != nil {
+		return overflow
+	}
 	if isRateLimited(err) {
 		return fmt.Errorf("%w: %w", model.ErrRateLimited, err)
 	}

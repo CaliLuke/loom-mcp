@@ -214,8 +214,14 @@ func (p *openAIChunkProcessor) Handle(event responses.ResponseStreamEventUnion) 
 	case responses.ResponseIncompleteEvent:
 		return p.handleCompleted(actual.Response)
 	case responses.ResponseFailedEvent:
+		if actual.Response.Error.Code == contextLengthExceededCode {
+			return openAIContextOverflowError("responses stream", 0, "", nil)
+		}
 		return fmt.Errorf("openai responses stream failed: %s", actual.Response.Error.Message)
 	case responses.ResponseErrorEvent:
+		if actual.Code == contextLengthExceededCode {
+			return openAIContextOverflowError("responses stream", 0, "", nil)
+		}
 		return fmt.Errorf("openai responses stream error: %s", actual.Message)
 	default:
 		return nil

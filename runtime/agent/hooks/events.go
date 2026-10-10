@@ -1153,6 +1153,8 @@ func providerPublicError(pe *model.ProviderError) string {
 		return PublicErrorProviderAuth
 	case model.ProviderErrorKindUnknown:
 		return PublicErrorProviderUnknown
+	case model.ProviderErrorKindContextOverflow:
+		return PublicErrorProviderDefault
 	default:
 		return PublicErrorProviderDefault
 	}

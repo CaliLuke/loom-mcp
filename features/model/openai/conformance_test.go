@@ -34,7 +34,8 @@ func TestClientConformance(t *testing.T) {
 	}
 
 	testutil.RunProviderConformance(t, testutil.ProviderConformanceSuite{
-		Provider: "openai",
+		Provider:        "openai",
+		ContextOverflow: testContextOverflow,
 		OrdinaryProviderError: func(t *testing.T) {
 			providerErr := errors.New("provider unavailable")
 			response, err := newClient(t, &mockResponsesClient{err: providerErr}).Complete(context.Background(), request())
@@ -198,6 +199,7 @@ func TestClientConformance(t *testing.T) {
 			require.Equal(t, canonical, response.ToolCalls[0].Name.String())
 		}},
 		Streaming: testutil.ProviderStreamingConformance{
+			ContextOverflow: testStreamContextOverflow,
 			SetupError: func(t *testing.T) {
 				providerErr := errors.New("stream setup failed")
 				mock := &mockResponsesClient{stream: newMockOpenAIStreamError(providerErr)}
