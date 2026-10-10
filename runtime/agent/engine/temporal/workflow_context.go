@@ -224,6 +224,23 @@ func (w *temporalWorkflowContext) ExecutePlannerActivity(ctx context.Context, ca
 	return out, nil
 }
 
+func (w *temporalWorkflowContext) ExecuteFinishRunActivity(ctx context.Context, call engine.FinishRunActivityCall) (*api.FinishRunOutput, error) {
+	if call.Name == "" {
+		return nil, errors.New("finish activity name is required")
+	}
+	if call.Input == nil {
+		return nil, errors.New("finish activity input is required")
+	}
+
+	actx := workflow.WithActivityOptions(w.ctx, w.activityOptionsFor(call.Name, call.Options))
+	fut := workflow.ExecuteActivity(actx, call.Name, call.Input)
+	var out *api.FinishRunOutput
+	if err := fut.Get(actx, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (w *temporalWorkflowContext) ExecuteToolActivity(ctx context.Context, call engine.ToolActivityCall) (*api.ToolOutput, error) {
 	fut, err := w.ExecuteToolActivityAsync(ctx, call)
 	if err != nil {

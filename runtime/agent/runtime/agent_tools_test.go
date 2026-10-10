@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"encoding/json/v2"
+	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 	"testing"
 	"time"
 
@@ -69,7 +70,7 @@ func seedParentRun(t *testing.T, store session.Store, runID, sessionID string) {
 }
 
 func TestAgentTool_DefaultContentFromPayload(t *testing.T) {
-	rt := &Runtime{
+	rt := &Runtime{RunStore: runstoreinmem.New(),
 		agents:        make(map[agent.Ident]AgentRegistration),
 		toolSpecs:     make(map[tools.Ident]tools.ToolSpec),
 		Engine:        engineinmem.New(),
@@ -122,7 +123,7 @@ func TestAgentTool_DefaultContentFromPayload(t *testing.T) {
 }
 
 func TestAgentTool_TextContent(t *testing.T) {
-	rt := &Runtime{
+	rt := &Runtime{RunStore: runstoreinmem.New(),
 		agents:        make(map[agent.Ident]AgentRegistration),
 		toolSpecs:     make(map[tools.Ident]tools.ToolSpec),
 		Engine:        engineinmem.New(),
@@ -177,7 +178,7 @@ func TestAgentTool_TextContent(t *testing.T) {
 }
 
 func TestAgentTool_PromptBuilderOverrides(t *testing.T) {
-	rt := &Runtime{
+	rt := &Runtime{RunStore: runstoreinmem.New(),
 		agents:        make(map[agent.Ident]AgentRegistration),
 		toolSpecs:     make(map[tools.Ident]tools.ToolSpec),
 		Engine:        engineinmem.New(),
@@ -239,7 +240,7 @@ func TestWithPromptSpecSetsPromptID(t *testing.T) {
 }
 
 func TestAgentTool_SystemPromptPrepended(t *testing.T) {
-	rt := &Runtime{
+	rt := &Runtime{RunStore: runstoreinmem.New(),
 		agents:        make(map[agent.Ident]AgentRegistration),
 		toolSpecs:     make(map[tools.Ident]tools.ToolSpec),
 		Engine:        engineinmem.New(),
@@ -341,12 +342,7 @@ func TestAgentTool_UsesFinalToolResultBeforeAggregation(t *testing.T) {
 			Name:   parent.Name,
 			Result: rawjson.Message([]byte(`{"events":["ok"]}`)),
 		},
-		ToolEvents: []*api.ToolEvent{
-			{
-				Name:   tools.Ident("test.child"),
-				Result: rawjson.Message([]byte(`"bad"`)),
-			},
-		},
+		ToolEventCount: 1,
 	}
 
 	tr, err := rt.adaptAgentChildOutput(context.Background(), cfg, call, run.Context{RunID: "child-run"}, out)
@@ -358,4 +354,5 @@ func TestAgentTool_UsesFinalToolResultBeforeAggregation(t *testing.T) {
 	require.Equal(t, []string{"ok"}, typed.Events)
 	require.NotNil(t, tr.RunLink)
 	require.Equal(t, "child-run", tr.RunLink.RunID)
+	require.Equal(t, 1, tr.ChildrenCount)
 }

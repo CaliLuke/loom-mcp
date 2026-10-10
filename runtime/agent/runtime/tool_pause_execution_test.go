@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 	"testing"
 	"time"
 
@@ -207,7 +208,7 @@ func TestToolPauseAwaitItems_RejectsInvalidPauses(t *testing.T) {
 // structural argument alone is not enough — the test must catch reorder
 // regressions, not just demonstrate helper behavior.
 func TestRunLoopBudgetedToolPauseRecordsResultBeforeUserAnswer(t *testing.T) {
-	rt := &Runtime{
+	rt := &Runtime{RunStore: runstoreinmem.New(),
 		Bus:           noopHooks{},
 		logger:        telemetry.NoopLogger{},
 		metrics:       telemetry.NoopMetrics{},
@@ -242,7 +243,7 @@ func TestRunLoopBudgetedToolPauseRecordsResultBeforeUserAnswer(t *testing.T) {
 
 	// The resume planner activity returns a FinalResponse so the run loop
 	// terminates after a single pause/answer cycle.
-	wfCtx := &testWorkflowContext{
+	wfCtx := &testWorkflowContext{finishRuntime: rt,
 		ctx:           context.Background(),
 		hookRuntime:   rt,
 		hasPlanResult: true,
@@ -259,7 +260,7 @@ func TestRunLoopBudgetedToolPauseRecordsResultBeforeUserAnswer(t *testing.T) {
 	ctrl := interrupt.NewController(wfCtx)
 	wfCtx.clarifyCh <- &api.ClarificationAnswer{ID: "clar-1", Answer: "Compressor 1"}
 
-	input := &RunInput{
+	input := &RunInput{RootRunID: "run-1",
 		AgentID:   agent.Ident("svc.agent"),
 		RunID:     "run-1",
 		SessionID: "sess-1",

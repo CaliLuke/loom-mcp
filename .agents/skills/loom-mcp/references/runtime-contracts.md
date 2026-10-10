@@ -123,6 +123,28 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - Consumer-side prompt rendering is optional and payload-only. Provider-side context belongs in the provider planner/runtime, not the consumer.
 - Generated helper packages expose `NewRegistration(...)`; runtime internals build the underlying registration with `runtime.NewAgentToolsetRegistration(...)`.
 
+## Stored Tool Outputs and Run Completion
+
+- Workflow protocol 3 removes `RunOutput.ToolEvents`. `ToolEventsRef` addresses
+  one stored list in `RootRunID`; `ToolEventCount` supplies `ChildrenCount` for
+  agent-as-tool parents. `ToolSummary` preserves child error and telemetry rules.
+- `runtime.LoadRunToolEvents(ctx, store, rootRunID, ref)` restores full result and
+  server-data bytes outside workflows. Missing content fails with wrapped store
+  errors. Authorize root-scope access before exposing server-only content.
+- Every planner input builder omits only the bytes whose corresponding refs are
+  set. `PlanResumeActivity` restores them from `Runtime.RunStore` in the root
+  scope before invoking the planner. Unreferenced entries remain inline.
+- Every RunOutput-producing runtime path schedules `Runtime.FinishRunActivity`
+  once in a detached workflow scope. It stores the omitted-bytes event list and
+  loads referenced completion results with `LoadToolResult` and the generated
+  codec. Final tool-result envelopes are bounded to 1,000,000 encoded bytes.
+- `RegisterAgent` registers `<agentID>.finish` on the workflow queue. Manual
+  registrations use `FinishRunActivityName`, `Engine.RegisterFinishRunActivity`,
+  and `api.FinishRunInput`/`FinishRunOutput`; custom workflow contexts implement
+  `ExecuteFinishRunActivity`. Workers and clients share the run store.
+- Typed workflow state, transcript history, inline/child/provided result storage,
+  hooks, run logs, and memory projection remain separate later work.
+
 ## Streams
 
 - Streams are session-owned.

@@ -43,12 +43,18 @@ func (r *Runtime) finishWithoutToolCalls(
 	}
 
 	finalToolResult := finalToolResultEvent(base.RunContext.Tool, result.FinalToolResult)
+	finished, err := r.finishRun(ctx, input, toolEvents, finalToolResult)
+	if err != nil {
+		return nil, err
+	}
 	return &RunOutput{
 		AgentID:         input.AgentID,
 		RunID:           base.RunContext.RunID,
 		Final:           finalMsg,
-		FinalToolResult: finalToolResult,
-		ToolEvents:      toolEvents,
+		FinalToolResult: finished.FinalToolResult,
+		ToolEventsRef:   finished.ToolEventsRef,
+		ToolEventCount:  finished.ToolEventCount,
+		ToolSummary:     finished.ToolSummary,
 		Notes:           clonePlannerNotes(result.Notes),
 		Usage:           &st.AggUsage,
 	}, nil
@@ -166,13 +172,19 @@ func (r *Runtime) finishAfterTerminalToolCalls(
 	if err != nil {
 		return nil, err
 	}
+	finished, err := r.finishRun(ctx, input, toolEvents, nil)
+	if err != nil {
+		return nil, err
+	}
 	return &RunOutput{
-		AgentID:    input.AgentID,
-		RunID:      base.RunContext.RunID,
-		Final:      &model.Message{Role: model.ConversationRoleAssistant},
-		ToolEvents: toolEvents,
-		Notes:      clonePlannerNotes(st.Result.Notes),
-		Usage:      &st.AggUsage,
+		AgentID:        input.AgentID,
+		RunID:          base.RunContext.RunID,
+		Final:          &model.Message{Role: model.ConversationRoleAssistant},
+		ToolEventsRef:  finished.ToolEventsRef,
+		ToolEventCount: finished.ToolEventCount,
+		ToolSummary:    finished.ToolSummary,
+		Notes:          clonePlannerNotes(st.Result.Notes),
+		Usage:          &st.AggUsage,
 	}, nil
 }
 
@@ -201,11 +213,17 @@ func (r *Runtime) finishAfterCompletionTool(
 	if finalToolResult == nil {
 		return nil, fmt.Errorf("completion tool %q produced no successful result", completion)
 	}
+	finished, err := r.finishRun(ctx, input, toolEvents, finalToolResult)
+	if err != nil {
+		return nil, err
+	}
 	return &RunOutput{
 		AgentID:         input.AgentID,
 		RunID:           base.RunContext.RunID,
-		FinalToolResult: finalToolResult,
-		ToolEvents:      toolEvents,
+		FinalToolResult: finished.FinalToolResult,
+		ToolEventsRef:   finished.ToolEventsRef,
+		ToolEventCount:  finished.ToolEventCount,
+		ToolSummary:     finished.ToolSummary,
 		Notes:           clonePlannerNotes(st.Result.Notes),
 		Usage:           &st.AggUsage,
 	}, nil

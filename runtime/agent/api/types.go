@@ -17,6 +17,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
@@ -228,14 +229,16 @@ type (
 		// - Top-level runs normally leave this nil.
 		FinalToolResult *ToolEvent
 
-		// ToolEvents captures all tool results emitted before completion in execution order.
-		//
-		// Contract:
-		// - ToolEvents must be workflow-boundary safe. Do not embed planner.ToolResult here:
-		//   planner.ToolResult contains `any` fields (Result) which Temporal will
-		//   rehydrate as map[string]any in parent workflows, eliminating strong typing
-		//   at the boundary.
-		ToolEvents []*ToolEvent
+		// ToolEventsRef addresses the complete event list in the root run scope.
+		// Use runtime.LoadRunToolEvents to restore result and server-data bytes.
+		ToolEventsRef runstore.Hash
+
+		// ToolEventCount is the number of events behind ToolEventsRef.
+		ToolEventCount int
+
+		// ToolSummary preserves child-run error and telemetry aggregation without
+		// carrying the event list across the workflow boundary.
+		ToolSummary ToolEventSummary
 
 		// Notes aggregates planner annotations produced during the final turn.
 		Notes []*planner.PlannerAnnotation
@@ -274,7 +277,7 @@ type (
 		//
 		// This is used in planner activity inputs: workflow orchestration must not
 		// shuttle large tool payloads. Full tool results remain available via hooks
-		// (memory/streams) and in RunOutput.ToolEvents.
+		// (memory/streams) and through runtime.LoadRunToolEvents.
 		ResultOmitted bool
 
 		// ResultOmittedReason provides a stable, machine-readable reason for omitting

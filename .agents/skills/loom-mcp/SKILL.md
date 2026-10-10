@@ -69,6 +69,14 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   recorded-history replay test. Drain running workflows before deploying the
   new version; mismatched and unstamped inputs fail before workflow effects.
 
+- Workflow protocol 3 stores `RunOutput.ToolEvents` behind `ToolEventsRef` and
+  `ToolEventCount`. Use `runtime.LoadRunToolEvents` outside workflows to load
+  full events in the root run scope. Planner inputs omit referenced result and
+  server-data bytes; `PlanResumeActivity` restores them before planner invocation.
+  `RegisterAgent` registers `FinishRunActivity` on the agent queue to store the
+  terminal event list and decode/bound typed final results. Manual registrations
+  and custom engines must provide the finish activity too.
+
 - Codex `ReasoningEffort` is a native provider/runtime factory option. Empty
   preserves provider defaults. Applications validate model-specific supported
   efforts from Codex `model/list`; the SDK only validates identifier syntax.

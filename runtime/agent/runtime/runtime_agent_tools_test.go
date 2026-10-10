@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"fmt"
+	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 	"testing"
 	"text/template"
 
@@ -26,7 +27,7 @@ const jsonNullLiteral = "null"
 
 // setupTestAgentWithPlanner creates a test runtime with an agent that uses the provided planner function.
 func setupTestAgentWithPlanner(plannerFn func(context.Context, *planner.PlanInput) (*planner.PlanResult, error)) (*Runtime, context.Context) {
-	rt := &Runtime{
+	rt := &Runtime{RunStore: runstoreinmem.New(),
 		agents:        make(map[agent.Ident]AgentRegistration),
 		toolSpecs:     make(map[tools.Ident]tools.ToolSpec),
 		logger:        telemetry.NoopLogger{},

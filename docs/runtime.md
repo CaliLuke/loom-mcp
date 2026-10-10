@@ -175,14 +175,70 @@ An error-only outcome has no eligible result hash.
 `planner.ToolOutput.Refs`, and `api.ToolCallOutput.Refs` carry `tools.ResultRefs`
 (also available as `api.ToolResultRefs`). `Result` addresses the full eligible
 result; `ServerData` and `Payload` address server-only content. Never put the
-server-only hashes or bytes into model messages. Existing result bytes, typed
-results, hook payloads, and model-facing previews remain unchanged. Inline,
+server-only hashes or bytes into model messages. Typed results remain in workflow
+state; hook payloads and model-facing previews remain unchanged. Inline,
 child-agent, and externally provided results do not populate these references.
 
 Typed consumers can call
 `runtime.LoadToolResult(ctx, store, rootRunID, toolSpec, refs.Result)` to load the
 eligible bytes and decode them with the generated result codec. Empty or missing
-hashes fail; workflow-side decoding still uses inline bytes.
+hashes fail. Tool execution still decodes inline activity results in workflow
+state; terminal completion decoding runs in the finish activity.
+
+**Planner activity boundary.** Every `PlanActivityInput.ToolOutputs` entry omits
+`Result` when `Refs.Result` is set and omits `ServerData` when
+`Refs.ServerData` is set. `PlanResumeActivity` loads these bytes from `RunStore`
+in `RunContext.RootRunID` before invoking the planner. Planners still receive
+full `planner.PlanResumeInput.ToolOutputs`; a missing hash fails the activity
+with a wrapped store error. Entries without references remain inline. Messages
+and accumulated workflow histories retain their current representation.
+
+**Breaking change: run tool events.** `api.RunOutput` (also aliased as
+`runtime.RunOutput`) replaces `ToolEvents []*api.ToolEvent` with
+`ToolEventsRef runstore.Hash` and `ToolEventCount int`. The reference addresses
+one stored event list in the root run scope. The list omits bytes only for parts
+that have references. `ToolSummary api.ToolEventSummary` holds the fixed set of
+child failure/telemetry aggregates used by agent-as-tool parents. `ChildrenCount`
+comes from `ToolEventCount`; parents keep the same final result and error rules.
+The output no longer carries a growing event list. `Final`, `FinalToolResult`,
+`Notes`, and `Usage` retain their roles; a typed final result is bounded to
+1,000,000 encoded bytes, including its envelope.
+
+Load full events explicitly on the client, outside workflow code:
+
+```go
+events, err := runtime.LoadRunToolEvents(ctx, rt.RunStore, rootRunID, out.ToolEventsRef)
+if err != nil {
+    return err
+}
+// events includes each full Result and server-only ServerData sidecar.
+```
+
+Use the root run ID for child outputs too. An empty or missing hash is an error,
+not an empty list. A completed run with no tool calls still stores an empty
+list. The helper does not load executed payloads. Callers must authorize access
+to the root scope because the returned events include server-only content.
+
+**Finish activity.** Every runtime path that produces a `RunOutput` schedules
+`Runtime.FinishRunActivity` once, including terminal-tool and policy-finalization
+paths. Its `api.FinishRunInput` carries the omitted-bytes event list and the
+selected final-result envelope. The activity stores the list, resolves a
+referenced completion result through `LoadToolResult` and the generated result
+codec, restores its server data, enforces the final-result bound, and returns
+`api.FinishRunOutput`. Unreferenced final results keep their inline bytes.
+Terminal storage uses a detached workflow scope so cancellation does not prevent
+retaining events on a path that returns output. Store or codec failures fail the
+finish activity. Retries may execute its handler more than once.
+
+`RegisterAgent` registers this activity automatically on the agent's workflow
+queue under `runtime.FinishRunActivityName(agentID)` (`<agentID>.finish`).
+Applications that register activities manually must also call
+`eng.RegisterFinishRunActivity(ctx, runtime.FinishRunActivityName(agentID),
+opts, rt.FinishRunActivity)`, with `opts.Queue` set to that queue and an activity
+timeout. Custom engine adapters must implement `Engine.RegisterFinishRunActivity`
+and `WorkflowContext.ExecuteFinishRunActivity`, using
+`engine.FinishRunActivityCall`. Planner, tool, finish, and client processes must
+share the root-scoped run store.
 
 Generated method dispatchers and local MCP adapters call
 `runtime.RecordToolPayload(ctx, payload)` immediately before invoking the
@@ -433,7 +489,7 @@ Start ──► PlanStart ──► Tool Calls? ──► Execute Tools ──�
 ### Workflow Contracts
 
 - **Workflow protocol versions must match.** `api.WorkflowProtocolVersion` is
-  currently `2` and versions the agent workflow's inputs, outputs, signals, and
+  currently `3` and versions the agent workflow's inputs, outputs, signals, and
   state. The runtime stamps it after caller run options on top-level and child
   inputs. Workflow entry and history replay reject a different or missing
   version before interceptors, activities, or commands, returning
@@ -2835,7 +2891,8 @@ external `Client`, also supply `ClientOptions` with that client's converter
 external client whose converter configuration was not supplied.
 
 The generated fixture keeps a completed history under
-`integration_tests/fixtures/agent_features/testdata/`. Run
+`integration_tests/fixtures/agent_features/testdata/workflow_protocol_v3.json`.
+The scrubbed recording includes a tool call and terminal finish activity. Run
 `go test -C integration_tests/fixtures/agent_features ./... -run '^TestGeneratedFeatureWorkflowReplay$'`
 for offline replay. To re-record it against the pinned Temporal development
 server, run

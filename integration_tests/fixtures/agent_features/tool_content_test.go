@@ -124,8 +124,10 @@ func TestActivityContentGeneratedDispatchAndWorkflow(t *testing.T) {
 				input.RootRunID = "caller-override"
 			})
 			require.NoError(t, err)
-			require.Len(t, out.ToolEvents, 1)
-			event := out.ToolEvents[0]
+			events, err := agentsruntime.LoadRunToolEvents(t.Context(), fx.rt.RunStore, out.RunID, out.ToolEventsRef)
+			require.NoError(t, err)
+			require.Len(t, events, 1)
+			event := events[0]
 			if failAt != 0 {
 				assert.Empty(t, event.Refs)
 				assert.NotNil(t, event.Error)
@@ -154,6 +156,7 @@ func (s *recordingContentStore) Put(ctx context.Context, scope string, data []by
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.failAt != 0 && len(s.writes)+1 == s.failAt {
+		s.failAt = 0 // Fail this tool write once; allow terminal event retention.
 		return "", runstore.ErrContentTooLarge
 	}
 	hash, err := s.Store.Put(ctx, scope, data)

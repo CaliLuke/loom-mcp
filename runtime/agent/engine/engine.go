@@ -121,6 +121,9 @@ type (
 		// accepts *api.ToolInput and returns *api.ToolOutput.
 		RegisterExecuteToolActivity(ctx context.Context, name string, opts ActivityOptions, fn func(context.Context, *api.ToolInput) (*api.ToolOutput, error)) error
 
+		// RegisterFinishRunActivity registers terminal event storage and typed-result finishing.
+		RegisterFinishRunActivity(ctx context.Context, name string, opts ActivityOptions, fn func(context.Context, *api.FinishRunInput) (*api.FinishRunOutput, error)) error
+
 		// StartWorkflow initiates a new workflow execution and returns a handle for
 		// interacting with it. The workflow ID in req must be unique for the engine
 		// instance. Errors may describe a definite rejection or an uncertain outcome;
@@ -240,6 +243,9 @@ type (
 		// and blocks until it completes. Planner activities are executed outside the
 		// deterministic workflow thread and may perform I/O.
 		ExecutePlannerActivity(ctx context.Context, call PlannerActivityCall) (*api.PlanActivityOutput, error)
+
+		// ExecuteFinishRunActivity stores terminal events outside workflow execution.
+		ExecuteFinishRunActivity(ctx context.Context, call FinishRunActivityCall) (*api.FinishRunOutput, error)
 
 		// ExecuteToolActivity schedules a tool execution activity and blocks until it
 		// completes. This is useful for sequential execution (finalizers, single tools).
@@ -512,3 +518,10 @@ type (
 		RunID() string
 	}
 )
+
+// FinishRunActivityCall schedules the runtime terminal activity.
+type FinishRunActivityCall struct {
+	Name    string
+	Input   *api.FinishRunInput
+	Options ActivityOptions
+}

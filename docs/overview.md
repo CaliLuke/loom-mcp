@@ -1070,7 +1070,9 @@ Goa‑AI produces retry hints from validation failures in two places:
 `runLoop` returns `*runtime.RunOutput` containing:
 
 - `Final` (the assistant's `*model.Message`)
-- `ToolEvents` (all tool results in execution order)
+- `ToolEventsRef` and `ToolEventCount` (stored tool results in execution order;
+  load full events with `runtime.LoadRunToolEvents(ctx, store, rootRunID, ref)`)
+- `ToolSummary` (child failure and telemetry aggregates)
 - `Notes` and aggregated `Usage`
 
 The runtime sets final status and returns to the client.

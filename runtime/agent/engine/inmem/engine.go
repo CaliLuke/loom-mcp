@@ -31,6 +31,7 @@ type (
 
 		hookActivities    map[string]hookActivityDef
 		plannerActivities map[string]plannerActivityDef
+		finishActivities  map[string]finishActivityDef
 		toolActivities    map[string]toolActivityDef
 
 		// statuses tracks workflow status by run ID (inmem uses workflow ID as run ID).
@@ -75,6 +76,10 @@ type (
 
 	plannerActivityDef struct {
 		handler func(context.Context, *api.PlanActivityInput) (*api.PlanActivityOutput, error)
+		opts    engine.ActivityOptions
+	}
+	finishActivityDef struct {
+		handler func(context.Context, *api.FinishRunInput) (*api.FinishRunOutput, error)
 		opts    engine.ActivityOptions
 	}
 
@@ -170,6 +175,29 @@ func (e *eng) RegisterPlannerActivity(_ context.Context, name string, opts engin
 		return fmt.Errorf("planner activity %q already registered", name)
 	}
 	e.plannerActivities[name] = plannerActivityDef{
+		handler: fn,
+		opts:    opts,
+	}
+	return nil
+}
+
+// RegisterFinishRunActivity registers a typed terminal activity.
+func (e *eng) RegisterFinishRunActivity(_ context.Context, name string, opts engine.ActivityOptions, fn func(context.Context, *api.FinishRunInput) (*api.FinishRunOutput, error)) error {
+	if name == "" {
+		return errors.New("finish activity name is required")
+	}
+	if fn == nil {
+		return errors.New("finish activity handler is required")
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.finishActivities == nil {
+		e.finishActivities = make(map[string]finishActivityDef)
+	}
+	if _, dup := e.finishActivities[name]; dup {
+		return fmt.Errorf("finish activity %q already registered", name)
+	}
+	e.finishActivities[name] = finishActivityDef{
 		handler: fn,
 		opts:    opts,
 	}
@@ -582,6 +610,28 @@ func (w *wfCtx) ExecutePlannerActivity(ctx context.Context, call engine.PlannerA
 	w.eng.mu.RUnlock()
 	if !ok {
 		return nil, fmt.Errorf("planner activity %q not registered", call.Name)
+	}
+	timeout := call.Options.StartToCloseTimeout
+	if timeout == 0 {
+		timeout = def.opts.StartToCloseTimeout
+	}
+	actCtx, cancel := withOptionalTimeout(ctx, timeout)
+	defer cancel()
+	return def.handler(actCtx, call.Input)
+}
+
+func (w *wfCtx) ExecuteFinishRunActivity(ctx context.Context, call engine.FinishRunActivityCall) (*api.FinishRunOutput, error) {
+	if call.Name == "" {
+		return nil, errors.New("finish activity name is required")
+	}
+	if call.Input == nil {
+		return nil, errors.New("finish activity input is required")
+	}
+	w.eng.mu.RLock()
+	def, ok := w.eng.finishActivities[call.Name]
+	w.eng.mu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("finish activity %q not registered", call.Name)
 	}
 	timeout := call.Options.StartToCloseTimeout
 	if timeout == 0 {

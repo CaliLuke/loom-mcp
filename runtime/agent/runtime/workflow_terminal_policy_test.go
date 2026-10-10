@@ -292,7 +292,7 @@ func TestQuestionAwaitTerminalResultFinishesRun(t *testing.T) {
 	})
 
 	results, items, out, err := rt.collectAwaitResults(
-		context.Background(),
+		wfCtx.Context(),
 		wfCtx,
 		AgentRegistration{ID: input.AgentID, Specs: []tools.ToolSpec{terminal}},
 		input,
@@ -432,7 +432,7 @@ func TestConfirmedTerminalToolFinishesOrRejectsPause(t *testing.T) {
 			rt.recordAssistantTurn(base, nil, []planner.ToolRequest{call}, ledger)
 
 			results, pauses, out, err := rt.executeConfirmedToolCall(
-				context.Background(),
+				wfCtx.Context(),
 				wfCtx,
 				AgentRegistration{ID: input.AgentID, ExecuteToolActivity: "execute", Specs: []tools.ToolSpec{terminal}},
 				input,

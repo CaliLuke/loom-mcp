@@ -397,6 +397,8 @@ func testTemporalWorkerReplacement(
 		agentsruntime.WithEngine(secondEngine),
 		agentsruntime.WithSessionStore(secondSessions),
 		agentsruntime.WithRunEventStore(secondRunEvents),
+		// Tool references survive worker replacement in the shared root scope.
+		agentsruntime.WithRunStore(first.rt.RunStore),
 	)
 	registerCoordinatorToolsets(t, ctx, second.rt, secondExec)
 	require.NoError(t, coordinator.RegisterCoordinatorAgent(ctx, second.rt, coordinator.CoordinatorAgentConfig{}))
@@ -413,6 +415,10 @@ func testTemporalWorkerReplacement(
 	out, err := handle.Wait(ctx)
 	require.NoError(t, err)
 	require.Equal(t, "generated workflow complete", messageText(out.Final))
+	events, err := agentsruntime.LoadRunToolEvents(ctx, second.rt.RunStore, out.RunID, out.ToolEventsRef)
+	require.NoError(t, err)
+	require.Len(t, events, out.ToolEventCount)
+	require.Contains(t, toolEventCallIDs(events), "draft")
 
 	run, err := secondSessions.LoadRun(ctx, "run-temporal-restart")
 	require.NoError(t, err)

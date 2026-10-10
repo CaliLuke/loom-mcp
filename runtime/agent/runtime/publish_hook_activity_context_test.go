@@ -332,3 +332,11 @@ func TestExecuteWorkflow_TerminalHookUsesDetachedContext(t *testing.T) {
 	require.True(t, wfCtx.state.detachedCalled, "expected terminal emission to use Detached workflow context")
 	require.True(t, wfCtx.state.terminalSent, "expected RunCompleted hook emission to succeed via Detached context")
 }
+
+func (panicWorkflowContext) ExecuteFinishRunActivity(context.Context, engine.FinishRunActivityCall) (*api.FinishRunOutput, error) {
+	panic("unexpected finish activity")
+}
+
+func (*cancelOnPlannerWorkflowContext) ExecuteFinishRunActivity(context.Context, engine.FinishRunActivityCall) (*api.FinishRunOutput, error) {
+	panic("unexpected finish activity")
+}

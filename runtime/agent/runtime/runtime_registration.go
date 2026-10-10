@@ -302,7 +302,11 @@ func (r *Runtime) registerAgentActivities(ctx context.Context, reg AgentRegistra
 			return err
 		}
 	}
-	return nil
+	return r.Engine.RegisterFinishRunActivity(ctx, FinishRunActivityName(reg.ID), engine.ActivityOptions{
+		Queue:               reg.Workflow.TaskQueue,
+		StartToCloseTimeout: defaultExecuteToolActivityTimeout,
+		RetryPolicy:         engine.RetryPolicy{MaxAttempts: 3},
+	}, r.FinishRunActivity)
 }
 
 func (r *Runtime) storeRegisteredAgent(reg AgentRegistration) error {

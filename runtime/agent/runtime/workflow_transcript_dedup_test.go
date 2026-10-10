@@ -7,6 +7,7 @@ package runtime
 
 import (
 	"context"
+	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 	"testing"
 	"time"
 
@@ -49,7 +50,7 @@ func TestRunLoopRecordsAssistantTranscriptOncePerTurn(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			rt := newTranscriptDedupRuntime(tc.toolCalls, tc.confirmed)
-			wfCtx := &testWorkflowContext{ctx: context.Background(), asyncResult: ToolOutput{Payload: []byte("null")}}
+			wfCtx := &testWorkflowContext{finishRuntime: rt, ctx: context.Background(), asyncResult: ToolOutput{Payload: []byte("null")}}
 			wfCtx.confirmCh = make(chan *api.ConfirmationDecision, len(tc.confirmed))
 			wfCtx.ensureSignals()
 			for range tc.confirmed {
@@ -61,7 +62,7 @@ func TestRunLoopRecordsAssistantTranscriptOncePerTurn(t *testing.T) {
 				Parts: []model.Part{model.TextPart{Text: "done"}},
 			}}}
 
-			input := &RunInput{AgentID: "svc.agent", RunID: "run-1"}
+			input := &RunInput{RootRunID: "run-1", AgentID: "svc.agent", RunID: "run-1"}
 			base := &planner.PlanInput{
 				RunContext: run.Context{RunID: input.RunID},
 				Agent:      newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID}),
@@ -92,7 +93,7 @@ func TestRunLoopRecordsAssistantTranscriptOncePerTurn(t *testing.T) {
 // newTranscriptDedupRuntime builds a minimal Runtime with anyJSON tool specs for
 // the given calls and confirmation overrides for the confirmed tool idents.
 func newTranscriptDedupRuntime(toolCalls []planner.ToolRequest, confirmed []tools.Ident) *Runtime {
-	rt := &Runtime{
+	rt := &Runtime{RunStore: runstoreinmem.New(),
 		logger:  telemetry.NoopLogger{},
 		metrics: telemetry.NoopMetrics{},
 		tracer:  telemetry.NoopTracer{},

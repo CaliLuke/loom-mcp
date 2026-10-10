@@ -17,6 +17,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 )
 
 const maxPlanToolResultBytes = 64 * 1024
@@ -29,24 +30,31 @@ const resultOmittedReasonWorkflowBudget = "workflow_budget"
 //   - Input values are trusted to be runtime-produced tool results; nil entries are
 //     a bug.
 //   - Tool result values are encoded via the registered tool result codec and stored
-//     as canonical JSON bytes on api.ToolEvent.Result.
+//     as canonical JSON bytes on api.ToolEvent.Result only without Refs.Result.
+//   - Referenced Result and ServerData bytes are omitted for the finish activity.
 func (r *Runtime) encodeToolEvents(ctx context.Context, events []*planner.ToolResult) ([]*api.ToolEvent, error) {
 	if len(events) == 0 {
 		return nil, nil
 	}
 	out := make([]*api.ToolEvent, 0, len(events))
 	for _, ev := range events {
-		result, err := r.marshalToolValue(ctx, ev.Name, ev.Result, ev.Bounds)
-		if err != nil {
-			return nil, fmt.Errorf("encode tool result for %s: %w", ev.Name, err)
+		var result []byte
+		resultBytes := ev.ResultBytes
+		if ev.Refs.Result == "" {
+			var err error
+			result, err = r.marshalToolValue(ctx, ev.Name, ev.Result, ev.Bounds)
+			if err != nil {
+				return nil, fmt.Errorf("encode tool result for %s: %w", ev.Name, err)
+			}
+			resultBytes = len(result)
 		}
 		out = append(out, &api.ToolEvent{
 			Refs:          ev.Refs,
 			Name:          ev.Name,
 			Result:        rawjson.Message(result),
-			ResultBytes:   len(result),
+			ResultBytes:   resultBytes,
 			ResultOmitted: false,
-			ServerData:    append(rawjson.Message(nil), ev.ServerData...),
+			ServerData:    inlineContent(ev.ServerData, ev.Refs.ServerData),
 			Bounds:        ev.Bounds,
 			Error:         ev.Error,
 			RetryHint:     ev.RetryHint,
@@ -66,7 +74,7 @@ func (r *Runtime) encodeToolEvents(ctx context.Context, events []*planner.ToolRe
 // The planner resume inputs must remain small: the workflow loop is the control plane
 // and should not shuttle observer-side rendering payloads or large values across workflow/activity
 // boundaries. Full tool results are persisted via hooks and returned in
-// RunOutput.ToolEvents for callers that need them.
+// the run store for callers using LoadRunToolEvents.
 //
 // Contract:
 //   - ServerData is always omitted.
@@ -207,7 +215,7 @@ func (r *Runtime) buildPlannerToolOutput(
 
 // decodeToolOutputs converts workflow-boundary tool output envelopes back into
 // planner ToolOutput values.
-func (r *Runtime) decodeToolOutputs(events []*api.ToolCallOutput) ([]*planner.ToolOutput, error) {
+func (r *Runtime) decodeToolOutputs(ctx context.Context, scope string, events []*api.ToolCallOutput) ([]*planner.ToolOutput, error) {
 	if len(events) == 0 {
 		return nil, nil
 	}
@@ -216,16 +224,20 @@ func (r *Runtime) decodeToolOutputs(events []*api.ToolCallOutput) ([]*planner.To
 		if ev == nil {
 			return nil, fmt.Errorf("nil tool output entry")
 		}
+		result, serverData, err := loadToolContent(ctx, r.RunStore, scope, ev.Name, ev.Refs, ev.Result, ev.ServerData)
+		if err != nil {
+			return nil, fmt.Errorf("decode planner tool output: %w", err)
+		}
 		out = append(out, &planner.ToolOutput{
 			Refs:                ev.Refs,
 			Name:                ev.Name,
 			ToolCallID:          ev.ToolCallID,
 			Payload:             append(rawjson.Message(nil), ev.Payload...),
-			Result:              append(rawjson.Message(nil), ev.Result...),
+			Result:              result,
 			ResultBytes:         ev.ResultBytes,
 			ResultOmitted:       ev.ResultOmitted,
 			ResultOmittedReason: ev.ResultOmittedReason,
-			ServerData:          append(rawjson.Message(nil), ev.ServerData...),
+			ServerData:          serverData,
 			Bounds:              ev.Bounds,
 			Error:               ev.Error,
 			RetryHint:           ev.RetryHint,
@@ -252,11 +264,11 @@ func encodePlannerToolOutputs(outputs []*planner.ToolOutput) ([]*api.ToolCallOut
 			Name:                output.Name,
 			ToolCallID:          output.ToolCallID,
 			Payload:             append(rawjson.Message(nil), output.Payload...),
-			Result:              append(rawjson.Message(nil), output.Result...),
+			Result:              inlineContent(output.Result, output.Refs.Result),
 			ResultBytes:         output.ResultBytes,
 			ResultOmitted:       output.ResultOmitted,
 			ResultOmittedReason: output.ResultOmittedReason,
-			ServerData:          append(rawjson.Message(nil), output.ServerData...),
+			ServerData:          inlineContent(output.ServerData, output.Refs.ServerData),
 			Bounds:              output.Bounds,
 			Error:               output.Error,
 			RetryHint:           output.RetryHint,
@@ -265,4 +277,12 @@ func encodePlannerToolOutputs(outputs []*planner.ToolOutput) ([]*api.ToolCallOut
 		})
 	}
 	return out, nil
+}
+
+// inlineContent copies only content that has not already been stored.
+func inlineContent(data rawjson.Message, ref runstore.Hash) rawjson.Message {
+	if ref != "" {
+		return nil
+	}
+	return append(rawjson.Message(nil), data...)
 }

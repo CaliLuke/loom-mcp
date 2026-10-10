@@ -31,7 +31,7 @@ import (
 type historyReplayPlanner struct{}
 
 const (
-	workflowHistoryFile        = "testdata/workflow_protocol_v2.json"
+	workflowHistoryFile        = "testdata/workflow_protocol_v3.json"
 	workflowHistoryIdentity    = "loom-mcp-history-recorder"
 	workflowHistoryStickyQueue = "loom-mcp-history-recorder-sticky"
 )
@@ -184,11 +184,12 @@ func (historyReplayPlanner) PlanResume(context.Context, *planner.PlanResumeInput
 	}}}, nil
 }
 
-// assertHistoryToolContent prevents a planner-only recording from satisfying K4 replay.
+// assertHistoryToolContent requires stored tool content and one K5 finish activity.
 func assertHistoryToolContent(t *testing.T, history *historypb.History) {
 	t.Helper()
 	var toolSchedule int64
 	var found bool
+	finishCalls := 0
 	for _, event := range history.Events {
 		if scheduled := event.GetActivityTaskScheduledEventAttributes(); scheduled != nil && scheduled.ActivityType.Name == "features.coordinator.executetool" {
 			toolSchedule = event.EventId
@@ -196,6 +197,31 @@ func assertHistoryToolContent(t *testing.T, history *historypb.History) {
 			require.NoError(t, json.Unmarshal(scheduled.Input.Payloads[0].Data, &input))
 			assert.Equal(t, "run-protocol-history", input.RootRunID)
 		}
+		if scheduled := event.GetActivityTaskScheduledEventAttributes(); scheduled != nil {
+			switch scheduled.ActivityType.Name {
+			case agentsruntime.FinishRunActivityName(coordinator.AgentID):
+				finishCalls++
+				var input api.FinishRunInput
+				require.NoError(t, json.Unmarshal(scheduled.Input.Payloads[0].Data, &input))
+				assert.Equal(t, "run-protocol-history", input.RootRunID)
+				require.Len(t, input.ToolEvents, 1)
+				assert.NotEmpty(t, input.ToolEvents[0].Refs.Result)
+				assert.Empty(t, input.ToolEvents[0].Result)
+			case "features.coordinator.resume":
+				var input api.PlanActivityInput
+				require.NoError(t, json.Unmarshal(scheduled.Input.Payloads[0].Data, &input))
+				require.Len(t, input.ToolOutputs, 1)
+				assert.NotEmpty(t, input.ToolOutputs[0].Refs.Result)
+				assert.Empty(t, input.ToolOutputs[0].Result)
+			}
+		}
+		if completed := event.GetWorkflowExecutionCompletedEventAttributes(); completed != nil {
+			var output api.RunOutput
+			require.NoError(t, json.Unmarshal(completed.Result.Payloads[0].Data, &output))
+			assert.NotEmpty(t, output.ToolEventsRef)
+			assert.Equal(t, 1, output.ToolEventCount)
+		}
+
 		if completed := event.GetActivityTaskCompletedEventAttributes(); completed != nil && toolSchedule != 0 && completed.ScheduledEventId == toolSchedule {
 			var output api.ToolOutput
 			require.NoError(t, json.Unmarshal(completed.Result.Payloads[0].Data, &output))
@@ -206,4 +232,5 @@ func assertHistoryToolContent(t *testing.T, history *historypb.History) {
 		}
 	}
 	assert.True(t, found, "recorded history must contain a completed tool activity with stored content")
+	assert.Equal(t, 1, finishCalls)
 }

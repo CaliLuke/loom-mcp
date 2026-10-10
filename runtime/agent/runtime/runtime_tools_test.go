@@ -430,14 +430,14 @@ func TestRegisterToolset_RejectsAgentToolsetWithIncompleteRoute(t *testing.T) {
 }
 
 func TestToolsetTaskQueueOverrideUsed(t *testing.T) {
-	rt := &Runtime{toolsets: map[string]ToolsetRegistration{"svc.export": {TaskQueue: "q1", Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
+	rt := &Runtime{RunStore: runstoreinmem.New(), toolsets: map[string]ToolsetRegistration{"svc.export": {TaskQueue: "q1", Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
 		return Executed(&planner.ToolResult{
 			Name: call.Name,
 		}), nil
 	}}}, Bus: noopHooks{}}
 	rt.toolSpecs = map[tools.Ident]tools.ToolSpec{"child": newAnyJSONSpec("child", "svc.export")}
-	wfCtx := &testWorkflowContext{ctx: context.Background(), asyncResult: ToolOutput{Payload: []byte("null")}, planResult: &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: &model.Message{Role: "assistant", Parts: []model.Part{model.TextPart{Text: "ok"}}}}}, hasPlanResult: true}
-	input := &RunInput{AgentID: "svc.agent", RunID: "run-1"}
+	wfCtx := &testWorkflowContext{finishRuntime: rt, ctx: context.Background(), asyncResult: ToolOutput{Payload: []byte("null")}, planResult: &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: &model.Message{Role: "assistant", Parts: []model.Part{model.TextPart{Text: "ok"}}}}}, hasPlanResult: true}
+	input := &RunInput{RootRunID: "run-1", AgentID: "svc.agent", RunID: "run-1"}
 	base := &planner.PlanInput{RunContext: run.Context{RunID: input.RunID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})}
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: tools.Ident("child")}}}
 	_, err := rt.runLoop(wfCtx, AgentRegistration{
@@ -453,14 +453,14 @@ func TestToolsetTaskQueueOverrideUsed(t *testing.T) {
 }
 
 func TestPreserveModelProvidedToolCallID(t *testing.T) {
-	rt := &Runtime{toolsets: map[string]ToolsetRegistration{"svc.ts": {Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
+	rt := &Runtime{RunStore: runstoreinmem.New(), toolsets: map[string]ToolsetRegistration{"svc.ts": {Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
 		// Ensure the ID provided by the planner/model flows into the executor unchanged
 		require.Equal(t, "model-123", call.ToolCallID)
 		return Executed(&planner.ToolResult{Name: call.Name}), nil
 	}}}, Bus: noopHooks{}}
 	rt.toolSpecs = map[tools.Ident]tools.ToolSpec{"tool": newAnyJSONSpec("tool", "svc.ts")}
-	wfCtx := &testWorkflowContext{ctx: context.Background(), asyncResult: ToolOutput{Payload: []byte("null")}, planResult: &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: &model.Message{Role: "assistant", Parts: []model.Part{model.TextPart{Text: "ok"}}}}}, hasPlanResult: true}
-	input := &RunInput{AgentID: "svc.agent", RunID: "run-1"}
+	wfCtx := &testWorkflowContext{finishRuntime: rt, ctx: context.Background(), asyncResult: ToolOutput{Payload: []byte("null")}, planResult: &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: &model.Message{Role: "assistant", Parts: []model.Part{model.TextPart{Text: "ok"}}}}}, hasPlanResult: true}
+	input := &RunInput{RootRunID: "run-1", AgentID: "svc.agent", RunID: "run-1"}
 	base := &planner.PlanInput{RunContext: run.Context{RunID: input.RunID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})}
 	// Planner supplies an explicit ToolCallID from the model
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: tools.Ident("tool"), ToolCallID: "model-123"}}}
@@ -488,7 +488,7 @@ func TestActivityToolExecutorExecute(t *testing.T) {
 
 func TestRunLoopPauseResumeEmitsEvents(t *testing.T) {
 	recorder := &recordingHooks{}
-	rt := &Runtime{
+	rt := &Runtime{RunStore: runstoreinmem.New(),
 		Bus:           recorder,
 		logger:        telemetry.NoopLogger{},
 		metrics:       telemetry.NoopMetrics{},
@@ -502,7 +502,7 @@ func TestRunLoopPauseResumeEmitsEvents(t *testing.T) {
 		}}},
 	}
 	rt.toolSpecs = map[tools.Ident]tools.ToolSpec{"tool": newAnyJSONSpec("tool", "svc.ts")}
-	wfCtx := &testWorkflowContext{
+	wfCtx := &testWorkflowContext{finishRuntime: rt,
 		ctx:         context.Background(),
 		hookRuntime: rt,
 		asyncResult: ToolOutput{Payload: []byte("null")},
@@ -516,7 +516,7 @@ func TestRunLoopPauseResumeEmitsEvents(t *testing.T) {
 	wfCtx.barrier <- struct{}{}
 	wfCtx.hasPlanResult = true
 	wfCtx.planResult = &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: &model.Message{Role: "assistant", Parts: []model.Part{model.TextPart{Text: "ok"}}}}}
-	input := &RunInput{AgentID: "svc.agent", RunID: "run-1", SessionID: "sess-1", TurnID: "turn-1"}
+	input := &RunInput{RootRunID: "run-1", AgentID: "svc.agent", RunID: "run-1", SessionID: "sess-1", TurnID: "turn-1"}
 	_, err := rt.CreateSession(context.Background(), input.SessionID)
 	require.NoError(t, err)
 	now := time.Now().UTC()
@@ -877,7 +877,7 @@ func TestServiceToolEventsPropagateBounds(t *testing.T) {
 
 func TestInlineToolsetEmitsParentToolEvents(t *testing.T) {
 	recorder := &recordingHooks{}
-	rt := &Runtime{
+	rt := &Runtime{RunStore: runstoreinmem.New(),
 		Bus:           recorder,
 		logger:        telemetry.NoopLogger{},
 		metrics:       telemetry.NoopMetrics{},
@@ -903,7 +903,7 @@ func TestInlineToolsetEmitsParentToolEvents(t *testing.T) {
 	rt.toolSpecs = map[tools.Ident]tools.ToolSpec{
 		tools.Ident("child.get_time_series"): newAnyJSONSpec("child.get_time_series", "child.tools"),
 	}
-	wfCtx := &testWorkflowContext{
+	wfCtx := &testWorkflowContext{finishRuntime: rt,
 		ctx:         context.Background(),
 		hookRuntime: rt,
 		planResult: &planner.PlanResult{
@@ -916,7 +916,7 @@ func TestInlineToolsetEmitsParentToolEvents(t *testing.T) {
 		},
 		hasPlanResult: true,
 	}
-	input := &RunInput{AgentID: "parent.agent", RunID: "run-inline", SessionID: "sess-1", TurnID: "turn-1"}
+	input := &RunInput{RootRunID: "run-inline", AgentID: "parent.agent", RunID: "run-inline", SessionID: "sess-1", TurnID: "turn-1"}
 	base := &planner.PlanInput{
 		RunContext: run.Context{RunID: input.RunID, SessionID: input.SessionID, TurnID: input.TurnID},
 		Agent:      newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID}),

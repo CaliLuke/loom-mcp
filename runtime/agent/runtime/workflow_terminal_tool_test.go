@@ -83,7 +83,9 @@ func TestRunLoopStopsAfterTerminalTool(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, out)
 	require.NotNil(t, out.Final)
-	require.Len(t, out.ToolEvents, 1)
-	require.Equal(t, terminalTool.Name, out.ToolEvents[0].Name)
+	events, err := LoadRunToolEvents(t.Context(), rt.RunStore, input.RootRunID, out.ToolEventsRef)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	require.Equal(t, terminalTool.Name, events[0].Name)
 	require.Empty(t, wfCtx.lastPlannerCall.Name, "expected no planner resume/finalization after terminal tool")
 }

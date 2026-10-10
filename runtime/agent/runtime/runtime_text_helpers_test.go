@@ -14,9 +14,7 @@ func TestApplyChildRunSummaryClearsResultWhenAllChildrenFail(t *testing.T) {
 		Name:   tools.Ident("parent"),
 		Result: "stale success",
 	}
-	output := &RunOutput{ToolEvents: []*api.ToolEvent{
-		{Name: tools.Ident("child"), Error: planner.NewToolError("boom")},
-	}}
+	output := &RunOutput{ToolEventCount: 1, ToolSummary: api.ToolEventSummary{FailedCount: 1, LastError: planner.NewToolError("boom")}}
 
 	applyChildRunSummary(result.Name, output, result)
 

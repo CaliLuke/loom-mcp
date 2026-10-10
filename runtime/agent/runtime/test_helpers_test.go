@@ -25,7 +25,9 @@ import (
 
 // testWorkflowContext is a lightweight engine.WorkflowContext implementation used by tests.
 type testWorkflowContext struct {
-	ctx context.Context
+	finishRuntime *Runtime
+	finishCalls   int
+	ctx           context.Context
 
 	lastHookCall    engine.HookActivityCall
 	lastPlannerCall engine.PlannerActivityCall
@@ -106,6 +108,7 @@ func (t *testWorkflowContext) Detached() engine.WorkflowContext {
 		barrier:       t.barrier,
 		hookRuntime:   t.hookRuntime,
 		runtime:       t.runtime,
+		finishRuntime: t.finishRuntime,
 		childRuntime:  t.childRuntime,
 
 		childRequests:      t.childRequests,
@@ -140,6 +143,7 @@ func (t *testWorkflowContext) WithCancel() (engine.WorkflowContext, func()) {
 		barrier:       t.barrier,
 		hookRuntime:   t.hookRuntime,
 		runtime:       t.runtime,
+		finishRuntime: t.finishRuntime,
 		childRuntime:  t.childRuntime,
 
 		childRequests:      t.childRequests,
@@ -998,4 +1002,27 @@ func newAnyJSONSpec(name tools.Ident, toolset string) tools.ToolSpec {
 		Payload: tools.TypeSpec{Name: string(name) + "_payload", Codec: codec},
 		Result:  tools.TypeSpec{Name: string(name + "_result"), Codec: codec},
 	}
+}
+
+func (s *stubEngine) RegisterFinishRunActivity(context.Context, string, engine.ActivityOptions, func(context.Context, *api.FinishRunInput) (*api.FinishRunOutput, error)) error {
+	return nil
+}
+
+func (t *testWorkflowContext) ExecuteFinishRunActivity(ctx context.Context, call engine.FinishRunActivityCall) (*api.FinishRunOutput, error) {
+	t.root().finishCalls++
+	rt := t.finishRuntime
+	if rt == nil {
+		rt = t.runtime
+	}
+	if rt == nil {
+		rt = t.hookRuntime
+	}
+	if rt == nil {
+		return nil, fmt.Errorf("test finish runtime is required")
+	}
+	return rt.FinishRunActivity(ctx, call.Input)
+}
+
+func (r *routeWorkflowContext) ExecuteFinishRunActivity(ctx context.Context, call engine.FinishRunActivityCall) (*api.FinishRunOutput, error) {
+	return r.hookRuntime.FinishRunActivity(ctx, call.Input)
 }

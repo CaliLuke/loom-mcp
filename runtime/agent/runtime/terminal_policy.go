@@ -339,11 +339,17 @@ func (r *Runtime) executeFinalizationToolCalls(
 	if err != nil {
 		return nil, err
 	}
+	finished, err := r.finishRun(wfCtx.Context(), input, events, events[len(events)-1])
+	if err != nil {
+		return nil, err
+	}
 	return &RunOutput{
 		AgentID:         input.AgentID,
 		RunID:           base.RunContext.RunID,
-		FinalToolResult: events[len(events)-1],
-		ToolEvents:      events,
+		FinalToolResult: finished.FinalToolResult,
+		ToolEventsRef:   finished.ToolEventsRef,
+		ToolEventCount:  finished.ToolEventCount,
+		ToolSummary:     finished.ToolSummary,
 		Usage:           &aggUsage,
 	}, nil
 }

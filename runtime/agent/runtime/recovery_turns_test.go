@@ -384,7 +384,8 @@ func TestExecuteWorkflowRunFinalizesAfterInitialModelRecoveryCap(t *testing.T) {
 		},
 	}
 	rt := New()
-	input := &RunInput{AgentID: "svc.agent", RunID: "run-initial-cap"}
+	wfCtx.finishRuntime = rt
+	input := &RunInput{RootRunID: "run-initial-cap", AgentID: "svc.agent", RunID: "run-initial-cap"}
 	reg := AgentRegistration{
 		ID:                 input.AgentID,
 		PlanActivityName:   "plan",
@@ -448,7 +449,8 @@ func TestResumeAfterToolTurnFinalizesAfterModelRecoveryCap(t *testing.T) {
 		},
 	}
 	rt := New()
-	input := &RunInput{AgentID: "svc.agent", RunID: "run-resume-cap"}
+	wfCtx.finishRuntime = rt
+	input := &RunInput{RootRunID: "run-resume-cap", AgentID: "svc.agent", RunID: "run-resume-cap"}
 	base := &planner.PlanInput{RunContext: run.Context{RunID: input.RunID, Attempt: 1}}
 	st := &runLoopState{
 		Caps:        policy.CapsState{MaxRecoveryTurns: 1, RemainingRecoveryTurns: 1},

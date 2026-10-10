@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"encoding/json/v2"
+	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 	"testing"
 	"time"
 
@@ -20,13 +21,13 @@ import (
 func TestUnknownToolOutcomeFinalizesWithoutOrdinaryResume(t *testing.T) {
 	tool := tools.Ident("svc.effect")
 	spec := newAnyJSONSpec(tool, "svc.tools")
-	rt := &Runtime{
+	rt := &Runtime{RunStore: runstoreinmem.New(),
 		Bus: noopHooks{}, RunEventStore: inmem.New(), logger: telemetry.NoopLogger{},
 		metrics: telemetry.NoopMetrics{}, tracer: telemetry.NoopTracer{},
 		toolSpecs: map[tools.Ident]tools.ToolSpec{tool: spec},
 	}
 	final := &model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "done"}}}
-	wfCtx := &testWorkflowContext{
+	wfCtx := &testWorkflowContext{finishRuntime: rt,
 		ctx: context.Background(),
 		asyncResult: ToolOutput{
 			Error:     "outcome_unknown: execution outcome is unknown; do not retry",
@@ -35,7 +36,7 @@ func TestUnknownToolOutcomeFinalizesWithoutOrdinaryResume(t *testing.T) {
 		hasPlanResult: true,
 		planResult:    &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: final}},
 	}
-	input := &RunInput{AgentID: "svc.agent", RunID: "run-unknown"}
+	input := &RunInput{RootRunID: "run-unknown", AgentID: "svc.agent", RunID: "run-unknown"}
 	base := &planner.PlanInput{RunContext: run.Context{RunID: input.RunID}}
 	reg := AgentRegistration{
 		ID: input.AgentID, Planner: &stubPlanner{}, ExecuteToolActivity: "execute", ResumeActivityName: "resume",
@@ -85,12 +86,12 @@ func TestOutcomeUnknownFinalizerRejectsToolCalls(t *testing.T) {
 func TestAwaitContinuationFinalizesWhenHistoryHasUnknownOutcome(t *testing.T) {
 	rt := New()
 	final := &model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "done"}}}
-	wfCtx := &testWorkflowContext{
+	wfCtx := &testWorkflowContext{finishRuntime: rt,
 		ctx:           context.Background(),
 		hasPlanResult: true,
 		planResult:    &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: final}},
 	}
-	input := &RunInput{AgentID: "svc.agent", RunID: "run-unknown-await"}
+	input := &RunInput{RootRunID: "run-unknown-await", AgentID: "svc.agent", RunID: "run-unknown-await"}
 	base := &planner.PlanInput{RunContext: run.Context{RunID: input.RunID}}
 	reg := AgentRegistration{ID: input.AgentID, ResumeActivityName: "resume"}
 	st := &runLoopState{

@@ -35,7 +35,7 @@ func (r *Runtime) adaptAgentChildOutput(ctx context.Context, cfg *AgentToolConfi
 			return nil, err
 		}
 		tr.ToolCallID = call.ToolCallID
-		tr.ChildrenCount = len(outPtr.ToolEvents)
+		tr.ChildrenCount = outPtr.ToolEventCount
 		attachRunLink(tr, handle)
 		return tr, nil
 	}

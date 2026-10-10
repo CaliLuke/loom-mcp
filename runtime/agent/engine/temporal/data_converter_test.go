@@ -59,7 +59,9 @@ func TestNewAgentDataConverterRoundTripsRunOutput(t *testing.T) {
 			Parts: []model.Part{model.TextPart{Text: "done"}},
 		},
 		FinalToolResult: &api.ToolEvent{Name: "test.final", Result: rawjson.Message(`{"ok":true}`)},
-		ToolEvents:      []*api.ToolEvent{{Name: "test.tool", Result: rawjson.Message(`{"value":1}`)}},
+		ToolEventsRef:   "sha256:events",
+		ToolEventCount:  1,
+		ToolSummary:     api.ToolEventSummary{FailedCount: 1, LastError: planner.NewToolError("failed")},
 		Notes:           []*planner.PlannerAnnotation{{Text: "note"}},
 		Usage:           &model.TokenUsage{InputTokens: 3, OutputTokens: 5},
 	}

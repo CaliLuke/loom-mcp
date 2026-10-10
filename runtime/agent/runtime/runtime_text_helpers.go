@@ -105,7 +105,7 @@ func ConvertRunOutputToToolResult(toolName tools.Ident, output *RunOutput) plann
 		Name:   toolName,
 		Result: finalRunOutputText(output),
 
-		ChildrenCount: len(output.ToolEvents)}
+		ChildrenCount: output.ToolEventCount}
 	applyChildRunSummary(toolName, output, &result)
 	return result
 }
@@ -118,15 +118,15 @@ func finalRunOutputText(output *RunOutput) string {
 }
 
 func applyChildRunSummary(toolName tools.Ident, output *RunOutput, result *planner.ToolResult) {
-	if len(output.ToolEvents) == 0 {
+	if output.ToolEventCount == 0 {
 		return
 	}
-	summary := summarizeChildToolEvents(output.ToolEvents)
+	summary := childToolSummary{eventCount: output.ToolEventCount, failedCount: output.ToolSummary.FailedCount, lastError: output.ToolSummary.LastError}
 	if summary.allFailed() {
 		result.Result = nil
 		result.Error = summary.asToolError(toolName)
 	}
-	if telemetry := summary.asTelemetry(); telemetry != nil {
+	if telemetry := output.ToolSummary.Telemetry; telemetry != nil {
 		result.Telemetry = telemetry
 	}
 }
@@ -137,7 +137,7 @@ type childToolSummary struct {
 	totalDurationMs int64
 	models          []string
 	failedCount     int
-	lastError       error
+	lastError       *planner.ToolError
 }
 
 func summarizeChildToolEvents(events []*api.ToolEvent) childToolSummary {

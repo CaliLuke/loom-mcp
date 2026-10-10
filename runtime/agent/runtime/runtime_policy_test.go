@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"errors"
+	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 	"io"
 	"testing"
 	"time"
@@ -132,7 +133,7 @@ func TestToolUnavailableSurvivesModelWrapperPolicy(t *testing.T) {
 }
 func TestPolicyAllowlistTrimsToolExecution(t *testing.T) {
 	recorder := &recordingHooks{}
-	rt := &Runtime{
+	rt := &Runtime{RunStore: runstoreinmem.New(),
 		Bus:           recorder,
 		Policy:        &stubPolicyEngine{decision: policy.Decision{AllowedTools: []tools.Ident{tools.Ident("allowed")}}},
 		logger:        telemetry.NoopLogger{},
@@ -148,7 +149,7 @@ func TestPolicyAllowlistTrimsToolExecution(t *testing.T) {
 			}), nil
 		}}}
 	rt.toolSpecs = map[tools.Ident]tools.ToolSpec{"allowed": newAnyJSONSpec("allowed", "svc.tools"), "blocked": newAnyJSONSpec("blocked", "svc.tools")}
-	wfCtx := &testWorkflowContext{
+	wfCtx := &testWorkflowContext{finishRuntime: rt,
 		ctx:         context.Background(),
 		hookRuntime: rt,
 		asyncResult: ToolOutput{Payload: []byte("null")},
@@ -162,7 +163,7 @@ func TestPolicyAllowlistTrimsToolExecution(t *testing.T) {
 		},
 		hasPlanResult: true,
 	}
-	input := &RunInput{AgentID: "svc.agent", RunID: "run-1"}
+	input := &RunInput{RootRunID: "run-1", AgentID: "svc.agent", RunID: "run-1"}
 	base := &planner.PlanInput{RunContext: run.Context{RunID: input.RunID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})}
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: tools.Ident("allowed")}, {Name: tools.Ident("blocked")}}}
 	out, err := rt.runLoop(wfCtx, AgentRegistration{
@@ -172,8 +173,10 @@ func TestPolicyAllowlistTrimsToolExecution(t *testing.T) {
 		ResumeActivityName:  "resume",
 	}, input, base, initial, nil, model.TokenUsage{}, policy.CapsState{MaxToolCalls: 5, RemainingToolCalls: 5}, time.Time{}, time.Time{}, 2, "turn-1", nil, nil, 0)
 	require.NoError(t, err)
-	require.Len(t, out.ToolEvents, 1)
-	require.Equal(t, tools.Ident("allowed"), out.ToolEvents[0].Name)
+	events, err := LoadRunToolEvents(t.Context(), rt.RunStore, input.RootRunID, out.ToolEventsRef)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	require.Equal(t, tools.Ident("allowed"), events[0].Name)
 	var scheduled []tools.Ident
 	for _, evt := range recorder.events {
 		if e, ok := evt.(*hooks.ToolCallScheduledEvent); ok {
@@ -443,7 +446,7 @@ func TestDisableToolsPolicyBlocksToolExecution(t *testing.T) {
 func TestAwaitResumeReappliesToolPolicy(t *testing.T) {
 	askTool := tools.Ident("inline.ts.ask")
 	extraTool := tools.Ident("inline.ts.extra")
-	rt := &Runtime{
+	rt := &Runtime{RunStore: runstoreinmem.New(),
 		Bus:           noopHooks{},
 		Policy:        &stubPolicyEngine{decision: policy.Decision{AllowedTools: []tools.Ident{askTool}}},
 		logger:        telemetry.NoopLogger{},
@@ -480,7 +483,7 @@ func TestAwaitResumeReappliesToolPolicy(t *testing.T) {
 
 	// The resume planner activity returns a FinalResponse so the loop ends
 	// after one pause/answer cycle.
-	wfCtx := &testWorkflowContext{
+	wfCtx := &testWorkflowContext{finishRuntime: rt,
 		ctx:           context.Background(),
 		hookRuntime:   rt,
 		hasPlanResult: true,
@@ -497,7 +500,7 @@ func TestAwaitResumeReappliesToolPolicy(t *testing.T) {
 	ctrl := interrupt.NewController(wfCtx)
 	wfCtx.clarifyCh <- &api.ClarificationAnswer{ID: "clar-1", Answer: "the first one"}
 
-	input := &RunInput{AgentID: "svc.agent", RunID: "run-1", SessionID: "sess-1", TurnID: "turn-1"}
+	input := &RunInput{RootRunID: "run-1", AgentID: "svc.agent", RunID: "run-1", SessionID: "sess-1", TurnID: "turn-1"}
 	_, err := rt.CreateSession(context.Background(), input.SessionID)
 	require.NoError(t, err)
 	now := time.Now().UTC()

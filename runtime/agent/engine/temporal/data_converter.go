@@ -11,6 +11,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	aitools "github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/sdk/converter"
@@ -75,7 +76,9 @@ type (
 		RunID           string
 		Final           *model.Message
 		FinalToolResult *api.ToolEvent
-		ToolEvents      []*api.ToolEvent
+		ToolEventsRef   runstore.Hash
+		ToolEventCount  int
+		ToolSummary     api.ToolEventSummary
 		Notes           []*planner.PlannerAnnotation
 		Usage           *model.TokenUsage
 	}
@@ -205,7 +208,9 @@ func decodeRunOutput(p *commonpb.Payload, valuePtr any) error {
 	dst.RunID = w.RunID
 	dst.Final = w.Final
 	dst.FinalToolResult = w.FinalToolResult
-	dst.ToolEvents = w.ToolEvents
+	dst.ToolEventsRef = w.ToolEventsRef
+	dst.ToolEventCount = w.ToolEventCount
+	dst.ToolSummary = w.ToolSummary
 	dst.Notes = w.Notes
 	dst.Usage = w.Usage
 	return nil
@@ -262,7 +267,9 @@ func encodeRunOutputWire(in *api.RunOutput) (*runOutputWire, error) {
 		RunID:           in.RunID,
 		Final:           in.Final,
 		FinalToolResult: in.FinalToolResult,
-		ToolEvents:      in.ToolEvents,
+		ToolEventsRef:   in.ToolEventsRef,
+		ToolEventCount:  in.ToolEventCount,
+		ToolSummary:     in.ToolSummary,
 		Notes:           in.Notes,
 		Usage:           in.Usage,
 	}, nil

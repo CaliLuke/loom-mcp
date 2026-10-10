@@ -62,7 +62,7 @@ func TestActivityContentReferencesSurviveEnvelopes(t *testing.T) {
 	require.NoError(t, err)
 	encoded, err := encodePlannerToolOutputs(outputs)
 	require.NoError(t, err)
-	decoded, err := rt.decodeToolOutputs(encoded)
+	decoded, err := rt.decodeToolOutputs(t.Context(), "root", encoded)
 	require.NoError(t, err)
 	assert.Equal(t, out.Refs, decoded[0].Refs)
 	assert.Equal(t, outputs[0].Result, decoded[0].Result)

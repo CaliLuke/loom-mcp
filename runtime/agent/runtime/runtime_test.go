@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 	"reflect"
 	"testing"
 	"text/template"
@@ -151,14 +152,14 @@ func TestStartRunDoesNotInjectSessionSearchAttribute(t *testing.T) {
 }
 
 func TestFinishWithoutToolCalls_UsesPlannerFinalToolResult(t *testing.T) {
-	rt := &Runtime{
+	rt := &Runtime{RunStore: runstoreinmem.New(),
 		logger:        telemetry.NoopLogger{},
 		metrics:       telemetry.NoopMetrics{},
 		tracer:        telemetry.NoopTracer{},
 		RunEventStore: runloginmem.New(),
 		Bus:           noopHooks{},
 	}
-	input := &RunInput{
+	input := &RunInput{RootRunID: "run-1",
 		AgentID:   "svc.agent",
 		SessionID: "sess-1",
 	}
@@ -177,7 +178,7 @@ func TestFinishWithoutToolCalls_UsesPlannerFinalToolResult(t *testing.T) {
 		},
 	}
 
-	out, err := rt.finishWithoutToolCalls(context.Background(), input, base, st, "turn-1")
+	out, err := rt.finishWithoutToolCalls((&testWorkflowContext{ctx: t.Context(), runtime: rt}).Context(), input, base, st, "turn-1")
 	require.NoError(t, err)
 	require.NotNil(t, out)
 	require.NotNil(t, out.FinalToolResult)
@@ -186,14 +187,14 @@ func TestFinishWithoutToolCalls_UsesPlannerFinalToolResult(t *testing.T) {
 
 func TestFinishWithoutToolCalls_PublishesAssistantTurnCommitted(t *testing.T) {
 	recorder := &recordingHooks{}
-	rt := &Runtime{
+	rt := &Runtime{RunStore: runstoreinmem.New(),
 		logger:        telemetry.NoopLogger{},
 		metrics:       telemetry.NoopMetrics{},
 		tracer:        telemetry.NoopTracer{},
 		RunEventStore: runloginmem.New(),
 		Bus:           recorder,
 	}
-	input := &RunInput{
+	input := &RunInput{RootRunID: "run-1",
 		AgentID:   "svc.agent",
 		SessionID: "",
 	}
@@ -213,7 +214,7 @@ func TestFinishWithoutToolCalls_PublishesAssistantTurnCommitted(t *testing.T) {
 		},
 	}
 
-	out, err := rt.finishWithoutToolCalls(context.Background(), input, base, st, "turn-1")
+	out, err := rt.finishWithoutToolCalls((&testWorkflowContext{ctx: t.Context(), runtime: rt}).Context(), input, base, st, "turn-1")
 	require.NoError(t, err)
 	require.NotNil(t, out)
 
@@ -272,7 +273,7 @@ func TestFinishWithoutToolCallsRejectsDualTerminalOutputs(t *testing.T) {
 		},
 	}
 
-	out, err := rt.finishWithoutToolCalls(context.Background(), input, base, st, "turn-1")
+	out, err := rt.finishWithoutToolCalls((&testWorkflowContext{ctx: t.Context(), runtime: rt}).Context(), input, base, st, "turn-1")
 	require.Error(t, err)
 	require.Nil(t, out)
 	require.Contains(t, err.Error(), "both")
@@ -583,7 +584,7 @@ func TestRuntimeResumeRunSignalsWorkflow(t *testing.T) {
 }
 
 func TestRecoveryTurnAllowsOneReplacementPlannerActivity(t *testing.T) {
-	rt := &Runtime{
+	rt := &Runtime{RunStore: runstoreinmem.New(),
 		toolsets: map[string]ToolsetRegistration{
 			"svc.tools": {Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
 				return Executed(&planner.ToolResult{
@@ -601,13 +602,13 @@ func TestRecoveryTurnAllowsOneReplacementPlannerActivity(t *testing.T) {
 		tracer:  telemetry.NoopTracer{},
 	}
 	finalMessage := &model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "recovered"}}}
-	wfCtx := &testWorkflowContext{
+	wfCtx := &testWorkflowContext{finishRuntime: rt,
 		ctx:           context.Background(),
 		asyncResult:   ToolOutput{Error: "boom"},
 		hasPlanResult: true,
 		planResult:    &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: finalMessage}},
 	}
-	input := &RunInput{AgentID: "svc.agent", RunID: "run-1"}
+	input := &RunInput{RootRunID: "run-1", AgentID: "svc.agent", RunID: "run-1"}
 	base := &planner.PlanInput{RunContext: run.Context{RunID: input.RunID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})}
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: tools.Ident("fail")}}}
 	out, err := rt.runLoop(wfCtx, AgentRegistration{
@@ -950,11 +951,9 @@ func TestOverridePolicyRejectsNegativeRecoveryTurnsWithoutMutation(t *testing.T)
 func TestConvertRunOutputToToolResult(t *testing.T) {
 	t.Run("aggregates_telemetry_without_error", func(t *testing.T) {
 		out := RunOutput{
-			Final: &model.Message{Role: "assistant", Parts: []model.Part{model.TextPart{Text: "final"}}},
-			ToolEvents: []*api.ToolEvent{
-				{Telemetry: &telemetry.ToolTelemetry{TokensUsed: 10, DurationMs: 100, Model: "m1"}},
-				{Telemetry: &telemetry.ToolTelemetry{TokensUsed: 5, DurationMs: 50, Model: "m1"}},
-			},
+			Final:          &model.Message{Role: "assistant", Parts: []model.Part{model.TextPart{Text: "final"}}},
+			ToolEventCount: 2,
+			ToolSummary:    api.ToolEventSummary{Telemetry: &telemetry.ToolTelemetry{TokensUsed: 15, DurationMs: 150, Model: "m1"}},
 		}
 		tr := ConvertRunOutputToToolResult("parent.tool", &out)
 		require.Nil(t, tr.Error)
@@ -966,11 +965,9 @@ func TestConvertRunOutputToToolResult(t *testing.T) {
 	})
 	t.Run("propagates_error_when_all_nested_fail", func(t *testing.T) {
 		out := RunOutput{
-			Final: &model.Message{Role: "assistant", Parts: []model.Part{model.TextPart{Text: "final"}}},
-			ToolEvents: []*api.ToolEvent{
-				{Error: planner.NewToolError("e1")},
-				{Error: planner.NewToolError("e2")},
-			},
+			Final:          &model.Message{Role: "assistant", Parts: []model.Part{model.TextPart{Text: "final"}}},
+			ToolEventCount: 2,
+			ToolSummary:    api.ToolEventSummary{FailedCount: 2, LastError: planner.NewToolError("e2")},
 		}
 		tr := ConvertRunOutputToToolResult("parent.tool", &out)
 		require.Error(t, tr.Error)
@@ -979,7 +976,7 @@ func TestConvertRunOutputToToolResult(t *testing.T) {
 
 func TestAgentAsToolNestedUpdates(t *testing.T) {
 	recorder := &recordingHooks{}
-	rt := &Runtime{
+	rt := &Runtime{RunStore: runstoreinmem.New(),
 		Bus:           recorder,
 		logger:        telemetry.NoopLogger{},
 		metrics:       telemetry.NoopMetrics{},
@@ -1222,7 +1219,7 @@ func TestRuntimePublishesPolicyDecision(t *testing.T) {
 			"engine": "basic",
 		},
 	}
-	rt := &Runtime{
+	rt := &Runtime{RunStore: runstoreinmem.New(),
 		Policy: &stubPolicyEngine{decision: decision},
 		Bus:    bus,
 		toolsets: map[string]ToolsetRegistration{
@@ -1258,7 +1255,7 @@ func TestRuntimePublishesPolicyDecision(t *testing.T) {
 		}
 	}()
 
-	input := RunInput{
+	input := RunInput{RootRunID: "run-123",
 		AgentID:   "svc.agent",
 		RunID:     "run-123",
 		SessionID: "session-1",
@@ -1287,7 +1284,7 @@ func TestRuntimePublishesPolicyDecision(t *testing.T) {
 		}),
 	}
 
-	wfCtx := &testWorkflowContext{
+	wfCtx := &testWorkflowContext{finishRuntime: rt,
 		ctx:           context.Background(),
 		hookRuntime:   rt,
 		asyncResult:   ToolOutput{Payload: []byte("null")},

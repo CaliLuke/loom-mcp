@@ -375,6 +375,21 @@ func (e *Engine) RegisterPlannerActivity(_ context.Context, name string, opts en
 	return e.registerActivityWithCtx(name, opts, wrapped)
 }
 
+// RegisterFinishRunActivity registers terminal event storage on the agent queue.
+func (e *Engine) RegisterFinishRunActivity(_ context.Context, name string, opts engine.ActivityOptions, fn func(context.Context, *api.FinishRunInput) (*api.FinishRunOutput, error)) error {
+	if err := e.requireWorkerMode("register finish activities"); err != nil {
+		return err
+	}
+	opts = e.applyActivityClassDefaults(activityKindHook, opts)
+	// Wrap to inject originating WorkflowContext into activity context so runtime code
+	// can start child workflows (agent-as-tool) with engine-owned context.
+	wrapped := func(ctx context.Context, in *api.FinishRunInput) (*api.FinishRunOutput, error) {
+		out, err := fn(e.injectWorkflowContextIntoActivity(ctx), in)
+		return out, classifyTemporalCancellation(err)
+	}
+	return e.registerActivityWithCtx(name, opts, wrapped)
+}
+
 // RegisterExecuteToolActivity registers a typed execute_tool activity with the
 // Temporal engine.  This method binds a Go function that accepts *api.ToolInput
 // and returns *api.ToolOutput to a logical activity name for use within agent

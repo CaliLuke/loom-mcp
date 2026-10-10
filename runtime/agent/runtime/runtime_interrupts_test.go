@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 	"testing"
 	"time"
 
@@ -18,7 +19,7 @@ import (
 
 func TestRunLoopPauseResumeEmitsEvents_Barriered(t *testing.T) {
 	recorder := &recordingHooks{}
-	rt := &Runtime{
+	rt := &Runtime{RunStore: runstoreinmem.New(),
 		Bus:     recorder,
 		logger:  telemetry.NoopLogger{},
 		metrics: telemetry.NoopMetrics{},
@@ -34,7 +35,7 @@ func TestRunLoopPauseResumeEmitsEvents_Barriered(t *testing.T) {
 	rt.toolSpecs = map[tools.Ident]tools.ToolSpec{
 		tools.Ident("tool"): newAnyJSONSpec("tool", "svc.ts"),
 	}
-	wfCtx := &testWorkflowContext{ctx: context.Background(), asyncResult: ToolOutput{Payload: []byte("null")}, barrier: make(chan struct{}, 1)}
+	wfCtx := &testWorkflowContext{finishRuntime: rt, ctx: context.Background(), asyncResult: ToolOutput{Payload: []byte("null")}, barrier: make(chan struct{}, 1)}
 	wfCtx.ensureSignals()
 	// Queue pause/resume before allowing async completion. The signal channels
 	// and barrier are buffered, so no scheduler delay is needed.
@@ -43,7 +44,7 @@ func TestRunLoopPauseResumeEmitsEvents_Barriered(t *testing.T) {
 	wfCtx.barrier <- struct{}{}
 	wfCtx.hasPlanResult = true
 	wfCtx.planResult = &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: &model.Message{Role: "assistant", Parts: []model.Part{model.TextPart{Text: "ok"}}}}}
-	input := &RunInput{AgentID: "svc.agent", RunID: "run-1"}
+	input := &RunInput{RootRunID: "run-1", AgentID: "svc.agent", RunID: "run-1"}
 	base := &planner.PlanInput{RunContext: run.Context{RunID: input.RunID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})}
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: "tool"}}}
 	ctrl := interrupt.NewController(wfCtx)

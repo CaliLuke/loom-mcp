@@ -159,7 +159,11 @@ func (r *Runtime) finalizeWithModelPlan(
 	if err != nil {
 		return nil, err
 	}
-	return buildFinalizedRunOutput(input.AgentID, base, output, toolEvents, aggUsage), nil
+	finished, err := r.finishRun(wfCtx.Context(), input, toolEvents, finalToolResultEvent(base.RunContext.Tool, output.Result.FinalToolResult))
+	if err != nil {
+		return nil, err
+	}
+	return buildFinalizedRunOutput(input.AgentID, base, output, finished, aggUsage), nil
 }
 
 func (r *Runtime) runFinalizationPlan(
@@ -237,15 +241,17 @@ func buildFinalizedRunOutput(
 	agentID agent.Ident,
 	base *planner.PlanInput,
 	output *PlanActivityOutput,
-	toolEvents []*api.ToolEvent,
+	finished *api.FinishRunOutput,
 	aggUsage model.TokenUsage,
 ) *RunOutput {
 	return &RunOutput{
 		AgentID:         agentID,
 		RunID:           base.RunContext.RunID,
 		Final:           finalPlannerMessage(output),
-		FinalToolResult: finalToolResultEvent(base.RunContext.Tool, output.Result.FinalToolResult),
-		ToolEvents:      toolEvents,
+		FinalToolResult: finished.FinalToolResult,
+		ToolEventsRef:   finished.ToolEventsRef,
+		ToolEventCount:  finished.ToolEventCount,
+		ToolSummary:     finished.ToolSummary,
 		Notes:           clonePlannerNotes(output.Result.Notes),
 		Usage:           &aggUsage,
 	}

@@ -100,7 +100,7 @@ func (r *Runtime) PlanResumeActivity(ctx context.Context, input *PlanActivityInp
 	if err != nil {
 		return nil, err
 	}
-	toolOutputs, err := r.decodeToolOutputs(input.ToolOutputs)
+	toolOutputs, err := r.decodeToolOutputs(ctx, input.RunContext.RootRunID, input.ToolOutputs)
 	if err != nil {
 		return nil, err
 	}

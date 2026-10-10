@@ -83,10 +83,12 @@ func runGeneratedChildScenario(t *testing.T, ctx context.Context, fx *featureRun
 	)
 	require.NoError(t, err)
 	require.Equal(t, "child complete", messageText(out.Final))
-	require.Len(t, out.ToolEvents, 1)
-	require.Nil(t, out.ToolEvents[0].Error)
-	require.JSONEq(t, `{"ok":true,"message":"child:loom"}`, string(out.ToolEvents[0].Result))
-	link := out.ToolEvents[0].RunLink
+	events, err := agentsruntime.LoadRunToolEvents(t.Context(), fx.rt.RunStore, out.RunID, out.ToolEventsRef)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	require.Nil(t, events[0].Error)
+	require.JSONEq(t, `{"ok":true,"message":"child:loom"}`, string(events[0].Result))
+	link := events[0].RunLink
 	require.NotNil(t, link)
 	require.Equal(t, "run-parent-child", link.ParentRunID)
 	require.Equal(t, "delegate-1", link.ParentToolCallID)
