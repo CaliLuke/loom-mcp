@@ -70,6 +70,22 @@
 // existing directory permissions, which Open preserves. The store never deletes
 // experiments.
 //
+// Show renders stored checks, scores, judgments and reconstructed session evidence.
+// Default trajectory limits apply unless Full is set. Missing exports and render
+// panics produce diagnostics. ShowJSON embeds trajectories; Export adds raw exports.
+// Summary and SummaryJSON order non-passed groups first and use full-ID references.
+//
+// Compare pools repeats of shared scenario/item pairs within selected variants.
+// CompareExperiments aligns shared variants, or the two sole variants regardless
+// of name. CompareVariants compares one experiment's first variant with the rest.
+// CompareOptions.Parent overlays whole candidate groups on their recorded parent.
+// Pass fractions exclude not_run but include pending; integer cross-products set
+// status. Deltas include changed check/claim fractions, score medians and modal
+// tool-sequence LCS edits with depth-first child tools. Totals cover the intersection.
+// Warnings expose changed datasets, agent and judge provenance, calibration,
+// truncation and incomplete experiments. WriteComparisons renders regressions first;
+// WriteComparisonsJSON preserves declaration order in a version-1 document.
+//
 // Claim is a declaration only. Judging belongs to a separate layer.
 // Execute may run concurrently on one harness; callbacks and expectation predicates
 // must be concurrency-safe and cooperate with cancellation.

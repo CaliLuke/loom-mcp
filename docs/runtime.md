@@ -1790,6 +1790,80 @@ new files use mode 0600. `Open` preserves existing directory permissions.
 The caller owns those permissions. The store writes its own `.gitignore` containing `*` and never
 deletes experiments. Redaction would invalidate exported request digests.
 
+### Eval show and compare
+
+`eval.Show` renders one stored attempt with checks, scores, claim judgments, errors,
+run and trace IDs, and its reconstructed session. It defaults to the trajectory
+renderer's limits; `ShowOptions.Full` removes them. Missing exports and renderer
+panics produce a `trajectory unavailable` diagnostic without hiding the remaining
+results. `Summary` groups stored verdicts with failing, error, pending, and not-run
+groups first. Failing attempt references always contain the full experiment ID.
+
+`ShowJSON` emits `loom-mcp.eval.show`, version 1. Each run contains the decoded
+`trajectory` by default; `ShowOptions.Export` also includes its raw `export`.
+Unavailable evidence has `trajectory_error` on the run, or on the attempt when
+there are no runs. Render limits affect text only. `SummaryJSON` emits
+`loom-mcp.eval.summary`, version 1, with the header, completion flag, ordered groups,
+and failing references. JSON uses the deterministic store codec and preserves
+exact number tokens.
+
+Given loaded experiments and an attempt selected with `Find`:
+
+<!-- snippet: eval-show-compare -->
+```go
+if err := eval.Show(&out, candidate, attempt, eval.ShowOptions{
+	Render: trajectory.RenderOptions{Limits: trajectory.DefaultLimits()},
+}); err != nil {
+	return err
+}
+comparisons, err := eval.CompareExperiments(baseline, candidate, eval.CompareOptions{})
+if err != nil {
+	return err
+}
+return eval.WriteComparisonsJSON(&out, comparisons)
+```
+
+`Compare` selects one variant per side. `CompareExperiments` compares the two
+variants when each experiment has exactly one, even if their names differ.
+Otherwise, it compares shared variant IDs and warns with `variant_unmatched` for
+unmatched variants. No shared variants is an error. Comparing the same experiment
+requires `CompareVariants(e, []string{"base", "candidate"})`. More than two variants
+produce one text column per variant against the first.
+
+Comparisons pool all repeats by scenario and item, compare the intersection, and
+list pairs present on only one side. Totals cover that intersection. The candidate's
+scenario/item declaration order determines JSON group order. Text lists Regressed,
+Improved, Not comparable, then a collapsed unchanged count and Totals.
+`WriteComparisonsJSON` emits `loom-mcp.eval.compare`, version 1.
+
+A group's pass fraction uses `ran = attempts - not_run`; pending counts as ran,
+never passed. Integer cross-products determine regression or improvement. A side
+with no ran attempts makes the group not comparable. Checks compare passed/total;
+claims compare entailed/total across all judged units, grouped by claim ID, subject,
+and declared tool selector. Missing legacy subjects mean `answer`. The sample is
+the lowest-repeat non-passed candidate attempt, or baseline attempt for improvement.
+Scores compare medians; an absent score is JSON `null`. Token and duration medians
+exclude not-run attempts and floor an even pair's mean. Duration is attempt latency.
+
+Tool sequences come from stored sessions. Each child run's tools follow its parent
+tool depth-first. The modal sequence reports its share of available attempts, with
+ties resolved by lowest repeat. Sequence edits use an LCS diff, choosing deletion
+first for ties. Attempts with unavailable trajectories are excluded and counted in
+`tools_unavailable`; no tool delta is inferred when either side has no available
+sequence.
+
+Warnings retain stable codes in text and JSON: `dataset_changed`, `no_agent_change`,
+`judge_changed`, `judge_uncalibrated`, `judgments_truncated`, `incomplete`, and
+`variant_unmatched`. `no_agent_change` requires equal system and tool hashes,
+context hashes, prompt references, models, and policy. Uncalibrated or truncated
+judgments mark affected groups and claim rows without suppressing their status.
+Text truncation fractions pool judgments from both sides.
+
+A rerun is standalone unless `CompareOptions.Parent` supplies its recorded parent.
+The supplied ID must match the candidate's `Header.Parent`. Candidate groups replace
+whole parent groups by variant/scenario/item; remaining parent groups are added.
+Warnings use candidate header provenance. Input experiments are not modified.
+
 ### Eval judge
 
 `eval/judge` evaluates claims against caller-rendered text. Construct a judge

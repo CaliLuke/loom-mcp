@@ -228,6 +228,38 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   deleted. Git identity detection disables optional locks and never refreshes the
   index. Redaction would invalidate exported request digests.
 
+## Eval Show and Compare
+
+- Show uses default trajectory limits unless Full is set. Render panics and
+  missing exports become diagnostics. ShowJSON embeds trajectory.Marshal bytes;
+  Export additionally includes raw exports. Summary orders non-passed groups
+  first and uses full experiment IDs. JSON formats are loom-mcp.eval.show,
+  loom-mcp.eval.summary and loom-mcp.eval.compare, all version 1.
+- Compare selects one variant per side and pools all repeats by scenario/item.
+  CompareExperiments aligns shared variants, or sole variants even with different
+  IDs. CompareVariants is required within one experiment. No shared variants is
+  an error. Parent overlays replace whole variant/scenario/item groups; the ID
+  must match candidate.Header.Parent. Warnings use candidate header provenance.
+- Compare only the intersection; list other pairs separately. JSON groups follow
+  candidate declaration order. Text orders regressed, improved, not comparable,
+  collapsed unchanged count, totals. Totals cover the intersection. More than two
+  variants use one column per variant against the first.
+- ran excludes not_run; pending never passes. Integer cross-products compare pass
+  fractions. Zero ran on either side is not comparable. Checks use passed/total;
+  claims use entailed/total judged units by claim/subject/declared tool selector.
+  Legacy empty subjects mean answer. Samples use the first non-passed candidate
+  by repeat, or baseline for improvement. Score medians retain fractions; absent
+  scores are null. Ran-only token/duration medians floor an even midpoint.
+- Modal tool sequences flatten children depth-first immediately after their
+  parent tool. Ties use lowest repeat; share excludes unavailable trajectories,
+  counted in tools_unavailable. LCS ties delete first. No tool delta is inferred
+  when either side has no available sequence.
+- Stable warning codes are dataset_changed, no_agent_change, judge_changed,
+  judge_uncalibrated, judgments_truncated, incomplete, variant_unmatched.
+  no_agent_change includes models and policy as well as hashes/context/prompts.
+  Calibration and truncation mark groups and claim rows without suppressing status;
+  text truncation fractions pool both sides. Keep report examples snippet-synced.
+
 ## Planner Streaming
 
 - `PlannerContext.ModelClient(id)` returns a runtime-decorated client.

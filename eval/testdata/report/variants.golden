@@ -1,0 +1,17 @@
+Compare variants of variants
+Regressed:
+  Item | a | b | c
+  chat/one | 1/1 passed | 0/1 regressed | 0/1 regressed
+    [b]
+    Median tokens 0 -> 0; duration 0s -> 0s
+    [c]
+    Median tokens 0 -> 0; duration 0s -> 0s
+Improved:
+  Item | a | b | c
+Not comparable:
+  Item | a | b | c
+Unchanged: 0 items
+Totals:
+  a 1/1 passed; median tokens 0; duration 0s; tools_unavailable 0
+  b 0/1 passed; median tokens 0; duration 0s; tools_unavailable 0
+  c 0/1 passed; median tokens 0; duration 0s; tools_unavailable 0

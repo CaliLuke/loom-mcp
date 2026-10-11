@@ -836,7 +836,11 @@ The caller owns existing directory permissions, which `Open` preserves.
 
 `evalcli show <experiment>/<attempt>` renders one attempt: the trajectory
 steps, failed checks with diagnostics, judgments with rationales, scores, and
-the trace ID. `--json` produces the full record for coding agents.
+the trace ID. `eval.Show` and `ShowJSON` own the rendering. `--json` embeds decoded
+trajectories for coding agents; `--export` additionally includes raw run exports.
+Missing trajectory evidence remains a visible diagnostic. Text defaults to bounded
+rendering; `--full` removes the limits. `Summary` and `SummaryJSON` put non-passed
+groups first and use full experiment IDs in attempt references.
 
 ### B5. Compare
 
@@ -846,7 +850,7 @@ the trace ID. `--json` produces the full record for coding agents.
 - warns when dataset hashes differ;
 - warns when the rendered system messages and tool definitions are identical
   in both (the change may not have reached the agent), unless the variants'
-  context fingerprints or prompt references differ;
+  context fingerprints, prompt references, models, or policy differ;
 - reports pass counts, changed checks and claims with rationales, score
   changes, median tokens and latency, and tool-sequence edits.
 
@@ -856,7 +860,19 @@ prints one column per variant against the first.
 
 A re-run of failed attempts (`--rerun-failed <experiment>`) is a new
 experiment linked to its parent. Compare treats it as standalone unless asked to
-merge it with its parent.
+merge it with its parent (`CompareOptions.Parent`, exposed as `--merge-parent`).
+The supplied parent must match the candidate's recorded parent. Candidate groups
+replace parent groups by (variant, scenario, item), including all repeats.
+
+Pass fractions exclude not-run attempts and include pending attempts as non-passes.
+Integer cross-products determine regression or improvement; no ran attempts on
+either side means not comparable. Checks use passed/total and claims use
+entailed/total judged units. Scores use medians. Tool sequences use each group's
+modal sequence, flatten child tools depth-first, and report LCS edits. Unavailable
+trajectories are excluded and counted. Uncalibrated and truncated judgments qualify
+results without suppressing status. JSON keeps candidate declaration order; text
+lists regressions, improvements, not-comparable groups, a collapsed unchanged count,
+and intersection-only totals.
 
 ### B6. Judge core
 

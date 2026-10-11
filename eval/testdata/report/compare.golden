@@ -1,0 +1,16 @@
+Compare baseline [base] -> candidate [base]
+Warning [no_agent_change]: recorded agent fingerprints, models and policy are identical
+Warning [judge_uncalibrated]: uncalibrated judgments qualify these results
+Warning [judgments_truncated]: some judgments used truncated subjects
+Regressed:
+  chat/one 2/2 -> 0/2 passed [uncalibrated] [truncated 2/8]
+    Check correct 2/2 -> 0/2: wrong arguments
+    Claim args (tool_args lookup) 4/4 -> 2/4 entailed; errors 0 -> 0 [uncalibrated] [truncated 2/8]: missing id
+    Score quality 1 -> 0.5 threshold 0.8
+    Median tokens 0 -> 0; duration 0s -> 0s
+Improved:
+Not comparable:
+Unchanged: 0 items
+Totals:
+  baseline 2/2 passed; median tokens 0; duration 0s; tools_unavailable 0
+  candidate 0/2 passed; median tokens 0; duration 0s; tools_unavailable 0

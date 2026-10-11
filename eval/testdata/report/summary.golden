@@ -1,0 +1,14 @@
+Experiment 0199d4a0-0000-7000-8000-000000000014 "report fixture" complete started 2026-10-11T12:00:00Z rev 94d1f173 (modified)
+Judge scripted-judge prompt sha256:aaaaaaaaaaaa calibrated NO (judgments marked uncalibrated)
+chat/check [base] 0/1 passed (1 failed, 0 error, 0 pending, 0 not run)
+chat/claim [base] 0/1 passed (1 failed, 0 error, 0 pending, 0 not run)
+chat/error [base] 0/1 passed (0 failed, 1 error, 0 pending, 0 not run)
+chat/pending [base] 0/1 passed (0 failed, 0 error, 1 pending, 0 not run)
+chat/not-run [base] 0/0 passed (0 failed, 0 error, 0 pending, 1 not run)
+chat/passed [base] 1/1 passed (0 failed, 0 error, 0 pending, 0 not run)
+Failing attempts:
+  0199d4a0-0000-7000-8000-000000000014/#1 base:chat:check:1 failed: correct: answer differs
+  0199d4a0-0000-7000-8000-000000000014/#2 base:chat:claim:1 failed: truth: wrong fact
+  0199d4a0-0000-7000-8000-000000000014/#3 base:chat:error:1 error: broken
+  0199d4a0-0000-7000-8000-000000000014/#4 base:chat:pending:1 pending: 2 gating claims unjudged
+  0199d4a0-0000-7000-8000-000000000014/#5 base:chat:not-run:1 not_run: token_limit

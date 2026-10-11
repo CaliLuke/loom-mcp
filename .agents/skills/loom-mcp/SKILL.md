@@ -665,6 +665,13 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   Map Claim fields explicitly. See references/runtime-contracts.md.
 - Keep generated assistant imports in the fixture module. The root module's
   eval tests cover pure contracts and custom callbacks without fixture imports.
+- Show/Summary read stored verdicts and reconstruct trajectories. ShowJSON embeds
+  trajectories by default; Export adds raw exports. Compare pools repeats on the
+  scenario/item intersection, with integer pass fractions, changed check/claim
+  fractions, score medians and modal tool-sequence edits. CompareVariants handles
+  one experiment; CompareOptions.Parent overlays whole rerun groups. Preserve
+  calibration/truncation flags and all stable warnings. See docs/runtime.md and
+  references/runtime-contracts.md for report formats and ordering.
 - Execute supports concurrent use of one harness. Drive, Assert and expectation
   predicates must be concurrency-safe and cooperate with cancellation.
 - Eval runner attempts recheck cancellation before factory entry. The first stop

@@ -1,0 +1,91 @@
+Experiment 0199d4a0-0000-7000-8000-000000000014 "report fixture" complete started 2026-10-11T12:00:00Z rev 94d1f173 (modified)
+Judge scripted-judge prompt sha256:aaaaaaaaaaaa calibrated NO (judgments marked uncalibrated)
+Attempt #0 base:chat:failed:1 verdict failed duration 1.5s tokens 7 judge tokens 4
+Task: Answer accurately
+Reference: reference answer
+Checks:
+  ok runs_succeeded
+  FAIL correct: answer differs
+Scores:
+  quality 0.5 threshold 0.8 BELOW
+Claims:
+  truth: Answer is true
+    [contradicted] truth (answer) uncalibrated truncated: wrong fact
+  style: Brief
+    [entailed] style (answer) informational: brief enough
+  judge_error: Grounded
+    [error] judge_error (answer): judge unavailable
+Run 1/2 agenttest-r1 session agenttest-s1 trace 0123456789abcdef0123456789abcdef
+Run 2/2 agenttest-r2 session agenttest-s1
+Run: agenttest-r1
+Session: agenttest-s1
+Agent: report
+Trace: 0123456789abcdef0123456789abcdef
+Status: success
+Step 0
+  Event: run_phase_changed
+    Timestamp: 2000-01-01T00:00:00Z
+    Payload: {"Phase":"prompted"}
+  Event: run_phase_changed
+    Timestamp: 2000-01-01T00:00:00Z
+    Payload: {"Phase":"planning"}
+Step 1
+  Model: 1/1 adopted
+    Activity: planner
+    Model: scripted
+    Model ID: report
+    Usage: {"CacheReadTokens":0,"CacheWriteTokens":0,"InputTokens":2,"Model":"scripted","ModelClass":"","OutputTokens":1,"TotalTokens":3}
+    Latency: 0s
+    System hash: sha256:4f53cda18c2b
+    Tools hash: sha256:4f53cda18c2b
+    Request digest: sha256:938f2820dbf2
+  Event: run_phase_changed
+    Timestamp: 2000-01-01T00:00:00Z
+    Payload: {"Phase":"executing_tools"}
+  Event: run_completed
+    Timestamp: 2000-01-01T00:00:00Z
+    Payload: {"http_status":0,"phase":"completed","retryable":false,"status":"success"}
+Final answer:
+  first answer
+Totals:
+  Model calls: 1 (adopted: 1)
+  Model calls by class: {"adopted":1}
+  Tokens by model: {"scripted":{"CacheReadTokens":0,"CacheWriteTokens":0,"InputTokens":2,"Model":"scripted","ModelClass":"","OutputTokens":1,"TotalTokens":3}}
+  Tool calls: 0 (failed: 0, repeated: 0)
+  Wall time: 0s
+
+Run: agenttest-r2
+Session: agenttest-s1
+Agent: report
+Status: success
+Step 0
+  Event: run_phase_changed
+    Timestamp: 2000-01-01T00:00:00Z
+    Payload: {"Phase":"prompted"}
+  Event: run_phase_changed
+    Timestamp: 2000-01-01T00:00:00Z
+    Payload: {"Phase":"planning"}
+Step 1
+  Model: 1/1 adopted
+    Activity: planner
+    Model: scripted
+    Model ID: report
+    Usage: {"CacheReadTokens":0,"CacheWriteTokens":0,"InputTokens":3,"Model":"scripted","ModelClass":"","OutputTokens":1,"TotalTokens":4}
+    Latency: 0s
+    System hash: sha256:4f53cda18c2b
+    Tools hash: sha256:4f53cda18c2b
+    Request digest: sha256:77dfe508ea32
+  Event: run_phase_changed
+    Timestamp: 2000-01-01T00:00:00Z
+    Payload: {"Phase":"executing_tools"}
+  Event: run_completed
+    Timestamp: 2000-01-01T00:00:00Z
+    Payload: {"http_status":0,"phase":"completed","retryable":false,"status":"success"}
+Final answer:
+  second answer
+Totals:
+  Model calls: 1 (adopted: 1)
+  Model calls by class: {"adopted":1}
+  Tokens by model: {"scripted":{"CacheReadTokens":0,"CacheWriteTokens":0,"InputTokens":3,"Model":"scripted","ModelClass":"","OutputTokens":1,"TotalTokens":4}}
+  Tool calls: 0 (failed: 0, repeated: 0)
+  Wall time: 0s
