@@ -842,15 +842,23 @@ merge it with its parent.
 
 ### B6. Judge core
 
-- Claims follow goa-ai's design and rules (2.1).
-- Mechanism per D3: `completion` with a schema built per call, or a port of
-  `tooloutput` with forced and automatic tool choice. Both give one call plus
-  bounded corrections.
-- Judge input is the rendered subject. Truncation must be visible (D3 decides
-  whether truncation is allowed at all or the call fails, as in goa-ai).
-- Calibration runs once per judge configuration (model and prompt hash) and is
-  cached. If it fails, every judgment in the experiment is marked
-  uncalibrated; `compare` and the Opik export flag those judgments.
+- `eval/judge` accepts rendered subjects and ordered claims; it imports neither
+  `eval` nor `trajectory`. Labels and rationales follow the rules in 2.1.
+- D3 is decided: one forced private `record_judgments` tool, using `Complete`,
+  temperature zero, no thinking and a required positive output-token cap. At most
+  three corrections follow the first call. Automatic tool choice is deferred.
+  The Codex adapter rejects the required cap and cannot serve as this judge.
+- Rendering may visibly elide content and set `Input.Truncated`. The judge never
+  cuts the assembled request: over `MaxInputBytes` (default 512 KiB) returns
+  `ErrInputTooLarge`; schemas over 1 MiB return `ErrSchemaTooLarge`.
+- Calibration runs once per Judge on four built-in examples plus user examples,
+  one call each, under a two-minute default timeout. Completed passes and failures
+  are cached by prompt hash, model, output cap and canonical examples until
+  `Recalibrate`. Infrastructure failures are not cached and leave results
+  uncalibrated without blocking judging. Judgments themselves are never cached.
+- T13 reserves the experiment-level `judge.calibrated` field and per-judgment
+  `uncalibrated`; T17 maps judge results to those records. Compare and export flag
+  uncalibrated judgments. T16 itself returns `Result.Calibrated`.
 
 ### B7. Judge subjects and built-in metrics
 
@@ -963,8 +971,8 @@ One ticket is one commit. Each ticket includes its tests and documentation.
 | | T13 Experiment store (B3) | T12, D2 (decided), compaction K8 (done) |
 | | T14 `show` and `compare` (B4, B5) | T4, T13 |
 | | T15 `evalcli` (B10, without replay and export) | T14 |
-| 4. Judge | T16 Judge core and calibration (B6) | T4, D3 |
-| | T17 Subjects and built-in metrics (B7) | T12, T16 |
+| 4. Judge | T16 Judge core and calibration (B6) | D3 |
+| | T17 Subjects and built-in metrics (B7) | T4, T12, T16 |
 | 5. Opik | T18 Opik export (B9) | T13, T17, D5 |
 | Optional | T19 Replay command and fixture export (B8) | T9, T13, T15 |
 | | T20 Opik dataset import (B9) | T18 |
@@ -987,7 +995,7 @@ T3 and request-fixture encoding to T9.
 |---|---|---|---|
 | D1 | Package names and homes | Decided: `runtime/agent/model` (`CallInfo`, done); `runtime/agent/tools` (`TypedTool`, `Named`); top-level `trajectory`, `expect`, `agenttest`, `eval`, `eval/judge`, `eval/evalcli`. K8 call records provide capture (5.3). | — |
 | D2 | Local store format and path | Decided: JSON files under the application module, gitignored; each run stored as `runrecord.Export`, trajectories derived from it | — |
-| D3 | Judge mechanism and truncation | Spike `completion` against a `tooloutput` port on Anthropic and OpenAI; decide whether over-limit input fails or truncates visibly | Phase 4 |
+| D3 | Judge mechanism and truncation | Decided: forced `record_judgments` tool only; renderer elision is visible and flagged, while the assembled request fails over its byte cap. Schemas are capped at 1 MiB. | — |
 | D4 | Trajectory source | Decided: transcript index and `RunRecord`, including K8 call records; observed fields optional; stream adapter only for remote clients | — |
 | D5 | Opik exporter home and trace mapping | Spike: how OTel trace IDs map to Opik traces, and whether the exporter lives in `features/` or in Auto-K on top of the store format | T18 |
 | D6 | Live-test gating | Decided: opt-in environment variable `LOOM_LIVE_MODEL=1`; the test names the model ID | — |
@@ -1024,7 +1032,7 @@ T3 and request-fixture encoding to T9.
 - **Runtime change for capture: resolved.** T0 model-call identity and K8
   call recording are implemented and covered by their tests.
 - **Judge variance.** Repeats and calibration reduce it but do not remove it.
-- **Rendering size.** Long trajectories can exceed judge context; D3 decides the
+- **Rendering size.** Long trajectories can exceed judge context; D3 fixes the
   policy.
 - **Storage growth.** Full trajectories with captured calls are large. The tool
   never deletes experiments.

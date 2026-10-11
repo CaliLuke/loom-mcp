@@ -149,6 +149,43 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   each completed session run and descendants with session/trace IDs; exports stay
   in memory. AttemptKey identifies attempts because run/session IDs may repeat.
 
+## Eval Judge
+
+- `eval/judge` owns labels, ordered claim schemas, deterministic forced-tool
+  requests, strict response decoding, calibration and caches. It imports neither
+  eval nor trajectory; subject rendering and result mapping belong to T17.
+- Inputs require a subject and unique claim IDs matching `[a-z0-9_]{1,64}` and
+  non-empty UTF-8 claim text. Schemas are capped at 1 MiB. Complete canonical
+  requests, including corrections, are capped at MaxInputBytes (default 512 KiB).
+  Initial validation/size failures make zero calls, including calibration.
+- Complete uses ModelID, MaxOutputTokens > 0, temperature zero, Thinking nil and
+  forced record_judgments. Codex rejects MaxTokens and cannot serve as the judge.
+  Properties and judgments retain input order. Only entailed is a passing label;
+  the other labels are contradicted, not_addressed and indeterminate.
+- JSON v2 rejects duplicate/unknown members; keys must exactly match the claims,
+  labels must be valid and rationales non-empty UTF-8. Three corrections maximum
+  follow the first call. Raw corrections echo tool calls with error results;
+  malformed JSON is carried as text (base64 for invalid UTF-8). Validated output
+  rejections get a user correction naming Kind without hidden output. Other
+  provider errors return immediately; exhausted corrections wrap ErrInvalidOutput.
+- Input.Truncated announces renderer elision in the prompt and Result. The judge
+  never truncates. Whitespace subjects yield not_addressed and NoCall without
+  calibration. Usage/Latency count judgment calls plus corrections, excluding
+  calibration. Errors can return partial results.
+- Calibration is singleflight per Judge under the initiating context and a
+  two-minute default CalibrationTimeout. Four built-ins precede user Examples;
+  each gets one call without correction. All labels must match. PromptHash hashes
+  the versioned prompt contract; CalibrationKey adds model, output cap and examples.
+- Cache completed passes and failures until Recalibrate; infrastructure failures
+  are not cached and keep Result.Calibrated false without blocking judging. A Judge
+  retains its outcome; retry with a new Judge. Default cache is process-wide;
+  NewMemoryCache isolates suites and NewDirCache atomically replaces <hex>.json.
+  Corrupt files miss. The CLI can use the store's _calibration directory. Judgment
+  results are never cached.
+- Live:true calls agenttest.LiveModelEnabled at construction; disabled wraps
+  ErrLiveModelDisabled, invalid values error, and neither makes a model call.
+  Live:false leaves scripted/undeclared clients available without an env check.
+
 ## Planner Streaming
 
 - `PlannerContext.ModelClient(id)` returns a runtime-decorated client.

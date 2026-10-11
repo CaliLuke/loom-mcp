@@ -646,6 +646,20 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   callbacks and return a partial report with the panic stack after workers drain;
   the stop reason is callback_panic unless an earlier stop already took effect.
 
+## Eval Judge
+
+- `eval/judge` judges rendered text with a forced `record_judgments` tool through
+  Complete, temperature zero, no thinking and a required positive output cap.
+  It imports neither eval nor trajectory. Codex rejects the required MaxTokens.
+- Validate claims and complete request size before calibration. Renderer elision
+  sets Input.Truncated; the judge never cuts input. Default request cap is 512 KiB
+  and schemas are capped at 1 MiB. Corrections also obey the request cap.
+- Calibration runs once per Judge, with four built-ins plus user examples and
+  one call per example. Cache completed passes and failures, never infrastructure
+  failures or judgments. Recalibrate bypasses completed cache entries. See
+  references/runtime-contracts.md and docs/runtime.md for correction and cache rules.
+- Config.Live uses agenttest.LiveModelEnabled; scripted clients leave it false.
+
 ## Command Reminders
 
 ```bash

@@ -1692,6 +1692,58 @@ failures leave Run's error nil. Invalid config returns no report.
 on errors. Reports retain all exports in memory; storage, CLI output and judging
 belong to later layers.
 
+### Eval judge
+
+`eval/judge` evaluates claims against caller-rendered text. Construct a judge
+with `judge.New(judge.Config{Client: client, ModelID: modelID,
+MaxOutputTokens: 1024})`, then call `Judge(ctx, judge.Input{...})`. Supply `Subject`,
+`Text`, the explicit `Task`, shared facts in `Reference`, and ordered `Claims`.
+Subject kinds and claim IDs match `[a-z0-9_]{1,64}`; IDs are unique and claim text
+is non-empty UTF-8. The judge does not infer a task or render a trajectory.
+
+Each request uses `Complete`, temperature zero, no thinking and a forced private
+`record_judgments` tool. Each claim has a required `label` and non-empty `rationale`.
+Labels are `entailed`, `contradicted`, `not_addressed` and `indeterminate`; results
+retain input claim order. Strict JSON v2 rejects duplicate keys, unknown members,
+missing claims and invalid labels. Up to three corrections follow the first call.
+Raw clients receive the invalid call plus an error tool result; malformed JSON
+arguments are represented as a string, or base64 when their bytes are not UTF-8.
+Validated clients hide rejected content, so corrections name only the rejection
+kind. Other provider errors return immediately. `ErrInvalidOutput` marks exhausted
+corrections. Usage and latency include corrections and exclude calibration; errors
+may carry a partial result. Judgments are never cached.
+
+The complete canonical request is capped at `MaxInputBytes` (default 512 KiB),
+including correction history. The claim schema has a separate 1 MiB limit. Either
+limit fails without sending the oversized request; input validation and initial
+size checks happen before calibration. The judge never cuts input. A renderer
+can elide content visibly and set `Input.Truncated`; both the prompt notice and
+`Result.Truncated` preserve that fact. Whitespace-only subjects return every claim
+as `not_addressed`, with `NoCall: true`, no usage and no calibration.
+
+The first non-empty judgment runs calibration once per Judge, shared by concurrent
+calls. Four built-in examples cover all labels, followed by `Config.Examples`.
+Each example gets one call with no corrections, under a shared two-minute default
+`CalibrationTimeout`. The first caller's context owns calibration; other callers
+can cancel their wait. Exact label agreement passes. A completed failure is
+cached too, and later judgments have `Calibrated: false`. Infrastructure failures
+are not cached and do not block judging. One Judge retains its outcome; create a
+new Judge to retry. `Recalibrate` bypasses a completed cache entry.
+
+`PromptHash()` identifies the versioned prompt contract. `CalibrationKey()` also
+includes the model, output-token cap and canonical examples. The default cache is
+process-wide; `NewMemoryCache()` isolates callers. `NewDirCache(dir)` returns a
+cache and an error, writes `<hex>.json` atomically and treats corrupt files as
+misses. The CLI can point it at the experiment store's `_calibration` directory.
+This package imports neither `eval` nor `trajectory`; subject mapping, experiment
+flags and verdict integration belong to the evaluation layers that call it.
+
+Set `Config.Live: true` for a live client to require `LOOM_LIVE_MODEL=1`. Disabled
+opt-in wraps `agenttest.ErrLiveModelDisabled`; invalid environment values fail.
+Scripted clients use the default `Live: false`. A positive output cap is required,
+so the Codex adapter, which rejects `MaxTokens`, cannot serve as this judge.
+The opt-in Anthropic calibration smoke test is excluded from short-test gates.
+
 ### Run-log result references and upgrade
 
 Every `ToolResultReceivedEvent` carries `Refs` for the stored eligible result,
