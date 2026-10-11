@@ -865,6 +865,11 @@ func (r receiver[T]) ReceiveAsync() (T, bool) {
 	}
 }
 
+// Pending returns the buffered signal count without consuming signals.
+func (r receiver[T]) Pending() int {
+	return len(r.ch)
+}
+
 func (f *future[T]) Get(ctx context.Context) (T, error) {
 	select {
 	case <-ctx.Done():

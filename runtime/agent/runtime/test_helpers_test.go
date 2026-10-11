@@ -541,6 +541,11 @@ func (r testReceiver[T]) ReceiveAsync() (T, bool) {
 	}
 }
 
+// Pending returns the buffered signal count without consuming signals.
+func (r testReceiver[T]) Pending() int {
+	return len(r.ch)
+}
+
 // routeWorkflowContext routes activity execution through registered handlers so tests can call
 // runtime helpers without standing up a workflow engine.
 type routeWorkflowContext struct {

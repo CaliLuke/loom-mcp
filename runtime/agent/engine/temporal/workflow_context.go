@@ -620,6 +620,11 @@ func (r *temporalReceiver[T]) ReceiveAsync() (T, bool) {
 	return out, false
 }
 
+// Pending returns the replay-deterministic workflow channel count without consuming signals.
+func (r *temporalReceiver[T]) Pending() int {
+	return r.ch.Len()
+}
+
 func (e *Engine) activityDefaultsFor(name string) engine.ActivityOptions {
 	e.mu.Lock()
 	defer e.mu.Unlock()

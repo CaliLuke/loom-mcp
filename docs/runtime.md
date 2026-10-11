@@ -3307,6 +3307,8 @@ cancellation. Canceling a workflow therefore releases a receiver blocked in
 status as `canceled` when all error leaves are cancellations. An independent
 cleanup, provider, hook, or transport failure makes the run fail.
 
+`Receiver.Pending()` counts buffered, unreceived signals without side effects, reflects workflow delivery in history order under replay, and is safe inside an `Await` predicate.
+
 ### Engine errors
 
 Custom engines must return `engine.ApplicationError`, `engine.TimeoutError`, and
@@ -4407,9 +4409,6 @@ Run `go test -race ./runtime/agent/engine/inmem -run '^TestConformance$'` for th
 in-memory suite, or `make test-engine-conformance` for both adapters. The latter
 starts a real Temporal dev server using the SDK's CLI download mechanism, has a
 five-minute timeout, and runs under `make itest`. Temporal is skipped with
-`-short`. Current known gaps are in-memory queue/schedule/heartbeat options and
-`await_signal`.
-`await_signal` stays a plain skip: `Await` needs a side-effect-free predicate, but
-`Receiver.ReceiveAsync` consumes the signal and no signal-handler primitive is
-available. Conformance workers use one-second workflow-task and sticky timeouts
+`-short`. Current known gaps are in-memory queue/schedule/heartbeat options.
+Conformance workers use one-second workflow-task and sticky timeouts
 to bound restart recovery independently of the old worker taking its next task.

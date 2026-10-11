@@ -89,7 +89,7 @@ func RunConformance(t *testing.T, factory Factory) {
 		{name: "external_cancel_cleanup", run: testCancellation},
 		{name: "cancel_scope", run: testCancelScope},
 		{name: "queries", run: testQueries},
-		{name: "await_signal", run: testAwaitSignal, unexpressible: true},
+		{name: "await_signal", run: testAwaitSignal},
 		{name: "durable_restart", run: testRestart, capability: "Durable"},
 	}...)
 	cases = append(cases, activityScenarios()...)

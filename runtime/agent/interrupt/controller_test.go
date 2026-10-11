@@ -136,6 +136,14 @@ func (r *receiverStub[T]) ReceiveAsync() (T, bool) {
 	return r.value, r.asyncOK
 }
 
+// Pending reports the configured signal availability without receiving it.
+func (r *receiverStub[T]) Pending() int {
+	if r.asyncOK {
+		return 1
+	}
+	return 0
+}
+
 func assertTimeoutCall[T any](t *testing.T, receiver *receiverStub[T], timeout time.Duration) {
 	t.Helper()
 	assert.Equal(t, 1, receiver.timeoutCalls)

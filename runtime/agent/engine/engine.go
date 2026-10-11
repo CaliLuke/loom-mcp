@@ -390,6 +390,12 @@ type (
 
 		// ReceiveAsync attempts to receive a signal without blocking.
 		ReceiveAsync() (T, bool)
+
+		// Pending returns the number of buffered signals not yet received. It is
+		// side-effect free and deterministic under replay: it reflects only signals
+		// already delivered to the workflow in history order. It is safe to call
+		// inside an Await predicate.
+		Pending() int
 	}
 
 	// ActivityOptions configures retry and timeouts for an activity.

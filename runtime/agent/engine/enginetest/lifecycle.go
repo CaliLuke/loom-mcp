@@ -223,9 +223,59 @@ func cleanup(w engine.WorkflowContext) error {
 	return checkEqual(&api.ToolOutput{Preview: "cleaned"}, out)
 }
 
-// testAwaitSignal fails explicitly until the public API can express this scenario
-// without consuming a receiver from Await's side-effect-free predicate. Adapters
-// must declare this exact scenario as a known gap, rather than silently passing it.
-func testAwaitSignal(_ *testing.T, _ Fixture) error {
-	return errors.New("await_signal: Receiver lacks readiness and WorkflowContext lacks a signal-handler/coroutine primitive; no side-effect-free signal predicate can be expressed")
+func testAwaitSignal(t *testing.T, f Fixture) error {
+	ctx := f.ctx
+	entered, _ := activityBarrier(t, f, false)
+	payload := &api.ResumeRequest{RunID: request(f).ID, Notes: "continue"}
+	registerWorkflow(t, f, workflowName, func(w engine.WorkflowContext, _ *api.RunInput) (*api.RunOutput, error) {
+		return awaitSignalWorkflow(w, payload)
+	})
+	h := start(t, f, ctx)
+	receive(t, ctx, entered)
+	require.Eventually(t, func() bool {
+		root, err := f.Engine.QueryRootRunID(ctx, request(f).ID)
+		return err == nil && root == rootRunID
+	}, 5*time.Second, time.Millisecond, "workflow must reach the empty signal wait")
+	require.NoError(t, h.Signal(ctx, api.SignalResume, payload))
+	return waitSuccess(ctx, h)
+}
+
+// awaitSignalWorkflow blocks in Await on Pending, then proves that inspection
+// left the signal available for ReceiveAsync.
+func awaitSignalWorkflow(w engine.WorkflowContext, payload *api.ResumeRequest) (*api.RunOutput, error) {
+	receiver := w.ResumeRequests()
+	if err := checkEqual(0, receiver.Pending()); err != nil {
+		return nil, err
+	}
+	if err := announce(w); err != nil {
+		return nil, err
+	}
+	// Queries observe the wait only after the announcement activity completes.
+	if err := w.SetQueryHandler(api.QueryRootRunID, func() (string, error) {
+		return rootRunID, checkEqual(0, receiver.Pending())
+	}); err != nil {
+		return nil, err
+	}
+	if err := w.Await(w.Context(), func() bool { return receiver.Pending() > 0 }); err != nil {
+		return nil, err
+	}
+	return receivePendingSignal(receiver, payload)
+}
+
+// receivePendingSignal checks that repeated Pending calls do not consume the
+// signal and that ReceiveAsync then returns it.
+func receivePendingSignal(receiver engine.Receiver[*api.ResumeRequest], payload *api.ResumeRequest) (*api.RunOutput, error) {
+	for range 2 {
+		if err := checkEqual(1, receiver.Pending()); err != nil {
+			return nil, err
+		}
+	}
+	got, ok := receiver.ReceiveAsync()
+	if !ok {
+		return nil, errors.New("Await consumed the pending signal")
+	}
+	if err := checkEqual(payload, got); err != nil {
+		return nil, err
+	}
+	return success(), checkEqual(0, receiver.Pending())
 }

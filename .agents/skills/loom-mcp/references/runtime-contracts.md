@@ -784,10 +784,11 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   obsolete gap is removed. Deadlines, cancellations, expired scenario contexts
   and untyped errors fail the test. Fixture/setup failures are ordinary failures,
   not accepted gap evidence.
+- Receiver.Pending counts buffered, unreceived signals without side effects,
+  reflects workflow delivery in history order under replay, and is safe inside
+  an Await predicate. Conformance awaits Pending() > 0 and then receives the signal.
 - Current executable gaps: inmem omits the activity heartbeat timeout and
-  ignores scheduling mechanics. `await_signal` remains a plain API-gap skip: Await predicates must
-  be side-effect-free, but ReceiveAsync consumes the signal and no workflow
-  signal-handler primitive is available.
+  ignores scheduling mechanics.
 
 ## Engine errors
 

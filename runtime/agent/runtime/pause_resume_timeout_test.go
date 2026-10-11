@@ -43,6 +43,11 @@ func (timeoutResumeReceiver) ReceiveAsync() (*api.ResumeRequest, bool) {
 	return nil, false
 }
 
+// Pending returns zero because this receiver never delivers signals.
+func (timeoutResumeReceiver) Pending() int {
+	return 0
+}
+
 type resumeTimeoutWorkflowContext struct{ *testWorkflowContext }
 
 func (w *resumeTimeoutWorkflowContext) ResumeRequests() engine.Receiver[*api.ResumeRequest] {
