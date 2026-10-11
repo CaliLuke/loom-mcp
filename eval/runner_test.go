@@ -3,9 +3,9 @@ package eval_test
 import (
 	"context"
 	"errors"
-	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/CaliLuke/loom-mcp/v2/agenttest"
@@ -49,52 +49,55 @@ func TestRunnerMatrix(t *testing.T) {
 }
 
 func TestRunnerConcurrency(t *testing.T) {
-	cfg := planConfig()
-	cfg.Harness = emptyFactory()
-	cfg.Variants = nil
-	cfg.Scenarios = cfg.Scenarios[:1]
-	cfg.Repeats = 6
-	cfg.Concurrency = 4
-	var active, peak atomic.Int32
-	barrier := make(chan struct{})
-	var release sync.Once
-	cfg.Scenarios[0].Drive = func(ctx context.Context, _ *agenttest.Harness, _ eval.Item) (*agenttest.SessionResult, error) {
-		n := active.Add(1)
-		defer active.Add(-1)
-		for old := peak.Load(); n > old; old = peak.Load() {
-			if peak.CompareAndSwap(old, n) {
-				break
+	synctest.Test(t, func(t *testing.T) {
+		cfg := planConfig()
+		cfg.Harness = emptyFactory()
+		cfg.Variants = nil
+		cfg.Scenarios = cfg.Scenarios[:1]
+		cfg.Repeats = 6
+		const concurrency = 4
+		cfg.Concurrency = concurrency
+		var active, peak atomic.Int32
+		barrier := make(chan struct{})
+		cfg.Scenarios[0].Drive = func(context.Context, *agenttest.Harness, eval.Item) (*agenttest.SessionResult, error) {
+			n := active.Add(1)
+			defer active.Add(-1)
+			for old := peak.Load(); n > old; old = peak.Load() {
+				if peak.CompareAndSwap(old, n) {
+					break
+				}
 			}
+			<-barrier
+			return syntheticSession(), nil
 		}
-		if n == 4 {
-			release.Do(func() {
-				close(barrier)
-			})
+		var callbackActive atomic.Int32
+		counts := make(map[int]int)
+		cfg.OnAttempt = func(a *eval.AttemptRecord) {
+			assert.Equal(t, int32(1), callbackActive.Add(1))
+			counts[a.Index]++
+			callbackActive.Add(-1)
 		}
-		select {
-		case <-barrier:
-		case <-ctx.Done():
-			return nil, ctx.Err()
+		var report *eval.Report
+		var runErr error
+		go func() {
+			report, runErr = eval.Run(t.Context(), cfg)
+		}()
+		// Wait until all runnable workers have entered Drive. None can finish,
+		// so an excess worker cannot escape the peak assertion by finishing early.
+		synctest.Wait()
+		assert.Equal(t, int32(concurrency), active.Load())
+		assert.Equal(t, int32(concurrency), peak.Load())
+		close(barrier)
+		synctest.Wait()
+		require.NoError(t, runErr)
+		require.NotNil(t, report)
+		assert.Equal(t, int32(concurrency), peak.Load())
+		require.Len(t, report.Attempts, 12)
+		for i, a := range report.Attempts {
+			assert.Equal(t, i, a.Index)
+			assert.Equal(t, 1, counts[i])
 		}
-		return syntheticSession(), nil
-	}
-	var callbackActive atomic.Int32
-	counts := make(map[int]int)
-	cfg.OnAttempt = func(a *eval.AttemptRecord) {
-		assert.Equal(t, int32(1), callbackActive.Add(1))
-		counts[a.Index]++
-		callbackActive.Add(-1)
-	}
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
-	r, err := eval.Run(ctx, cfg)
-	require.NoError(t, err)
-	assert.Equal(t, int32(4), peak.Load())
-	require.Len(t, r.Attempts, 12)
-	for i, a := range r.Attempts {
-		assert.Equal(t, i, a.Index)
-		assert.Equal(t, 1, counts[i])
-	}
+	})
 }
 
 func TestRunnerScheduling(t *testing.T) {

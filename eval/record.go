@@ -71,6 +71,8 @@ const (
 	StopTokenLimit StopReason = "token_limit"
 	// StopLiveModelDisabled means live use was not explicitly enabled.
 	StopLiveModelDisabled StopReason = "live_model_disabled"
+	// StopCallbackPanic means the attempt observer panicked.
+	StopCallbackPanic StopReason = "callback_panic"
 )
 
 // String returns the unambiguous variant:scenario:item:repeat identity.
@@ -152,5 +154,12 @@ func (r *AttemptRecord) countUsage() {
 				r.Tokens += tokens
 			}
 		}
+	}
+}
+
+// stop preserves the first observed reason for stopping new attempts.
+func (r *Report) stop(reason StopReason) {
+	if r.Stop == "" {
+		r.Stop = reason
 	}
 }

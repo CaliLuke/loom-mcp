@@ -15,6 +15,7 @@ import (
 
 // Config declares an experiment. Zero Repeats and Concurrency both mean one.
 // OnAttempt runs serially once per record; callbacks must not mutate configuration.
+// A callback panic stops new attempts and disables subsequent callbacks.
 type Config struct {
 	Harness                         HarnessFunc
 	Scenarios                       []Scenario
@@ -35,8 +36,9 @@ type harnessOwners struct {
 
 // Run executes a validated matrix with isolated harnesses and bounded concurrency.
 // A stopped experiment retains one record per planned key. Only invalid config,
-// caller cancellation and disabled live models return errors; quality and harness
-// failures remain in records. Already running attempts finish after a token stop.
+// caller cancellation, disabled live models and callback panics return errors;
+// quality and harness failures remain in records. The first stop reason wins.
+// Already running attempts finish after a token stop or callback panic.
 func Run(ctx context.Context, cfg Config) (*Report, error) {
 	plan, err := buildPlan(cfg)
 	if err != nil {
@@ -56,15 +58,13 @@ func Run(ctx context.Context, cfg Config) (*Report, error) {
 		})
 	}
 	order := schedule(plan)
-	runErr := collect(ctx, cfg, report, plan, order, jobs, completed)
+	runErr := collect(ctx, &cfg, report, plan, order, jobs, completed)
 	close(jobs)
 	workers.Wait()
 	for _, a := range report.Attempts {
-		if a.Outcome == nil && a.NotRun == "" {
+		if a.Outcome == nil {
 			a.NotRun = report.Stop
-			if cfg.OnAttempt != nil {
-				cfg.OnAttempt(a)
-			}
+			runErr = notifyAttempt(&cfg, report, a, runErr)
 		}
 	}
 	report.Finished = time.Now()
@@ -72,14 +72,14 @@ func Run(ctx context.Context, cfg Config) (*Report, error) {
 }
 
 // collect owns dispatch, stop decisions, accounting and all callbacks.
-func collect(ctx context.Context, cfg Config, report *Report, plan []plannedAttempt, order []int, jobs chan<- runnerJob, completed <-chan *AttemptRecord) error {
+func collect(ctx context.Context, cfg *Config, report *Report, plan []plannedAttempt, order []int, jobs chan<- runnerJob, completed <-chan *AttemptRecord) error {
 	next, inFlight := 0, 0
 	var runErr error
 	canceled := ctx.Done()
 	for next < len(order) || inFlight > 0 {
-		if ctx.Err() != nil {
-			report.Stop = StopCanceled
-			runErr = context.Cause(ctx)
+		if canceled != nil && ctx.Err() != nil {
+			report.stop(StopCanceled)
+			runErr = errors.Join(runErr, context.Cause(ctx))
 			canceled = nil
 		}
 		if report.Stop != "" && inFlight == 0 {
@@ -94,8 +94,8 @@ func collect(ctx context.Context, cfg Config, report *Report, plan []plannedAtte
 		}
 		select {
 		case <-canceled:
-			report.Stop = StopCanceled
-			runErr = context.Cause(ctx)
+			report.stop(StopCanceled)
+			runErr = errors.Join(runErr, context.Cause(ctx))
 			canceled = nil
 		case dispatch <- job:
 			next++
@@ -106,27 +106,44 @@ func collect(ctx context.Context, cfg Config, report *Report, plan []plannedAtte
 		}
 	}
 	// A cancellation delivered by the final callback must still return its cause.
-	if ctx.Err() != nil {
-		report.Stop = StopCanceled
-		return context.Cause(ctx)
+	if canceled != nil && ctx.Err() != nil {
+		report.stop(StopCanceled)
+		return errors.Join(runErr, context.Cause(ctx))
 	}
 	return runErr
 }
 
 // acceptRecord accounts completed work before deciding whether more work may start.
-func acceptRecord(cfg Config, report *Report, a *AttemptRecord, runErr error) error {
+func acceptRecord(cfg *Config, report *Report, a *AttemptRecord, runErr error) error {
 	report.Attempts[a.Index] = a
+	if a.NotRun != "" {
+		// Canceled dispatches are delivered with the other skipped records last.
+		return runErr
+	}
 	report.Tokens += a.Tokens
-	if errors.Is(a.HarnessErr, agenttest.ErrLiveModelDisabled) && report.Stop != StopCanceled {
-		report.Stop = StopLiveModelDisabled
+	if errors.Is(a.HarnessErr, agenttest.ErrLiveModelDisabled) {
+		report.stop(StopLiveModelDisabled)
 		runErr = errors.Join(runErr, a.HarnessErr)
 	}
 	if report.Stop == "" && report.MaxTokens > 0 && report.Tokens >= report.MaxTokens {
 		report.Stop = StopTokenLimit
 	}
-	if cfg.OnAttempt != nil {
-		cfg.OnAttempt(a)
+	return notifyAttempt(cfg, report, a, runErr)
+}
+
+// notifyAttempt disables a panicking observer so collection can drain the workers.
+func notifyAttempt(cfg *Config, report *Report, a *AttemptRecord, runErr error) (err error) {
+	if cfg.OnAttempt == nil {
+		return runErr
 	}
+	defer func() {
+		if value := recover(); value != nil {
+			cfg.OnAttempt = nil
+			report.stop(StopCallbackPanic)
+			err = errors.Join(runErr, fmt.Errorf("eval: OnAttempt panic: %v\n%s", value, debug.Stack()))
+		}
+	}()
+	cfg.OnAttempt(a)
 	return runErr
 }
 
@@ -193,6 +210,9 @@ func newReport(cfg Config, plan []plannedAttempt) *Report {
 // runAttempt closes each newly owned harness exactly once, including error paths.
 func runAttempt(ctx context.Context, factory HarnessFunc, owners *harnessOwners, job runnerJob) *AttemptRecord {
 	a := job.attempt
+	if ctx.Err() != nil {
+		return &AttemptRecord{AttemptKey: a.key, Index: job.index, NotRun: StopCanceled}
+	}
 	r := &AttemptRecord{AttemptKey: a.key, Index: job.index, Outcome: &Outcome{Scenario: a.key.Scenario, Item: a.key.Item}, Started: time.Now()}
 	defer func() {
 		r.Duration = time.Since(r.Started)

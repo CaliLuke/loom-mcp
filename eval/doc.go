@@ -30,11 +30,13 @@
 // Verdict precedence is error, failed, pending, passed. Gating claims remain
 // pending until judging; informational claims do not gate. HarnessErr records
 // factory/setup/panic/reuse/Close failures. NotRun records identify attempts
-// skipped by cancellation, token limits or disabled live models. Run returns a
-// partial report and an error for caller cancellation or disabled live use;
-// token limits and recorded failures are not Run errors. Run never enables live
-// models. OnAttempt is serial, once per record, with skipped records delivered
-// last in declaration order. Groups reports counts without a pass threshold.
+// skipped by cancellation, token limits, disabled live models or an OnAttempt
+// panic; the first stop reason wins. Run returns a partial report and an error
+// for caller cancellation, disabled live use or an OnAttempt panic (with its
+// stack); token limits and recorded failures are not Run errors. Run never
+// enables live models. OnAttempt is serial, at most once per record, with
+// skipped records delivered last in declaration order; a panic disables later
+// callbacks. Groups reports counts without a pass threshold.
 //
 // Tokens come from all completed calls in each returned run record, including
 // descendants and abandoned calls. TotalTokens is used when positive, otherwise

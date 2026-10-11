@@ -1632,8 +1632,9 @@ report, err := eval.Run(ctx, eval.Config{
 
 An omitted variant list creates `default`; zero `Repeats` or `Concurrency` means
 one. Variant IDs are unique dataset-style IDs. Labels scope prompt overrides,
-and `Policy` is cloned per run. Put model overrides and per-agent context settings
-in `Variant.Options`, using `ScriptedModel` or
+and a non-nil `Policy` is cloned per run. A nil variant policy preserves policy
+defaults supplied through `WithDefaultRunOptions`. Put model overrides and
+per-agent context settings in `Variant.Options`, using `ScriptedModel` or
 `WithRuntimeOptions(runtime.WithContextCompaction(...))`. `NewHarnessFunc` applies
 base options before variant options, runs optional setup and closes failed setups.
 A custom factory receives `(ctx, variant, opts...)`, must forward `opts` to
@@ -1662,7 +1663,10 @@ gating claims. Informational claims do not gate. Factory/setup errors, panics
 `error` verdict. Repeats all run; `Report.Groups()` counts each verdict without
 gating an experiment. `OnAttempt` is serial and fires once per record in completion
 order, then once for each skipped record in declaration order. Callback order
-under concurrency is nondeterministic.
+under concurrency is nondeterministic. If `OnAttempt` panics, Run stops new
+attempts, disables further callbacks and drains already running attempts before
+returning the partial report and an error containing the panic and stack. Its stop
+reason is `callback_panic` unless an earlier stop already took effect.
 
 `MaxTokens` zero is unlimited. Usage sums every completed recorded model call,
 including abandoned attempts and descendants, once per returned session run.
@@ -1674,11 +1678,16 @@ Skipped records have nil Outcome and `NotRun: token_limit`; this stop is not an
 error. Concurrent completion order can change which keys are skipped.
 
 Cancellation keeps finished evidence, cancels running work and marks unstarted
-records `canceled`; Run returns the partial report with the context cause. The
+records `canceled` when cancellation is the first stop; Run returns the partial
+report with the context cause. A dispatched attempt checks cancellation again
+before constructing its harness, so canceled work remains `not_run`. The
 runner never enables live clients. A factory error matching `ErrLiveModelDisabled`
-stops new attempts, marks them `live_model_disabled` and returns the partial report
-with that error. Other recorded failures leave Run's error nil. Invalid config
-returns no report. `AttemptRecord.Runs()` exposes each completed run's version-1
+stops new attempts with `live_model_disabled` and returns the partial report with
+that error. The first stop reason remains authoritative for `Report.Stop` and
+skipped records. Later cancellation joins existing errors, preserving
+`errors.Is(err, agenttest.ErrLiveModelDisabled)` when both apply. Other recorded
+failures leave Run's error nil. Invalid config returns no report.
+`AttemptRecord.Runs()` exposes each completed run's version-1
 `runrecord.Export`, session ID and optional trace ID, preserving a completed prefix
 on errors. Reports retain all exports in memory; storage, CLI output and judging
 belong to later layers.

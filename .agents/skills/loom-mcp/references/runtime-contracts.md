@@ -120,6 +120,8 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   variant/scenario/item/repeat keys. eval.Run creates one fresh harness per attempt
   and closes it once. HarnessFunc forwards options; NewHarnessFunc applies base
   options before variant options and closes failed or panicking setup.
+- A nil variant Policy preserves earlier WithDefaultRunOptions policy defaults.
+  Non-nil policies still override defaults and are cloned per run.
 - Variants carry labels, per-run cloned Policy and agenttest Options for models
   and context runtime settings. WithDefaultRunOptions runs before caller options
   on every harness run path; reserved RunID validation includes defaults.
@@ -129,12 +131,18 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - Verdict precedence is error, failed, pending, passed. Unjudged gating claims
   remain pending. HarnessErr records factory/setup/panic/reuse/Close failures.
   Groups counts verdicts without gating. OnAttempt is serial, once per record,
-  including not-run records last in declaration order.
+  including not-run records last in declaration order. A panic disables further
+  callbacks, stops dispatch and returns the panic with its stack after workers
+  drain. The stop reason is callback_panic unless already stopped.
 - MaxTokens uses >= and counts all completed calls in returned records, including
   descendants and abandoned attempts; positive TotalTokens wins over the sum of
   token components. Decide calls inside Assert and unreturned Drive runs are not
   counted. Running attempts finish after a token stop, allowing Concurrency-1
   additional attempts beyond the crossing attempt; skipped keys may vary.
+- Attempts recheck cancellation before constructing a harness; canceled
+  dispatches remain not_run. The first stop reason wins for Report.Stop and
+  skipped records; later cancellation joins existing errors, preserving the
+  ErrLiveModelDisabled match.
 - Cancellation and disabled live factories return partial reports with an error;
   token stops and recorded failures do not. Run never enables live models. Every
   planned key retains a record, with nil Outcome iff NotRun is set. Runs exports

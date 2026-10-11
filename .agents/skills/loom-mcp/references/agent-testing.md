@@ -113,16 +113,22 @@ application path. Re-capture when planner decoration changes tool definitions.
   Factories receive the variant and supplied options, forward options and return
   fresh harnesses. Use ScriptedModel for per-harness scripts; never share scripts.
 - Put labels and cloned run policy on Variant; put model and context runtime
-  settings in Variant.Options. WithDefaultRunOptions precedes caller options on
+  settings in Variant.Options. A nil variant Policy preserves earlier policy
+  defaults. WithDefaultRunOptions precedes caller options on
   Run, RunSession and CaptureFirstRequest; RunID remains reserved.
 - Plan validates all scenarios and selector intersections. OR within each kind,
   AND across kinds; item selectors may be scenario/item. Records keep declaration
   order while starts use longest timeouts first (zero longest). Zero repeats and
   concurrency mean one. OnAttempt is serial and includes skipped records last.
+  OnAttempt panics stop dispatch and disable further callbacks; Run drains workers
+  before returning a partial report and an error containing the panic and stack.
 - Verdicts use error, failed, pending, passed precedence. Gating claims remain
   pending until judged; informational claims do not gate. Groups reports counts.
   HarnessErr includes factory/setup/panic/reuse/Close errors. NotRun distinguishes
-  canceled, token_limit and live_model_disabled. Cancellation/live gating return
+  canceled, token_limit, live_model_disabled and callback_panic. Attempts recheck
+  cancellation before factory entry. The first stop reason wins; later
+  cancellation joins existing errors, including ErrLiveModelDisabled.
+  Cancellation/live gating return
   partial reports and errors; token stops and quality failures do not.
 - Usage counts completed calls in all returned run records, descendants and
   abandoned attempts included, once. Direct Decide calls in Assert and unreturned

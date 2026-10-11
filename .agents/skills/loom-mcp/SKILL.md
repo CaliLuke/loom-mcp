@@ -629,6 +629,11 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   eval tests cover pure contracts and custom callbacks without fixture imports.
 - Execute supports concurrent use of one harness. Drive, Assert and expectation
   predicates must be concurrency-safe and cooperate with cancellation.
+- Eval runner attempts recheck cancellation before factory entry. The first stop
+  reason wins; later cancellation joins existing errors. Nil variant Policy
+  preserves earlier run defaults. OnAttempt panics stop dispatch, disable later
+  callbacks and return a partial report with the panic stack after workers drain;
+  the stop reason is callback_panic unless an earlier stop already took effect.
 
 ## Command Reminders
 

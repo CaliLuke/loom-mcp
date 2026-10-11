@@ -58,7 +58,9 @@ func callSetup(setup func(*agenttest.Harness, Variant) error, h *agenttest.Harne
 
 func variantRunOptions(v Variant) []agenttest.RunOption {
 	return []agenttest.RunOption{runtime.WithLabels(v.Labels), func(in *runtime.RunInput) {
-		in.Policy = clonePolicy(v.Policy)
+		if v.Policy != nil {
+			in.Policy = clonePolicy(v.Policy)
+		}
 	}}
 }
 

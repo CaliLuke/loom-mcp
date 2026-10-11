@@ -248,3 +248,38 @@ func TestRunnerMatrixFixture(t *testing.T) {
 		require.NoError(t, a.HarnessErr)
 	}
 }
+
+func TestRunnerPreservesDefaultPolicyFixture(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		policy *api.PolicyOverrides
+		want   int
+	}{
+		{name: "nil inherits default", want: 2},
+		{name: "explicit overrides default", policy: &api.PolicyOverrides{PerTurnMaxToolCalls: 1}, want: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var observed []int
+			interceptor := runtime.RuntimeInterceptorFuncs{BeforeRunFunc: func(_ context.Context, in *runtime.BeforeRunInput) (*runtime.BeforeRunDecision, error) {
+				if in.Input.Policy == nil {
+					observed = append(observed, 0)
+				} else {
+					observed = append(observed, in.Input.Policy.PerTurnMaxToolCalls)
+				}
+				return nil, nil
+			}}
+			r, err := eval.Run(t.Context(), eval.Config{
+				Harness: runnerFactory(
+					agenttest.WithDefaultRunOptions(runtime.WithPerTurnMaxToolCalls(2)),
+					agenttest.WithRuntimeOptions(runtime.WithInterceptors(interceptor)),
+					agenttest.ScriptedModel("fixture", agenttest.Respond(agenttest.Text("ready")))),
+				Scenarios: []eval.Scenario{runnerScenario()},
+				Variants:  []eval.Variant{{ID: "policy", Policy: tc.policy}},
+			})
+			require.NoError(t, err)
+			require.NoError(t, r.Attempts[0].HarnessErr)
+			require.NoError(t, r.Attempts[0].Outcome.Err)
+			assert.Equal(t, []int{tc.want}, observed)
+		})
+	}
+}
