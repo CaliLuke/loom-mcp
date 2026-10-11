@@ -484,7 +484,7 @@ func testTemporalSignalTimeoutRace(t *testing.T, temporalClient client.Client) {
 	require.NoError(t, fx.rt.Seal(ctx))
 
 	const workflowTimeout = 2 * time.Second
-	offsets := []time.Duration{time.Second, 1900 * time.Millisecond, workflowTimeout + time.Nanosecond}
+	offsets := []time.Duration{workflowTimeout / 2, workflowTimeout - workflowTimeout/20, workflowTimeout + time.Nanosecond}
 	completed := 0
 	timedOut := 0
 	for i, offset := range offsets {
@@ -506,9 +506,12 @@ func testTemporalSignalTimeoutRace(t *testing.T, temporalClient client.Client) {
 			Messages:                []*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "race"}}}},
 		})
 		require.NoError(t, err)
+		// Publishing the await is setup, not the race: allow it until the run
+		// deadline, while keeping answer offsets relative to workflow start.
+		awaitDeadline := startedAt.Add(workflowTimeout)
 		require.Eventually(t, func() bool {
 			return fx.recorder.countForRun(hooks.AwaitTypedInput, runID) == 1
-		}, time.Second, 10*time.Millisecond)
+		}, time.Until(awaitDeadline), 10*time.Millisecond)
 		answerRef, err := fx.rt.RunStore.Put(ctx, runID, []byte(`{"ok":true}`))
 		require.NoError(t, err)
 		var out *api.RunOutput
@@ -575,8 +578,9 @@ func testTemporalSignalTimeoutRace(t *testing.T, temporalClient client.Client) {
 			require.Failf(t, "stranded canonical run status", "run %s remained %s after engine terminal status %s", runID, snapshot.Status, status)
 		}
 	}
-	require.GreaterOrEqual(t, completed, 1)
-	require.GreaterOrEqual(t, timedOut, 1)
+	// Require both outcomes so late setup/signals cannot pass with only timeouts.
+	require.GreaterOrEqual(t, completed, 1, "at least one answer must beat the workflow timeout")
+	require.GreaterOrEqual(t, timedOut, 1, "at least one workflow timeout must beat the answer")
 }
 
 func (signalTimeoutPlanner) PlanStart(context.Context, *planner.PlanInput) (*planner.PlanResult, error) {
