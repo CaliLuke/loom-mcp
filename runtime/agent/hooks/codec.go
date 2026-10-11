@@ -22,6 +22,7 @@ type (
 	// runCompletedPayload is used to serialize RunCompletedEvent for transport.
 	// It converts the error to a string since errors cannot be directly serialized.
 	runCompletedPayload struct {
+		PlannerStep    *int      `json:"planner_step,omitempty"`
 		Status         string    `json:"status"`
 		Phase          run.Phase `json:"phase"`
 		PublicError    string    `json:"public_error,omitempty"`
@@ -47,6 +48,7 @@ type (
 	}
 
 	toolResultReceivedPayload struct {
+		PlannerStep      *int                     `json:"planner_step,omitempty"`
 		Refs             tools.ResultRefs         `json:"refs"`
 		ToolCallID       string                   `json:"tool_call_id"`
 		ParentToolCallID string                   `json:"parent_tool_call_id,omitempty"`
@@ -100,6 +102,7 @@ func encodeHookPayload(evt Event) (rawjson.Message, error) {
 
 func encodeRunCompletedPayload(e *RunCompletedEvent) (rawjson.Message, error) {
 	p := runCompletedPayload{
+		PlannerStep:    e.PlannerStep,
 		Status:         e.Status,
 		Phase:          e.Phase,
 		PublicError:    e.PublicError,
@@ -118,6 +121,7 @@ func encodeRunCompletedPayload(e *RunCompletedEvent) (rawjson.Message, error) {
 
 func encodeToolResultPayload(e *ToolResultReceivedEvent) (rawjson.Message, error) {
 	return marshalHookPayload("tool result", toolResultReceivedPayload{
+		PlannerStep:      e.PlannerStep,
 		Refs:             e.Refs,
 		ToolCallID:       e.ToolCallID,
 		ParentToolCallID: e.ParentToolCallID,
@@ -183,6 +187,13 @@ func DecodeFromHookInput(input *ActivityInput) (Event, error) {
 	}
 	if !handled {
 		return nil, fmt.Errorf("unsupported hook event type %q", input.Type)
+	}
+	var base baseEvent
+	if err := decodeHookPayload(input, &base); err != nil {
+		return nil, err
+	}
+	if base.PlannerStep != nil {
+		evt.(interface{ SetPlannerStep(int) }).SetPlannerStep(*base.PlannerStep)
 	}
 	if input.TurnID != "" {
 		stampTurnID(evt, input.TurnID)

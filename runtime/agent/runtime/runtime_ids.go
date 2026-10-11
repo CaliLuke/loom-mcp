@@ -25,6 +25,8 @@ type (
 		AgentID   agent.Ident
 		SessionID string
 		TurnID    string
+		// PlannerStep identifies the planner activity rendering this prompt; nil for tool rendering.
+		PlannerStep *int
 	}
 
 	promptRenderHookContextKey struct{}

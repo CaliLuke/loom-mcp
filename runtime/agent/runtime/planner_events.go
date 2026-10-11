@@ -34,6 +34,7 @@ type runtimePlannerEvents struct {
 	runID     string
 	sessionID string
 	turnID    string
+	step      int
 
 	mu  sync.Mutex
 	led *transcript.Ledger
@@ -326,6 +327,7 @@ func (e *runtimePlannerEvents) validatePresentationCommitSize(candidateID string
 		messages = append(messages, presentation.messages...)
 	}
 	event := hooks.NewAssistantPresentationCommittedEvent(e.runID, e.agentID, e.sessionID, presentationIDs, messages)
+	event.SetPlannerStep(e.step)
 	event.CallKeys = presentationKeys(e.presentations, presentationIDs)
 	input, err := hooks.EncodeToHookInput(event, e.turnID)
 	if err != nil {
@@ -471,6 +473,7 @@ func (e *runtimePlannerEvents) publish(ctx context.Context, evt hooks.Event) {
 	if e.hookError() != nil {
 		return
 	}
+	evt.(interface{ SetPlannerStep(int) }).SetPlannerStep(e.step)
 	if err := e.rt.publishHookErr(ctx, evt, e.turnID); err != nil {
 		e.mu.Lock()
 		if e.hookErr == nil {

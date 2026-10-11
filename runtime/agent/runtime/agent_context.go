@@ -14,38 +14,40 @@ import (
 
 // agentContextOptions configures construction of a planner.PlannerContext.
 type agentContextOptions struct {
-	runtime    *Runtime
-	agentID    agent.Ident
-	runID      string
-	rootRunID  string
-	attempt    int
-	memory     memory.Reader
-	sessionID  string
-	labels     map[string]string
-	turnID     string
-	events     planner.PlannerEvents
-	cache      CachePolicy
-	toolPolicy toolPolicyEnvelope
-	recovery   *modelRecoveryRecorder
-	recording  *CallRecording
+	runtime     *Runtime
+	agentID     agent.Ident
+	runID       string
+	rootRunID   string
+	attempt     int
+	plannerStep int
+	memory      memory.Reader
+	sessionID   string
+	labels      map[string]string
+	turnID      string
+	events      planner.PlannerEvents
+	cache       CachePolicy
+	toolPolicy  toolPolicyEnvelope
+	recovery    *modelRecoveryRecorder
+	recording   *CallRecording
 }
 
 // simplePlannerContext is a minimal implementation of planner.PlannerContext.
 type simplePlannerContext struct {
-	rt         *Runtime
-	agent      agent.Ident
-	runID      string
-	rootRunID  string
-	attempt    int
-	turnID     string
-	mem        memory.Reader
-	sessionID  string
-	labels     map[string]string
-	ev         planner.PlannerEvents
-	cache      CachePolicy
-	toolPolicy toolPolicyEnvelope
-	recovery   *modelRecoveryRecorder
-	recording  *CallRecording
+	rt          *Runtime
+	agent       agent.Ident
+	runID       string
+	rootRunID   string
+	attempt     int
+	plannerStep int
+	turnID      string
+	mem         memory.Reader
+	sessionID   string
+	labels      map[string]string
+	ev          planner.PlannerEvents
+	cache       CachePolicy
+	toolPolicy  toolPolicyEnvelope
+	recovery    *modelRecoveryRecorder
+	recording   *CallRecording
 }
 
 func newAgentContext(opts agentContextOptions) planner.PlannerContext {
@@ -53,20 +55,21 @@ func newAgentContext(opts agentContextOptions) planner.PlannerContext {
 		panic("newAgentContext: recording is required")
 	}
 	return &simplePlannerContext{
-		rt:         opts.runtime,
-		agent:      opts.agentID,
-		runID:      opts.runID,
-		rootRunID:  opts.rootRunID,
-		attempt:    opts.attempt,
-		turnID:     opts.turnID,
-		mem:        opts.memory,
-		sessionID:  opts.sessionID,
-		labels:     cloneLabels(opts.labels),
-		ev:         opts.events,
-		cache:      opts.cache,
-		toolPolicy: opts.toolPolicy,
-		recovery:   opts.recovery,
-		recording:  opts.recording,
+		rt:          opts.runtime,
+		agent:       opts.agentID,
+		runID:       opts.runID,
+		rootRunID:   opts.rootRunID,
+		attempt:     opts.attempt,
+		plannerStep: opts.plannerStep,
+		turnID:      opts.turnID,
+		mem:         opts.memory,
+		sessionID:   opts.sessionID,
+		labels:      cloneLabels(opts.labels),
+		ev:          opts.events,
+		cache:       opts.cache,
+		toolPolicy:  opts.toolPolicy,
+		recovery:    opts.recovery,
+		recording:   opts.recording,
 	}
 }
 
@@ -133,10 +136,11 @@ func (c *simplePlannerContext) RenderPrompt(ctx context.Context, id prompt.Ident
 		Labels:    cloneLabels(c.labels),
 	}
 	renderContext := withPromptRenderHookContext(ctx, PromptRenderHookContext{
-		RunID:     c.runID,
-		AgentID:   c.agent,
-		SessionID: c.sessionID,
-		TurnID:    c.turnID,
+		RunID:       c.runID,
+		AgentID:     c.agent,
+		SessionID:   c.sessionID,
+		TurnID:      c.turnID,
+		PlannerStep: &c.plannerStep,
 	})
 	return c.rt.PromptRegistry.Render(renderContext, id, scope, data)
 }

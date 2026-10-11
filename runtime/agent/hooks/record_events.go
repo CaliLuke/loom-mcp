@@ -14,7 +14,7 @@ type (
 	// PlannerStepEvent adopts every started call returned by one planner activity.
 	// ViewRef names the committed view used by that activity before history policy.
 	PlannerStepEvent struct {
-		baseEvent `json:"-"`
+		baseEvent
 		// ProtocolVersion is the workflow input version validated before execution.
 		ProtocolVersion int
 		// Step is the one-based planner activity schedule number.
@@ -29,7 +29,7 @@ type (
 
 	// RunSealedEvent names the terminal transcript after pending entries commit.
 	RunSealedEvent struct {
-		baseEvent `json:"-"`
+		baseEvent
 		// ProtocolVersion is the workflow input version validated before execution.
 		ProtocolVersion int
 		// IndexHead addresses the complete sealed transcript.
@@ -39,7 +39,7 @@ type (
 	// ContextRequestGrowthEvent reports the first request in a run whose message
 	// bytes outside the loaded view exceed those inside it.
 	ContextRequestGrowthEvent struct {
-		baseEvent `json:"-"`
+		baseEvent
 		// Key identifies the first request dominated by outside-view bytes.
 		Key runstore.CallKey
 		// Inside counts encoded message bytes matched to the recorded view.

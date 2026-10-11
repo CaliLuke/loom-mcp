@@ -96,7 +96,7 @@ type (
 
 	// RunStartedEvent fires when a run begins execution.
 	RunStartedEvent struct {
-		baseEvent `json:"-"`
+		baseEvent
 		// RunContext carries the execution metadata (run ID, attempt, labels, caps)
 		// for this run invocation.
 		RunContext run.Context
@@ -108,7 +108,7 @@ type (
 	// RunCompletedEvent fires after a run finishes, whether
 	// successfully or with a failure.
 	RunCompletedEvent struct {
-		baseEvent `json:"-"`
+		baseEvent
 		// Status indicates the final outcome: "success", "failed", or "canceled".
 		Status string
 		// PublicError is a user-safe, deterministic summary of the terminal failure.
@@ -139,7 +139,7 @@ type (
 
 	// RunPausedEvent fires when a run is intentionally paused.
 	RunPausedEvent struct {
-		baseEvent `json:"-"`
+		baseEvent
 		// Reason provides a human-readable explanation for why the run was paused.
 		// Examples: "user_requested", "approval_required", "manual_review_needed".
 		// Subscribers can use this to categorize pause events and display appropriate
@@ -161,7 +161,7 @@ type (
 
 	// RunResumedEvent fires when a paused run resumes.
 	RunResumedEvent struct {
-		baseEvent `json:"-"`
+		baseEvent
 		// Notes carries optional human-readable context provided when resuming the run.
 		// This might include instructions for the planner ("focus on X"), approval
 		// summaries, or other guidance. Empty if no notes were provided with the resume request.
@@ -185,7 +185,7 @@ type (
 	// It is emitted on the parent run and allows consumers to correlate child-run
 	// events without flattening them into the parent.
 	ChildRunLinkedEvent struct {
-		baseEvent `json:"-"`
+		baseEvent
 		// ToolName is the canonical tool identifier for the parent tool.
 		ToolName tools.Ident
 		// ToolCallID is the parent tool call identifier.
@@ -201,14 +201,14 @@ type (
 	// canceled). This is a higher-fidelity signal than Status and is primarily
 	// intended for streaming/UX consumers.
 	RunPhaseChangedEvent struct {
-		baseEvent `json:"-"`
+		baseEvent
 		// Phase is the new lifecycle phase for the run.
 		Phase run.Phase
 	}
 
 	// PromptRenderedEvent fires when the runtime resolves and renders a prompt.
 	PromptRenderedEvent struct {
-		baseEvent `json:"-"`
+		baseEvent
 		// PromptID identifies the rendered prompt specification.
 		PromptID prompt.Ident
 		// Version is the resolved prompt version used for rendering.
@@ -220,7 +220,7 @@ type (
 	// ToolCallScheduledEvent fires when the runtime schedules a tool activity
 	// for execution.
 	ToolCallScheduledEvent struct {
-		baseEvent `json:"-"`
+		baseEvent
 		// ToolCallID uniquely identifies the scheduled tool invocation so progress
 		// updates can correlate with the original request.
 		ToolCallID string
@@ -248,7 +248,7 @@ type (
 	// ToolResultReceivedEvent fires when a tool activity completes and returns
 	// a result or error.
 	ToolResultReceivedEvent struct {
-		baseEvent `json:"-"`
+		baseEvent
 		// Refs addresses complete eligible results and server-only content in the root run scope.
 		Refs tools.ResultRefs
 		// ToolCallID uniquely identifies the tool invocation that produced this result.
@@ -303,7 +303,7 @@ type (
 	// dynamically discovers additional child tools across multiple planning iterations.
 	// UIs use this to update progress displays ("3 of 5 children complete").
 	ToolCallUpdatedEvent struct {
-		baseEvent `json:"-"`
+		baseEvent
 		// ToolCallID identifies the tool call being updated (usually a parent call).
 		ToolCallID string
 		// ExpectedChildrenTotal is the new count of expected child tools. This value
@@ -321,7 +321,7 @@ type (
 	//     and ToolResultReceivedEvent (and, at the model boundary, the finalized
 	//     tool call chunk).
 	ToolCallArgsDeltaEvent struct {
-		baseEvent `json:"-"`
+		baseEvent
 		// ToolCallID is the provider-issued identifier for the tool call.
 		ToolCallID string
 		// ToolName is the canonical tool identifier when known.
@@ -333,7 +333,7 @@ type (
 	// PlannerNoteEvent fires when the planner emits an annotation or
 	// intermediate thought during execution.
 	PlannerNoteEvent struct {
-		baseEvent `json:"-"`
+		baseEvent
 		// Note is the text content of the planner's annotation.
 		Note string
 		// Labels provide optional categorization metadata (e.g., "type": "reasoning").
@@ -344,7 +344,7 @@ type (
 	// (either signed plaintext or redacted bytes). This preserves provider-accurate
 	// thinking suitable for exact replay and auditing.
 	ThinkingBlockEvent struct {
-		baseEvent `json:"-"`
+		baseEvent
 		// Text is the plaintext reasoning content when provided by the model.
 		Text string
 		// Signature is the provider signature for plaintext reasoning (when required).
@@ -360,7 +360,7 @@ type (
 	// AssistantMessageEvent fires when a final assistant response is produced,
 	// indicating the workflow is completing with a user-facing message.
 	AssistantMessageEvent struct {
-		baseEvent `json:"-"`
+		baseEvent
 		// Message is the textual content of the assistant's response.
 		Message string
 		// Structured contains optional typed output (e.g., Pydantic-style structured data).
@@ -376,7 +376,7 @@ type (
 	//   - Downstream consumers must treat it as the canonical assistant turn, not
 	//     as a best-effort streaming chunk.
 	AssistantTurnCommittedEvent struct {
-		baseEvent `json:"-"`
+		baseEvent
 		// Message is the canonical assistant transcript message that was just
 		// committed by legacy single-message paths.
 		Message *model.Message
@@ -397,7 +397,7 @@ type (
 	// RetryHintIssuedEvent fires when the planner or runtime suggests a retry
 	// policy change, such as disabling a failing tool or adjusting caps.
 	RetryHintIssuedEvent struct {
-		baseEvent `json:"-"`
+		baseEvent
 		// Reason summarizes why the retry hint was issued (e.g., "invalid_arguments").
 		Reason string
 		// ToolName identifies the tool involved in the failure, if applicable.
@@ -409,7 +409,7 @@ type (
 	// MemoryAppendedEvent fires when new memory entries are successfully
 	// persisted to the memory store.
 	MemoryAppendedEvent struct {
-		baseEvent `json:"-"`
+		baseEvent
 		// EventCount indicates how many memory events were written in this operation.
 		EventCount int
 	}
@@ -417,7 +417,7 @@ type (
 	// PolicyDecisionEvent captures the outcome of a policy evaluation so downstream
 	// systems can audit allowlists, cap adjustments, and metadata applied for a turn.
 	PolicyDecisionEvent struct {
-		baseEvent `json:"-"`
+		baseEvent
 		// AllowedTools lists the globally unique tool identifiers that the policy engine
 		// permitted for this turn. The runtime enforces this allowlist: planners can only
 		// invoke tools in this list. An empty slice means no tools are allowed for this turn,
@@ -447,10 +447,12 @@ type (
 	// anonymously in each concrete event struct, providing implementations of
 	// the RunID, AgentID, Timestamp, and TurnID methods.
 	baseEvent struct {
-		runID     string
-		agentID   agent.Ident
-		timestamp int64
-		eventKey  string
+		// PlannerStep is set by events published from the planner activity.
+		PlannerStep *int `json:"planner_step,omitempty"`
+		runID       string
+		agentID     agent.Ident
+		timestamp   int64
+		eventKey    string
 		// sessionID associates the event with the logical session that owns the
 		// run. All events emitted for a given run share the same session ID.
 		sessionID string
@@ -462,7 +464,7 @@ type (
 	// AwaitClarificationEvent indicates the planner requested a human-provided
 	// clarification before continuing execution.
 	AwaitClarificationEvent struct {
-		baseEvent `json:"-"`
+		baseEvent
 		// ID correlates this await with a subsequent ProvideClarification.
 		ID string
 		// Question is the prompt to present to the user.
@@ -478,7 +480,7 @@ type (
 	// AwaitConfirmationEvent indicates the runtime requested an explicit operator
 	// confirmation before executing a sensitive tool call.
 	AwaitConfirmationEvent struct {
-		baseEvent `json:"-"`
+		baseEvent
 		// ID correlates this await with a subsequent confirmation decision.
 		ID string
 		// Title is an optional display title for the confirmation UI.
@@ -496,7 +498,7 @@ type (
 	// AwaitQuestionsEvent indicates the planner requested structured multiple-choice
 	// answers to be provided out-of-band (typically by a UI) before the run can resume.
 	AwaitQuestionsEvent struct {
-		baseEvent `json:"-"`
+		baseEvent
 		// ID correlates this await with a subsequent ProvideToolResults.
 		ID string
 		// ToolName identifies the tool awaiting user answers.
@@ -513,7 +515,7 @@ type (
 
 	// AwaitTypedInputEvent indicates the planner requested schema-typed user input.
 	AwaitTypedInputEvent struct {
-		baseEvent `json:"-"`
+		baseEvent
 		// ID correlates this await with a subsequent ProvideTypedInput.
 		ID string
 		// Title is an optional display title for the input UI.
@@ -541,7 +543,7 @@ type (
 	// the decision is received so subscribers can record a durable audit trail and
 	// UIs can render an approval record independent of tool execution.
 	ToolAuthorizationEvent struct {
-		baseEvent `json:"-"`
+		baseEvent
 		// ToolName identifies the tool that was authorized.
 		ToolName tools.Ident
 		// ToolCallID is the tool_call_id for the pending tool call.
@@ -557,7 +559,7 @@ type (
 
 	// AwaitExternalToolsEvent indicates the planner requested external tool execution.
 	AwaitExternalToolsEvent struct {
-		baseEvent `json:"-"`
+		baseEvent
 		// ID correlates this await with a subsequent ProvideToolResults.
 		ID string
 		// Items enumerate the external tool calls to be satisfied.
@@ -574,7 +576,7 @@ type (
 	// UsageEvent reports token usage for a model invocation within a run.
 	// Emitted when the model stream reports usage deltas or a final summary.
 	UsageEvent struct {
-		baseEvent `json:"-"`
+		baseEvent
 		// TokenUsage contains the attributed token counts reported by the model
 		// adapter. Model and ModelClass identify the specific model that produced
 		// this delta.
@@ -586,7 +588,7 @@ type (
 	// an agent-as-tool produced zero child tool calls, the runtime finalizes
 	// instead of resuming.
 	HardProtectionEvent struct {
-		baseEvent `json:"-"`
+		baseEvent
 		// Reason is a fixed string describing the protection that was applied.
 		// Example: "agent_tool_no_children".
 		Reason string
@@ -1207,6 +1209,11 @@ func (e *baseEvent) SetTimestampMS(timestampMS int64) {
 // a hook activity input envelope.
 func (e *baseEvent) SetEventKey(eventKey string) {
 	e.eventKey = eventKey
+}
+
+// SetPlannerStep records the step of the planner activity that published the event.
+func (e *baseEvent) SetPlannerStep(step int) {
+	e.PlannerStep = &step
 }
 
 // newBaseEvent constructs a baseEvent with the current timestamp.

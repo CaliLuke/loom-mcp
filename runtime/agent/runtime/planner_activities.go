@@ -53,6 +53,7 @@ func (r *Runtime) PlanStartActivity(ctx context.Context, input *PlanActivityInpu
 		input.Recovery = &copy
 	}
 	events := newPlannerEvents(r, input.AgentID, input.RunID, input.RunContext.SessionID, input.RunContext.TurnID)
+	events.step = input.Step
 	recoveryRecorder := &modelRecoveryRecorder{}
 	recordedView := input.View
 	recordedView.IndexHead, recordedView.Pending = view.Head, nil
@@ -108,6 +109,7 @@ func (r *Runtime) PlanResumeActivity(ctx context.Context, input *PlanActivityInp
 		input.Recovery = &copy
 	}
 	events := newPlannerEvents(r, input.AgentID, input.RunID, input.RunContext.SessionID, input.RunContext.TurnID)
+	events.step = input.Step
 	recoveryRecorder := &modelRecoveryRecorder{}
 	recordedView := input.View
 	recordedView.IndexHead, recordedView.Pending = view.Head, nil
@@ -432,19 +434,20 @@ func (r *Runtime) plannerContext(ctx context.Context, input *PlanActivityInput, 
 		return nil, nil, err
 	}
 	agentCtx := newAgentContext(agentContextOptions{
-		runtime:   r,
-		agentID:   input.AgentID,
-		runID:     input.RunID,
-		rootRunID: input.RunContext.RootRunID,
-		attempt:   engine.ActivityAttemptFromContext(ctx),
-		memory:    reader,
-		sessionID: input.RunContext.SessionID,
-		labels:    input.RunContext.Labels,
-		turnID:    input.RunContext.TurnID,
-		events:    events,
-		cache:     reg.Policy.Cache,
-		recovery:  recovery,
-		recording: recording,
+		runtime:     r,
+		agentID:     input.AgentID,
+		runID:       input.RunID,
+		rootRunID:   input.RunContext.RootRunID,
+		attempt:     engine.ActivityAttemptFromContext(ctx),
+		plannerStep: input.Step,
+		memory:      reader,
+		sessionID:   input.RunContext.SessionID,
+		labels:      input.RunContext.Labels,
+		turnID:      input.RunContext.TurnID,
+		events:      events,
+		cache:       reg.Policy.Cache,
+		recovery:    recovery,
+		recording:   recording,
 		toolPolicy: toolPolicyEnvelope{
 			Active:  input.ToolPolicyActive,
 			Allowed: cloneToolIdents(input.AllowedTools),

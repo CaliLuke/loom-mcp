@@ -159,6 +159,9 @@ func (r *Runtime) onPromptRendered(ctx context.Context, event prompt.RenderEvent
 		event.Version,
 		event.Scope,
 	)
+	if meta.PlannerStep != nil {
+		hookEvent.SetPlannerStep(*meta.PlannerStep)
+	}
 	if err := r.publishHookErr(ctx, hookEvent, meta.TurnID); err != nil {
 		r.logWarn(
 			ctx,

@@ -957,6 +957,93 @@ The complete request is only a canonical verification digest: it is never
 stored as addressed content or copied into export `Content`. Rebuild and import
 verify the reconstructed request against that digest.
 
+### Trajectories from RunRecord
+
+The top-level `trajectory` package derives evaluation steps from a self-contained
+`RunRecord`. `Build(record, runID, options)` reads no stores and produces the same
+trajectory from `runrecord.Read` and `runrecord.FromExport`. The requested run and
+all linked children must be sealed; an unsealed run returns `ErrNotTerminal`.
+
+```go
+tr, err := trajectory.Build(record, runID, trajectory.Options{
+    Output:           output,
+    EventsUnverified: hasBeforeEvent,
+})
+if err != nil {
+    return err
+}
+data, err := tr.Marshal()
+if err != nil {
+    return err
+}
+```
+
+`Options.Output`, when supplied, selects its `Final` for the requested run,
+including an explicit nil final. Otherwise the final answer comes from the last
+assistant entry naming an adopted model call. Child final answers always come
+from their records. `Status` comes from the observed `run_completed` payload;
+`StatusVerified` reports its trust, and an absent completion event leaves status
+empty.
+
+`Trajectory.Steps` contains model calls, tool calls, await prompts, answers and
+selected observer events. Step N's planner head is the view its model read.
+An assistant entry belongs to the step of its producing model call, identified
+by the entry's `Call` key. Its results and structural entries follow it in that
+step, even when step N+1's head first includes them. User, resume and clarification
+entries belong to the first step whose head includes them. Each step's model
+calls, sorted by `(Seq, Attempt)`, precede its produced entries. Events published
+from the planner activity's event sink or planner-context prompt observer carry
+an optional `planner_step` in their hook and run-log JSON payloads. The builder
+places each stamped observation in that step, including planner notes published
+before the step's adoption. Every unstamped observation belongs to the latest
+step whose `planner_step` record precedes it, or step 0 before the first boundary.
+Workflow and tool events remain unstamped: await prompts and phase changes stay
+with the step whose output the workflow is handling, as does `prompt_rendered`
+from agent-as-tool execution. Observations follow their step's entries and
+precede the next step's model calls. Older unstamped records use this same
+preceding-boundary rule; event types do not determine placement. Trailing sealed
+assistant entries also use their producing call's step. Abandoned and incomplete
+model calls remain visible with their recorded class and step. Each model step preserves request hashes,
+prompt references, chosen tool calls, usage,
+latency, failure kind and context-measurement facts. `callrecord.DecodeResponse`
+restores exact numeric metadata and tool inputs and preserves chosen tool payload
+bytes.
+
+Tool arguments come from the assistant entry's stored call, before server
+injection. Results, bounds, structured errors and duration come from canonical
+stored output metadata; full result bytes come from its result reference, even
+when hooks or transcript previews omit the body. Results with no matching call,
+duplicate results, name mismatches and repeated tool-call IDs are errors. Child
+trajectories appear in `ToolStep.Children` directly under their owning call, in
+child-link order. A missing linked run is an error. `AnswerStep.Content` is
+`json.RawMessage`: clarification text becomes a JSON string, with invalid UTF-8
+replaced by U+FFFD. Typed-input payloads retain their exact stored JSON bytes and
+numeric tokens. Serialized answers are readable JSON values, never base64.
+Deterministic marshaling sorts
+object keys and removes formatting whitespace without rounding numbers.
+Question and external-tool answers are full JSON tool results, and confirmation
+decisions appear as observed authorization steps.
+
+Record-derived model, tool and stored-answer steps have `Verified=true`.
+Thinking, notes, retry hints, policy decisions, await prompts, phase changes,
+prompt-rendering events, confirmation decisions and completion status are observed
+fields. Set `EventsUnverified` whenever an application has a `BeforeEvent`
+interceptor: those observed steps become unverified, while record-derived steps
+remain verified. An interceptor that drops observer events cannot remove recorded
+calls, results or answers.
+
+Totals are local to each run. They include all model attempts, counts by adoption
+class, adopted model calls, tokens per model, tool calls, failed tool calls and
+repeated calls with the same name and key-sorted JSON arguments. Wall time spans
+the first and last **record-event** timestamps (`planner_step`, `run_sealed`,
+`child_run_linked` and compaction record events). Observer events never feed
+totals, so dropping them leaves totals unchanged. Each child has its own totals.
+
+`trajectory.Session` is a caller-ordered list of trajectories. Both trajectory
+and session `Marshal` methods produce deterministic JSON with nanosecond
+durations and sorted object keys. Rendering and the documented JSON schema are
+separate surfaces.
+
 ### Run-log result references and upgrade
 
 Every `ToolResultReceivedEvent` carries `Refs` for the stored eligible result,
