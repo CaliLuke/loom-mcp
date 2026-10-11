@@ -77,6 +77,10 @@ official SDK for valid client behavior.
 
 ### Assistant fixture
 
+Its `agenttest` package compiles and checks the examples in
+[Testing agents and tools](../docs/agent_testing.md), including wiring, selection,
+request reuse and stub diagnostics.
+
 `fixtures/assistant` owns generated-server behavior that can be tested directly
 with `httptest`, including:
 

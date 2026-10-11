@@ -1067,19 +1067,18 @@ The top-level `trajectory` package derives evaluation steps from a self-containe
 `RunRecord`. `Build(record, runID, options)` reads no stores and produces the same
 trajectory from `runrecord.Read` and `runrecord.FromExport`. The requested run and
 all linked children must be sealed; an unsealed run returns `ErrNotTerminal`.
+The compiled example below uses `r`, a harness Result from the assistant fixture,
+and `h`, its harness; later reference blocks reuse `tr`.
 
+<!-- snippet: runtime_trajectory -->
 ```go
-tr, err := trajectory.Build(record, runID, trajectory.Options{
-    Output:           output,
-    EventsUnverified: hasBeforeEvent,
+tr, err := trajectory.Build(r.Record, r.RunID, trajectory.Options{
+    Output:           r.Output,
+    EventsUnverified: h.Runtime().HasEventInterceptors(),
 })
-if err != nil {
-    return err
-}
+require.NoError(t, err)
 data, err := tr.Marshal()
-if err != nil {
-    return err
-}
+require.NoError(t, err)
 ```
 
 `Options.Output`, when supplied, selects its `Final` for the requested run,
@@ -1156,6 +1155,7 @@ JSON. Children appear below their owning tool, with two additional spaces in
 text. Steps remain in slice order, grouped by planner step number. Each run ends
 with its own totals, whose map keys are sorted.
 
+<!-- snippet: runtime_render -->
 ```go
 text := tr.Render(trajectory.RenderOptions{
     Format: trajectory.FormatText,
@@ -1205,11 +1205,10 @@ embedded JSON Schema 2020-12 at
 protocol versions. An added optional field stays v1; removal, rename, type changes
 or changes in meaning require v2.
 
+<!-- snippet: runtime_document -->
 ```go
-data, err := trajectory.EncodeDocument(tr)
-if err != nil {
-    return err
-}
+data, err = trajectory.EncodeDocument(tr)
+require.NoError(t, err)
 ```
 
 The field reference below uses the exact JSON spelling. Trajectory-owned names
@@ -1249,21 +1248,23 @@ observations unverified, while recorded calls, results and answers remain verifi
 
 ### Harness
 
+Start with [Testing agents and tools](agent_testing.md) for compiled wiring,
+selection and request-fixture recipes.
+
 `agenttest.New(t, register, opts...)` constructs an isolated in-memory runtime
 and reports script and lifecycle leaks at test cleanup. The `register` callback
 wires application agents and real tool executors, including generated
 `Register…Agent` and `RegisterUsedToolsets` functions. Scripted overrides are
 registered afterward; other application model clients remain available.
 
+<!-- snippet: runtime_harness -->
 ```go
-h := agenttest.New(t, register,
-    agenttest.ScriptedModel("chat", agenttest.Respond(agenttest.Text("done"))),
+h := agenttest.New(t, guideRegister,
+    agenttest.ScriptedModel("fixture", agenttest.Respond(agenttest.Text("done"))),
     agenttest.WithResponder(agenttest.Responder{agenttest.Clarify("yes")}),
 )
-result, err := h.Run(t.Context(), AgentID, agenttest.User("hello"))
-if err != nil {
-    t.Fatal(err)
-}
+result, err := h.Run(t.Context(), "assistant.assistant_runtime", agenttest.User("hello"))
+require.NoError(t, err)
 expect.Require(t, expect.Trajectory(result.Trajectory), expect.Completed())
 ```
 
@@ -1334,6 +1335,7 @@ The harness is strict by default. Register real toolsets through the application
 normal registration path (including generated `RegisterUsedToolsets`); executors
 may be omitted for stubbed tools. Then declare typed responses before Run:
 
+<!-- snippet: runtime_stubs -->
 ```go
 stub := agenttest.Stub(h, projected.ProjectedStatusToolTool)
 stub.Return(&projected.ProjectedStatusToolResult{Status: "ready"})
@@ -1397,10 +1399,11 @@ events, completion checks and budgets. A Session that lists a child separately
 from a parent that already contains it counts that child twice, including its
 calls, events and budgets.
 
+<!-- snippet: runtime_expect -->
 ```go
 subject := expect.Trajectory(tr)
 expect.Require(t, subject,
-    expect.Call(EchoTool, nil, nil),
+    expect.Call(projected.ProjectedStatusToolTool, nil, nil),
     expect.Completed(),
     expect.MaxModelCalls(3),
     expect.MaxTokens(1000),

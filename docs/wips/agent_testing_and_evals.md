@@ -251,7 +251,9 @@ Success criteria:
 
 ## 4. Worked examples
 
-These are target APIs. Names follow decision D1 and may change.
+Story (a) reflects the implemented Plan-A APIs. The compiled examples in
+[`docs/agent_testing.md`](../agent_testing.md) are authoritative. Story (b) remains
+a Plan-B target API.
 
 ### Story (a): I added a `search_orders` tool
 
@@ -261,11 +263,14 @@ func TestSearchOrdersSelection(t *testing.T) {
 	h := agenttest.New(t, bootstrap.Register, agenttest.LiveModel("default"))
 
 	// Capture one real request from the agent, then reuse it.
-	base := h.CaptureFirstRequest(ctx, chat.Agent, "Where is my order 1234?")
+	base, err := h.CaptureFirstRequest(ctx, chat.Agent, agenttest.User("Where is my order 1234?"))
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	agenttest.Repeat(t, 5, 4, func(t *testing.T) {
-		calls := agenttest.Decide(t, h.Model("default"), base)
-		expect.Require(t, calls,
+	agenttest.Repeat(t, 5, 4, func(at testing.TB) {
+		d := agenttest.Decide(at, h.Model("default"), base)
+		expect.Require(at, expect.Calls(d.Calls),
 			expect.Call(orders.SearchOrdersTool, func(p *orders.SearchOrdersPayload) error {
 				if p.OrderID != "1234" {
 					return fmt.Errorf("order_id = %q", p.OrderID)
@@ -277,9 +282,9 @@ func TestSearchOrdersSelection(t *testing.T) {
 
 	// Negative case: a request that must not use the tool.
 	other := base.WithUserMessage("What are your opening hours?")
-	agenttest.Repeat(t, 5, 5, func(t *testing.T) {
-		calls := agenttest.Decide(t, h.Model("default"), other)
-		expect.Require(t, calls, expect.Forbid(orders.SearchOrdersTool))
+	agenttest.Repeat(t, 5, 5, func(at testing.TB) {
+		d := agenttest.Decide(at, h.Model("default"), other)
+		expect.Require(at, expect.Calls(d.Calls), expect.Forbid(orders.SearchOrdersTool))
 	})
 }
 ```
@@ -293,12 +298,15 @@ func TestSearchOrdersWiring(t *testing.T) {
 		agenttest.Respond(agenttest.ToolCall(orders.SearchOrdersTool, &orders.SearchOrdersPayload{OrderID: "1234"})),
 		agenttest.Respond(agenttest.Text("Order 1234 ships tomorrow.")),
 	))
-	h.Stub(orders.SearchOrdersTool, func(ctx context.Context, p *orders.SearchOrdersPayload) (*orders.SearchOrdersResult, error) {
+	agenttest.Stub(h, orders.SearchOrdersTool).Handle(func(ctx context.Context, p *orders.SearchOrdersPayload) (*orders.SearchOrdersResult, error) {
 		return &orders.SearchOrdersResult{Status: "shipping"}, nil
 	})
 
-	traj := h.Run(ctx, chat.Agent, "Where is my order 1234?")
-	expect.Require(t, traj, expect.Call(orders.SearchOrdersTool, nil, nil), expect.Completed())
+	result, err := h.Run(ctx, chat.Agent, agenttest.User("Where is my order 1234?"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	expect.Require(t, expect.Trajectory(result.Trajectory), expect.Call(orders.SearchOrdersTool, nil, nil), expect.Completed())
 }
 ```
 
@@ -507,12 +515,13 @@ failure.
 - `expect.Require(t, subject, expectations...)` evaluates the expectations and
   fails the test with every failed check's diagnostic.
 
-Expectations apply to a trajectory, a session trajectory, or the tool calls of
-one model call (`Decide`).
+Subjects are sealed. Construct them with `expect.Trajectory(tr)`,
+`expect.Session(runs)` or `expect.Calls(d.Calls)` for one model decision.
 
 **Data-driven expected tools** for datasets that cannot hold Go code (JSONL,
-Opik): `ExpectedTools` lists tool names with an optional JSON subset of
-arguments, plus `ordered` and `exact` flags. It yields a check and a
+Opik): `ExpectedTools{Tools, Ordered, Exact}` is a struct. `Tools` lists tool
+names with an optional JSON subset of arguments; the flags control matching.
+It yields a check and a
 `tool_correctness` score (matching calls divided by calls made), following
 DeepEval's definition.
 
@@ -532,21 +541,25 @@ The harness:
 - calls the application's registration function;
 - registers models from options, keyed by model ID as in
   `RegisterModel(id, ...)`: `agenttest.LiveModel(id)` uses the application's
-  configured client for that model ID; `agenttest.ScriptedModel(id,
-  responses...)` uses the scripted model (A3). `h.Model(id)` returns the
-  registered client;
+  configured client for that model ID and builds no provider;
+  `agenttest.ScriptedModel(id, turns...)` uses the scripted model (A3).
+  `h.Model(id)` returns the registered client;
 - configures `RunStore` and `RunEventStore` for K8 recording and `RunRecord`
   reconstruction (T6);
 - creates a unique session per run, so concurrent tests and repeats never
   collide;
-- installs an OTel tracer through `WithTracer`, exporting to a configurable
-  endpoint such as Logal, and opens a root span per run. Without an exporter the
-  trace ID is recorded as empty.
+- uses a caller-supplied OTel `TracerProvider` through `WithTracerProvider`
+  and `telemetry.NewTracer`, and opens a root span per run. The caller owns
+  exporter configuration and shutdown. Without a provider the trace ID is empty.
+
+Runtime additions used by Plan A are `Runtime.HasEventInterceptors`,
+`telemetry.NewTracer`, `Runtime.ToolDispatchMode` and `Runtime.ModelIDs`.
 
 `h.Run(ctx, agent, input)` starts a run, answers awaits through the configured
-responder, waits for a terminal phase, and returns a trajectory.
-`h.RunSession(ctx, agent, turns)` sends several user turns in one session and
-returns a session trajectory.
+responder, waits for a terminal phase, and returns `(*Result, error)`. Agent
+failures populate `Result.RunErr`; harness failures return an error.
+`h.RunSession(ctx, agent, turns...)` returns `(*SessionResult, error)` with ordered
+runs and a session trajectory; history comes from the agent memory policy.
 
 Await responder: a policy that answers confirmations (approve or deny by tool),
 clarifications, questions, and typed input from fixed values or a function. An
@@ -556,11 +569,13 @@ await without an answer fails the run with a diagnostic.
 
 A `BeforeTool` interceptor replaces execution of activity-run tools:
 
-- `h.Stub(tool, func(ctx, P) (R, error))`, fixed results, fixed errors, and an
-  optional delay;
-- a tool called without a stub fails the run by default;
-  `h.Passthrough(tool)` runs the real tool;
-- randomness takes an explicit seed, which is recorded.
+- `agenttest.Stub(h, tool).Handle(func(context.Context, P) (R, error))`,
+  `.Return(value)`, `.Fail(err)` and an optional `.After(delay)`;
+- activity tools are strict by default. An unstubbed call becomes a model-visible
+  tool error and a `*StubError` in Run's harness error and Close;
+  `h.Passthrough(tool)` runs the real tool.
+
+Recorded-seed randomness is deferred follow-up work.
 
 Limit: inline tools and agent-as-tool children skip interceptors. Children are
 tested through their own model (scripted or live) and stubs on their tools.
@@ -572,14 +587,18 @@ A `model.Provider` wrapped with `model.NewClient`, so every scripted response
 goes through the same request-contract validation as a real provider. It
 supports `Complete` and `Stream`. Responses are built from typed descriptors
 (`agenttest.ToolCall(tool, payload)`, `agenttest.Text(...)`), with unique call
-IDs and a stop reason.
+IDs and a stop reason. `ScriptedModel(id, turns ...Turn)` builds a script;
+`ScriptedModelFrom(id, script)` shares an existing script. `NewScript(...).AnyOrder()`
+selects the first unconsumed turn whose matchers pass.
 
 ### A4. Decide and Repeat
 
 - `h.CaptureFirstRequest(ctx, agent, input)` runs the agent until its first
-  model call and returns the captured request. Tools are not run. Mechanism:
-  register a client that returns a sentinel error on both `Complete` and
-  `Stream`. K8 records the effective request before calling that client. The
+  model call and returns `(Request, error)`. Tools scheduled before that call
+  follow normal strict stub rules. At construction the harness wraps every
+  registered model with a gate returning a sentinel on both `Complete` and
+  `Stream`; register all models inside the registration callback. K8 records
+  the effective request before calling that client. The
   in-memory engine does not retry activities, so the run ends failed, and the
   harness checks that the failure is the sentinel. A run that ends without any
   model call is an error. A planner that handles the sentinel itself instead
@@ -587,15 +606,19 @@ IDs and a stop reason.
   the request from the run's `runrecord` `Calls[0].Request`, after every
   interceptor and the runtime's re-applied policies.
 - `agenttest.Decide(t, client, request)` makes one model call and returns the
-  chosen tool calls. No tools run. This is the main tool-selection test.
+  `*Decision` containing request, response, calls and latency. No tools run.
+  This is the main tool-selection test.
 - The captured request is an `agenttest.Request`. Its transform methods return
   a copy: `WithUserMessage` (replaces the last user message), `WithSystem`
   (replaces the system-role messages), `WithToolSpecs` (current generated
-  specs), `WithModel`, `WithRunID` (replaces the original run ID for replay).
-- `agenttest.Repeat(t, n, minPass, fn)` runs `fn` `n` times and passes when at
-  least `minPass` attempts pass (glossary). It reports the diagnostics of every
+  specs; it mirrors a private tool-spec mapping), `WithModel`, `WithRunID`
+  (replaces the original run ID for replay).
+- `agenttest.Repeat(t, n, minPass, func(testing.TB))` runs the callback `n` times
+  and passes when at least `minPass` attempts pass (glossary). It reports the diagnostics of every
   failed attempt.
-- Live-model tests are opt-in: they skip unless `LOOM_LIVE_MODEL=1` (D6).
+- `LiveModel(id)` and `SkipUnlessLive(t, id)` require `LOOM_LIVE_MODEL=1`
+  (D6); undeclared application clients are not blocked. Live-model tests skip
+  by default through these helpers.
   Unlike the opt-out `CODEX_INTEGRATION` smoke test, they never run by
   default.
 
@@ -845,14 +868,14 @@ One ticket is one commit. Each ticket includes its tests and documentation.
 | Phase | Ticket | Blocked by |
 |---|---|---|
 | 1. Foundation | T0 Model-call identity in the runtime (5.2), done | — |
-| | T1 `TypedTool` descriptors, `tools.Named`, codegen (5.1) | — |
-| | T3 Trajectory from `RunRecord`, including `callrecord.DecodeResponse` (5.4) | compaction K8 (done) |
-| | T4 Trajectory rendering and JSON schema (5.4) | T3 |
-| | T5 `expect` package, including `ExpectedTools` (5.5) | T1, T3 phase 1 |
-| 2. Testing | T6 Harness: runtime, RunStore, RunEventStore, models, sessions, tracer, `Run`, await responder (A1) | T3 |
-| | T7 Tool stubs (A2) | T1, T6 |
-| | T8 Scripted model (A3) | — |
-| | T9 `CaptureFirstRequest`, `Decide`, request-fixture encoding, transforms, `Repeat`, live gating (A4) | T5, T6, T8, D6 (decided) |
+| | T1 `TypedTool` descriptors, `tools.Named`, codegen (5.1), done | — |
+| | T3 Trajectory from `RunRecord`, including `callrecord.DecodeResponse` (5.4), done | compaction K8 (done) |
+| | T4 Trajectory rendering and JSON schema (5.4), done | T3 |
+| | T5 `expect` package, including `ExpectedTools` (5.5), done | T1, T3 phase 1 |
+| 2. Testing | T6 Harness: runtime, RunStore, RunEventStore, models, sessions, tracer, `Run`, await responder (A1), done | T3 |
+| | T7 Tool stubs (A2), done | T1, T6 |
+| | T8 Scripted model (A3), done | — |
+| | T9 `CaptureFirstRequest`, `Decide`, request-fixture encoding, transforms, `Repeat`, live gating (A4), done | T5, T6, T8, D6 (decided) |
 | | T10 Docs, skill, fixture (A5) | T6–T9 |
 | 3. Dev loop | T11 Scenarios, items, JSONL datasets (B1) | T5, T6 |
 | | T12 Runner (B2) | T11 |
@@ -871,9 +894,9 @@ need for them.
 Plan A is complete after phase 2. Each phase ends with the repository
 verification ladder.
 
-T1, T3, and T8 can start now. T10 is last in Plan A. The separate capture
-ticket is dropped: `DecodeResponse` belongs to T3 and request-fixture encoding
-to T9.
+T0–T9 are done; T2 was dropped and its work landed in T3 and T9. T10 is last
+in Plan A. The separate capture ticket is dropped: `DecodeResponse` belongs to
+T3 and request-fixture encoding to T9.
 
 ---
 

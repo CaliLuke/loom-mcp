@@ -583,6 +583,7 @@ loom example <module-import-path>/design
 
 ## References
 
+- `references/agent-testing.md`: application agent/tool tests with agenttest, expect and trajectory.
 - `references/repo-map.md`: source routing for repo docs and packages
 - `references/runtime-contracts.md`: current runtime, planner streaming, stream profile, and agent-as-tool rules
 - `references/codegen-contracts.md`: current DSL/codegen/type-ref/MCP generation rules
@@ -595,6 +596,7 @@ loom example <module-import-path>/design
 
 ## Selection Rules
 
+- For an application's agent/tool tests, start with `references/agent-testing.md`.
 - Start with `references/runtime-contracts.md` or `references/codegen-contracts.md`, depending on the task.
 - Use `references/repo-map.md` to jump into the right repo docs or packages.
 - Use the `references/user-guides/*.md` files only when the contract files and repo docs are not enough.

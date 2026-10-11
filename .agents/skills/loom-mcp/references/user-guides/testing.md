@@ -6,6 +6,7 @@ Use fast contract tests close to the changed layer, then run the repository veri
 
 | Change | Start with |
 | --- | --- |
+| Application agent/tool behaviour | `agenttest` + `expect`; `references/agent-testing.md` |
 | DSL validation/expression | `dsl/*_test.go`, `expr/**/*_test.go` |
 | Generator/template | `codegen/**/tests`, golden/contract tests |
 | Runtime planner/tool behavior | package tests under `runtime/agent/...` |

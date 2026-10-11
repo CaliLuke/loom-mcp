@@ -6,6 +6,7 @@ Use this map to choose the smallest authoritative source for the task at hand.
 
 - `README.md`: current product framing, quick start, agent composition, MCP overview, stream profiles.
 - `DESIGN.md`: plugin architecture, generated surface, MCP/codegen intent, quickstart output.
+- `docs/agent_testing.md`: compiled application wiring, selection and request-fixture recipes.
 - `docs/runtime.md`: runtime contracts, plan/execute/resume loop, streaming, tool execution, prompt/runtime features.
 - `docs/dsl.md`: DSL surface and generated helper semantics.
 - `docs/glossary.md`: canonical distinctions for state, delivery, skills, MCP, registry, and generated ownership.
@@ -13,6 +14,9 @@ Use this map to choose the smallest authoritative source for the task at hand.
 
 ## Source Directories
 
+- `agenttest/`: in-memory harness, scripted models, strict stubs and standalone decisions.
+- `expect/`: typed expectations and sealed evidence subjects.
+- `trajectory/`: record-derived causal steps, rendering and versioned JSON.
 - `dsl/`: loom-mcp DSL surface.
 - `expr/`: design expression model.
 - `codegen/`: generator internals and templates.
@@ -27,6 +31,7 @@ Use this map to choose the smallest authoritative source for the task at hand.
 
 ## Skill Reference Files
 
+- `references/agent-testing.md`: first stop for application agent/tool tests.
 - `references/runtime-contracts.md`: current runtime, planner streaming, agent-as-tool, and stream behavior.
 - `references/codegen-contracts.md`: current DSL/codegen/MCP generation rules.
 - `references/user-guides/*.md`: secondary long-form guides. Use these after the contract files and repo docs when you need broader narrative or examples.

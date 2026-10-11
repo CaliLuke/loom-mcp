@@ -112,6 +112,7 @@ Start here:
 - [`docs/overview.md`](docs/overview.md)
 - [`docs/dsl.md`](docs/dsl.md)
 - [`docs/runtime.md`](docs/runtime.md)
+- [`docs/agent_testing.md`](docs/agent_testing.md)
 - [`docs/mcp_sdk_server.md`](docs/mcp_sdk_server.md)
 - [`docs/operations.md`](docs/operations.md)
 - [`docs/tool_payload_defaults.md`](docs/tool_payload_defaults.md)
