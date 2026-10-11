@@ -2767,6 +2767,22 @@ directly, it must call `model.NewClient(provider)` before registration. The
 different `Stream` return types make a raw provider fail the `model.Client`
 interface at compile time.
 
+For deterministic model tests, use `agenttest.ScriptClient(t, turns...)` or
+`agenttest.NewScript(turns...)` and its `Client()`. Build turns with `Respond`,
+`Text`, `Thinking`, `ToolCall`, `RawToolCall`, `Usage`, and `Fail`; typed tool calls
+use the descriptor's payload codec, and encoding failures are `NewScript` builder
+errors. `NewScript` also rejects malformed turn shapes and stream failure offsets
+beyond the turn's chunk count. Responses pass the real `model.NewClient`
+validation against each request.
+`HasTool`, `LacksTool`, and `LastToolResult` accept typed descriptors or `tools.Ident`.
+Scripts consume turns in FIFO order, with optional `When` matchers;
+`AnyOrder()` selects the first unconsumed
+matching turn. `Requests()` and `Remaining()` expose progress, and `ScriptClient`
+reports recorded diagnostics and unused turns at test cleanup. Streaming uses
+the same responses, supports `Chunked(n)` and `FailStreamAfter(n, err)`, and must
+be drained and finalized like any validated model stream. `WithContextLimits`
+exposes configured limits through `model.ContextInfo` without token counting.
+
 `model.TokenUsage` uses one cache accounting convention for every provider.
 `InputTokens` contains only uncached input. `CacheReadTokens` and
 `CacheWriteTokens` are disjoint input counts. A non-zero `TotalTokens` equals
