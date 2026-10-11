@@ -1,7 +1,7 @@
 # Agent Testing and Development Evals
 
-Status: draft for peer review, revision 4. Date: 2026-10-09. Revision 4 aligns
-the plan with context compaction revision 9's record.
+Status: draft for peer review, revision 5. Date: 2026-10-10. Revision 5 aligns
+the plan with the built K8 record and the binding eval decisions.
 
 This document plans two related capabilities for loom-mcp:
 
@@ -13,8 +13,9 @@ This document plans two related capabilities for loom-mcp:
   perform: run cases repeatedly, record full trajectories, judge them, find out
   why attempts fail, and compare one version of the agent with another.
 
-Both plans share one foundation: typed tool descriptors, a **trajectory** record
-built from the durable run log, and **model-call capture**.
+Both plans share one foundation: typed tool descriptors and a **trajectory**
+built from the transcript index and **`RunRecord`**, including K8 model-call
+records.
 
 Plan B is a development tool, not a CI gate. Its command does not encode
 pass/fail in its exit status.
@@ -49,7 +50,7 @@ pass/fail in its exit status.
 | Session | The runtime session that groups runs. Child agent runs share the parent's session. |
 | Trajectory | The typed record of one run and its child runs: model calls, tool calls, awaits, answer, usage, timing. |
 | Session trajectory | The ordered trajectories of every run in one session. Used by multi-turn cases. |
-| Model call | One request to a model client and its response, captured by the harness. |
+| Model call | One request to a model client and its response, recorded by K8 for agent runs or held by `Decide` for a standalone call. |
 | Scenario | A named kind of case with shared code, task, and assertions. |
 | Item | One input to a scenario: a single prompt or a list of user turns, plus optional data. |
 | Dataset | The items of a scenario. From Go values, a JSONL file, or Opik. |
@@ -160,8 +161,8 @@ Verified against the code at the date above.
 - **Model calls**: `assistant_turn` events never carry tool calls; adapters put
   tool calls in `Response.ToolCalls`. `usage` events have no call ID, and
   streaming emits several per call. Model-recovery retries and rejected tool
-  calls are not visible as events, by design (ROADMAP non-goals). So model calls
-  must be captured at the client.
+  calls are not visible as observer events. K8 call records hold model-call
+  evidence independently of those events (5.3).
 - **Run log limits**: the default store is in-memory. Application `BeforeEvent`
   interceptors can drop or rewrite events before they are appended.
   `tool_result_received` events over 1 MB omit inline result and server bodies,
@@ -183,12 +184,13 @@ Verified against the code at the date above.
 - **Model clients**: `RegisterModel` accepts any `model.Client` without
   validation. Validation applies when a client is built with
   `model.NewClient(provider)`. A registered client is the innermost layer,
-  inside the interceptors, and is shared by every run. Nothing places run or
-  turn IDs in the context of a model call, and `model.Request.RunID` is
-  optional, with no turn or call ID. `model.Request.PromptRefs` lists the
-  prompts used.
+  inside the runtime's call recorder and interceptors, and is shared by every
+  run. The planner's model-client path places `model.CallInfo` in the call
+  context (5.2). Direct `Runtime.ModelClient` calls do not receive it or get
+  recorded. `model.Request.RunID` is optional, with no turn or call ID.
+  `model.Request.PromptRefs` lists the prompts used.
 - **Run results**: `RunOutput` holds the final assistant message (`Final`),
-  tool events, notes, and aggregate `Usage`.
+  tool-event refs, notes, and aggregate `Usage`.
 - **Awaits** resume the same run (`ProvideConfirmation`, `ProvideClarification`,
   `ResumeRun`), so a tool call never starts in one run and finishes in another
   today. goa-ai's continuation handling is not needed until the ROADMAP's
@@ -199,10 +201,11 @@ Verified against the code at the date above.
   template, not of the rendered text), and scope, and fires only for
   registry-rendered prompts. `model.Request` has no system field; the system
   prompt is in `Messages`.
-- **Codecs**: each toolset generates `<Tool>PayloadCodec` and
-  `<Tool>ResultCodec` (`tools.JSONCodec[*T]`), `Specs`, and `Spec(name)`. There
-  is no `TypedTool`. `ToolSpec` embeds codec functions, so it cannot be hashed
-  directly.
+- **Codecs**: toolset specs packages name codecs `<TypeName>Codec`
+  (`tools.JSONCodec[*T]`) and expose `Specs` and `Spec(name)`. Agent helper
+  packages re-export them as `<Const>PayloadCodec` and `<Const>ResultCodec`.
+  There is no `TypedTool`. `ToolSpec` embeds codec functions, so it cannot be
+  hashed directly.
 - **Tracing**: there is no run-level span, only planner and model spans. The
   default tracer is a no-op. The in-memory engine keeps the caller's context,
   so when a real tracer is installed (`WithTracer`), a harness-opened root span
@@ -360,41 +363,29 @@ This is a user-facing codegen change. The ticket updates `docs/`, the loom-mcp
 skill, and regenerates fixtures (`make regen-assistant-fixture`,
 `make gen-registry`).
 
-### 5.2 Model-call identity (runtime change, T0)
+### 5.2 Model-call identity (T0, done)
 
-Today a model client cannot tell which run or turn a call belongs to (2.4).
-`AfterModel` cannot be joined to a stream's final response, and a shared client
-serves concurrent runs. So T0 adds a runtime change:
+T0 is implemented. A shared client can identify calls from concurrent runs:
 
-- the runtime places an exported `model.CallInfo{AgentID, RunID, SessionID,
-  TurnID, ModelID, Seq, Attempt}` in the context of every model call, in the planner's
-  model-client path (`simplePlannerContext.ModelClient`);
-- `model.CallInfoFrom(ctx)` reads it. `Seq` orders the calls of one run and is
-  unique across retries and parallel calls; `Attempt` is the planner activity
-  attempt, which T0 exposes through the engine (today the engine reads
-  `activity.GetInfo` only for the heartbeat timeout and run ID; `temporaltrace`
-  puts the attempt on spans but does not expose it to runtime code). `Seq` comes from the
-  compaction plan's run store (`NextSeq`, ticket K2), the only source unique
-  across retries and parallel calls under Temporal, so T0 follows K2
-  (`context_compaction.md` 4.13).
+- the runtime places an exported `model.CallInfo{AgentID, RunID, RootRunID,
+  SessionID, TurnID, ModelID, Seq, Attempt}` in the context of every model call
+  in the planner's model-client path (`simplePlannerContext.ModelClient`);
+- `model.CallInfoFrom(ctx)` reads it. `RootRunID` is the shared run-store scope.
+  `Seq` orders the calls of one run and is unique across retries and parallel
+  calls. It comes from the run store's `NextSeq` (compaction K2), scoped by
+  `(RootRunID, RunID)`. `Attempt` is the engine's planner activity attempt,
+  starting at 1; it is 0 when a planner activity is invoked without an engine
+  context.
 
-T0 is a small, general runtime change. It also helps provider logging and
-tracing. It blocks T2.
+This identity also helps provider logging and tracing. Direct
+`Runtime.ModelClient` calls do not receive it automatically.
 
 ### 5.3 Model-call capture
 
-> **Superseded for agent runs by the compaction plan's call record**
-> (`context_compaction.md` 4.13, ticket K8): the runtime records every model
-> call (request parts, response, error kind, usage) in the run store, keyed by
-> `(RunID, Seq, Attempt)` from `CallInfo`. The trajectory reads it through
-> `RunRecord`. Unlike the decorator, it also holds responses that runtime
-> validation later rejected, rejected summaries, and the content each index
-> entry adopted. The decorator below remains only for calls made outside a run,
-> such as `Decide`. The text is kept until the two plans are merged into the
-> roadmap.
-
-A `model.Client` decorator, installed at registration, records every model
-call, keyed by `CallInfo`:
+K8 call records (`runtime/agent/callrecord`) are the capture for agent runs.
+The runtime stores request parts, response, error kind, usage, and latency in
+the run store, keyed by `(RunID, Seq, Attempt)` from `CallInfo` within
+`RootRunID`. The trajectory reads them through `RunRecord`:
 
 - the request as sent to the provider (`model.Request`, including messages,
   tool definitions, and `PromptRefs`), with model ID and model class;
@@ -404,36 +395,48 @@ call, keyed by `CallInfo`:
 - or the error: its validation kind for an `OutputValidationError`, otherwise
   its message.
 
-A call without `CallInfo`, such as one made by `Decide`, is recorded under a
-harness-generated key.
+`callRecordingClient` is the innermost runtime layer around the registered
+client. It records the effective request after `BeforeModel`, cache policy,
+tool policy, and `tool_unavailable` decoration. Unary responses are recorded
+before `AfterModel`. For streams, `AfterModel` runs when the stream opens and
+the response is recorded at finalization. `AfterModel` response replacements
+and the later rewriting of tool-unavailable calls are outside the record.
+Calls short-circuited by `BeforeModel` do not reach the recorder. Raw rejected
+provider output is not recorded (ROADMAP non-goal).
 
-The decorator is the innermost layer. Changes made outside it are not
-captured: `AfterModel` response replacements and the rewriting of
-tool-unavailable calls. Raw rejected provider output is not recorded (ROADMAP
-non-goal).
+`callrecord.Encode`, `DecodeRequest`, `RequestDigest`, and `Rebuild` provide the
+stable request codec and exact reconstruction. T3 adds `DecodeResponse` in
+`callrecord`, without adding an export field. K8 tests cover request
+round-trips and unary and streaming call recording.
 
-The ticket proves correct keying on the unary and streaming paths with
-concurrent runs on one harness.
+Direct `Runtime.ModelClient` calls are not recorded. `Decide` holds its own
+request and response.
 
-A capture codec gives `model.Request` a stable JSON form with a round-trip test.
-Thinking signatures are provider-specific and are not replayed on another
-provider.
+Replay caveats: the unexported `completionValidate` callback is not carried
+over; thinking signatures are provider-specific and are not replayed on
+another provider; `Params.RunID` keeps the original run ID. T9 adds
+`WithRunID` to change it explicitly.
 
 ### 5.4 Trajectory
 
-Package `trajectory` (home per D1) builds a `Trajectory` for one run from:
+Package `trajectory` (home per D1) builds a `Trajectory` for one run from the
+**transcript index and `RunRecord`** (compaction K8):
 
-1. the **run log**, listed by run ID after the run ends: tool calls
-   (`tool_call_scheduled`, `tool_result_received`), committed assistant
-   messages, thinking, planner notes, retry hints, policy decisions, awaits,
-   phase changes, child links, prompt references, and the compaction steps
-   (`context_compacted`, `context_compaction_skipped`, `context_recalled`,
-   `context_overflow`). Await and
-   clarification answers and typed inputs are not in the run log; they come
-   from `RunRecord` (`context_compaction.md` 4.4);
-2. **captured model calls** (5.3): the model call steps, with the tool calls
-   each one chose, usage, and latency;
-3. **`RunOutput`**: the final answer (`Final`) and aggregate usage.
+1. `Run.Entries`: tool calls are loaded from index `Calls` hashes; results and
+   their metadata come from entry `Output` refs, resolving full content through
+   `RunRecord`. Committed assistant messages, clarification answers, and typed
+   inputs also come from the record (`context_compaction.md` 4.4);
+2. `Run.Calls`: model steps, including the requests, responses, chosen tool
+   calls, usage, latency, and adopted, abandoned, or incomplete classification;
+3. record events and the recorded transcript: child links, final answer, and
+   record-derived timing. Compaction events (`context_compacted`,
+   `context_compaction_skipped`, `context_overflow`) are record events that skip
+   `BeforeEvent` (compaction design 4.5), added by their compaction tickets;
+4. optional observed event fields: thinking, planner notes, retry hints, policy
+   decisions, awaits, phase changes, and prompt-render metadata. These may be
+   absent or rewritten by `BeforeEvent`; `EventsUnverified` marks them when an
+   interceptor is registered. `context_recalled` arrives with K13; it is not an
+   existing event.
 
 Child runs are found through `child_run_linked` and loaded the same way. Their
 trajectories are placed under the parent tool call.
@@ -462,15 +465,16 @@ Rules:
 - A trajectory is built only for a run in a terminal phase. This rule is new;
   goa-ai's collector does not enforce it.
 - Model-call steps of an agent run come from the call record (compaction K8),
-  which is always on; calls outside a run appear only when the capture
-  decorator was installed.
+  which is always on. Abandoned and incomplete calls remain in step order and
+  are marked by class. `Decide` holds standalone call evidence itself (5.3).
 - Tool results are read at full size through `RunRecord` (compaction K8),
   which replaces the run log's 1 MB truncation, so typed result predicates
   always decode the whole result.
-- The harness fails at construction when an application `BeforeEvent`
-  interceptor is registered, because it could drop or rewrite events the
-  trajectory depends on. An explicit option allows it, and the trajectory is
-  then marked unverified.
+- T6 sets `EventsUnverified` when any `BeforeEvent` interceptor is registered.
+  Record-derived steps remain verified; observed fields are optional and
+  marked unverified. Observed events never feed totals. Wall time uses only
+  record-event timestamps (`planner_step`, `run_sealed`, `child_run_linked`,
+  and compaction record events).
 
 A **session trajectory** is the ordered list of trajectories of the runs a case
 started in one session.
@@ -530,8 +534,9 @@ The harness:
   `RegisterModel(id, ...)`: `agenttest.LiveModel(id)` uses the application's
   configured client for that model ID; `agenttest.ScriptedModel(id,
   responses...)` uses the scripted model (A3). `h.Model(id)` returns the
-  registered client, wrapped with capture;
-- installs model-call capture (5.3) on every model;
+  registered client;
+- configures `RunStore` and `RunEventStore` for K8 recording and `RunRecord`
+  reconstruction (T6);
 - creates a unique session per run, so concurrent tests and repeats never
   collide;
 - installs an OTel tracer through `WithTracer`, exporting to a configurable
@@ -573,21 +578,20 @@ IDs and a stop reason.
 
 - `h.CaptureFirstRequest(ctx, agent, input)` runs the agent until its first
   model call and returns the captured request. Tools are not run. Mechanism:
-  the capture decorator records the request and returns a sentinel error
-  without calling the provider, on both `Complete` and `Stream`. The in-memory
-  engine does not retry activities, so the run ends failed, and the harness
-  checks that the failure is the sentinel. A run that ends without any model
-  call is an error. A planner that handles the sentinel itself instead of
-  returning it makes the harness fail with a diagnostic. Capture happens in the
-  decorator, not in `BeforeModel`, because only the decorator sees the
-  effective request after every interceptor and the runtime's re-applied
-  policies.
+  register a client that returns a sentinel error on both `Complete` and
+  `Stream`. K8 records the effective request before calling that client. The
+  in-memory engine does not retry activities, so the run ends failed, and the
+  harness checks that the failure is the sentinel. A run that ends without any
+  model call is an error. A planner that handles the sentinel itself instead
+  of returning it makes the harness fail with a diagnostic. The harness reads
+  the request from the run's `runrecord` `Calls[0].Request`, after every
+  interceptor and the runtime's re-applied policies.
 - `agenttest.Decide(t, client, request)` makes one model call and returns the
   chosen tool calls. No tools run. This is the main tool-selection test.
 - The captured request is an `agenttest.Request`. Its transform methods return
   a copy: `WithUserMessage` (replaces the last user message), `WithSystem`
   (replaces the system-role messages), `WithToolSpecs` (current generated
-  specs), `WithModel`.
+  specs), `WithModel`, `WithRunID` (replaces the original run ID for replay).
 - `agenttest.Repeat(t, n, minPass, fn)` runs `fn` `n` times and passes when at
   least `minPass` attempts pass (glossary). It reports the diagnostics of every
   failed attempt.
@@ -605,8 +609,8 @@ IDs and a stop reason.
 
 - Codegen tests show one descriptor per tool; a mismatched predicate type fails
   to compile (a compile-failure test fixture).
-- Capture tests join calls to runs and turns on unary and streaming paths;
-  request round-trip is exact.
+- Capture is covered by K8 tests: calls join to runs and turns on unary and
+  streaming paths; request round-trip is exact.
 - Trajectory tests cover causal order, nested child runs, duplicate and orphaned
   results, non-terminal runs, every await kind, totals, and deterministic JSON.
 - Expect tests cover exact and in-order matching, first-binding, forbidden
@@ -697,10 +701,11 @@ Identity of an experiment:
 - per variant: its labels, policy overrides, the context configuration
   fingerprint, and the prompt references it resolved.
 
-Each attempt records: scenario, item, repeat index, the trajectory, captured
-model calls, `RunRecord`'s self-contained export (`context_compaction.md` 4.5,
-so compaction replay and `show` work after the run's store is gone), checks,
-judgments, scores, tokens, latency, trace ID, and any infrastructure error.
+Each attempt records: scenario, item, repeat index, each run as a self-contained
+`runrecord.Export` (`context_compaction.md` 4.5), checks, judgments, scores,
+tokens, latency, trace ID, and any infrastructure error. Trajectories are
+derived from those exports; model calls are already in the record. Compaction
+replay and `show` work after the run's store is gone.
 
 Storage: an experiment directory with `experiment.json` and `attempts.jsonl`
 under a gitignored path (D2). The schema is documented and versioned.
@@ -814,7 +819,7 @@ default, `--json` everywhere.
 | Conversation simulator | — | Follow-up |
 | Dataset from code, CSV/JSON, cloud | Go slice, JSONL (B1); Opik (B9) | Partial: Go slice and JSONL; Opik import optional (T20); no CSV |
 | Dataset synthesis | — | Not planned |
-| Instrumentation (`@observe`, integrations) | Not needed for runtime steps: run log plus model capture (5.3, 5.4) | Gap: steps inside a planner or tool, such as a retrieval, are invisible unless they are tools. Follow-up: custom step events. |
+| Instrumentation (`@observe`, integrations) | Not needed for runtime steps: transcript index and `RunRecord`, including K8 call records (5.3, 5.4) | Gap: steps inside a planner or tool, such as a retrieval, are invisible unless they are tools. Follow-up: custom step events. |
 | Trajectory: generations, tool calls, retries, handoffs, timing | Model calls, tool calls with errors and duration, retry hints, child runs (5.4) | Full, except provider retries rejected by validation (non-goal) |
 | `evals_iterator`: run, capture, evaluate, store | Runner and store (B2, B3) | Full |
 | `TaskCompletionMetric` | Trajectory claim with fixed task (B7) | Full; task never inferred |
@@ -839,20 +844,19 @@ One ticket is one commit. Each ticket includes its tests and documentation.
 
 | Phase | Ticket | Blocked by |
 |---|---|---|
-| 1. Foundation | T0 Model-call identity in the runtime (5.2) | D1, compaction K2 |
-| | T1 `TypedTool` descriptors, `tools.Named`, codegen (5.1) | D1 |
-| | T2 Model-call capture and request codec (5.3) | T0, D1 |
-| | T3 Trajectory from run log, captured calls, and `RunOutput` (5.4) | T2, compaction K8 |
+| 1. Foundation | T0 Model-call identity in the runtime (5.2), done | — |
+| | T1 `TypedTool` descriptors, `tools.Named`, codegen (5.1) | — |
+| | T3 Trajectory from `RunRecord`, including `callrecord.DecodeResponse` (5.4) | compaction K8 (done) |
 | | T4 Trajectory rendering and JSON schema (5.4) | T3 |
-| | T5 `expect` package, including `ExpectedTools` (5.5) | T1, T3 |
-| 2. Testing | T6 Harness: runtime, models, sessions, tracer, `Run`, await responder (A1) | T2, T3 |
+| | T5 `expect` package, including `ExpectedTools` (5.5) | T1, T3 phase 1 |
+| 2. Testing | T6 Harness: runtime, RunStore, RunEventStore, models, sessions, tracer, `Run`, await responder (A1) | T3 |
 | | T7 Tool stubs (A2) | T1, T6 |
-| | T8 Scripted model (A3) | T1, T6 |
-| | T9 `CaptureFirstRequest`, `Decide`, transforms, `Repeat`, live gating (A4) | T5, T6, D6 |
+| | T8 Scripted model (A3) | — |
+| | T9 `CaptureFirstRequest`, `Decide`, request-fixture encoding, transforms, `Repeat`, live gating (A4) | T5, T6, T8, D6 (decided) |
 | | T10 Docs, skill, fixture (A5) | T6–T9 |
 | 3. Dev loop | T11 Scenarios, items, JSONL datasets (B1) | T5, T6 |
 | | T12 Runner (B2) | T11 |
-| | T13 Experiment store (B3) | T12, D2, compaction K8 |
+| | T13 Experiment store (B3) | T12, D2 (decided), compaction K8 (done) |
 | | T14 `show` and `compare` (B4, B5) | T4, T13 |
 | | T15 `evalcli` (B10, without replay and export) | T14 |
 | 4. Judge | T16 Judge core and calibration (B6) | T4, D3 |
@@ -867,18 +871,22 @@ need for them.
 Plan A is complete after phase 2. Each phase ends with the repository
 verification ladder.
 
+T1, T3, and T8 can start now. T10 is last in Plan A. The separate capture
+ticket is dropped: `DecodeResponse` belongs to T3 and request-fixture encoding
+to T9.
+
 ---
 
 ## 10. Open decisions
 
 | ID | Decision | Proposal | Blocks |
 |---|---|---|---|
-| D1 | Package names and homes | `runtime/agent/model` (`CallInfo`); `runtime/agent/tools` (`TypedTool`, `Named`); top-level `capture` (decorator and request codec), `trajectory`, `expect`, `agenttest`, `eval`, `eval/judge`, `eval/evalcli` | T0, T1, T2 |
-| D2 | Local store format and path | JSON files; path under the application module, gitignored | T13 |
+| D1 | Package names and homes | Decided: `runtime/agent/model` (`CallInfo`, done); `runtime/agent/tools` (`TypedTool`, `Named`); top-level `trajectory`, `expect`, `agenttest`, `eval`, `eval/judge`, `eval/evalcli`. K8 call records provide capture (5.3). | — |
+| D2 | Local store format and path | Decided: JSON files under the application module, gitignored; each run stored as `runrecord.Export`, trajectories derived from it | — |
 | D3 | Judge mechanism and truncation | Spike `completion` against a `tooloutput` port on Anthropic and OpenAI; decide whether over-limit input fails or truncates visibly | Phase 4 |
-| D4 | Trajectory source | Decided: run log plus model capture; stream adapter only for remote clients | — |
+| D4 | Trajectory source | Decided: transcript index and `RunRecord`, including K8 call records; observed fields optional; stream adapter only for remote clients | — |
 | D5 | Opik exporter home and trace mapping | Spike: how OTel trace IDs map to Opik traces, and whether the exporter lives in `features/` or in Auto-K on top of the store format | T18 |
-| D6 | Live-test gating | Opt-in environment variable `LOOM_LIVE_MODEL=1`; the test names the model ID | T9 |
+| D6 | Live-test gating | Decided: opt-in environment variable `LOOM_LIVE_MODEL=1`; the test names the model ID | — |
 | D7 | Trace ID under Temporal | In-memory: harness tracer and root span (decided). Temporal: open | Not blocking; Temporal support is a follow-up |
 
 ---
@@ -909,8 +917,8 @@ verification ladder.
 
 ## 12. Risks
 
-- **Runtime change for capture.** T0 adds model-call identity to the runtime.
-  It is small but touches the planner path, so it gets its own review.
+- **Runtime change for capture: resolved.** T0 model-call identity and K8
+  call recording are implemented and covered by their tests.
 - **Judge variance.** Repeats and calibration reduce it but do not remove it.
 - **Rendering size.** Long trajectories can exceed judge context; D3 decides the
   policy.

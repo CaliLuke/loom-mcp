@@ -1712,8 +1712,9 @@ recoveries. Long-running scenarios use the pretend window.
 - The trajectory is built from the canonical record through `RunRecord`, so
   compaction never removes evidence.
 - For agent runs, the call record (4.13) replaces the harness capture
-  decorator (eval plan 5.3): one schema, one layer, one store. The harness
-  keeps a decorator only for calls outside a run, such as `Decide`.
+  decorator (eval plan 5.3): one schema, one layer, one store. Calls outside
+  a run, such as `Decide`, are not recorded; `Decide` returns its own request
+  and response.
 - Calls are keyed by `(RunID, Seq, Attempt)` from `model.CallInfo`; child runs
   have their own keys. T0 takes `Seq` from `NextSeq`, so it follows K2.
 - An attempt in the experiment store (eval plan T13) holds `RunRecord`'s
@@ -1721,7 +1722,9 @@ recoveries. Long-running scenarios use the pretend window.
 - Record events skip `BeforeEvent` interceptors (4.5), so the transcript and
   the classification of calls hold even under an application interceptor. The
   other run-log events the trajectory reads stay interceptable, so the
-  harness still refuses `BeforeEvent` interceptors by default (eval plan 5.4).
+  trajectory marks the fields it takes from them as unverified
+  (`EventsUnverified`, eval plan 5.4) when a `BeforeEvent` interceptor is
+  registered.
 - Experiment identity (eval plan B3) includes the fingerprint and prompt
   reference per variant; `compare` does not warn about identical system
   messages and tools when those differ.
