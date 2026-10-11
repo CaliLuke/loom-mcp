@@ -183,7 +183,7 @@ Typed consumers can call
 eligible bytes and decode them with the generated result codec. Empty or missing
 hashes fail. Tool activities return references; terminal completion decoding runs in the finish activity.
 
-### Transcript index and planner views (protocol 11)
+### Transcript index and planner views (protocol 12)
 
 The workflow keeps immutable `index.MessageEntry` values and a committed
 `IndexHead`, rather than accumulated messages, tool outputs, typed answers, or a
@@ -234,9 +234,9 @@ Anthropic and Bedrock view grammars; views without checkpoints retain the existi
 resume-time Bedrock validation. Successful activity outputs may return `ViewUpdate`;
 output-validation recovery outputs never adopt it. Protocol 7 introduced these view updates, recorded
 request facts and model rates, entry size metadata and stamped run settings.
-The current protocol is 11 (recorded clarification exchanges and ordered await handshakes). Drain older workflows
-before upgrading; v5–v10 fixtures retain mismatch
-rejection before effects. Structural templates remain version 5.
+The current protocol is 12 (resume budget enforcement and terminal-result
+adoption across the budget). Drain older workflows before upgrading; v5–v11
+fixtures retain mismatch rejection before effects. Structural templates remain version 5.
 
 ### Opt-in context compaction
 
@@ -3144,6 +3144,14 @@ budget ends. The finalizer can return a response or execute an advertised
 terminal bookkeeping tool.
 
 The grace period does not permit normal planning or domain tool execution.
+At every planner resume boundary, including after an await barrier, an expired
+active budget permits only the time-budget finalizer, once. A terminal planner
+result already in hand (a final response or final tool result, with no tool calls
+or await) completes the run even if adopting that result crosses the budget. The runtime keeps that result without calling
+the finalizer again.
+
+A finalizer that would start at or after the hard deadline (`Budget` plus
+`FinalizerGrace`) is not scheduled. The run fails with `context deadline exceeded`.
 Deployments can enforce a separate wall-clock limit at the workflow boundary.
 
 ---
@@ -4179,13 +4187,17 @@ external `Client`, also supply `ClientOptions` with that client's converter
 external client whose converter configuration was not supplied.
 
 The generated fixture keeps a completed history under
-`integration_tests/fixtures/agent_features/testdata/workflow_protocol_v11.json`.
+`integration_tests/fixtures/agent_features/testdata/workflow_protocol_v12.json`.
 The scrubbed recording includes overflow recovery, a confirmation-gated tool turn
 with clarification, its recorded assistant question and user answer, one resume
 that selects child validation and context lookup, seed/result/question content
-batches, planner-step commits and terminal finish activity. The unchanged protocol
-5–10 fixtures verify rejection before workflow effects; protocol versions must
-match, so workers running protocol 11 cannot replay them as successful runs. Run
+batches, planner-step commits and terminal finish activity. A second recording,
+`workflow_protocol_v12_budget.json`, exercises an external-await resume whose
+terminal answer arrives within budget, but whose adoption crosses the budget.
+It completes without a finalizer call.
+The unchanged protocol 5–11 fixtures verify rejection before workflow effects;
+protocol versions must match, so workers running protocol 12 cannot replay them
+as successful runs. Run
 `go test -C integration_tests/fixtures/agent_features ./... -run '^TestGeneratedFeatureWorkflowReplay$'`
 for offline replay. To re-record it against the pinned Temporal development
 server, run
@@ -5248,9 +5260,10 @@ Each invocation records one keyed context_recalled event with kind, outcome
 and step. Exhaustion emits recall_budget_exhausted once per allowance episode,
 reset by refill. RunRecord rebuilds and validates recorded charges and settings.
 Workflow protocol 9 adds overflow recovery to these lookup contracts. The recorded
-v11 fixture exercises bounded recovery, lookup and a single resume after
-confirmation and clarification, including the recorded question/answer pair;
-v5–v10 fail before effects.
+v12 fixture exercises bounded recovery, lookup and a single resume after
+confirmation and clarification, including the recorded question/answer pair.
+The v12 budget fixture covers terminal adoption across the active budget without a finalizer call; v5–v11 fail
+before effects.
 Structural templates remain version 5.
 
 FromRecord preserves the canonical tool name in the stored record and marks

@@ -30,23 +30,40 @@ const maxRecoveryToolCatalogEntries = model.MaxToolDefinitionsPerRequest
 
 var errRecoveryTurnCapExceeded = errors.New("recovery turn cap exceeded")
 
-func capPlanActivityOptions(wfCtx engine.WorkflowContext, options engine.ActivityOptions, hardDeadline time.Time) engine.ActivityOptions {
+// capPlanActivityOptions rejects expired deadlines before scheduling and leaves
+// registered timeout defaults unchanged when no deadline is configured.
+func capPlanActivityOptions(wfCtx engine.WorkflowContext, options engine.ActivityOptions, hardDeadline time.Time) (engine.ActivityOptions, error) {
 	callOpts := options
 	startToClose := options.StartToCloseTimeout
 	scheduleToStart := options.ScheduleToStartTimeout
 	if !hardDeadline.IsZero() {
-		if rem := hardDeadline.Sub(wfCtx.Now()); rem > 0 {
-			if startToClose == 0 || startToClose > rem {
-				startToClose = rem
-			}
-			if scheduleToStart == 0 || scheduleToStart > rem {
-				scheduleToStart = rem
-			}
+		rem := hardDeadline.Sub(wfCtx.Now())
+		if rem <= 0 {
+			return engine.ActivityOptions{}, context.DeadlineExceeded
+		}
+		if startToClose <= 0 || startToClose > rem {
+			startToClose = rem
+		}
+		if scheduleToStart <= 0 || scheduleToStart > rem {
+			scheduleToStart = rem
 		}
 	}
 	callOpts.StartToCloseTimeout = startToClose
 	callOpts.ScheduleToStartTimeout = scheduleToStart
-	return callOpts
+	return callOpts, nil
+}
+
+// schedulePlanActivity checks the deadline before advancing the step or emitting
+// a planner command. Finalizers pass their separate grace deadline here.
+func schedulePlanActivity(wfCtx engine.WorkflowContext, base *workflowPlanInput, name string, options engine.ActivityOptions, input *PlanActivityInput, deadline time.Time) (*PlanActivityOutput, error) {
+	callOpts, err := capPlanActivityOptions(wfCtx, options, deadline)
+	if err != nil {
+		return nil, err
+	}
+	base.step = input.Step
+	return wfCtx.ExecutePlannerActivity(wfCtx.Context(), engine.PlannerActivityCall{
+		Name: name, Input: input, Options: callOpts,
+	})
 }
 
 func validatePlanActivityOutput(out *PlanActivityOutput, input PlanActivityInput) error {
@@ -249,13 +266,7 @@ func (r *Runtime) runPlanActivity(
 	if err := enforcePlanActivityInputBudget(input); err != nil {
 		return nil, err
 	}
-	base.step = input.Step
-	callOpts := capPlanActivityOptions(wfCtx, options, hardDeadline)
-	out, err := wfCtx.ExecutePlannerActivity(wfCtx.Context(), engine.PlannerActivityCall{
-		Name:    activityName,
-		Input:   &input,
-		Options: callOpts,
-	})
+	out, err := schedulePlanActivity(wfCtx, base, activityName, options, &input, hardDeadline)
 	if err != nil {
 		return nil, err
 	}

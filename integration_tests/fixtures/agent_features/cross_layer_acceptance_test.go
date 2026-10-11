@@ -39,6 +39,7 @@ type externalAwaitPlanner struct {
 	mu          sync.Mutex
 	resumeCalls int
 	toolOutputs int
+	finalize    *planner.Termination
 }
 
 type awaitingSpecialistPlanner struct {
@@ -164,7 +165,8 @@ func runGeneratedExternalAwaitScenario(t *testing.T, ctx context.Context, fx *fe
 	out, err := handle.Wait(ctx)
 	require.NoError(t, err)
 	require.Equal(t, "external inputs complete", messageText(out.Final))
-	resumeCalls, toolOutputs := plan.snapshot()
+	resumeCalls, toolOutputs, finalize := plan.snapshot()
+	assert.Nil(t, finalize, "the barrier must resume normal planning")
 	require.Equal(t, 1, resumeCalls)
 	require.Equal(t, 1, toolOutputs)
 	require.Equal(t, 1, fx.recorder.count(hooks.AwaitClarification))
@@ -313,6 +315,7 @@ func (p *externalAwaitPlanner) PlanResume(_ context.Context, input *planner.Plan
 	p.mu.Lock()
 	p.resumeCalls++
 	p.toolOutputs = len(input.ToolOutputs)
+	p.finalize = input.Finalize
 	p.mu.Unlock()
 	return &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: &model.Message{
 		Role:  model.ConversationRoleAssistant,
@@ -320,10 +323,10 @@ func (p *externalAwaitPlanner) PlanResume(_ context.Context, input *planner.Plan
 	}}}, nil
 }
 
-func (p *externalAwaitPlanner) snapshot() (int, int) {
+func (p *externalAwaitPlanner) snapshot() (int, int, *planner.Termination) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return p.resumeCalls, p.toolOutputs
+	return p.resumeCalls, p.toolOutputs, p.finalize
 }
 
 func (p *awaitingSpecialistPlanner) PlanStart(context.Context, *planner.PlanInput) (*planner.PlanResult, error) {

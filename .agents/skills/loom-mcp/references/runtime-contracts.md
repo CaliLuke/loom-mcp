@@ -760,6 +760,15 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - `policy.CapsState` tracks counter budgets only. Its legacy `ExpiresAt` field is
   deprecated and ignored; do not create a second wall-clock deadline through a
   policy decision.
+- After the active budget expires, only the time-budget finalizer may plan,
+  once, at every resume boundary, including after an await barrier. The grace
+  period does not permit normal planning or domain tool execution.
+- A terminal result already in hand (a final response or final tool result, with
+  no tool calls or await) completes the run even when adoption crosses the
+  budget, without another finalizer call. Planner scheduling rejects expired
+  deadlines; the finalizer uses the hard deadline including its grace period.
+  A finalizer that would start at or after that deadline (Budget + FinalizerGrace)
+  is not scheduled; the run fails with context deadline exceeded.
 - Engine-specific queue/schedule timeouts are separate from semantic run,
   planner, and tool budgets.
 
@@ -1092,9 +1101,11 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   ContextRecovery.DisableRecall and per-episode refill rules still apply.
   HistoryPolicy receives the recovered loaded view. Compress planners that build
   unrelated requests fail not_view_bearing at the observed provider overflow.
-- Protocol 11 records overflow recovery, a confirmation-gated tool turn with
+- Protocol 12 records overflow recovery, a confirmation-gated tool turn with
   a clarification question/answer pair, one resume, lookup and finalization in
-  workflow_protocol_v11.json; v5-v10 fixtures reject before effects. Structural templates stay version 5.
+  workflow_protocol_v12.json. The separate workflow_protocol_v12_budget.json
+  records terminal adoption across the active budget without a finalizer call;
+  v5-v11 fixtures reject before effects. Structural templates stay version 5.
   Anthropic/Bedrock Claude recognize older input-length/max_tokens overflow text;
   OpenAI recognizes nested response.failed/error.code mid-stream and Anthropic
   handles status-200 SSE error events. Tests cite documented recorded-body shapes.

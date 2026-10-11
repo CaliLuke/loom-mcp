@@ -69,7 +69,7 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   recorded-history replay test. Drain running workflows before deploying the
   new version; mismatched and unstamped inputs fail before workflow effects.
 
-- Current workflow protocol is 11. Every agent observes adopted call facts,
+- Current workflow protocol is 12. Every agent observes adopted call facts,
   sends sorted Models and runs the advisory guard, bounded overflow recovery and
   recall advertising. Threshold compaction stays opt-in. The existing
   run.ContextRecovery adds GuardMargin (zero=10%) beside DisableRecall; RunInput
@@ -81,9 +81,10 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   the observed provider overflow with its typed byte shortfall, emits
   context_budget_too_small and spends no retry. Views carry monotone
   PreviewThrough/ForceClearThrough and shared preview limits, including forced
-  Keep placeholders. The real v11 history covers recovery, a confirmation-gated
+  Keep placeholders. The real v12 history covers recovery, a confirmation-gated
   tool turn with a recorded clarification question/answer pair, one resume, lookup
-  and finalization; v5-v10 reject before effects. Structural templates stay version 5.
+  and finalization. A second v12 budget history covers terminal adoption across
+  the active budget without a finalizer call; v5-v11 reject before effects. Structural templates stay version 5.
 
 - Workflow protocol 6 uses immutable `runtime/agent/transcript/index` entries
   and linked segments. Workflows retain entries and IndexHead; planner activity
@@ -205,6 +206,14 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - `policy.CapsState` owns counter budgets only. Its deprecated `ExpiresAt` field
   is ignored; active-time enforcement belongs to deterministic runtime deadlines
   configured through `TimeBudget`, with external waits pausing that budget.
+- An expired active-time budget permits only the time-budget finalizer, once,
+  at every resume boundary, including after an await barrier. A terminal result
+  already in hand (final response or final tool result, with no tool calls or
+  await) completes even if adoption crosses the budget; do not discard it or call the finalizer again.
+  Reject planner scheduling when its deadline has expired; finalization uses
+  the separate hard deadline that includes its grace period. A finalizer that
+  would start at or after that deadline (Budget + FinalizerGrace) is not scheduled;
+  the run fails with context deadline exceeded.
 - Retry-and-reflect failure tracking is process-local and limited to 4096
   run/tool keys. Each failure refreshes its key. When full, the interceptor
   discards the least-recently-failed keys, which restart at attempt one.

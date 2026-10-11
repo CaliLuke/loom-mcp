@@ -25,6 +25,7 @@ type seedBudgetWorkflowContext struct {
 	planDelay      time.Duration
 	resumeDelay    time.Duration
 	duringProvided func()
+	duringHook     func(engine.HookActivityCall)
 }
 
 func TestRunBudgetStartsAfterSeedContent(t *testing.T) {
@@ -151,5 +152,8 @@ func (w *seedBudgetWorkflowContext) ExecutePlannerActivity(ctx context.Context, 
 
 func (w *seedBudgetWorkflowContext) PublishHook(ctx context.Context, call engine.HookActivityCall) error {
 	w.now = w.now.Add(w.hookDelay)
+	if w.duringHook != nil {
+		w.duringHook(call)
+	}
 	return w.testWorkflowContext.PublishHook(engine.WithActivityContext(ctx), call)
 }

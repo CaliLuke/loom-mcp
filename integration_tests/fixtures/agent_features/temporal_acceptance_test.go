@@ -95,7 +95,12 @@ func TestGeneratedFeatureRealTemporalContracts(t *testing.T) {
 		if os.Getenv("LOOM_MCP_RECORD_WORKFLOW_HISTORY") != "1" {
 			t.Skip("set LOOM_MCP_RECORD_WORKFLOW_HISTORY=1 to re-record")
 		}
-		recordWorkflowHistory(t, server.Client())
+		t.Run("main", func(t *testing.T) {
+			recordWorkflowHistory(t, server.Client())
+		})
+		t.Run("budget adoption", func(t *testing.T) {
+			recordBudgetWorkflowHistory(t, server.Client())
+		})
 	})
 
 	t.Run("generated coordinator matches in-memory behavior", func(t *testing.T) {

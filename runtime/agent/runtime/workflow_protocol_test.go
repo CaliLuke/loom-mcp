@@ -85,7 +85,7 @@ func TestChildInputsStampWorkflowProtocol(t *testing.T) {
 }
 
 func TestExecuteWorkflowRejectsProtocolBeforeEffects(t *testing.T) {
-	for _, version := range []int{0, 9, 10, api.WorkflowProtocolVersion + 1} {
+	for _, version := range []int{0, 9, 10, 11, api.WorkflowProtocolVersion + 1} {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {
 			beforeRuns := 0
 			bus := &recordingHooks{}

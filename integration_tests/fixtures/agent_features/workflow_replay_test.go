@@ -42,7 +42,7 @@ import (
 type historyReplayPlanner struct{}
 
 const (
-	workflowHistoryFile        = "testdata/workflow_protocol_v11.json"
+	workflowHistoryFile        = "testdata/workflow_protocol_v12.json"
 	workflowHistoryIdentity    = "loom-mcp-history-recorder"
 	workflowHistoryStickyQueue = "loom-mcp-history-recorder-sticky"
 	workflowHistoryQuestion    = "Which topic should the draft use?"
@@ -55,19 +55,25 @@ func TestGeneratedFeatureWorkflowReplay(t *testing.T) {
 		rewrite  bool
 		missing  bool
 		previous int
+		budget   bool
 	}{
 		{name: "current"},
+		{name: "terminal adoption crosses budget", budget: true},
 		{name: "protocol 5 rejected before effects", previous: 5},
 		{name: "protocol 6 rejected before effects", previous: 6},
 		{name: "protocol 7 rejected before effects", previous: 7},
 		{name: "protocol 8 rejected before effects", previous: 8},
 		{name: "protocol 9 rejected before effects", previous: 9},
 		{name: "protocol 10 rejected before effects", previous: 10},
+		{name: "protocol 11 rejected before effects", previous: 11},
 		{name: "future", rewrite: true},
 		{name: "missing", rewrite: true, missing: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			historyFile := workflowHistoryFile
+			if test.budget {
+				historyFile = workflowBudgetHistoryFile
+			}
 			if test.previous != 0 {
 				historyFile = fmt.Sprintf("testdata/workflow_protocol_v%d.json", test.previous)
 			}
@@ -84,9 +90,13 @@ func TestGeneratedFeatureWorkflowReplay(t *testing.T) {
 			require.NoError(t, json.Unmarshal(payload.Data, &input))
 			var recordedVersion int
 			require.NoError(t, json.Unmarshal(input["WorkflowProtocolVersion"], &recordedVersion))
-			assertHistoryToolContent(t, history, recordedVersion)
-			if recordedVersion >= 11 {
-				assertHistoryClarification(t, history)
+			if test.budget {
+				assertHistoryBudgetAdoption(t, history)
+			} else {
+				assertHistoryToolContent(t, history, recordedVersion)
+				if recordedVersion >= 11 {
+					assertHistoryClarification(t, history)
+				}
 			}
 			if test.previous != 0 {
 				assert.Equal(t, test.previous, recordedVersion)
@@ -144,8 +154,14 @@ func recordWorkflowHistory(t *testing.T, temporalClient client.Client) {
 	out, err := handle.Wait(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, "history replay complete", messageText(out.Final))
+	recordCompletedWorkflowHistory(t, ctx, temporalClient, eng, out.RunID, workflowHistoryFile)
+}
+
+// recordCompletedWorkflowHistory captures, scrubs and replays a real completed run.
+func recordCompletedWorkflowHistory(t *testing.T, ctx context.Context, temporalClient client.Client, eng *temporalengine.Engine, runID, filename string) *historypb.History {
+	t.Helper()
 	history := &historypb.History{}
-	events := temporalClient.GetWorkflowHistory(ctx, out.RunID, "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	events := temporalClient.GetWorkflowHistory(ctx, runID, "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 	for events.HasNext() {
 		event, err := events.Next()
 		require.NoError(t, err)
@@ -158,7 +174,8 @@ func recordWorkflowHistory(t *testing.T, temporalClient client.Client) {
 	data, err := (protojson.MarshalOptions{Indent: "  "}).Marshal(history)
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll("testdata", 0o750))
-	require.NoError(t, os.WriteFile(workflowHistoryFile, append(data, '\n'), 0o600))
+	require.NoError(t, os.WriteFile(filename, append(data, '\n'), 0o600))
+	return history
 }
 
 // scrubWorkflowHistory removes recording-machine identities and sticky queue

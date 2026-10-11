@@ -219,6 +219,11 @@ func (l *workflowLoop) handlePendingInterrupts() error {
 }
 
 func (l *workflowLoop) finalizeIfPastBudget() (*RunOutput, error) {
+	// Adoption can cross the budget after a terminal result is already in hand.
+	if len(l.st.Result.ToolCalls) == 0 && l.st.Result.Await == nil &&
+		(l.st.Result.FinalResponse != nil || l.st.Result.FinalToolResult != nil) {
+		return nil, nil
+	}
 	now := l.wfCtx.Now()
 	if l.deadlines.shouldFinalize(now) {
 		return l.finalizeForTimeBudget()

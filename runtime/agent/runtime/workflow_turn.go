@@ -298,6 +298,9 @@ func (r *Runtime) resumeAfterToolTurn(
 	deadlines *runDeadlines,
 	turnID string,
 ) (*RunOutput, error) {
+	if deadlines.budgetExpired(wfCtx.Now()) {
+		return r.finalizeWithPlanner(wfCtx, reg, input, base, st.ToolEvents, st.AggUsage, st.Caps, st.NextAttempt, turnID, plannerResultNotes(st.Result), planner.TerminationReasonTimeBudget, deadlines.Hard)
+	}
 	if resultsContainOutcomeUnknown(st.ToolEvents) {
 		return r.finalizeWithPlanner(
 			wfCtx, reg, input, base, st.ToolEvents, st.AggUsage, st.Caps,
