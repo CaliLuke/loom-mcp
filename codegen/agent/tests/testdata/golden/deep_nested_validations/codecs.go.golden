@@ -28,6 +28,18 @@ var (
 		ToJSON:   MarshalValidateResult,
 		FromJSON: UnmarshalValidateResult,
 	}
+)
+
+var (
+	// ValidateTool describes deep.validate with its typed payload and result codecs.
+	ValidateTool = tools.TypedTool[*ValidatePayload, *ValidateResult]{
+		Name:    Validate,
+		Payload: ValidatePayloadCodec,
+		Result:  ValidateResultCodec,
+	}
+)
+
+var (
 	// validatePayloadCodec provides an untyped codec for *ValidatePayload.
 	validatePayloadCodec = tools.JSONCodec[any]{
 		ToJSON: func(v any) ([]byte, error) {

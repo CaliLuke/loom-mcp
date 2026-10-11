@@ -52,6 +52,9 @@ type (
 		// ConstName is the Go constant identifier for this tool's ID, computed
 		// using the name scope to ensure uniqueness within the package.
 		ConstName string
+		// DescriptorName is the unique typed descriptor identifier, reserved
+		// after all tool constants and types have been allocated.
+		DescriptorName string
 		// Title is the human-friendly display title.
 		Title string
 		// Service name that owns the tool.

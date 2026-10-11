@@ -522,6 +522,8 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   unsafe under the new runtime contract. Regenerate every SDK fixture, including
   `integration_tests/fixtures/sdkbridge_consumer`, after an increment. Do not add
   a compatibility path for old versions.
+  Typed-tool descriptors are additive: keep compatibility version 3 and the
+  frozen SDK consumer baseline unchanged for descriptor generation alone.
 - Generated SDK servers expose Loom transport observability directly through
   `SDKServerOptions.TransportObserver`; keep external middleware wrapping as an
   application-wide alternative, not the only enablement path.

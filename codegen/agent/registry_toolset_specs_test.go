@@ -61,6 +61,10 @@ func TestRegistryToolsetSpecsStructure(t *testing.T) {
 		}
 	}
 	require.NotEmpty(t, specsContent, "expected generated specs.go at %s", expectedPath)
+	require.NotContains(t, specsContent, "tools.TypedTool")
+	for _, file := range files {
+		require.NotEqual(t, "gen/registry_test/toolsets/data_tools/codecs.go", filepath.ToSlash(file.Path))
+	}
 
 	require.Contains(t, specsContent, "func Specs() []tools.ToolSpec")
 	require.Contains(t, specsContent, "func FreezeSpecs() ([]tools.ToolSpec, error)")

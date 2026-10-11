@@ -29,6 +29,18 @@ var (
 		ToJSON:   MarshalSummarizeResult,
 		FromJSON: UnmarshalSummarizeResult,
 	}
+)
+
+var (
+	// SummarizeTool describes delegated.summarize with its typed payload and result codecs.
+	SummarizeTool = tools.TypedTool[*SummarizePayload, *SummarizeResult]{
+		Name:    Summarize,
+		Payload: SummarizePayloadCodec,
+		Result:  SummarizeResultCodec,
+	}
+)
+
+var (
 	// summarizePayloadCodec provides an untyped codec for *SummarizePayload.
 	summarizePayloadCodec = tools.JSONCodec[any]{
 		ToJSON: func(v any) ([]byte, error) {

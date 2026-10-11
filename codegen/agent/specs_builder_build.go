@@ -72,6 +72,9 @@ func buildToolSpecsDataFor(genpkg string, svc *service.Data, tools []*ToolData) 
 		}
 		data.addTool(entry)
 	}
+	if err := allocateToolDescriptors(data.tools, builder.scopeForTool()); err != nil {
+		return nil, err
+	}
 	data.Scope = builder.helperScope
 	data.Unions = builder.unionTypes()
 	data.TransportUnions = builder.transportUnionTypes()
@@ -91,6 +94,34 @@ func buildToolSpecsDataFor(genpkg string, svc *service.Data, tools []*ToolData) 
 		return data.tools[i].Name < data.tools[j].Name
 	})
 	return data, nil
+}
+
+// allocateToolDescriptors protects existing and derived identifiers before
+// naming descriptors and rejects tools without both typed codecs.
+func allocateToolDescriptors(entries []*toolEntry, scope *codegen.NameScope) error {
+	for _, entry := range entries {
+		for _, prefix := range []string{"Spec", "Inject", "Decode", "With"} {
+			name := prefix + entry.ConstName
+			if scope.PeekUnique(name) == name {
+				scope.Unique(name)
+			}
+		}
+	}
+	for _, entry := range entries {
+		for _, codec := range []struct {
+			usage    string
+			typeInfo *typeData
+		}{
+			{"payload", entry.Payload},
+			{"result", entry.Result},
+		} {
+			if codec.typeInfo == nil || !codec.typeInfo.GenerateCodec || codec.typeInfo.ExportedCodec == "" {
+				return fmt.Errorf("agent codegen: tool %q has no generated %s codec", entry.Name, codec.usage)
+			}
+		}
+		entry.DescriptorName = scope.Unique(entry.ConstName + "Tool")
+	}
+	return nil
 }
 
 // toolsetWithResolvedToolNames clones a toolset with the collision-resolved

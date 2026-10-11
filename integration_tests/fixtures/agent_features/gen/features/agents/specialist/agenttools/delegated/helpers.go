@@ -44,6 +44,10 @@ type SummarizeResult = delegatedspecs.SummarizeResult
 var SummarizePayloadCodec = delegatedspecs.SummarizePayloadCodec
 var SummarizeResultCodec = delegatedspecs.SummarizeResultCodec
 
+// SummarizeTool describes delegated.summarize with its typed payload and
+// result codecs.
+var SummarizeTool = delegatedspecs.SummarizeTool
+
 // NewSpecialistToolsetRegistration creates a toolset registration for the
 // specialist agent.
 // The returned registration can be used with runtime.RegisterToolset to make

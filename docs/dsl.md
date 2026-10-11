@@ -94,7 +94,7 @@ var _ = Service("orchestrator", func() {
 Running `loom gen example.com/assistant/design` produces:
 
 - `gen/orchestrator/agents/chat`: workflow + planner activities + agent registry.
-- `gen/orchestrator/agents/chat/specs`: payload/result structs, JSON codecs, tool schemas.
+- `gen/orchestrator/agents/chat/specs`: payload/result structs, JSON codecs, typed tool descriptors, tool schemas.
 - `gen/orchestrator/agents/chat/agenttools`: helpers that expose exported tools to other agents.
 - MCP registration helpers when an MCP toolset is referenced via `Use`.
 
@@ -112,6 +112,24 @@ var Specs = []tools.ToolSpec{
 ```
 
 Use these constants anywhere you need to reference tools.
+
+Each specs package with typed codecs also emits one `tools.TypedTool[P, R]`
+descriptor per tool in `codecs.go`, immediately after the typed codec block.
+For example, a primitive echo tool exposes
+`EchoTool = tools.TypedTool[*EchoPayload, EchoResult]{Name: Echo, Payload: EchoPayloadCodec, Result: EchoResultCodec}`.
+Type arguments match the generated codecs exactly, including pointer and value
+semantics. An empty result has a concrete `struct{}` type and codec. Generation
+fails if either typed codec is missing.
+
+Descriptor names use `<Const>Tool`, with a scope suffix on collision. They are
+reserved after all tool constants, types, and derived `Spec<Const>`,
+`Inject<Const>`, `Decode<Const>`, and `With<Const>` names so existing names stay stable.
+Exported-agent and used-toolset helpers re-export these descriptors using the
+resolved specs names. There is no generated `Typed()` list.
+
+Both descriptors and identifier constants satisfy `tools.Named` via `Ident()`.
+Registry toolsets use untyped codecs and expose `tools.Ident` for Named-only
+use; registry specs do not emit typed descriptors.
 
 ### Agent‑as‑Tool Composition (Child Workflows)
 

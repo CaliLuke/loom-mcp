@@ -27,6 +27,11 @@ import "strings"
 // calls. User code never needs to handle these transformations.
 type Ident string
 
+// Ident returns the identifier so Ident satisfies Named.
+func (id Ident) Ident() Ident {
+	return id
+}
+
 // String returns the string representation of the identifier. Useful for
 // logging, error messages, and JSON serialization where the raw string is needed.
 func (id Ident) String() string {

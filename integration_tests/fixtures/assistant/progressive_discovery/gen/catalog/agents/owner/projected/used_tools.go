@@ -32,6 +32,10 @@ type ProjectedLookupResult = projectedspecs.ProjectedLookupResult
 
 var ProjectedLookupResultCodec = projectedspecs.ProjectedLookupResultCodec
 
+// ProjectedLookupTool describes projected.projected_lookup with its typed
+// payload and result codecs.
+var ProjectedLookupTool = projectedspecs.ProjectedLookupTool
+
 // CallOption customizes planner.ToolRequest values built by the typed helpers.
 type CallOption func(*planner.ToolRequest)
 

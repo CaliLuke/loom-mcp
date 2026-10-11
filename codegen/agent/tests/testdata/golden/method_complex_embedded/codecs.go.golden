@@ -28,6 +28,18 @@ var (
 		ToJSON:   MarshalUpsertResult,
 		FromJSON: UnmarshalUpsertResult,
 	}
+)
+
+var (
+	// UpsertTool describes profiles.upsert with its typed payload and result codecs.
+	UpsertTool = tools.TypedTool[*UpsertPayload, *UpsertResult]{
+		Name:    Upsert,
+		Payload: UpsertPayloadCodec,
+		Result:  UpsertResultCodec,
+	}
+)
+
+var (
 	// upsertPayloadCodec provides an untyped codec for *UpsertPayload.
 	upsertPayloadCodec = tools.JSONCodec[any]{
 		ToJSON: func(v any) ([]byte, error) {

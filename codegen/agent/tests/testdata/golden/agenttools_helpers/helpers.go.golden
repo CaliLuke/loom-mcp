@@ -43,6 +43,9 @@ type FindResult = searchspecs.FindResult
 var FindPayloadCodec = searchspecs.FindPayloadCodec
 var FindResultCodec = searchspecs.FindResultCodec
 
+// FindTool describes search.find with its typed payload and result codecs.
+var FindTool = searchspecs.FindTool
+
 // NewScribeToolsetRegistration creates a toolset registration for the scribe
 // agent.
 // The returned registration can be used with runtime.RegisterToolset to make

@@ -28,6 +28,18 @@ var (
 		ToJSON:   MarshalAddResult,
 		FromJSON: UnmarshalAddResult,
 	}
+)
+
+var (
+	// AddTool describes math.add with its typed payload and result codecs.
+	AddTool = tools.TypedTool[*AddPayload, *AddResult]{
+		Name:    Add,
+		Payload: AddPayloadCodec,
+		Result:  AddResultCodec,
+	}
+)
+
+var (
 	// addPayloadCodec provides an untyped codec for *AddPayload.
 	addPayloadCodec = tools.JSONCodec[any]{
 		ToJSON: func(v any) ([]byte, error) {

@@ -2,6 +2,20 @@
 
 Use this file for current loom-mcp runtime behavior in this repo. Prefer it over stale external notes.
 
+## Typed Tool Identity
+
+- `tools.TypedTool[P, R]` contains only `Name tools.Ident`,
+  `Payload tools.JSONCodec[P]`, and `Result tools.JSONCodec[R]`.
+  Schemas and runtime metadata remain in `tools.ToolSpec`.
+- Both `tools.Ident` and `tools.TypedTool[P, R]` implement
+  `tools.Named` through `Ident() tools.Ident`.
+- Generated typed specs and helper packages expose one descriptor per tool,
+  preserving exact codec pointer/value types. Descriptor allocation protects
+  constants, types, and derived Spec/Inject/Decode/With identifiers; descriptors
+  receive suffixes on collision while existing names stay stable. Registry
+  specs have untyped codecs and use `tools.Ident` for Named-only APIs without
+  typed descriptors.
+
 ## Planner Streaming
 
 - `PlannerContext.ModelClient(id)` returns a runtime-decorated client.

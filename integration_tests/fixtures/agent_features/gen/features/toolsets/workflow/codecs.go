@@ -89,6 +89,54 @@ var (
 		ToJSON:   MarshalReviseResult,
 		FromJSON: UnmarshalReviseResult,
 	}
+)
+
+var (
+	// DraftTool describes workflow.draft with its typed payload and result codecs.
+	DraftTool = tools.TypedTool[*DraftPayload, *DraftResult]{
+		Name:    Draft,
+		Payload: DraftPayloadCodec,
+		Result:  DraftResultCodec,
+	}
+	// FinalizeTool describes workflow.finalize with its typed payload and result codecs.
+	FinalizeTool = tools.TypedTool[*FinalizePayload, *FinalizeResult]{
+		Name:    Finalize,
+		Payload: FinalizePayloadCodec,
+		Result:  FinalizeResultCodec,
+	}
+	// MethodEchoTool describes workflow.method_echo with its typed payload and result codecs.
+	MethodEchoTool = tools.TypedTool[*MethodEchoPayload, *MethodEchoResult]{
+		Name:    MethodEcho,
+		Payload: MethodEchoPayloadCodec,
+		Result:  MethodEchoResultCodec,
+	}
+	// PublishTool describes workflow.publish with its typed payload and result codecs.
+	PublishTool = tools.TypedTool[*PublishPayload, *PublishResult]{
+		Name:    Publish,
+		Payload: PublishPayloadCodec,
+		Result:  PublishResultCodec,
+	}
+	// RetryTool describes workflow.retry with its typed payload and result codecs.
+	RetryTool = tools.TypedTool[*RetryPayload, *RetryResult]{
+		Name:    Retry,
+		Payload: RetryPayloadCodec,
+		Result:  RetryResultCodec,
+	}
+	// ReviewTool describes workflow.review with its typed payload and result codecs.
+	ReviewTool = tools.TypedTool[*ReviewPayload, *ReviewResult]{
+		Name:    Review,
+		Payload: ReviewPayloadCodec,
+		Result:  ReviewResultCodec,
+	}
+	// ReviseTool describes workflow.revise with its typed payload and result codecs.
+	ReviseTool = tools.TypedTool[*RevisePayload, *ReviseResult]{
+		Name:    Revise,
+		Payload: RevisePayloadCodec,
+		Result:  ReviseResultCodec,
+	}
+)
+
+var (
 	// draftPayloadCodec provides an untyped codec for *DraftPayload.
 	draftPayloadCodec = tools.JSONCodec[any]{
 		ToJSON: func(v any) ([]byte, error) {

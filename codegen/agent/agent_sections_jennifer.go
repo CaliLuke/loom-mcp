@@ -208,6 +208,9 @@ func emitAgentToolsAliases(stmt *jen.Statement, data agentToolsetFileData) {
 		stmt.Line()
 		stmt.Var().Id(tool.ConstName + "ResultCodec").Op("=").Id(data.Toolset.SpecsPackageName + "specs").Dot(tool.Result.ExportedCodec)
 		stmt.Line()
+		gocodegen.Doc(stmt, tool.DescriptorName+" describes "+tool.Name+" with its typed payload and result codecs.")
+		stmt.Var().Id(tool.DescriptorName).Op("=").Id(data.Toolset.SpecsPackageName + "specs").Dot(tool.DescriptorName)
+		stmt.Line()
 	}
 	stmt.Line()
 }
@@ -225,6 +228,9 @@ func emitUsedToolsAliases(stmt *jen.Statement, data agentToolsetFileData) {
 			stmt.Var().Id(tool.ConstName + "ResultCodec").Op("=").Id(data.Toolset.SpecsPackageName + "specs").Dot(tool.Result.ExportedCodec)
 			stmt.Line()
 		}
+		gocodegen.Doc(stmt, tool.DescriptorName+" describes "+tool.Name+" with its typed payload and result codecs.")
+		stmt.Var().Id(tool.DescriptorName).Op("=").Id(data.Toolset.SpecsPackageName + "specs").Dot(tool.DescriptorName)
+		stmt.Line()
 	}
 	stmt.Line()
 }

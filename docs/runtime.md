@@ -1111,6 +1111,37 @@ the smaller ordinary-hook payload limit does not truncate accepted content.
 
 ## Tool Execution
 
+### Typed Tool Descriptors
+
+`tools.TypedTool[P, R]` pairs a canonical `Name` with typed `Payload` and
+`Result` JSON codecs. Generated specs packages expose one descriptor per tool
+in `codecs.go`, using the exact pointer or value types of those codecs:
+
+```go
+var EchoTool = tools.TypedTool[*EchoPayload, EchoResult]{
+    Name: Echo,
+    Payload: EchoPayloadCodec,
+    Result: EchoResultCodec,
+}
+```
+
+Use `EchoTool.Payload.ToJSON` and `EchoTool.Payload.FromJSON` to encode and
+decode payloads. The result codec works the same way. A descriptor contains
+only the identifier and codecs; schemas and runtime metadata remain in
+`tools.ToolSpec`.
+
+Both `tools.Ident` and `tools.TypedTool[P, R]` implement `tools.Named` through
+`Ident() tools.Ident`. APIs that only need a tool's identity can accept either.
+Registry toolsets expose untyped codecs and use `tools.Ident` as their
+Named-only representation; they do not generate typed descriptors.
+
+Descriptor names are `<Const>Tool`, with a scope suffix on collision. Constants
+and types retain their existing names. Allocation also protects the derived
+`Spec<Const>`, `Inject<Const>`, `Decode<Const>`, and `With<Const>` identifiers.
+Exported-agent and used-toolset helper
+packages re-export descriptors under the same resolved names as their specs
+packages.
+
 ### Tool Payload and Result Flow
 
 1. **Model emits tool call** — Provider adapter produces `model.ToolCall` with

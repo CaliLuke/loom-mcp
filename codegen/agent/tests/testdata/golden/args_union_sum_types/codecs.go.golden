@@ -28,6 +28,18 @@ var (
 		ToJSON:   MarshalEchoResult,
 		FromJSON: UnmarshalEchoResult,
 	}
+)
+
+var (
+	// EchoTool describes union.echo with its typed payload and result codecs.
+	EchoTool = tools.TypedTool[*EchoPayload, *EchoResult]{
+		Name:    Echo,
+		Payload: EchoPayloadCodec,
+		Result:  EchoResultCodec,
+	}
+)
+
+var (
 	// echoPayloadCodec provides an untyped codec for *EchoPayload.
 	echoPayloadCodec = tools.JSONCodec[any]{
 		ToJSON: func(v any) ([]byte, error) {

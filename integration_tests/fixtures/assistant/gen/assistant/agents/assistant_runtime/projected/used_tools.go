@@ -33,6 +33,11 @@ type ProjectedBoundedLookupToolResult = projectedspecs.ProjectedBoundedLookupToo
 
 var ProjectedBoundedLookupToolResultCodec = projectedspecs.ProjectedBoundedLookupToolResultCodec
 
+// ProjectedBoundedLookupToolTool describes
+// projected.projected_bounded_lookup_tool with its typed payload and result
+// codecs.
+var ProjectedBoundedLookupToolTool = projectedspecs.ProjectedBoundedLookupToolTool
+
 type ProjectedLookupToolPayload = projectedspecs.ProjectedLookupToolPayload
 
 var ProjectedLookupToolPayloadCodec = projectedspecs.ProjectedLookupToolPayloadCodec
@@ -41,6 +46,10 @@ type ProjectedLookupToolResult = projectedspecs.ProjectedLookupToolResult
 
 var ProjectedLookupToolResultCodec = projectedspecs.ProjectedLookupToolResultCodec
 
+// ProjectedLookupToolTool describes projected.projected_lookup_tool with its
+// typed payload and result codecs.
+var ProjectedLookupToolTool = projectedspecs.ProjectedLookupToolTool
+
 type ProjectedStatusToolPayload = projectedspecs.ProjectedStatusToolPayload
 
 var ProjectedStatusToolPayloadCodec = projectedspecs.ProjectedStatusToolPayloadCodec
@@ -48,6 +57,10 @@ var ProjectedStatusToolPayloadCodec = projectedspecs.ProjectedStatusToolPayloadC
 type ProjectedStatusToolResult = projectedspecs.ProjectedStatusToolResult
 
 var ProjectedStatusToolResultCodec = projectedspecs.ProjectedStatusToolResultCodec
+
+// ProjectedStatusToolTool describes projected.projected_status_tool with its
+// typed payload and result codecs.
+var ProjectedStatusToolTool = projectedspecs.ProjectedStatusToolTool
 
 // CallOption customizes planner.ToolRequest values built by the typed helpers.
 type CallOption func(*planner.ToolRequest)

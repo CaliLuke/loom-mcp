@@ -28,6 +28,18 @@ var (
 		ToJSON:   MarshalStoreResult,
 		FromJSON: UnmarshalStoreResult,
 	}
+)
+
+var (
+	// StoreTool describes docs.store with its typed payload and result codecs.
+	StoreTool = tools.TypedTool[*StorePayload, *StoreResult]{
+		Name:    Store,
+		Payload: StorePayloadCodec,
+		Result:  StoreResultCodec,
+	}
+)
+
+var (
 	// storePayloadCodec provides an untyped codec for *StorePayload.
 	storePayloadCodec = tools.JSONCodec[any]{
 		ToJSON: func(v any) ([]byte, error) {

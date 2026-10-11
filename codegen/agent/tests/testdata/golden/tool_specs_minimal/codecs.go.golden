@@ -28,6 +28,18 @@ var (
 		ToJSON:   MarshalSummarizeDocResult,
 		FromJSON: UnmarshalSummarizeDocResult,
 	}
+)
+
+var (
+	// SummarizeDocTool describes helpers.summarize_doc with its typed payload and result codecs.
+	SummarizeDocTool = tools.TypedTool[*SummarizeDocPayload, *SummarizeDocResult]{
+		Name:    SummarizeDoc,
+		Payload: SummarizeDocPayloadCodec,
+		Result:  SummarizeDocResultCodec,
+	}
+)
+
+var (
 	// summarizeDocPayloadCodec provides an untyped codec for *SummarizeDocPayload.
 	summarizeDocPayloadCodec = tools.JSONCodec[any]{
 		ToJSON: func(v any) ([]byte, error) {

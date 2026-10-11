@@ -49,6 +49,30 @@ var (
 		ToJSON:   MarshalProjectedStatusToolResult,
 		FromJSON: UnmarshalProjectedStatusToolResult,
 	}
+)
+
+var (
+	// ProjectedBoundedLookupToolTool describes projected.projected_bounded_lookup_tool with its typed payload and result codecs.
+	ProjectedBoundedLookupToolTool = tools.TypedTool[*ProjectedBoundedLookupToolPayload, *ProjectedBoundedLookupToolResult]{
+		Name:    ProjectedBoundedLookupTool,
+		Payload: ProjectedBoundedLookupToolPayloadCodec,
+		Result:  ProjectedBoundedLookupToolResultCodec,
+	}
+	// ProjectedLookupToolTool describes projected.projected_lookup_tool with its typed payload and result codecs.
+	ProjectedLookupToolTool = tools.TypedTool[*ProjectedLookupToolPayload, *ProjectedLookupToolResult]{
+		Name:    ProjectedLookupTool,
+		Payload: ProjectedLookupToolPayloadCodec,
+		Result:  ProjectedLookupToolResultCodec,
+	}
+	// ProjectedStatusToolTool describes projected.projected_status_tool with its typed payload and result codecs.
+	ProjectedStatusToolTool = tools.TypedTool[*ProjectedStatusToolPayload, *ProjectedStatusToolResult]{
+		Name:    ProjectedStatusTool,
+		Payload: ProjectedStatusToolPayloadCodec,
+		Result:  ProjectedStatusToolResultCodec,
+	}
+)
+
+var (
 	// projectedBoundedLookupToolPayloadCodec provides an untyped codec for *ProjectedBoundedLookupToolPayload.
 	projectedBoundedLookupToolPayloadCodec = tools.JSONCodec[any]{
 		ToJSON: func(v any) ([]byte, error) {

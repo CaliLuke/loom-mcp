@@ -29,6 +29,18 @@ var (
 		ToJSON:   MarshalAnswerResult,
 		FromJSON: UnmarshalAnswerResult,
 	}
+)
+
+var (
+	// AnswerTool describes helpers.answer with its typed payload and result codecs.
+	AnswerTool = tools.TypedTool[*AnswerPayload, *AnswerResult]{
+		Name:    Answer,
+		Payload: AnswerPayloadCodec,
+		Result:  AnswerResultCodec,
+	}
+)
+
+var (
 	// answerPayloadCodec provides an untyped codec for *AnswerPayload.
 	answerPayloadCodec = tools.JSONCodec[any]{
 		ToJSON: func(v any) ([]byte, error) {

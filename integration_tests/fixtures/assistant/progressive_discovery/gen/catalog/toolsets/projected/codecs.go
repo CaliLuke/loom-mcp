@@ -30,6 +30,18 @@ var (
 		ToJSON:   MarshalProjectedLookupResult,
 		FromJSON: UnmarshalProjectedLookupResult,
 	}
+)
+
+var (
+	// ProjectedLookupTool describes projected.projected_lookup with its typed payload and result codecs.
+	ProjectedLookupTool = tools.TypedTool[*ProjectedLookupPayload, *ProjectedLookupResult]{
+		Name:    ProjectedLookup,
+		Payload: ProjectedLookupPayloadCodec,
+		Result:  ProjectedLookupResultCodec,
+	}
+)
+
+var (
 	// projectedLookupPayloadCodec provides an untyped codec for *ProjectedLookupPayload.
 	projectedLookupPayloadCodec = tools.JSONCodec[any]{
 		ToJSON: func(v any) ([]byte, error) {

@@ -144,18 +144,20 @@ func TestAgentGeneratedSurfacesUseCachedUniqueToolNames(t *testing.T) {
 	}
 	entries := []*toolEntry{
 		{
-			Name:      "helpers.get_x",
-			GoName:    "GetX",
-			ConstName: "GetX",
-			Payload:   &typeData{TypeName: "GetXPayload", ExportedCodec: "GetXPayloadCodec"},
-			Result:    &typeData{TypeName: "GetXResult", ExportedCodec: "GetXResultCodec"},
+			Name:           "helpers.get_x",
+			GoName:         "GetX",
+			ConstName:      "GetX",
+			DescriptorName: "GetXTool",
+			Payload:        &typeData{TypeName: "GetXPayload", ExportedCodec: "GetXPayloadCodec"},
+			Result:         &typeData{TypeName: "GetXResult", ExportedCodec: "GetXResultCodec"},
 		},
 		{
-			Name:      "helpers.getX",
-			GoName:    "GetX",
-			ConstName: "GetX2",
-			Payload:   &typeData{TypeName: "GetX2Payload", ExportedCodec: "GetX2PayloadCodec"},
-			Result:    &typeData{TypeName: "GetX2Result", ExportedCodec: "GetX2ResultCodec"},
+			Name:           "helpers.getX",
+			GoName:         "GetX",
+			ConstName:      "GetX2",
+			DescriptorName: "GetX2Tool",
+			Payload:        &typeData{TypeName: "GetX2Payload", ExportedCodec: "GetX2PayloadCodec"},
+			Result:         &typeData{TypeName: "GetX2Result", ExportedCodec: "GetX2ResultCodec"},
 		},
 	}
 	toolset := &ToolsetData{
@@ -197,6 +199,7 @@ func TestAgentGeneratedSurfacesUseCachedUniqueToolNames(t *testing.T) {
 	require.Contains(t, helpers.String(), "type GetX2Payload = helpersspecs.GetX2Payload")
 	require.Contains(t, helpers.String(), "func NewGetX2Call(")
 	require.Contains(t, helpers.String(), "GetX2PayloadCodec.ToJSON(args)")
+	require.Contains(t, helpers.String(), "var GetX2Tool = helpersspecs.GetX2Tool")
 }
 
 func TestAgentRegistryUniquesAliasesAgainstLateFixedImports(t *testing.T) {

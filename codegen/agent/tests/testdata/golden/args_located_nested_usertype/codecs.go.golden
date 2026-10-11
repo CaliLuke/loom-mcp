@@ -29,6 +29,18 @@ var (
 		ToJSON:   MarshalSetStepStatusResult,
 		FromJSON: UnmarshalSetStepStatusResult,
 	}
+)
+
+var (
+	// SetStepStatusTool describes progress.set_step_status with its typed payload and result codecs.
+	SetStepStatusTool = tools.TypedTool[*SetStepStatusPayload, *SetStepStatusResult]{
+		Name:    SetStepStatus,
+		Payload: SetStepStatusPayloadCodec,
+		Result:  SetStepStatusResultCodec,
+	}
+)
+
+var (
 	// setStepStatusPayloadCodec provides an untyped codec for *SetStepStatusPayload.
 	setStepStatusPayloadCodec = tools.JSONCodec[any]{
 		ToJSON: func(v any) ([]byte, error) {

@@ -50,6 +50,19 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   for direct `Any` fields and arrays or maps of `Any`. Codec allocations also
   require this import, even without validation helpers. Prove imports with
   compile-after-generation tests, including a plain-type control.
+- Every specs package with typed codecs emits one `tools.TypedTool[P, R]`
+  descriptor per tool in `codecs.go` after the typed codec block. Type arguments
+  match the payload/result codecs exactly, including pointer/value semantics.
+  Empty results use a concrete `struct{}` type. Missing generated payload or
+  result codecs fail generation.
+- `toolEntry.DescriptorName` is `scope.Unique(ConstName + "Tool")`, allocated
+  after all tool constants and types. Before descriptor allocation, reserve
+  `Spec`, `Inject`, `Decode`, and `With` plus each resolved `ConstName`, protecting
+  derived identifiers even when they are emitted in helper packages. Existing
+  names stay stable; only descriptors take collision suffixes. Exported
+  agent-toolset and used-toolset helpers re-export the same resolved descriptor
+  name. Do not generate a `Typed()` list. Registry specs remain untyped and
+  emit no descriptors; their identifiers support `tools.Named`.
 
 ## Generator Editing Rules
 
@@ -143,6 +156,9 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   contract. The generation gate regenerates current SDK fixtures but leaves the
   external `sdkbridge_consumer` output frozen. Regenerate that baseline only
   when `sdkbridge.CompatibilityVersion` increments.
+  Typed-tool descriptors are additive and keep compatibility version 3. They
+  do not change the frozen SDK consumer baseline; consumer generator drift is
+  separate work, not a reason to increment the version.
 - MCP generation emits only the minimal service types, `MCPAdapter`,
   local-provider registration, OAuth discovery, prompt provider, and
   `SDKServer`. Absence tests must reject generated native MCP clients, servers,

@@ -28,6 +28,18 @@ var (
 		ToJSON:   MarshalReadResult,
 		FromJSON: UnmarshalReadResult,
 	}
+)
+
+var (
+	// ReadTool describes docs.read with its typed payload and result codecs.
+	ReadTool = tools.TypedTool[*ReadPayload, *ReadResult]{
+		Name:    Read,
+		Payload: ReadPayloadCodec,
+		Result:  ReadResultCodec,
+	}
+)
+
+var (
 	// readPayloadCodec provides an untyped codec for *ReadPayload.
 	readPayloadCodec = tools.JSONCodec[any]{
 		ToJSON: func(v any) ([]byte, error) {

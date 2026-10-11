@@ -33,6 +33,20 @@ const toolCodecsTemplateSource = `var (
     {{- $printed = true }}
     {{- end }}
 {{- end }}
+)
+
+var (
+{{- range .Tools }}
+    // {{ .DescriptorName }} describes {{ .Name }} with its typed payload and result codecs.
+    {{ .DescriptorName }} = tools.TypedTool[{{ if .Payload.Pointer }}*{{ end }}{{ .Payload.FullRef }}, {{ if .Result.Pointer }}*{{ end }}{{ .Result.FullRef }}]{
+        Name: {{ .ConstName }},
+        Payload: {{ .Payload.ExportedCodec }},
+        Result: {{ .Result.ExportedCodec }},
+    }
+{{- end }}
+)
+
+var (
 {{- $printed = false }}
 {{- range .Types }}
     {{- if .GenerateCodec }}

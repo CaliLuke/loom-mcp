@@ -37,6 +37,9 @@ type DraftResult = workflowspecs.DraftResult
 
 var DraftResultCodec = workflowspecs.DraftResultCodec
 
+// DraftTool describes workflow.draft with its typed payload and result codecs.
+var DraftTool = workflowspecs.DraftTool
+
 type FinalizePayload = workflowspecs.FinalizePayload
 
 var FinalizePayloadCodec = workflowspecs.FinalizePayloadCodec
@@ -44,6 +47,10 @@ var FinalizePayloadCodec = workflowspecs.FinalizePayloadCodec
 type FinalizeResult = workflowspecs.FinalizeResult
 
 var FinalizeResultCodec = workflowspecs.FinalizeResultCodec
+
+// FinalizeTool describes workflow.finalize with its typed payload and result
+// codecs.
+var FinalizeTool = workflowspecs.FinalizeTool
 
 type MethodEchoPayload = workflowspecs.MethodEchoPayload
 
@@ -53,6 +60,10 @@ type MethodEchoResult = workflowspecs.MethodEchoResult
 
 var MethodEchoResultCodec = workflowspecs.MethodEchoResultCodec
 
+// MethodEchoTool describes workflow.method_echo with its typed payload and
+// result codecs.
+var MethodEchoTool = workflowspecs.MethodEchoTool
+
 type PublishPayload = workflowspecs.PublishPayload
 
 var PublishPayloadCodec = workflowspecs.PublishPayloadCodec
@@ -60,6 +71,10 @@ var PublishPayloadCodec = workflowspecs.PublishPayloadCodec
 type PublishResult = workflowspecs.PublishResult
 
 var PublishResultCodec = workflowspecs.PublishResultCodec
+
+// PublishTool describes workflow.publish with its typed payload and result
+// codecs.
+var PublishTool = workflowspecs.PublishTool
 
 type RetryPayload = workflowspecs.RetryPayload
 
@@ -69,6 +84,9 @@ type RetryResult = workflowspecs.RetryResult
 
 var RetryResultCodec = workflowspecs.RetryResultCodec
 
+// RetryTool describes workflow.retry with its typed payload and result codecs.
+var RetryTool = workflowspecs.RetryTool
+
 type ReviewPayload = workflowspecs.ReviewPayload
 
 var ReviewPayloadCodec = workflowspecs.ReviewPayloadCodec
@@ -77,6 +95,10 @@ type ReviewResult = workflowspecs.ReviewResult
 
 var ReviewResultCodec = workflowspecs.ReviewResultCodec
 
+// ReviewTool describes workflow.review with its typed payload and result
+// codecs.
+var ReviewTool = workflowspecs.ReviewTool
+
 type RevisePayload = workflowspecs.RevisePayload
 
 var RevisePayloadCodec = workflowspecs.RevisePayloadCodec
@@ -84,6 +106,10 @@ var RevisePayloadCodec = workflowspecs.RevisePayloadCodec
 type ReviseResult = workflowspecs.ReviseResult
 
 var ReviseResultCodec = workflowspecs.ReviseResultCodec
+
+// ReviseTool describes workflow.revise with its typed payload and result
+// codecs.
+var ReviseTool = workflowspecs.ReviseTool
 
 // CallOption customizes planner.ToolRequest values built by the typed helpers.
 type CallOption func(*planner.ToolRequest)
