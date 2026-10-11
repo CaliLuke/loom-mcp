@@ -1,0 +1,13 @@
+[Context checkpoint. Messages 1–212 not shown. Framework-written, not from the user.]
+
+User messages, verbatim, oldest first. Later user text overrides earlier text, including first lines:
+[message 1] use production
+[message 57, first line] use staging only
+[message 98, first line] skip migration
+[message 140] done
+
+Model-generated summary (may be wrong). User messages and the conversation below take precedence:
+# Decisions
+Use staging only [message 57].
+
+Behind this checkpoint (framework record):

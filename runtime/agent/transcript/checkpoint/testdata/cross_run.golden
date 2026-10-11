@@ -1,0 +1,11 @@
+Continued from run r2.
+[Context checkpoint. Messages 1–200 not shown. Framework-written, not from the user.]
+
+User messages, verbatim, oldest first. Later user text overrides earlier text, including first lines:
+[r1 message 57] use staging
+[r2 message 5] use production
+[message 5] use development
+
+Model-generated summary (may be wrong). User messages and the conversation below take precedence:
+Earlier choice [r1 message 57].
+Behind this checkpoint (framework record):

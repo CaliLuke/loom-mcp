@@ -4179,3 +4179,84 @@ var ErrRateLimited = errors.New("model: rate limited")
 | **Model-facing skill tools** | `FromSkills(...)` toolset used by an agent to list and load local instruction packages.          |
 | **Finalizer**    | Aggregates child results into parent tool result for agent-as-tool (does not propagate artifacts). |
 | **Reminder**     | Structured backstage guidance injected into planner prompts.                                       |
+
+## Pure context checkpoint rendering
+
+`runtime/agent/transcript/checkpoint` implements pure selection and rendering
+without changing workflow state, stored index encodings or the protocol
+version. `Units` groups assistant batches, their results, bookkeeping
+operations, reminders and attached typed/finalize entries; `openFrom` makes
+an unresolved await suffix atomic. `CutPoints` permits only boundaries
+before assistant-starting units with a closed preceding call set.
+`ChooseTail` always retains the newest unit. `RoleOf` loads stored Message
+roles and must succeed; a failed role read panics with a wrapped cause.
+
+`Input` contains record-authored `Users`, stored `Pinned` IDs, `CitedUsers`,
+summary provenance, a repeatable newest-first `iter.Seq[ReceiptItem]` over
+the receipt chain, and bounded `EarlierCounts`. Entry IDs in `Users` identify
+pins in the current index; `Origin` supplies original order and labels.
+`SelectPins` chooses the first user and a contiguous newest suffix within
+half of `KeepUserTokens` and `MaxPins`. `Render` rechecks pins against the
+current budget, first user then newest first, stopping at the first pin that
+does not fit. Citations select index lines before uncited newer lines,
+but displayed user text always sorts oldest first by original run position
+and message ID. Text comes from `Users`, including cited corrections; a
+summary cannot supply user wording.
+
+`DefaultLimits` is `{MaxPins: 32, UserIndexLineBytes: 160, MaxPinnedParts: 2}`.
+Non-text parts have a separate count and quarter-of-`KeepUserTokens` token
+allowance. `PartTokens` measures each part independently; nil uses 1,500
+tokens for images/URIs and half a token per document byte, rounded up.
+Text/chunk documents use text previews. Unshown parts name their original
+message, part number, format and size. `HeadTail` is deterministic and
+UTF-8 safe. `ClearedResult` supplies the tier-1 placeholder and error first
+line; K12 retains the original result's error flag.
+
+`ParseCitations` accepts exact `[message N]` and `[rK message N]` forms.
+`Qualify` binds bare citations to the run that wrote a copied summary.
+`ValidateCitations` uses an authorized `CitationResolver` returning entry
+kind and conversation role; user-role tool results are not user citations.
+Its failures wrap `ErrCitesNonUser`, `ErrCitesUnknown` or `ErrCitesNotBehind`,
+and preserve resolver errors.
+
+`BoundSummary` preserves whole summaries that fit. Otherwise it reserves a
+closing reference, keeps ordered Markdown headings while they fit, shares
+remaining bytes equally and passes short-section surplus forward.
+`ReceiptItem` can supply both a call and assistant prose; these receive
+separate discovery lines. Individual receipt lines are capped at 512 bytes;
+older items collapse to at most two aggregate lines, each with a handle.
+Tiny component allowances omit whole lines rather than partial handles.
+`Handle` hashes `part || recordID` into `rc-` plus eight hex digits; part names
+are `users`, `receipt`, `earlier`. `CheckpointID` hashes the record ID into
+`ck-` plus eight hex digits. Copied-summary closing references retain the
+summary's run and record ID.
+
+`Render` produces one user-role message, text first and kept non-text parts
+after it. Its text bound is `MaxBytes(b) = 2 × (KeepUserTokens +
+MaxSummaryTokens + ReceiptTokens + FramingTokens)` under the current budget.
+Framing is measured exactly; any deficit consumes receipt allowance first,
+then summary allowance. `MinCheckpointBytes(b)` reserves the full user
+allowance plus the largest possible header and labels, with a 512-byte floor:
+`max(512, 2 × KeepUserTokens + 392)` bytes on the supported 64-bit platform.
+Smaller total budgets return `ErrCheckpointBudget`. At or above that threshold,
+framing plus receipt/summary capacity covers every header without consuming
+user bytes. The default framing remains 200 tokens. Renderer labels and
+placeholders recommend no tool.
+
+`transcript.AssembleView` strips thinking, including opaque redacted
+reasoning, before the tail and retains tail blocks intact. It marks the
+checkpoint with `CheckpointMetaKey`. `ValidateView` ignores system messages,
+requires a first user and an assistant after the checkpoint, validates
+bidirectional complete tool handshakes, and applies `GrammarBedrock` role
+alternation/thinking or `GrammarAnthropic`.
+
+K12 must implement `FromRecord`, load user content/provenance and citation
+metadata, provide repeatable receipt traversal, store selected pins, assemble
+and validate loaded views, and cache by record hash. K12 also extends stored
+receipt lines with tool use IDs, entry kinds and unsummarised ranges. These
+pure helpers are not wired into loading yet. K13 owns handle resolution;
+K15 calls citation validation/qualification; K17 owns settings validation;
+K18 supplies continuation positions, carried origins and earlier totals.
+
+Golden checkpoints are in
+`runtime/agent/transcript/checkpoint/testdata/{correction,cross_run}.golden`.

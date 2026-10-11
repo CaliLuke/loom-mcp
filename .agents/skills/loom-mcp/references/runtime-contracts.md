@@ -686,3 +686,35 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - `runtime/agent/runtime/agent_tools.go`
 - `runtime/agent/runtime/model_wrapper.go`
 - `runtime/agent/stream/stream.go`
+
+## Pure Checkpoint Helpers
+
+- `runtime/agent/transcript/checkpoint` is pure and independent of stored
+  checkpoint encodings. K12 owns FromRecord, loading, repeatable newest-first
+  receipt traversal, selected pin storage, caching and validator wiring.
+- Atomic units include assistant batches/results, bookkeeping, reminders,
+  typed/finalize attachments and an open-await suffix. CutPoints only yields
+  assistant starts after complete preceding call sets; ChooseTail always keeps
+  the newest unit, falling back to the latest earlier safe cut when needed.
+  RoleOf must resolve stored Message roles successfully.
+- Render orders record-authored Users by origin position and original ID.
+  CitedUsers selects lines, never wording. Pins use half of KeepUserTokens,
+  rechecking the first user then newest first and stopping before a gap;
+  image/byte-document/URI parts use MaxPinnedParts and a quarter-token allowance.
+  DefaultLimits remains 32 pins, 160 index bytes, two non-text parts.
+- ValidateCitations resolves both entry kind and role, rejecting user-role tool
+  results. Qualify binds copied bare citations to Summary.Run before rendering
+  or re-summarizing. K15/K18 supply integration and prior-run resolution.
+- Text bytes never exceed MaxBytes(current RenderBudget). Exact framing takes
+  a deficit from receipt first, then summary. MinCheckpointBytes(b) is the
+  maximum of 512 bytes and the full user allowance plus largest framing bytes.
+  K17 validates this threshold. FramingTokens remains 200.
+  Receipt lines cap at 512 bytes and older lines collapse to at most two handles.
+  Tiny component budgets omit whole lines/handles, never partial handles.
+- Handle(part, recordID) uses rc- plus eight SHA-256 hex digits over part || ID;
+  parts are users, receipt, earlier. CheckpointID uses ck- plus eight SHA-256
+  hex digits over ID. Copied summary references preserve run and record ID.
+- transcript.AssembleView strips pre-tail ThinkingPart, including Redacted,
+  and marks the checkpoint. ValidateView applies GrammarBedrock/Anthropic,
+  first-user/post-checkpoint-assistant constraints and bidirectional tool
+  handshakes. These validators are not wired before K12.

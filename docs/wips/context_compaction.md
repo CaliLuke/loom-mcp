@@ -532,7 +532,7 @@ the framework; it is not from the user.]
 User messages, verbatim from the record, oldest first. A later message
 overrides an earlier one, whether it is shown in full or by its first line:
   [message 1] Deploy the fix to production and …              (in full)
-  … 31 user messages in 2–48 are not listed and may override earlier ones [users rc-02d9]
+  … 31 user messages in 2–48 are not listed and may override earlier ones [users rc-02d9e5f6]
   [message 57, first line] Use staging only, not production.
   [message 98, first line] Also skip the migration step.
   [message 140] …                                             (in full)
@@ -545,8 +545,8 @@ precedence over it:
 Behind this checkpoint (framework record):
   toolu_201 search_orders(customer_id="c-42", …)
   message 187, assistant: "Using the v2 endpoint, because v1 drops refunds…"
-  … 37 earlier calls and 12 assistant messages in 3–180 [receipt rc-7f3a]
-  … 112 calls and 40 assistant messages in earlier runs r1–r2 [receipt rc-c41e]
+  … 37 earlier calls and 12 assistant messages in 3–180 [receipt rc-7f3a6b8c]
+  … 112 calls and 40 assistant messages in earlier runs r1–r2 [receipt rc-c41e5a6b]
 ```
 
 The record lists every evicted tool call and every evicted assistant message
@@ -554,9 +554,12 @@ that has text, by its first line, so a decision made in prose without a tool
 call is discoverable like a call (P5).
 
 The bracketed handles name a part of the stored receipt (4.18). Handles and
-checkpoint IDs are qualified by run like every other reference: `r1:ck-91b2`
-names a record in run 1, and a summary copied into a later run keeps naming
-the record in the run that made it.
+checkpoint IDs are qualified by run like every other reference: `r1:ck-91b2c3d4`
+names a record in run 1. Each identifier uses eight hexadecimal digits:
+`Handle(part, recordID)` is `rc-` plus the first four SHA-256 bytes of
+`part || recordID`; `CheckpointID(recordID)` is `ck-` plus the first four
+SHA-256 bytes of `recordID`. A handle is opaque (4.18). A summary
+copied into a later run keeps naming the record in the run that made it.
 
 A continued session (4.16) adds one header line, `Continued from run r2.`, to
 this message; it is not a separate entry.
@@ -582,6 +585,17 @@ a rendering changes only when the budget does, which keeps it byte-stable
 (4.21). The conversion is a sizing convention; the guard and overflow
 recovery handle the cases where it underestimates.
 
+The pure renderer measures framing bytes exactly before allocating section
+space. Any framing deficit beyond `FramingTokens × 2` is taken from the
+receipt allowance first, then the summary allowance; user text keeps its
+allowance. It never clips the assembled checkpoint to establish the bound.
+`MinCheckpointBytes(b)` is `max(512, 2 × KeepUserTokens + Fmax)` bytes, where
+`Fmax` is the largest possible header and labels (392 bytes on the supported
+64-bit platform). This reserves the full user allowance and guarantees enough
+framing, receipt and summary capacity for every header. Smaller total budgets
+return `ErrCheckpointBudget`; K17 rejects them during override validation.
+The default `FramingTokens` remains 200.
+
 - A summary within the current `MaxSummaryTokens` renders whole. A larger one,
   made under a larger budget, renders as a **bounded summary**: a pure
   function of the text and the budget that keeps the Markdown headings in
@@ -589,7 +603,7 @@ recovery handle the cases where it underestimates.
   closing line), gives each kept section an equal share of the budget (a short section passes
   what it does not use to the sections after it), cuts each section at a
   line boundary within its share, and ends with
-  `[summary shortened from 16,000 tokens; full text: checkpoint r1:ck-91b2]`.
+  `[summary shortened from 16,000 tokens; full text: checkpoint r1:ck-91b2c3d4]`.
   The stored summary is never changed, and `recall_context` pages its full
   text. A summary without headings is one section. The next summary replaces
   it under the current budget (4.12).
@@ -620,8 +634,12 @@ fixed overhead, which covers a system prompt and tools that alone exceed the
 window.
 
 **View grammar.** Every rendered view satisfies each provider's transcript
-rules, checked by `transcript.ValidateBedrock` and an Anthropic equivalent on
-loaded views in tests and at load time:
+rules. K11 supplies pure `transcript.ValidateView` with `GrammarBedrock`
+(including its thinking flag) and `GrammarAnthropic`, plus `AssembleView`.
+Validation ignores system messages, requires a first user message and a
+post-checkpoint assistant, enforces Bedrock alternation, and checks calls
+and results in both directions. K12 wires these helpers into loaded views;
+the existing `ValidateBedrock` call remains unchanged until then:
 
 ```
 view       := system* (checkpoint tail | history)
@@ -1348,7 +1366,8 @@ any window:
 | `MinSavingTokens` | min(0.10 × B, 20k) |
 | `MaxSummaryTokens` | min(0.10 × B, 16k) |
 | `ReceiptTokens` | min(0.03 × B, 6k) |
-| `FramingTokens` | 200 (checkpoint labels and headers) |
+| `FramingTokens` | 200 (checkpoint labels and headers; exact deficit charged to receipt, then summary) |
+| `MinCheckpointBytes(b)` | max(512, 2 × KeepUserTokens + largest framing bytes), a renderer threshold |
 | `GuardMargin` | 0.10 |
 | `MaxSummarisedResultTokens` | 0.5 × the summariser's B |
 | `MaxSummaryChunks` | 8 |
@@ -1362,7 +1381,11 @@ The resident budgets (`KeepRecentTokens`, `KeepUserTokens`,
 `ProtectRecentToolTokens`, `MaxSummaryTokens`, `ReceiptTokens`) sum to at most
 0.43 × B for every window. With `FramingTokens` they stay under 0.5 × B for
 any B of 2,900 tokens or more, which covers 4k windows. Overrides are validated when B is first known, and fail fast
-if the resident budgets plus `FramingTokens` exceed 0.5 × B.
+if the resident budgets plus `FramingTokens` exceed 0.5 × B. K17 also rejects
+checkpoint overrides whose `MaxBytes(b)` is below `MinCheckpointBytes(b)`:
+max(512, 2 × KeepUserTokens + largest framing bytes). This guarantees capacity
+for exact framing after receipt and summary donations. `MinCheckpointBytes`
+is a renderer function of the current budget, not a token setting.
 
 **Enablement.** Overflow recovery (4.15) is on for every agent: without it the
 run would fail. Threshold compaction (the trigger, tier 1, eviction,
@@ -1436,14 +1459,14 @@ Input, one of three kinds. **Reads** return content:
 - a tool use ID or message ID from a receipt line, placeholder, pin or user
   index line, optionally qualified by a chain label, with an `offset` to page a
   large result or message;
-- a checkpoint ID from a bounded summary (`r1:ck-91b2`), with an `offset`,
+- a checkpoint ID from a bounded summary (`r1:ck-91b2c3d4`), with an `offset`,
   which pages the full stored summary.
 
 **Listings** return lines, newest first, each with its ID and run, plus a
 cursor for the next page:
 
-- `list` with a handle from a collapsed line (`rc-c41e` for receipts,
-  `rc-02d9` for the user index). The agent needs no run ID or range it has
+- `list` with a handle from a collapsed line (`rc-c41e5a6b` for receipts,
+  `rc-02d9e5f6` for the user index). The agent needs no run ID or range it has
   not been shown: the handle is on the line;
 - `list` with a message range, optionally qualified by a chain label, which
   lists *every* model-visible message in it: user and assistant text by first
@@ -1458,6 +1481,11 @@ cursor for the next page:
   and a one-line snippet, plus a cursor that continues the scan. A match's
   offset lets a read jump into a large result instead of paging from its
   start.
+
+Rendered handles use `rc-` followed by eight hexadecimal digits; checkpoint
+IDs use `ck-` followed by eight hexadecimal digits (4.6). Collapsed users,
+current-run receipts and earlier-run receipts use distinct part names
+`users`, `receipt` and `earlier` when hashing the checkpoint record ID.
 
 A handle and a cursor are opaque. A handle names a checkpoint record and the
 part its line collapsed; a cursor names a position in that chain or scan.
