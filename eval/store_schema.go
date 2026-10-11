@@ -63,7 +63,7 @@ type Fingerprint struct {
 	Context      []string                      `json:"context"`
 }
 
-// JudgeInfo reserves judge provenance for schema version 1.
+// JudgeInfo records judge provenance for schema version 1.
 type JudgeInfo struct {
 	ModelID        string `json:"model_id"`
 	PromptHash     string `json:"prompt_hash"`
@@ -72,7 +72,7 @@ type JudgeInfo struct {
 }
 
 // StoredClaim retains a claim and its optional judging subject and tool selector.
-// Subject and Tool are reserved for judging; Claim does not yet populate them.
+// Subject and Tool retain the resolved claim and selector.
 type StoredClaim struct {
 	ID            string      `json:"id"`
 	Text          string      `json:"text"`
@@ -89,7 +89,7 @@ type StoredJudgedStep struct {
 	CallID string      `json:"call_id"`
 }
 
-// StoredJudgment reserves one claim judgment for schema version 1.
+// StoredJudgment retains one claim judgment for schema version 1.
 // Step is present only for judgments about a step.
 type StoredJudgment struct {
 	ClaimID       string            `json:"claim_id"`
@@ -206,11 +206,14 @@ func storedAttempt(r *AttemptRecord) (*StoredAttempt, error) {
 	if r == nil {
 		return nil, fmt.Errorf("eval: nil attempt")
 	}
-	a := &StoredAttempt{AttemptKey: r.AttemptKey, Key: r.AttemptKey.String(), Index: r.Index, Verdict: r.Verdict(), NotRun: r.NotRun, HarnessError: errorText(r.HarnessErr), Started: r.Started, Duration: r.Duration, Usage: r.Usage, Tokens: r.Tokens}
+	a := &StoredAttempt{AttemptKey: r.AttemptKey, Key: r.AttemptKey.String(), Index: r.Index, Verdict: r.Verdict(), NotRun: r.NotRun, HarnessError: errorText(r.HarnessErr), Started: r.Started, Duration: r.Duration, Usage: r.Usage, Tokens: r.Tokens, JudgeUsage: r.JudgeUsage, JudgeTokens: r.JudgeTokens}
 	if o := r.Outcome; o != nil {
 		a.Task, a.Reference, a.Checks, a.Scores, a.Error = o.Task, o.Reference, o.Checks, o.Scores, errorText(o.Err)
 		for _, claim := range o.Claims {
 			a.Claims = append(a.Claims, wireClaim(claim))
+		}
+		for _, judgment := range o.Judgments {
+			a.Judgments = append(a.Judgments, storedJudgment(judgment))
 		}
 		if o.Session != nil {
 			for _, result := range o.Session.Runs {
@@ -242,4 +245,13 @@ func errorText(err error) string {
 		return err.Error()
 	}
 	return ""
+}
+
+// storedJudgment converts errors to durable text and owns the optional locator.
+func storedJudgment(j Judgment) StoredJudgment {
+	stored := StoredJudgment{ClaimID: j.ClaimID, Subject: string(j.Subject), Label: string(j.Label), Rationale: j.Rationale, Informational: j.Informational, Uncalibrated: j.Uncalibrated, Truncated: j.Truncated, Error: errorText(j.Err)}
+	if j.Step != nil {
+		stored.Step = &StoredJudgedStep{Run: j.Step.Run, Index: j.Step.Index, Tool: j.Step.Tool, CallID: j.Step.CallID}
+	}
+	return stored
 }

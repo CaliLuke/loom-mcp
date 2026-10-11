@@ -11,6 +11,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/agenttest"
 	"github.com/CaliLuke/loom-mcp/v2/expect"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
 // Scenario shares defaults, assertions and optional driving code across items.
@@ -29,11 +30,14 @@ type Scenario struct {
 	Assert    func(ctx context.Context, a *Attempt) (Assertions, error)
 }
 
-// Claim declares a criterion for a future judge; Execute does not judge it.
+// Claim declares a criterion for a judge; Execute does not judge it.
 type Claim struct {
 	ID            string
 	Text          string
 	Informational bool
+	// Subject defaults to answer. Tool selects calls only for step subjects.
+	Subject Subject
+	Tool    tools.Ident
 }
 
 // Assertions contains additional quality checks, claim declarations and scores.
@@ -76,6 +80,11 @@ func Validate(scenarios ...Scenario) error {
 		allTools := s.Items.Len() > 0
 		for _, item := range s.Items.items {
 			allTools = allTools && item.ExpectedTools != nil
+			task := item.Task
+			if task == "" {
+				task = s.Task
+			}
+			problems = append(problems, prefixProblems(fmt.Sprintf("scenario %q item %q: ", s.ID, item.ID), claimPlaceholders(s.Claims, task, item.ExpectedOutcome))...)
 		}
 		if len(s.Claims) == 0 && len(s.Expect) == 0 && s.Assert == nil && !allTools {
 			add(ErrNoAssertions)
@@ -113,6 +122,14 @@ func validateClaims(claims []Claim) error {
 			problems = append(problems, fmt.Errorf("duplicate claim ID %q", claim.ID))
 		}
 		seen[claim.ID] = true
+		switch claim.Subject {
+		case "", SubjectAnswer, SubjectTrajectory, SubjectSession, SubjectStep:
+		default:
+			problems = append(problems, fmt.Errorf("claim %q has unknown subject %q", claim.ID, claim.Subject))
+		}
+		if claim.Tool != "" && claim.Subject != SubjectStep {
+			problems = append(problems, fmt.Errorf("claim %q Tool requires step subject", claim.ID))
+		}
 	}
 	return errors.Join(problems...)
 }

@@ -77,6 +77,9 @@ func validateConfig(cfg Config, variants []Variant) []error {
 	if len(cfg.Scenarios) == 0 {
 		problems = append(problems, errors.New("eval: no scenarios"))
 	}
+	if cfg.JudgeTimeout < 0 {
+		problems = append(problems, errors.New("eval: JudgeTimeout must be non-negative"))
+	}
 	problems = append(problems, Validate(cfg.Scenarios...))
 	problems = append(problems, validateVariants(variants)...)
 	for _, field := range []struct {

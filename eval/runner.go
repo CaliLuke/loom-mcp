@@ -23,6 +23,10 @@ type Config struct {
 	Select                          Selection
 	Repeats, Concurrency, MaxTokens int
 	OnAttempt                       func(*AttemptRecord)
+	Judge                           OutcomeJudge
+	// JudgeTimeout bounds judging per attempt, separately from Scenario.Timeout.
+	// Zero uses five minutes; negative values are invalid.
+	JudgeTimeout time.Duration
 }
 
 type runnerJob struct {
@@ -45,6 +49,10 @@ func Run(ctx context.Context, cfg Config) (*Report, error) {
 		return nil, err
 	}
 	report := newReport(cfg, plan)
+	var prepareErr error
+	if cfg.Judge != nil {
+		prepareErr = cfg.Judge.Prepare(ctx)
+	}
 	concurrency := min(report.Concurrency, len(plan))
 	jobs := make(chan runnerJob)
 	completed := make(chan *AttemptRecord, concurrency)
@@ -53,7 +61,9 @@ func Run(ctx context.Context, cfg Config) (*Report, error) {
 	for range concurrency {
 		workers.Go(func() {
 			for job := range jobs {
-				completed <- runAttempt(ctx, cfg.Harness, owners, job)
+				record := runAttempt(ctx, cfg.Harness, owners, job)
+				judgeAttempt(ctx, cfg.Judge, cfg.JudgeTimeout, record)
+				completed <- record
 			}
 		})
 	}
@@ -66,6 +76,13 @@ func Run(ctx context.Context, cfg Config) (*Report, error) {
 			a.NotRun = report.Stop
 			runErr = notifyAttempt(&cfg, report, a, runErr)
 		}
+	}
+	if cfg.Judge != nil {
+		info := cfg.Judge.Info()
+		if prepareErr != nil {
+			info.Calibrated = false
+		}
+		report.Judge = &info
 	}
 	report.Finished = time.Now()
 	return report, runErr
@@ -120,7 +137,7 @@ func acceptRecord(cfg *Config, report *Report, a *AttemptRecord, runErr error) e
 		// Canceled dispatches are delivered with the other skipped records last.
 		return runErr
 	}
-	report.Tokens += a.Tokens
+	report.Tokens += a.Tokens + a.JudgeTokens
 	if errors.Is(a.HarnessErr, agenttest.ErrLiveModelDisabled) {
 		report.stop(StopLiveModelDisabled)
 		runErr = errors.Join(runErr, a.HarnessErr)

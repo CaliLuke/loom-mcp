@@ -1602,7 +1602,7 @@ Checks appear in order: mandatory `runs_succeeded`, scenario `Expect`, item
 `expected_tools` (with the `tool_correctness` score), then `Assert` results.
 The health check reads `Result.RunErr` and remains usable with event interceptors.
 Duplicate check and score names receive `#2`, `#3`, and so on; claim IDs must be
-unique. Claims are declarations for a later judge, with scenario claims first.
+unique. Claims are judged by an optional eval.OutcomeJudge (eval/judging), with scenario claims first.
 At least one user check or claim must remain after evaluation; the built-in
 health check alone reports `ErrNoAssertions`.
 
@@ -1713,9 +1713,9 @@ retains `subject` and an optional `step` object with `run`, `index`, `tool`, and
 `call_id`. Only step judgments carry that locator. Attempts can also contain
 `judge_usage` (the same shape as `usage`) and `judge_tokens`. Empty subjects and
 tool selectors, absent steps, and zero judge usage and tokens are omitted.
-The decoder preserves these fields and still rejects unknown members. The current
-writer maps existing `Claim` fields explicitly; judge execution and population of
-the reserved fields belong to the judging layer.
+The decoder preserves these fields and still rejects unknown members. The writer maps
+`Claim` fields explicitly, and the runner populates the judging fields when a
+judge is configured.
 
 Supply a validated runner configuration and connect the writer before the run:
 
@@ -1915,6 +1915,78 @@ opt-in wraps `agenttest.ErrLiveModelDisabled`; invalid environment values fail.
 Scripted clients use the default `Live: false`. A positive output cap is required,
 so the Codex adapter, which rejects `MaxTokens`, cannot serve as this judge.
 The opt-in Anthropic calibration smoke test is excluded from short-test gates.
+
+### Eval judging
+
+`eval/judging` connects `eval.Run` to `eval/judge` through `eval.OutcomeJudge`.
+Create the core with `judge.New`, wrap it with `judging.New(judging.Config{Judge:
+core})`, and set `eval.Config.Judge` to that adapter. For example, this compiled
+assistant fixture uses an adapter and a scripted agent:
+
+<!-- snippet: eval-judging -->
+```go
+scenario := eval.Scenario{
+	ID: "greeting", Agent: "assistant.assistant_runtime", Task: "Say hello",
+	Items:  eval.Items(eval.Item{ID: "hello", Input: "Say hello"}),
+	Claims: []eval.Claim{eval.TaskCompletion()},
+}
+cfg := eval.Config{
+	Harness: eval.NewHarnessFunc(registerScenarioFixture, nil,
+		agenttest.ScriptedModel("fixture", agenttest.Respond(agenttest.Text("Hello!")))),
+	Scenarios: []eval.Scenario{scenario}, Judge: adapter,
+}
+```
+
+Claims select `answer` (the default, last final message), `trajectory` (last run
+with children), `session` (all runs), or `step`. `TaskCompletion` and
+`StepEfficiency` target trajectory; `ConversationCompleteness` targets session;
+`ArgumentCorrectness` targets adopted root-run model calls that chose tools.
+`ToolArgumentCorrectness(tool)` targets root-run calls of one named tool.
+Its claim ID lowercases the tool identity, replaces non-ASCII-alphanumeric
+characters with underscores and truncates the complete ID to 64 bytes. Validation
+rejects collisions, unknown subjects and tool selectors on other subjects.
+Plan quality and plan adherence can be custom claims when the agent records a plan.
+
+`Execute` expands `{task}` from the item's task or scenario default and
+`{expected_outcome}` from the item, then stores the resolved text. Missing values
+fail validation; unresolved Assert claims become `Outcome.Err`. A step judge sees
+prior runs and the current run's prefix, including the call but excluding its
+result, error, children, duration, final message and later steps. Child runs are
+context, not separate step units. A selector with no units gets `not_addressed`
+with rationale `no matching step` without a provider call. Empty final answers
+also get `not_addressed` without a call or an uncalibrated flag.
+
+The adapter batches answer, trajectory and session claims in that order, then
+step selectors in first-claim order and units in run/index order. Returned
+judgments follow claim order, then unit order. It uses text rendering and
+`trajectory.DefaultLimits()` unless configured otherwise. Comparing bounded and
+unbounded renderings detects truncation; the judge prompt and each affected
+judgment retain the flag. Render panics and provider errors become batch errors;
+other batches continue.
+
+The runner calibrates once before dispatch using the run context. Calibration
+errors are non-fatal and produce uncalibrated judgments. Each attempt then has a
+separate `JudgeTimeout` (default five minutes), after harness cleanup and outside
+`Duration`. Judging runs even after quality failures, but skips harness and
+execution errors. Gating judgment errors make the verdict `error`; any other
+non-entailed gating unit makes it `failed`. Missing gating judgments are `pending`.
+Informational claims do not affect verdicts. Failed checks and thresholds take
+precedence over pending claims. `OnAttempt` receives the final verdict.
+
+Judge usage excludes calibration, appears in `JudgeUsage`/`JudgeTokens`, and
+counts toward `Report.Tokens` and `MaxTokens` alongside agent usage. Before
+`Writer.Finish`, pass `*report.Judge` to `Writer.SetJudge` to persist provenance.
+The writer stores resolved claims, judgments, step locators and error text.
+
+Every successful evaluation prepends four deterministic scores: `model_calls`
+(adopted), `tool_calls`, `failed_tool_calls`, and `repeated_tool_calls`. They sum
+run-local totals across the session and descendants, have no thresholds, and
+reserve their names; colliding user scores receive `#2`. Tokens and duration
+remain record fields. `tool_correctness` remains the expected-tools score.
+
+Rendered subjects include full prompts, tool results and potentially customer
+data. Configuring a judge sends that evidence to its model provider. Live judges
+require explicit opt-in through the core judge's `Live` setting.
 
 ### Run-log result references and upgrade
 

@@ -23,14 +23,16 @@ type StopReason string
 // AttemptRecord retains quality results and harness failures for one planned key.
 type AttemptRecord struct {
 	AttemptKey
-	Index      int
-	Outcome    *Outcome
-	HarnessErr error
-	NotRun     StopReason
-	Started    time.Time
-	Duration   time.Duration
-	Usage      model.TokenUsage
-	Tokens     int
+	Index       int
+	Outcome     *Outcome
+	HarnessErr  error
+	NotRun      StopReason
+	Started     time.Time
+	Duration    time.Duration
+	Usage       model.TokenUsage
+	Tokens      int
+	JudgeUsage  model.TokenUsage
+	JudgeTokens int
 }
 
 // RunEvidence exports one returned session run including its descendants.
@@ -58,6 +60,7 @@ type Report struct {
 	Started, Finished                       time.Time
 	Stop                                    StopReason
 	Attempts                                []*AttemptRecord
+	Judge                                   *JudgeInfo
 }
 
 // Group counts verdicts for one variant, scenario and item.

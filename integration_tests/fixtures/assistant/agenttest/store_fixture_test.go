@@ -69,7 +69,7 @@ func TestStoreMatrixFixture(t *testing.T) {
 		assert.Equal(t, original.Duration, a.Duration)
 		assert.Equal(t, original.Outcome.Checks, a.Checks)
 		assert.Equal(t, original.Outcome.Scores, a.Scores)
-		assert.Equal(t, []eval.StoredClaim{{ID: "helpful", Text: "Helpful", Informational: true}}, a.Claims)
+		assert.Equal(t, []eval.StoredClaim{{ID: "helpful", Text: "Helpful", Informational: true, Subject: "answer"}}, a.Claims)
 		assert.Equal(t, original.Outcome.Task, a.Task)
 		assert.Equal(t, original.Outcome.Reference, a.Reference)
 		assert.Empty(t, a.HarnessError)

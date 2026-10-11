@@ -51,7 +51,7 @@ func TestScenarioSingleTurnFixture(t *testing.T) {
 				assert.True(t, c.Passed, c.Diagnostic)
 			}
 			assert.Equal(t, []string{"runs_succeeded", "completed", "expected_tools", "final"}, names)
-			assert.Equal(t, []expect.Score{{Name: "tool_correctness", Value: 1}}, out.Scores)
+			assert.Equal(t, []expect.Score{{Name: "model_calls", Value: 2}, {Name: "tool_calls", Value: 1}, {Name: "failed_tool_calls"}, {Name: "repeated_tool_calls"}, {Name: "tool_correctness", Value: 1}}, out.Scores)
 		})
 	}
 }

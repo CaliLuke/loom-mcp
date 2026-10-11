@@ -101,11 +101,13 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - Scenario requires Agent unless Drive is set, non-negative Timeout, a valid
   dataset and an assertion source. Validate joins every problem with scenario
   and item locations. Claim IDs match `[a-z0-9_]{1,64}`, are unique and have
-  non-empty UTF-8 text. Claims are declarations only; no eval/judge import.
+  non-empty UTF-8 text. eval never imports eval/judge; eval/judging adapts claims to the judge.
 - Execute resolves item Task/Reference before defaults, then runs one session.
   Drive replaces RunSession; Assert receives Attempt.Subject and the last
   trajectory's Final. Checks order runs_succeeded, Expect, ExpectedTools, Assert.
-  Scores include tool_correctness; duplicate check/score names receive #n.
+  Scores prepend model_calls (adopted), tool_calls, failed_tool_calls and
+  repeated_tool_calls, summed recursively across the session. Expected tools add
+  tool_correctness; duplicate check/score names receive #n.
   Scenario claims precede Assert claims; duplicate claim IDs are errors.
 - RunErr is a quality failure in runs_succeeded, independent of event trust.
   Harness/Drive errors preserve session evidence, empty checks/scores and skip
@@ -153,11 +155,34 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   each completed session run and descendants with session/trace IDs; exports stay
   in memory. AttemptKey identifies attempts because run/session IDs may repeat.
 
+## Eval Judging
+
+- eval defines Subject, Claim, Judgment and OutcomeJudge; eval/judging adapts
+  eval/judge without reversing the package import boundary. Default subject is
+  answer; trajectory means last run and session means all runs. Execute resolves
+  {task} and {expected_outcome}, including Assert claims, before persistence.
+- ArgumentCorrectness uses adopted root model calls with chosen tools;
+  ToolArgumentCorrectness uses root tool calls. Prefixes hide the current tool's
+  result/error/children/duration, final answer and later steps. Empty selectors
+  receive not_addressed without a call. Child runs are never separate units.
+- Batches run sequentially: answer, trajectory, session, then selectors in first
+  claim order and units in run/index order. Results preserve claim/unit order.
+  DefaultLimits bounds text; comparison with unlimited rendering sets Truncated.
+  Render panics/provider failures attach errors to every claim in that batch.
+- Run calls Prepare once with run ctx before workers. JudgeTimeout defaults to
+  five minutes, excludes calibration and follows harness Close and Duration.
+  Skip judging on HarnessErr/Outcome.Err, but still judge failed quality checks.
+  Gating judgment errors produce error, non-entailed units failed, absent units
+  pending; informational claims never gate. Empty answers use NoCall and are
+  not uncalibrated. Report.Judge comes from adapter provenance.
+- JudgeUsage/JudgeTokens exclude calibration and add to report/budget tokens.
+  Call Writer.SetJudge before Finish. Rendered evidence goes to the judge provider.
+
 ## Eval Judge
 
 - `eval/judge` owns labels, ordered claim schemas, deterministic forced-tool
   requests, strict response decoding, calibration and caches. It imports neither
-  eval nor trajectory; subject rendering and result mapping belong to T17.
+  eval nor trajectory; eval/judging owns subject rendering and result mapping.
 - Inputs require a subject and unique claim IDs matching `[a-z0-9_]{1,64}` and
   non-empty UTF-8 claim text. Schemas are capped at 1 MiB. Complete canonical
   requests, including corrections, are capped at MaxInputBytes (default 512 KiB).
@@ -211,7 +236,8 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   (run, index, tool, call_id), and attempt judge_usage/judge_tokens. Empty optional
   fields and zero judge usage/tokens are omitted. Decode retains these fields;
   judging integration populates them. wireClaim uses explicit field mapping so
-  adding fields to Claim does not break the store's build.
+  adding fields to Claim does not break the store's build. Writer maps resolved
+  claims, judgment flags/errors/locators and judge usage from attempts.
 - Fingerprints use recorded Started.ModelID, Class, Prompts, Request.System and
   Request.Tools. Context hashes cover each root run's context, recovery,
   compaction and retained-tool configuration. Finish stores sorted set unions per

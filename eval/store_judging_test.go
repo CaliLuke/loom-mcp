@@ -1,6 +1,7 @@
 package eval
 
 import (
+	"context"
 	"testing"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
@@ -41,4 +42,31 @@ func TestStoreJudgingOptionalMembers(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, a, decoded)
 	assert.Contains(t, string(encoded), `"judgments":[{`)
+}
+
+// T17 AC12: actual runner-domain values are mapped by Append, not just decoded.
+func TestStoreJudgmentMapping(t *testing.T) {
+	cfg := storeConfig()
+	s, err := Open(t.TempDir())
+	require.NoError(t, err)
+	w, err := s.Begin(t.Context(), cfg, ExperimentMeta{Identity: &Identity{}})
+	require.NoError(t, err)
+	report := storeReport(t, cfg)
+	a := report.Attempts[0]
+	a.JudgeUsage = model.TokenUsage{InputTokens: 3, OutputTokens: 4}
+	a.JudgeTokens = 7
+	a.Outcome.Claims = []Claim{{ID: "helpful", Text: "Helpful", Subject: SubjectStep, Tool: "assistant.lookup", Informational: true}}
+	a.Outcome.Judgments = []Judgment{{ClaimID: "helpful", Subject: SubjectStep, Step: &JudgedStep{Run: 0, Index: 2, Tool: "assistant.lookup", CallID: "call-1"}, Informational: true, Uncalibrated: true, Truncated: true, Err: context.DeadlineExceeded}}
+	require.NoError(t, w.Append(a))
+	info := JudgeInfo{ModelID: "script", PromptHash: "prompt", CalibrationKey: "key"}
+	w.SetJudge(info)
+	require.NoError(t, w.Finish(report, nil))
+	loaded, err := s.Load(w.ID())
+	require.NoError(t, err)
+	assert.Equal(t, &info, loaded.Header.Judge)
+	got := loaded.Attempts[0]
+	assert.Equal(t, a.JudgeUsage, got.JudgeUsage)
+	assert.Equal(t, 7, got.JudgeTokens)
+	assert.Equal(t, []StoredClaim{{ID: "helpful", Text: "Helpful", Subject: "step", Tool: "assistant.lookup", Informational: true}}, got.Claims)
+	assert.Equal(t, []StoredJudgment{{ClaimID: "helpful", Subject: "step", Step: &StoredJudgedStep{Run: 0, Index: 2, Tool: "assistant.lookup", CallID: "call-1"}, Informational: true, Uncalibrated: true, Truncated: true, Error: context.DeadlineExceeded.Error()}}, got.Judgments)
 }

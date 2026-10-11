@@ -33,6 +33,7 @@ type Outcome struct {
 	Checks    []expect.Check
 	Scores    []expect.Score
 	Claims    []Claim
+	Judgments []Judgment
 	Err       error
 }
 
@@ -62,6 +63,10 @@ func Execute(ctx context.Context, h *agenttest.Harness, s Scenario, item Item) (
 		item.Reference = s.Reference
 	}
 	out := &Outcome{Scenario: s.ID, Item: item.ID, Task: item.Task, Reference: item.Reference, Claims: slices.Clone(s.Claims)}
+	if err := resolveClaims(out.Claims, item); err != nil {
+		out.Err = err
+		return out, nil
+	}
 	if s.Timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, s.Timeout)
@@ -129,6 +134,7 @@ func evaluate(ctx context.Context, s Scenario, a *Attempt, out *Outcome) (err er
 		err = errors.Join(err, ctx.Err())
 	}()
 	subject := a.Subject()
+	out.Scores = metrics(a.Session.Trajectory)
 	out.Checks = append([]expect.Check{runsSucceeded(a.Session)}, expect.Evaluate(subject, s.Expect...)...)
 	if a.Item.ExpectedTools != nil {
 		check, score := a.Item.ExpectedTools.Evaluate(subject)
@@ -142,7 +148,11 @@ func evaluate(ctx context.Context, s Scenario, a *Attempt, out *Outcome) (err er
 		}
 		out.Checks = append(out.Checks, extra.Checks...)
 		out.Scores = append(out.Scores, extra.Scores...)
+		start := len(out.Claims)
 		out.Claims = append(out.Claims, extra.Claims...)
+		if err := resolveClaims(out.Claims[start:], a.Item); err != nil {
+			return err
+		}
 	}
 	if err := validateResults(out); err != nil {
 		return err

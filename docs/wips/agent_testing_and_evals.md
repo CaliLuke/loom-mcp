@@ -57,9 +57,9 @@ pass/fail in its exit status.
 | Attempt | One execution of one item. An item runs once per repeat. |
 | Experiment | One execution of a selection of scenarios × items × repeats, with recorded identity. Plan B's unit of storage and comparison. Matches Opik's term. |
 | Check | A deterministic pass/fail assertion with a diagnostic on failure. |
-| Claim | An English sentence judged by a model. Labels: `entailed`, `contradicted`, `not_addressed`, `indeterminate`. A claim is gating by default; `Informational: true` records it without affecting the attempt result. |
-| Score | A number with a name, deterministic or judged. Informational unless a threshold is set. |
-| Attempt passed | No infrastructure error, every check passed, every gating claim `entailed`, every score at or above its threshold when one is set. Used by both `agenttest.Repeat` and experiments. |
+| Claim | An English sentence judged against an answer, trajectory, session or call prefix by a model. Labels: `entailed`, `contradicted`, `not_addressed`, `indeterminate`. A claim is gating by default; `Informational: true` records it without affecting the attempt result. |
+| Score | A deterministic number with a name. Informational unless a threshold is set; numeric judge scores are out of scope. |
+| Attempt passed | No infrastructure error, every check passed, every unit of every gating claim `entailed`, every score at or above its threshold when one is set. Used by both `agenttest.Repeat` and experiments. |
 
 ---
 
@@ -756,8 +756,8 @@ func Execute(ctx context.Context, h *agenttest.Harness, s Scenario, item Item) (
   ErrEmptyDataset at line 2. Validate prefixes every diagnostic line with its
   scenario location, preserving DecodeError unwrapping.
 - Scenario and item IDs and tags match `[A-Za-z0-9][A-Za-z0-9._-]{0,127}`.
-  Claim IDs match `[a-z0-9_]{1,64}` and must be unique. Claims are declarations
-  only; T16/T17 owns judging. At least one user check or claim must remain;
+  Claim IDs match `[a-z0-9_]{1,64}` and must be unique. Execute declares and resolves claims; the runner delegates judging through
+  `eval.OutcomeJudge`. At least one user check or claim must remain;
   `runs_succeeded` alone does not satisfy `ErrNoAssertions`.
 - `Persona` remains reserved and rejected. ExpectedOutcome requires Turns.
 - T12 owns selection, repeats, concurrency, variants and attempt records.
@@ -784,7 +784,7 @@ func Execute(ctx context.Context, h *agenttest.Harness, s Scenario, item Item) (
 - Longest timeouts start first (zero longest); records keep declaration order.
   OnAttempt is serial, once per record, with skipped records delivered last.
 - Infrastructure errors are separate from quality failures. Verdict precedence is
-  error, failed, pending, passed; gating claims stay pending until T17 judges them.
+  error, failed, pending, passed; gating claims stay pending when no judge is configured.
   Groups reports counts without gating. Live-disabled factories stop new work and
   return an error; the runner never enables live models.
 - Tokens count all completed calls in returned records, including descendants and
@@ -820,7 +820,7 @@ The reserved version-1 schema includes optional claim `subject` and `tool`, deco
 into `StoredClaim`. Judgments have optional `subject` and `step`, where the step
 locator contains `run`, `index`, `tool`, and `call_id`. Attempts have optional
 `judge_usage` and `judge_tokens`; zero values are omitted. T13 preserves these
-fields on decode. T17 supplies the judging types and populates them when writing.
+fields on decode. Judging integration populates these fields when writing.
 The current claim mapping uses explicit fields so extending `Claim` does not
 break the store's build.
 
@@ -891,25 +891,35 @@ and intersection-only totals.
   `Recalibrate`. Infrastructure failures are not cached and leave results
   uncalibrated without blocking judging. Judgments themselves are never cached.
 - T13 reserves the experiment-level `judge.calibrated` field and per-judgment
-  `uncalibrated`; T17 maps judge results to those records. Compare and export flag
+  `uncalibrated`; `eval/judging` maps judge results to those records. Compare and export flag
   uncalibrated judgments. T16 itself returns `Result.Calibrated`.
 
 ### B7. Judge subjects and built-in metrics
 
 | Subject | Target | Built-in |
 |---|---|---|
-| Answer | the final answer | custom claims |
-| Trajectory | the rendered trajectory | task completion: "The agent completed the task: {Task}." Step efficiency: "The agent took no unnecessary steps for the task." Plan quality and plan adherence are documented custom claims, not built-ins, because they apply only to agents that state a plan in thinking or planner notes. |
+| Answer | the last run's final answer (default subject) | custom claims |
+| Trajectory | the last run's rendered trajectory, including children | task completion: "The agent completed the task: {task}." Step efficiency: "The agent took no unnecessary steps for the task." Plan quality and plan adherence are documented custom claims, not built-ins, because they apply only to agents that state a plan in thinking or planner notes. |
 | Session | the session trajectory | conversation completeness against `ExpectedOutcome`; custom claims such as knowledge retention |
-| Step | every model call, or every call of a named tool | argument correctness: "The arguments of this call are correct given the conversation so far." |
+| Step | every adopted root-run model call that chose tools, or every root-run call of a named tool | argument correctness: "The arguments of this call are correct given the conversation so far." |
 
 - The task is always fixed by the item or scenario. The judge never infers the
   task from the trajectory it grades.
 - Claims produce labels. Over repeats, the fraction of `entailed` labels is the
   item's score. Numeric 0–1 judge scores (DeepEval style) are not produced in
   the first version (see 11).
-- Deterministic scores need no model: model calls, tool calls, identical
-  repeated calls, failed calls, tokens, latency, `tool_correctness`.
+- Deterministic scores need no model: `model_calls` (adopted), `tool_calls`,
+  `failed_tool_calls` and `repeated_tool_calls` are always prepended and sum
+  every session run plus descendants. `tool_correctness` comes from expected
+  tools. Tokens and latency are record fields, not duplicate scores.
+- `Execute` resolves `{task}` and `{expected_outcome}` before judging. Missing
+  values are contract errors. Step subjects hide the current call's outcome and
+  later steps; zero matching units yield `not_addressed` without a model call.
+- `eval/judging` implements `eval.OutcomeJudge` without coupling `eval` to
+  `eval/judge`. Run prepares calibration before dispatch. `JudgeTimeout` is
+  separate from the scenario timeout and defaults to five minutes. Gating judge
+  errors make attempts `error`; missing judgments leave them `pending`.
+  Judge tokens count toward `MaxTokens`, excluding calibration.
 
 ### B8. Replay (optional)
 
@@ -1027,7 +1037,7 @@ T3 and request-fixture encoding to T9.
 
 | ID | Decision | Proposal | Blocks |
 |---|---|---|---|
-| D1 | Package names and homes | Decided: `runtime/agent/model` (`CallInfo`, done); `runtime/agent/tools` (`TypedTool`, `Named`); top-level `trajectory`, `expect`, `agenttest`, `eval`, `eval/judge`, `eval/evalcli`. K8 call records provide capture (5.3). | — |
+| D1 | Package names and homes | Decided: `runtime/agent/model` (`CallInfo`, done); `runtime/agent/tools` (`TypedTool`, `Named`); top-level `trajectory`, `expect`, `agenttest`, `eval`, `eval/judge`, `eval/judging` (the eval-to-judge adapter; added by T17), `eval/evalcli`. K8 call records provide capture (5.3). | — |
 | D2 | Local store format and path | Decided: JSON files under the application module, gitignored; each run stored as `runrecord.Export`, trajectories derived from it | — |
 | D3 | Judge mechanism and truncation | Decided: forced `record_judgments` tool only; renderer elision is visible and flagged, while the assembled request fails over its byte cap. Schemas are capped at 1 MiB. | — |
 | D4 | Trajectory source | Decided: transcript index and `RunRecord`, including K8 call records; observed fields optional; stream adapter only for remote clients | — |
@@ -1081,8 +1091,10 @@ T3 and request-fixture encoding to T9.
 
 Trajectories and captured model calls contain full prompts, model text, tool
 arguments, and tool results, which can include customer data. Experiments are
-stored locally under a gitignored path. Export to Opik (B9) is explicit and
-sends the same data to the shared instance. Neither is telemetry. Both hold
+stored locally under a gitignored path. Configuring a judge sends rendered
+subjects, including prompts, tool results and customer data, to the judge model
+provider. Export to Opik (B9) is explicit and
+sends the same data to the shared instance. Neither is telemetry. The stored and exported records hold
 what the compaction record holds: responses that runtime validation rejected,
 rejected summaries, and server-only data (`ServerData`, injected arguments).
 Output that never reaches the runtime model wrapper is not recorded.

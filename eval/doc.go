@@ -57,7 +57,7 @@
 // Oversized records omit exports and retain a StorageError diagnostic.
 // Schema version 1 reserves StoredClaim subjects and tool selectors, judgment
 // subjects and step locators, and separate judge usage and tokens. These optional
-// fields survive decoding; the current runner does not populate them.
+// fields survive decoding; the runner populates them when a judge is configured.
 //
 // Load rejects invalid schemas and exports but retains complete lines before a
 // torn final line. StoredRun.Record and Trajectory restore evidence after harness

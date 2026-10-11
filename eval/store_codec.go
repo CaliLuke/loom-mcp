@@ -97,7 +97,7 @@ var storeUnmarshalers = json.JoinUnmarshalers(
 )
 
 // wireClaim maps the current Claim fields without coupling the two struct shapes.
-// Judging integration will populate Subject and Tool when Claim gains them.
+// Subject and Tool retain the resolved criterion and selector.
 func wireClaim(v Claim) StoredClaim {
-	return StoredClaim{ID: v.ID, Text: v.Text, Informational: v.Informational}
+	return StoredClaim{ID: v.ID, Text: v.Text, Informational: v.Informational, Subject: string(v.Subject), Tool: v.Tool}
 }

@@ -21,6 +21,10 @@ func (o *Outcome) Verdict() Verdict {
 	if o == nil || o.Err != nil {
 		return VerdictError
 	}
+	claims := claimVerdict(o.Claims, o.Judgments)
+	if claims == VerdictError {
+		return claims
+	}
 	for _, c := range o.Checks {
 		if !c.Passed {
 			return VerdictFailed
@@ -31,12 +35,7 @@ func (o *Outcome) Verdict() Verdict {
 			return VerdictFailed
 		}
 	}
-	for _, c := range o.Claims {
-		if !c.Informational {
-			return VerdictPending
-		}
-	}
-	return VerdictPassed
+	return claims
 }
 
 // Verdict gives not-run and harness errors precedence over the outcome.

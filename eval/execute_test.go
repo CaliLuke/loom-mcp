@@ -40,7 +40,7 @@ func TestExecuteCustomDrive(t *testing.T) {
 	assert.Same(t, session, out.Session)
 	assert.Equal(t, "override", out.Task)
 	assert.Equal(t, "default reference", out.Reference)
-	assert.Equal(t, []eval.Claim{{ID: "correct", Text: "Answers correctly"}, {ID: "extra", Text: "Extra criterion"}}, out.Claims)
+	assert.Equal(t, []eval.Claim{{ID: "correct", Text: "Answers correctly", Subject: eval.SubjectAnswer}, {ID: "extra", Text: "Extra criterion", Subject: eval.SubjectAnswer}}, out.Claims)
 }
 
 func TestExecuteInfrastructure(t *testing.T) {
@@ -157,7 +157,7 @@ func TestExecuteNamesAndAgentFailure(t *testing.T) {
 		names[n] = check.Name
 	}
 	assert.Equal(t, []string{"runs_succeeded", "runs_succeeded#2", "expected_tools", "runs_succeeded#3", "runs_succeeded#2#2", "expected_tools#2"}, names)
-	assert.Equal(t, []expect.Score{{Name: "tool_correctness", Value: 1}, {Name: "tool_correctness#2", Value: 1}, {Name: "tool_correctness#3", Value: 0}}, out.Scores)
+	assert.Equal(t, []expect.Score{{Name: "model_calls"}, {Name: "tool_calls"}, {Name: "failed_tool_calls"}, {Name: "repeated_tool_calls"}, {Name: "tool_correctness", Value: 1}, {Name: "tool_correctness#2", Value: 1}, {Name: "tool_correctness#3", Value: 0}}, out.Scores)
 }
 
 func TestExecuteInvalidArguments(t *testing.T) {

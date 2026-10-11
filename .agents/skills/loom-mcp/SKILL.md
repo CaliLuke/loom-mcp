@@ -682,6 +682,13 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 
 ## Eval Judge
 
+- `eval/judging` implements eval.OutcomeJudge and renders answer, last-run
+  trajectory, session and root-run step prefixes. Execute resolves placeholders;
+  Run prepares calibration before dispatch, judges after Close under a separate
+  five-minute default timeout, and counts judge tokens toward the budget.
+  Gating judgment errors are errors, non-entailed units fail, absent judgments
+  stay pending. Deterministic metrics are always prepended and recurse through
+  child totals. Persist Report.Judge with Writer.SetJudge before Finish.
 - `eval/judge` judges rendered text with a forced `record_judgments` tool through
   Complete, temperature zero, no thinking and a required positive output cap.
   It imports neither eval nor trajectory. Codex rejects the required MaxTokens.
