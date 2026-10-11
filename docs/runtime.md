@@ -4260,3 +4260,39 @@ K18 supplies continuation positions, carried origins and earlier totals.
 
 Golden checkpoints are in
 `runtime/agent/transcript/checkpoint/testdata/{correction,cross_run}.golden`.
+
+## Engine conformance
+
+`runtime/agent/engine/enginetest.RunConformance` checks the public engine contract:
+workflow registration, results and status; typed activity inputs, outputs, errors,
+options and attempts; parallel tool futures; all typed signals buffered during
+activities; timers and monotonic workflow time; children; cancellation and detached
+cleanup; and live root-run queries. Retry-capable engines must recover a failed
+activity on attempt two. Durable engines must recover after worker replacement
+without executing an already completed activity again. Value preservation on
+in-memory execution checks pointer passing; it does not prove a codec round trip.
+Serializing adapters, such as Temporal, exercise their codecs through the suite.
+
+Custom adapters call `enginetest.RunConformance(t, enginetest.Factory{...})` from a
+`TestConformance`. Set `Durable` and `Retries` truthfully and implement `New` to
+return a fresh `Fixture` with isolated workflow/activity queues and test cleanup.
+Provide `VerifyActivityOptions` to inspect actual backend scheduling and, when
+`Durable` is true, `Restart` to replace workers on the same backend, re-register
+the supplied definitions and activate the new worker. Unsupported capabilities
+produce explicit skips. `KnownGaps` uses exact scenario names with a defect and
+follow-up explanation. Executable gaps must return a typed `enginetest.GapError`
+wrapping an observed behavioral difference. Unexpected success requires removal
+of the obsolete entry. Deadlines, cancellations, expired scenario contexts and
+untyped errors fail the test; they cannot count as expected failures. Unexpressible
+API gaps remain explicit skips.
+
+Run `go test -race ./runtime/agent/engine/inmem -run '^TestConformance$'` for the
+in-memory suite, or `make test-engine-conformance` for both adapters. The latter
+starts a real Temporal dev server using the SDK's CLI download mechanism, has a
+five-minute timeout, and runs under `make itest`. Temporal is skipped with
+`-short`. Current known gaps are Temporal returning an existing handle on an
+active ID conflict, in-memory queue/schedule/heartbeat options, and `await_signal`.
+`await_signal` stays a plain skip: `Await` needs a side-effect-free predicate, but
+`Receiver.ReceiveAsync` consumes the signal and no signal-handler primitive is
+available. Conformance workers use one-second workflow-task and sticky timeouts
+to bound restart recovery independently of the old worker taking its next task.

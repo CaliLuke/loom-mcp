@@ -207,6 +207,7 @@ test-fuzz:
 # Run generated quickstart acceptance plus every generated fixture and MCP
 # framework contract. Nested fixture modules must be invoked explicitly.
 itest: tools
+	$(MAKE) test-engine-conformance
 	$(MAKE) test-payload-growth
 	$(GO) test -race -count=1 ./codegen/agent/tests -run '^TestQuickstartGeneratesAndRuns$$'
 	$(MAKE) verify-mcp-local
@@ -330,3 +331,8 @@ regen-sdkbridge-consumer-fixture:
 
 verify-agent-feature-fixture:
 	$(GO) test -C ./integration_tests/fixtures/agent_features -race ./... -count=1
+
+# Real backend conformance includes Temporal worker replacement and retries.
+.PHONY: test-engine-conformance
+test-engine-conformance:
+	$(GO) test -race -count=1 -timeout=5m -v ./runtime/agent/engine/inmem ./runtime/agent/engine/temporal -run '^TestConformance$$'

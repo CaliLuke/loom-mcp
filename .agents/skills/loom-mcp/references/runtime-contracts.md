@@ -718,3 +718,27 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   and marks the checkpoint. ValidateView applies GrammarBedrock/Anthropic,
   first-user/post-checkpoint-assistant constraints and bidirectional tool
   handshakes. These validators are not wired before K12.
+
+## Engine Conformance
+
+- Custom engines should run `enginetest.RunConformance` with a fresh fixture for
+  each scenario. Durable and Retries capabilities gate explicit skips only.
+- Fixtures provide backend option inspection and, for durable engines, replacement
+  workers on the same backend with re-registration. Keep existing workflow handles
+  usable. Completed activities must not execute again after replacement.
+- In-memory value preservation checks pointer passing, not a codec round trip.
+  Serializing adapters exercise their codecs through the same suite.
+- `make test-engine-conformance` runs in-memory and real Temporal dev-server
+  conformance with race detection and a five-minute timeout; `make itest` includes
+  it. Temporal conformance skips under `-short`. Conformance-only workflow-task
+  and sticky schedule-to-start timeouts are one second to bound worker recovery.
+- Executable KnownGaps must return a typed enginetest.GapError wrapping an
+  observed behavioral difference. Unexpected success fails the suite until the
+  obsolete gap is removed. Deadlines, cancellations, expired scenario contexts
+  and untyped errors fail the test. Fixture/setup failures are ordinary failures,
+  not accepted gap evidence.
+- Current executable gaps: Temporal returns the existing handle on active ID
+  conflict; inmem omits the activity heartbeat timeout and ignores scheduling
+  mechanics. `await_signal` remains a plain API-gap skip: Await predicates must
+  be side-effect-free, but ReceiveAsync consumes the signal and no workflow
+  signal-handler primitive is available.
