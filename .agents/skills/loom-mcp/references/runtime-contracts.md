@@ -89,10 +89,10 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   derive from it only to add values. Active native Go cancellation/deadline
   contexts and foreign workflow scopes are rejected. To cancel while waiting,
   create a scope with `WithCancel()` and call the returned workflow context's
-  `Await` with its own `Context()`. Preserve the raw Temporal cancellation error;
-  the runtime classifier recognizes it.
+  `Await` with its own `Context()`. The adapter returns the engine cancellation
+  marker and preserves SDK inspection of the original cause.
 - The runtime classifies the complete error graph. Every leaf must be
-  `context.Canceled` or a Temporal cancellation for a canceled result.
+  `context.Canceled` or the engine cancellation marker for a canceled result.
 - The classifier has fixed limits for depth, visits, and children. Cycles,
   typed nil errors, panics, and oversized graphs are failures. Each decision
   uses one bounded inspection, including stable Temporal marker discovery.
@@ -788,3 +788,25 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   ignores scheduling mechanics. `await_signal` remains a plain API-gap skip: Await predicates must
   be side-effect-free, but ReceiveAsync consumes the signal and no workflow
   signal-handler primitive is available.
+
+## Engine errors
+
+- `engine.ApplicationError` carries Type, Message, NonRetryable, Details and Cause.
+  Engines must not retry a NonRetryable activity failure, and must surface neutral
+  application/timeout/cancellation errors to workflow code for errors.As inspection.
+- Engine aliases use the leaf `engine/errtypes` implementation to avoid existing
+  engine -> api -> hooks and engine -> telemetry -> cancellation import cycles.
+- Provider errors use `hooks.ProviderErrorDetails` with unchanged payload fields.
+  Temporal converts at all activity, child, timer and workflow completion boundaries.
+  It preserves original SDK diagnostic causes and mixed-cancellation protections.
+- `engine.ErrCanceled` shares context.Canceled's identity. Exact-leaf classification
+  remains bounded. Backend SDK cancellation predicates run only at exact leaves.
+- In-memory execution preserves application failures without retries, returns the
+  cancellation marker and marks native execution deadlines as engine.TimeoutError.
+- `runtime/temporaltrace` is an explicitly Temporal-specific, opt-in exception.
+- Shared `application_errors` conformance scenarios verify non-retryability and
+  Type/Details preservation across every existing activity case.
+- Converted Temporal application wrappers preserve the SDK's exact Error text,
+  including nested failures, in workflow/client results and recorded tool payloads.
+- Outbound conversion never hoists an engine node out of external joins or reason
+  wrappers. Only root engine nodes or adapter-owned synthetic wrappers convert.

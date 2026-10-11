@@ -3307,6 +3307,29 @@ cancellation. Canceling a workflow therefore releases a receiver blocked in
 status as `canceled` when all error leaves are cancellations. An independent
 cleanup, provider, hook, or transport failure makes the run fail.
 
+### Engine errors
+
+Custom engines must return `engine.ApplicationError`, `engine.TimeoutError`, and
+`engine.ErrCanceled` from activity, child-workflow, and timer boundaries so runtime
+code can inspect failures with `errors.As` and `engine.IsCanceled`/`engine.IsTimeout`.
+An activity returning an `ApplicationError` with `NonRetryable: true` must never be
+retried. Preserve its `Type`, `Message`, and single serializable `Details` value;
+retain the backend error as its cause. Provider failures use
+`loom_mcp.provider_error` and `hooks.ProviderErrorDetails`.
+
+`ErrCanceled` shares `context.Canceled`'s identity. Run cancellation still requires
+every exact error leaf to be a cancellation; a joined cleanup failure fails the
+run. Native context deadlines are timeout failures. The Temporal adapter owns SDK
+failure conversion and preserves backend error text in ToolResult and hook
+payloads. Conversion restores only root engine errors or adapter-owned wrappers;
+caller joins and reason wrappers retain their text and retryability. The in-memory engine passes
+application errors through, marks execution deadlines, and never retries.
+
+Run the shared `enginetest.RunConformance` suite for custom adapters. Its
+`application_errors` scenarios check type/details preservation and one attempt
+for a non-retryable failure with a retry policy allowing three attempts.
+`runtime/temporaltrace` is an opt-in Temporal-specific tracing package.
+
 ### Available Engines
 
 **Temporal worker** — Production-grade durable execution:

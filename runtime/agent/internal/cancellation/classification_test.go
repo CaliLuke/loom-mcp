@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"testing"
 
+	engine "github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine/errtypes"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/temporal"
 	grpcCodes "google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
 )
@@ -141,8 +141,8 @@ func TestOnlyClassifiesCompleteErrorGraph(t *testing.T) {
 		{name: "nil", want: false},
 		{name: "context cancellation", err: context.Canceled, want: true},
 		{name: "wrapped context cancellation", err: fmt.Errorf("wrapped: %w", context.Canceled), want: true},
-		{name: "temporal cancellation", err: temporal.NewCanceledError("canceled"), want: true},
-		{name: "joined cancellations", err: errors.Join(context.Canceled, temporal.NewCanceledError("canceled")), want: true},
+		{name: "engine cancellation", err: engine.ErrCanceled, want: true},
+		{name: "joined cancellations", err: errors.Join(context.Canceled, engine.ErrCanceled), want: true},
 		{name: "mixed cancellation and failure", err: errors.Join(context.Canceled, errors.New("cleanup failed")), want: false},
 		{name: "deadline", err: context.DeadlineExceeded, want: false},
 		{name: "ordinary failure", err: errors.New("failed"), want: false},
@@ -285,4 +285,36 @@ func deepCancellation(depth int) error {
 		err = fmt.Errorf("wrapped: %w", err)
 	}
 	return err
+}
+
+func TestBackendCancellationMatchesExactLeaf(t *testing.T) {
+	marker := errors.New("backend canceled")
+	failure := errors.New("failure")
+	for _, test := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "leaf", err: marker, want: true},
+		{name: "wrapped leaf", err: fmt.Errorf("wrapped: %w", marker), want: true},
+		{name: "mixed", err: errors.Join(marker, failure)},
+		{name: "wrapper is not leaf", err: &safeWrapperError{child: failure}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got := InspectWithCancellationLeaf(test.err, nil, func(candidate error) bool {
+				if Exact(candidate, marker) {
+					return true
+				}
+				//nolint:errorlint // The callback must only ever receive exact leaves.
+				_, wrapper := candidate.(*safeWrapperError)
+				return wrapper
+			})
+			require.True(t, got.Valid)
+			require.Equal(t, test.want, got.OnlyCancellation)
+		})
+	}
+	got := InspectWithCancellationLeaf(marker, nil, func(error) bool {
+		panic("backend predicate")
+	})
+	require.False(t, got.Valid)
 }

@@ -33,7 +33,7 @@ func (w *temporalWorkflowContext) ExecuteSealRecordActivity(ctx context.Context,
 	actx := workflow.WithActivityOptions(w.ctx, w.activityOptionsFor(call.Name, call.Options))
 	var out *api.SealRecordOutput
 	if err := workflow.ExecuteActivity(actx, call.Name, call.Input).Get(actx, &out); err != nil {
-		return nil, err
+		return nil, normalizeTemporalError(err)
 	}
 	return out, nil
 }

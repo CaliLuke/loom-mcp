@@ -255,11 +255,16 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   `failed`, or `canceled` status remains authoritative; later session-store
   updates may enrich metadata but must not reopen or replace that outcome.
 - An error graph is a cancellation only when every leaf is `context.Canceled`
-  or a Temporal cancellation. The classifier bounds graph depth, visits, and
+  or the engine cancellation marker. The classifier bounds depth, visits, and
   fan-out. It rejects cycles, typed nil errors, panics, and oversized graphs.
 - A mixed cancellation and failure graph fails the run and preserves every
   error leaf. `context.DeadlineExceeded` is a failure unless the engine reports
   a canceled run.
+- Engine errors are `engine.ApplicationError`, `engine.TimeoutError`, and
+  `engine.ErrCanceled`. NonRetryable application failures must never retry.
+  Temporal SDK conversions belong in the adapter; `runtime/temporaltrace` remains
+  explicitly Temporal-specific and opt-in. The leaf `engine/errtypes` package
+  avoids hooks/telemetry import cycles; application code uses the engine aliases.
 - The Temporal adapter stores mixed cancellation as a non-retryable application
   failure. One bounded inspection finds its stable type without `errors.As`.
   Activity, child, top-level wait, and restart query paths restore cancellation

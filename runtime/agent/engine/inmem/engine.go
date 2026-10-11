@@ -319,7 +319,7 @@ func (e *eng) startWorkflow(acceptanceCtx, workflowParent context.Context, req e
 		}
 		h.mu.Lock()
 		h.result = res
-		h.err = err
+		h.err = normalizeError(err)
 		h.mu.Unlock()
 		// Update status based on completion.
 		e.mu.Lock()
@@ -615,7 +615,7 @@ func (w *wfCtx) NewTimer(ctx context.Context, d time.Duration) (engine.Future[ti
 		defer close(fut.ready)
 		select {
 		case <-ctx.Done():
-			fut.err = ctx.Err()
+			fut.err = normalizeError(ctx.Err())
 		case <-time.After(d):
 			fut.result = fireAt
 		}
@@ -660,7 +660,7 @@ func (w *wfCtx) PublishHook(ctx context.Context, call engine.HookActivityCall) e
 	}
 	actCtx, cancel := withOptionalTimeout(ctx, timeout)
 	defer cancel()
-	return def.handler(actCtx, call.Input)
+	return normalizeError(def.handler(actCtx, call.Input))
 }
 
 func (w *wfCtx) ExecutePlannerActivity(ctx context.Context, call engine.PlannerActivityCall) (*api.PlanActivityOutput, error) {
@@ -682,7 +682,8 @@ func (w *wfCtx) ExecutePlannerActivity(ctx context.Context, call engine.PlannerA
 	}
 	actCtx, cancel := withOptionalTimeout(ctx, timeout)
 	defer cancel()
-	return def.handler(actCtx, call.Input)
+	out, err := def.handler(actCtx, call.Input)
+	return out, normalizeError(err)
 }
 
 func (w *wfCtx) ExecuteFinishRunActivity(ctx context.Context, call engine.FinishRunActivityCall) (*api.FinishRunOutput, error) {
@@ -704,7 +705,8 @@ func (w *wfCtx) ExecuteFinishRunActivity(ctx context.Context, call engine.Finish
 	}
 	actCtx, cancel := withOptionalTimeout(ctx, timeout)
 	defer cancel()
-	return def.handler(actCtx, call.Input)
+	out, err := def.handler(actCtx, call.Input)
+	return out, normalizeError(err)
 }
 
 // ExecuteRecordContentActivity stores content through the registered handler.
@@ -727,7 +729,8 @@ func (w *wfCtx) ExecuteRecordContentActivity(ctx context.Context, call engine.Re
 	}
 	actCtx, cancel := withOptionalTimeout(ctx, timeout)
 	defer cancel()
-	return def.handler(actCtx, call.Input)
+	out, err := def.handler(actCtx, call.Input)
+	return out, normalizeError(err)
 }
 
 // ExecuteChildDispatchActivity validates child dispatch through the registered handler.
@@ -750,7 +753,8 @@ func (w *wfCtx) ExecuteChildDispatchActivity(ctx context.Context, call engine.Ch
 	}
 	actCtx, cancel := withOptionalTimeout(ctx, timeout)
 	defer cancel()
-	return def.handler(actCtx, call.Input)
+	out, err := def.handler(actCtx, call.Input)
+	return out, normalizeError(err)
 }
 
 func (w *wfCtx) ExecuteToolActivity(ctx context.Context, call engine.ToolActivityCall) (*api.ToolOutput, error) {
@@ -785,6 +789,7 @@ func (w *wfCtx) ExecuteToolActivityAsync(ctx context.Context, call engine.ToolAc
 		actCtx, cancel := withOptionalTimeout(ctx, timeout)
 		defer cancel()
 		fut.result, fut.err = def.handler(actCtx, call.Input)
+		fut.err = normalizeError(fut.err)
 	}()
 	return fut, nil
 }

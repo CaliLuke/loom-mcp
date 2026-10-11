@@ -11,7 +11,7 @@ func TestConformance(t *testing.T) {
 	gaps := map[string]string{
 		"await_signal": "E0 follow-up: Await requires a side-effect-free predicate, but Receiver offers only consuming ReceiveAsync and WorkflowContext has no signal handler/coroutine",
 	}
-	for _, kind := range []string{"hook", "planner", "tool", "finish", "record_content", "child_dispatch"} {
+	for _, kind := range []string{"hook", "planner", "tool", "finish", "record_content", "child_dispatch", "seal"} {
 		gaps["activity_options/"+kind] = "E0 follow-up: inmem applies StartToCloseTimeout only; Queue, ScheduleToStartTimeout, HeartbeatTimeout and retry options are ignored"
 	}
 	enginetest.RunConformance(t, enginetest.Factory{

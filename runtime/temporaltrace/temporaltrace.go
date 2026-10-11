@@ -1,5 +1,6 @@
 // Package temporaltrace defines the OpenTelemetry tracing contract for Temporal
-// activity execution in loom-mcp powered runtimes.
+// activity execution in loom-mcp powered runtimes. This opt-in package is
+// explicitly Temporal-specific; it is outside the engine-neutral runtime contract.
 //
 // Contract:
 //   - Temporal activities execute in a distinct trace domain from synchronous

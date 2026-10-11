@@ -54,5 +54,6 @@ func (w *wfCtx) ExecuteSealRecordActivity(ctx context.Context, call engine.SealR
 	}
 	actCtx, cancel := withOptionalTimeout(ctx, timeout)
 	defer cancel()
-	return def.handler(actCtx, call.Input)
+	out, err := def.handler(actCtx, call.Input)
+	return out, normalizeError(err)
 }

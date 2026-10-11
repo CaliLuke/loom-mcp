@@ -1,0 +1,12 @@
+{
+  "nested": {
+    "hook_payload": "{\"refs\":{\"Result\":\"\",\"ServerData\":\"\",\"Payload\":\"\"},\"tool_call_id\":\"call\",\"tool_name\":\"golden.tool\",\"duration\":0,\"error\":{\"Message\":\"tool failed\",\"Cause\":{\"Message\":\"activity error (type: failing, scheduledEventID: 0, startedEventID: 0, identity: ): outer (type: example.outer, retryable: false): boom (type: example.boom, retryable: false)\",\"Cause\":null}}}",
+    "tool_error": "{\"Message\":\"tool failed\",\"Cause\":{\"Message\":\"activity error (type: failing, scheduledEventID: 0, startedEventID: 0, identity: ): outer (type: example.outer, retryable: false): boom (type: example.boom, retryable: false)\",\"Cause\":null}}",
+    "workflow_error": "activity error (type: failing, scheduledEventID: 0, startedEventID: 0, identity: ): outer (type: example.outer, retryable: false): boom (type: example.boom, retryable: false)"
+  },
+  "plain": {
+    "hook_payload": "{\"refs\":{\"Result\":\"\",\"ServerData\":\"\",\"Payload\":\"\"},\"tool_call_id\":\"call\",\"tool_name\":\"golden.tool\",\"duration\":0,\"error\":{\"Message\":\"tool failed\",\"Cause\":{\"Message\":\"activity error (type: failing, scheduledEventID: 0, startedEventID: 0, identity: ): boom (type: example.boom, retryable: false)\",\"Cause\":null}}}",
+    "tool_error": "{\"Message\":\"tool failed\",\"Cause\":{\"Message\":\"activity error (type: failing, scheduledEventID: 0, startedEventID: 0, identity: ): boom (type: example.boom, retryable: false)\",\"Cause\":null}}",
+    "workflow_error": "activity error (type: failing, scheduledEventID: 0, startedEventID: 0, identity: ): boom (type: example.boom, retryable: false)"
+  }
+}

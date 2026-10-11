@@ -604,7 +604,8 @@ func classifyTemporalCancellation(err error) error {
 	if err == nil {
 		return nil
 	}
-	inspection := cancellation.Inspect(err, nil)
+	nodes := temporalErrorNodes{}
+	inspection := cancellation.InspectWithCancellationLeaf(err, nodes.match, isTemporalCancellationLeaf)
 	if !inspection.Valid {
 		return temporalsdk.NewNonRetryableApplicationError(
 			"operation failed with an invalid error graph",
@@ -616,13 +617,14 @@ func classifyTemporalCancellation(err error) error {
 		return temporalsdk.NewCanceledError("operation canceled")
 	}
 	if inspection.ContainsCancellation {
+		cause := convertRootTemporalError(err, nodes.originalApplication)
 		return temporalsdk.NewNonRetryableApplicationError(
 			"operation failed with mixed cancellation and failure",
 			mixedCancellationFailureType,
-			err,
+			cause,
 		)
 	}
-	return err
+	return convertRootTemporalError(err, nodes.originalApplication)
 }
 
 // classifyTemporalStartError maps duplicate IDs and marks only direct, definitive server rejections.

@@ -20,13 +20,15 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/toolerrors"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 
-	"go.temporal.io/sdk/temporal"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine/errtypes"
 )
 
 const providerErrorApplicationType = "loom_mcp.provider_error"
 
 type (
-	providerErrorEnvelope struct {
+	// ProviderErrorDetails is the portable provider failure envelope. Its field
+	// names and value shape preserve the recorded activity failure payload.
+	ProviderErrorDetails struct {
 		Provider   string
 		Operation  string
 		HTTPStatus int
@@ -41,7 +43,7 @@ type (
 		inspection   cancellation.Inspection
 		provider     *model.ProviderError
 		providerText string
-		application  *temporal.ApplicationError
+		application  *errtypes.ApplicationError
 		timeout      bool
 		deadline     bool
 	}
@@ -666,7 +668,7 @@ func NewRunCompletedEvent(runID string, agentID agent.Ident, sessionID, status s
 	return out
 }
 
-// WrapRunCompletionError encodes provider failures into a Temporal application
+// WrapRunCompletionError encodes provider failures into an engine application
 // error envelope so Wait()/Get()-based terminal paths can recover structured
 // provider metadata after the workflow engine serializes the error.
 func WrapRunCompletionError(err error) error {
@@ -677,14 +679,14 @@ func WrapRunCompletionError(err error) error {
 	if !details.inspection.Valid {
 		return cancellation.ErrInvalidErrorGraph
 	}
-	if _, alreadyWrapped := providerErrorFromTemporalInspection(details); alreadyWrapped {
+	if _, alreadyWrapped := providerErrorFromApplicationInspection(details); alreadyWrapped {
 		return err
 	}
 	pe := details.provider
 	if pe == nil {
 		return err
 	}
-	envelope := providerErrorEnvelope{
+	envelope := ProviderErrorDetails{
 		Provider:   pe.Provider(),
 		Operation:  pe.Operation(),
 		HTTPStatus: pe.HTTPStatus(),
@@ -695,9 +697,9 @@ func WrapRunCompletionError(err error) error {
 		Retryable:  pe.Retryable(),
 	}
 	if pe.Retryable() {
-		return temporal.NewApplicationErrorWithCause(details.providerText, providerErrorApplicationType, err, envelope)
+		return errtypes.NewApplicationError(details.providerText, providerErrorApplicationType, envelope, err)
 	}
-	return temporal.NewNonRetryableApplicationError(details.providerText, providerErrorApplicationType, err, envelope)
+	return errtypes.NewNonRetryableApplicationError(details.providerText, providerErrorApplicationType, envelope, err)
 }
 
 // NewChildRunLinkedEvent constructs a ChildRunLinkedEvent for the given parent
@@ -1091,11 +1093,11 @@ func inspectCompletionError(err error) completionErrorInspection {
 				details.provider = typed
 				details.providerText = errorText
 			}
-		case *temporal.ApplicationError:
-			if details.application == nil && typed.Type() == providerErrorApplicationType {
+		case *errtypes.ApplicationError:
+			if details.application == nil && typed.Type == providerErrorApplicationType {
 				details.application = typed
 			}
-		case *temporal.TimeoutError:
+		case *errtypes.TimeoutError:
 			details.timeout = true
 		}
 		if cancellation.Exact(candidate, context.DeadlineExceeded) {
@@ -1117,16 +1119,15 @@ func providerErrorFromInspection(details completionErrorInspection) (*model.Prov
 	if details.provider != nil {
 		return details.provider, true
 	}
-	return providerErrorFromTemporalInspection(details)
+	return providerErrorFromApplicationInspection(details)
 }
 
-func providerErrorFromTemporalInspection(details completionErrorInspection) (*model.ProviderError, bool) {
+func providerErrorFromApplicationInspection(details completionErrorInspection) (*model.ProviderError, bool) {
 	appErr := details.application
 	if appErr == nil {
 		return nil, false
 	}
-	var envelope providerErrorEnvelope
-	decoded := appErr.Details(&envelope) == nil
+	envelope, decoded := appErr.Details.(ProviderErrorDetails)
 	if !decoded {
 		return nil, false
 	}

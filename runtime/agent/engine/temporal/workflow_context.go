@@ -20,7 +20,6 @@ import (
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
-	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/internal/cancellation"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/temporal"
@@ -116,31 +115,6 @@ func newTemporalWorkflowContext(e *Engine, ctx workflow.Context) *temporalWorkfl
 	return wfCtx
 }
 
-// normalizeTemporalError translates Temporal cancellation errors to context.Canceled.
-//
-// The runtime uses context cancellation to classify cancellations uniformly across
-// engine backends without depending on Temporal SDK error types.
-func normalizeTemporalError(err error) error {
-	if err == nil {
-		return nil
-	}
-	inspection := cancellation.Inspect(err, func(candidate error, _ string) bool {
-		//nolint:errorlint // Inspect supplies each exact graph node to the matcher.
-		applicationErr, ok := candidate.(*temporal.ApplicationError)
-		return ok && applicationErr.Type() == mixedCancellationFailureType
-	})
-	if !inspection.Valid {
-		return err
-	}
-	if inspection.OnlyCancellation {
-		return context.Canceled
-	}
-	if inspection.Matched {
-		return errors.Join(context.Canceled, err)
-	}
-	return err
-}
-
 func mergeRetryPolicies(base, override engine.RetryPolicy) engine.RetryPolicy {
 	result := base
 	if override.MaxAttempts != 0 {
@@ -203,7 +177,7 @@ func (w *temporalWorkflowContext) PublishHook(ctx context.Context, call engine.H
 	actx := workflow.WithActivityOptions(w.ctx, w.activityOptionsFor(call.Name, call.Options))
 	fut := workflow.ExecuteActivity(actx, call.Name, call.Input)
 	var ignored struct{}
-	return fut.Get(actx, &ignored)
+	return normalizeTemporalError(fut.Get(actx, &ignored))
 }
 
 func (w *temporalWorkflowContext) ExecutePlannerActivity(ctx context.Context, call engine.PlannerActivityCall) (*api.PlanActivityOutput, error) {
@@ -218,7 +192,7 @@ func (w *temporalWorkflowContext) ExecutePlannerActivity(ctx context.Context, ca
 	fut := workflow.ExecuteActivity(actx, call.Name, call.Input)
 	var out *api.PlanActivityOutput
 	if err := fut.Get(actx, &out); err != nil {
-		return nil, err
+		return nil, normalizeTemporalError(err)
 	}
 	return out, nil
 }
@@ -235,7 +209,7 @@ func (w *temporalWorkflowContext) ExecuteFinishRunActivity(ctx context.Context, 
 	fut := workflow.ExecuteActivity(actx, call.Name, call.Input)
 	var out *api.FinishRunOutput
 	if err := fut.Get(actx, &out); err != nil {
-		return nil, err
+		return nil, normalizeTemporalError(err)
 	}
 	return out, nil
 }
@@ -253,7 +227,7 @@ func (w *temporalWorkflowContext) ExecuteRecordContentActivity(ctx context.Conte
 	fut := workflow.ExecuteActivity(actx, call.Name, call.Input)
 	var out *api.RecordContentOutput
 	if err := fut.Get(actx, &out); err != nil {
-		return nil, err
+		return nil, normalizeTemporalError(err)
 	}
 	return out, nil
 }
@@ -271,7 +245,7 @@ func (w *temporalWorkflowContext) ExecuteChildDispatchActivity(ctx context.Conte
 	fut := workflow.ExecuteActivity(actx, call.Name, call.Input)
 	var out *api.ChildDispatchOutput
 	if err := fut.Get(actx, &out); err != nil {
-		return nil, err
+		return nil, normalizeTemporalError(err)
 	}
 	return out, nil
 }
@@ -385,7 +359,7 @@ func (w *temporalWorkflowContext) Await(ctx context.Context, condition func() bo
 	if ctx.Done() != nil {
 		return errors.New("await context cannot use Go cancellation; use WithCancel().Context() for workflow-scope cancellation")
 	}
-	return workflow.Await(w.ctx, condition)
+	return normalizeTemporalError(workflow.Await(w.ctx, condition))
 }
 
 func (w *temporalWorkflowContext) WithCancel() (engine.WorkflowContext, func()) {

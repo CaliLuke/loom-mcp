@@ -89,6 +89,7 @@ func TestClassifyTemporalCancellation(t *testing.T) {
 	}{
 		{name: "nil"},
 		{name: "cancellation", err: context.Canceled, wantCanceled: true},
+		{name: "SDK cancellation", err: temporalsdk.NewCanceledError("detail"), wantCanceled: true},
 		{name: "joined cancellations", err: errors.Join(context.Canceled, fmt.Errorf("wrapped: %w", context.Canceled)), wantCanceled: true},
 		{name: "mixed cancellation and failure", err: errors.Join(context.Canceled, cleanup), wantLeaves: []error{context.Canceled, cleanup}},
 		{name: "deadline", err: context.DeadlineExceeded, wantSame: true, wantLeaves: []error{context.DeadlineExceeded}},
@@ -250,7 +251,9 @@ func TestNormalizeTemporalErrorClassifiesCompleteGraph(t *testing.T) {
 	mixed := errors.Join(temporalsdk.NewCanceledError("canceled"), cleanup)
 	got := normalizeTemporalError(mixed)
 	require.ErrorIs(t, got, cleanup)
-	require.NotErrorIs(t, got, context.Canceled)
+	require.ErrorIs(t, got, engine.ErrCanceled)
+	require.True(t, cancellation.Contains(got))
+	require.False(t, cancellation.Only(got))
 	require.ErrorIs(t, normalizeTemporalError(context.DeadlineExceeded), context.DeadlineExceeded)
 }
 

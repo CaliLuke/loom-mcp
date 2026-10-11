@@ -23,11 +23,14 @@ type activityCase struct {
 }
 
 func activityScenarios() []scenario {
-	cases := make([]scenario, 0, 30)
+	cases := make([]scenario, 0, 6*len(activities()))
 	for _, a := range activities() {
 		cases = append(cases,
 			scenario{name: "activities/" + a.name, run: func(t *testing.T, f Fixture) error {
 				return testActivity(t, f, a, false)
+			}},
+			scenario{name: "application_errors/" + a.name, run: func(t *testing.T, f Fixture) error {
+				return testApplicationError(t, f, a)
 			}},
 			scenario{name: "activity_errors/" + a.name, run: func(t *testing.T, f Fixture) error {
 				return testActivity(t, f, a, true)

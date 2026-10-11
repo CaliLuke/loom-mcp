@@ -14,7 +14,7 @@ import (
 
 func activities() []activityCase {
 	return []activityCase{
-		hookCase(), plannerCase(), toolCase(), finishCase(), contentCase(), dispatchCase(),
+		hookCase(), plannerCase(), toolCase(), finishCase(), contentCase(), dispatchCase(), sealCase(),
 	}
 }
 
@@ -96,5 +96,18 @@ func dispatchCase() activityCase {
 		},
 		invoke: func(w engine.WorkflowContext, in any, opts engine.ActivityOptions) (any, error) {
 			return w.ExecuteChildDispatchActivity(w.Context(), engine.ChildDispatchActivityCall{Name: activityName, Input: in.(*api.ChildDispatchInput), Options: opts})
+		}}
+}
+
+func sealCase() activityCase {
+	return activityCase{name: "seal", input: &api.SealRecordInput{RootRunID: rootRunID, RunID: testRunID, ProtocolVersion: api.WorkflowProtocolVersion, IndexHead: indexRef, EventKey: "run_sealed:run"},
+		output: &api.SealRecordOutput{IndexHead: "sha256:sealed"},
+		register: func(ctx context.Context, e engine.Engine, opts engine.ActivityOptions, fn func(context.Context, any) (any, error)) error {
+			return e.RegisterSealRecordActivity(ctx, activityName, opts, func(ctx context.Context, in *api.SealRecordInput) (*api.SealRecordOutput, error) {
+				return typedResult[*api.SealRecordOutput](fn(ctx, in))
+			})
+		},
+		invoke: func(w engine.WorkflowContext, in any, opts engine.ActivityOptions) (any, error) {
+			return w.ExecuteSealRecordActivity(w.Context(), engine.SealRecordActivityCall{Name: activityName, Input: in.(*api.SealRecordInput), Options: opts})
 		}}
 }

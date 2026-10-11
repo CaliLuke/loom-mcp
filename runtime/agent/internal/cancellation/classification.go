@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"go.temporal.io/sdk/temporal"
+	engine "github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine/errtypes"
 	grpcCodes "google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
 )
@@ -32,13 +32,14 @@ type Inspection struct {
 type Matcher func(err error, text string) bool
 
 type graphClassifier struct {
-	active        map[errorIdentity]struct{}
-	leaves        int
-	cancellations int
-	terminations  int
-	visits        int
-	matcher       Matcher
-	matched       bool
+	active           map[errorIdentity]struct{}
+	leaves           int
+	cancellations    int
+	terminations     int
+	visits           int
+	matcher          Matcher
+	cancellationLeaf func(error) bool
+	matched          bool
 }
 
 const (
@@ -54,14 +55,14 @@ var (
 )
 
 // Only reports whether every leaf in a bounded error graph is an exact context
-// or Temporal cancellation. Malformed, cyclic, or oversized graphs are ordinary
+// or engine cancellation. Malformed, cyclic, or oversized graphs are ordinary
 // failures rather than cancellations.
 func Only(err error) bool {
 	return Inspect(err, nil).OnlyCancellation
 }
 
 // Contains reports whether a valid bounded error graph has at least one exact
-// context or Temporal cancellation leaf.
+// context or engine cancellation leaf.
 func Contains(err error) bool {
 	return Inspect(err, nil).ContainsCancellation
 }
@@ -101,12 +102,21 @@ func Sanitize(err error) error {
 // Inspect classifies err and optionally matches nodes in one bounded traversal.
 // Nil, malformed, cyclic, oversized, or panicking graphs are invalid.
 func Inspect(err error, matcher Matcher) Inspection {
+	return InspectWithCancellationLeaf(err, matcher, nil)
+}
+
+// InspectWithCancellationLeaf adds a backend cancellation predicate evaluated
+// only at exact leaves, after the same bounded graph validation as Inspect.
+// It lets adapters recognize SDK leaves without coupling runtime classification
+// to a backend. A predicate panic makes the graph invalid.
+func InspectWithCancellationLeaf(err error, matcher Matcher, leaf func(error) bool) Inspection {
 	if err == nil {
 		return Inspection{}
 	}
 	classifier := graphClassifier{
-		active:  make(map[errorIdentity]struct{}),
-		matcher: matcher,
+		active:           make(map[errorIdentity]struct{}),
+		matcher:          matcher,
+		cancellationLeaf: leaf,
 	}
 	if !classifier.visit(err, 0) {
 		return Inspection{}
@@ -169,14 +179,7 @@ func (c *graphClassifier) visit(err error, depth int) bool {
 		}
 		return true
 	}
-	c.leaves++
-	if isCancellationLeaf(err) {
-		c.cancellations++
-		c.terminations++
-	} else if isContextTerminationLeaf(err) {
-		c.terminations++
-	}
-	return true
+	return c.classifyLeaf(err, errorText)
 }
 
 func matchError(matcher Matcher, err error, errorText string) (matched bool, safe bool) {
@@ -205,9 +208,7 @@ func isCancellationLeaf(err error) bool {
 	if Exact(err, context.Canceled) {
 		return true
 	}
-	//nolint:errorlint // Temporal cancellation is recognized only at an exact leaf.
-	_, ok := err.(*temporal.CanceledError)
-	return ok
+	return Exact(err, engine.ErrCanceled)
 }
 
 func isContextTerminationLeaf(err error) bool {
@@ -299,4 +300,25 @@ func unwrapChildren(err error) (children []error, resultErr error) {
 		return []error{wrapped.Unwrap()}, nil
 	}
 	return nil, nil
+}
+
+func (c *graphClassifier) classifyLeaf(err error, errorText string) bool {
+	c.leaves++
+	isCancellation := isCancellationLeaf(err)
+	if !isCancellation && c.cancellationLeaf != nil {
+		matched, safe := matchError(func(candidate error, _ string) bool {
+			return c.cancellationLeaf(candidate)
+		}, err, errorText)
+		if !safe {
+			return false
+		}
+		isCancellation = matched
+	}
+	if isCancellation {
+		c.cancellations++
+		c.terminations++
+	} else if isContextTerminationLeaf(err) {
+		c.terminations++
+	}
+	return true
 }

@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
+	engine "github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine/errtypes"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/internal/cancellation"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/temporal"
 )
 
 type cyclicHookError struct {
@@ -40,7 +40,7 @@ func (*panickingHookTextError) Error() string {
 	panic("broken hook text")
 }
 
-func TestNewRunCompletedEventPreservesTemporalProviderErrorEnvelope(t *testing.T) {
+func TestNewRunCompletedEventPreservesEngineProviderErrorEnvelope(t *testing.T) {
 	providerErr := model.NewProviderError(
 		"bedrock",
 		"converse_stream",
@@ -54,9 +54,9 @@ func TestNewRunCompletedEventPreservesTemporalProviderErrorEnvelope(t *testing.T
 	)
 
 	err := WrapRunCompletionError(providerErr)
-	var appErr *temporal.ApplicationError
+	var appErr *engine.ApplicationError
 	require.ErrorAs(t, err, &appErr)
-	require.False(t, appErr.NonRetryable())
+	require.False(t, appErr.NonRetryable)
 
 	evt := NewRunCompletedEvent("run-1", "svc.agent", "sess-1", "failed", run.PhaseFailed, err)
 
