@@ -44,18 +44,19 @@ func MaxBytes(b index.RenderBudget) int {
 }
 
 // MinCheckpointBytes returns the total byte threshold guaranteeing framing capacity.
-// It reserves the full user allowance plus the largest possible header and labels,
-// with a 512-byte floor. At or above it, receipt and summary can cover any framing
-// deficit without consuming user bytes. Component token budgets must be nonnegative.
+// It reserves the full user allowance (at least a compact users line), the
+// largest header/labels, two compact receipt lines and a compact summary closing
+// line. Component token budgets must be nonnegative.
 func MinCheckpointBytes(b index.RenderBudget) int {
 	largest := Input{Through: ^index.MessageID(0), ContinuedFrom: int(^uint(0) >> 1)}
 	framing := len(checkpointHeader(largest)) + len(userLabel) + len(summaryLabel) + len(receiptLabel)
-	return max(minCheckpointBytes, b.KeepUserTokens*BytesPerToken+framing)
+	return max(minCheckpointBytes, max(compactUsersBytes, b.KeepUserTokens*BytesPerToken)+framing+compactReceiptBytes+compactSummaryBytes())
 }
 
 // Render constructs one bounded user-role checkpoint from record-authored inputs.
-// Framing deficits consume receipt bytes first, then summary bytes. User text
-// retains its own allowance. K17 validates component budgets before loading.
+// Framing deficits consume receipt then summary bytes above their handle floors.
+// Tiny component budgets borrow capacity for compact handles. K17 validates
+// component budgets before loading.
 func Render(in Input, b index.RenderBudget, lim Limits, pt PartTokens) (*model.Message, error) {
 	minimum := MinCheckpointBytes(b)
 	if MaxBytes(b) < minimum {
@@ -63,7 +64,7 @@ func Render(in Input, b index.RenderBudget, lim Limits, pt PartTokens) (*model.M
 	}
 	header := checkpointHeader(in)
 	framing := len(header) + len(userLabel) + len(summaryLabel) + len(receiptLabel)
-	summaryBytes, receiptBytes, err := sectionBudgets(b, framing)
+	summaryBytes, receiptBytes, err := sectionBudgets(b, framing, in.Summary != nil)
 	if err != nil {
 		return nil, err
 	}
@@ -95,18 +96,24 @@ func checkpointHeader(in Input) string {
 	return header
 }
 
-// sectionBudgets charges exact framing rather than clipping finished text.
-func sectionBudgets(b index.RenderBudget, framing int) (int, int, error) {
-	summary, receipt := b.MaxSummaryTokens*BytesPerToken, b.ReceiptTokens*BytesPerToken
-	deficit := max(0, framing-b.FramingTokens*BytesPerToken)
-	take := min(deficit, receipt)
+// sectionBudgets preserves discovery floors before charging exact framing.
+// Surplus framing can fund floors when nominal component budgets are smaller.
+func sectionBudgets(b index.RenderBudget, framing int, hasSummary bool) (int, int, error) {
+	summaryFloor := 0
+	if hasSummary {
+		summaryFloor = compactSummaryBytes()
+	}
+	summary, receipt := max(summaryFloor, b.MaxSummaryTokens*BytesPerToken), max(compactReceiptBytes, b.ReceiptTokens*BytesPerToken)
+	users := max(compactUsersBytes, b.KeepUserTokens*BytesPerToken)
+	deficit := max(0, users+summary+receipt+framing-MaxBytes(b))
+	take := min(deficit, receipt-compactReceiptBytes)
 	receipt -= take
 	deficit -= take
-	take = min(deficit, summary)
+	take = min(deficit, summary-summaryFloor)
 	summary -= take
 	deficit -= take
 	if deficit > 0 {
-		return 0, 0, fmt.Errorf("%w: framing needs %d additional bytes", ErrCheckpointBudget, deficit)
+		return 0, 0, fmt.Errorf("%w: framing and handles need %d additional bytes", ErrCheckpointBudget, deficit)
 	}
 	return summary, receipt, nil
 }
@@ -126,5 +133,20 @@ func renderSummary(in Input, maxBytes int) (string, error) {
 	text := Qualify(in.Summary.Text, pos, in.CurrentPos)
 	tokens := (len(in.Summary.Text) + BytesPerToken - 1) / BytesPerToken
 	closing := fmt.Sprintf("[summary shortened from %s tokens; full text: checkpoint r%d:%s]", thousands(tokens), pos, CheckpointID(in.Summary.ID))
+	if len(text) > maxBytes && len(closing) > maxBytes {
+		closing = compactSummaryClosing(pos, in.Summary.ID)
+	}
+	if len(text) > maxBytes && len(closing) > maxBytes {
+		return "", fmt.Errorf("%w: summary handle needs %d bytes", ErrCheckpointBudget, len(closing))
+	}
 	return BoundSummary(text, maxBytes, closing), nil
+}
+
+// compactSummaryBytes covers every valid chain position on this platform.
+func compactSummaryBytes() int {
+	return len(compactSummaryClosing(int(^uint(0)>>1), "record"))
+}
+
+func compactSummaryClosing(pos int, recordID string) string {
+	return fmt.Sprintf("[full text: checkpoint r%d:%s]", pos, CheckpointID(recordID))
 }

@@ -9,11 +9,13 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/compaction"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/checkpoint"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/recall"
 )
 
 type reader struct {
@@ -129,10 +131,17 @@ func (r *runReader) readEvent(event *runlog.Event) (string, error) {
 	if event.Type == hooks.PlannerStep {
 		return "", r.readStep(event)
 	}
+	if event.Type == hooks.ContextRecalled {
+		return "", r.readRecallCharge(event)
+	}
+
 	if event.Type == hooks.RunSealed {
 		return "", r.readSeal(event)
 	}
 	if event.Type == hooks.ContextCompacted || event.Type == hooks.ContextCompactionSkipped || event.Type == hooks.ContextOverflow {
+		if event.Type == hooks.ContextCompacted && r.run.CompactionSettings != nil {
+			r.run.Recall = r.run.Recall.Refilled(*r.run.CompactionSettings)
+		}
 		// The common envelope reads canonical compaction keys and retained K8
 		// exports. K12 produces an empty call_keys list.
 		var adoption struct {
@@ -233,6 +242,9 @@ func (r *runReader) readStep(event *runlog.Event) error {
 	if err := r.recordCompactionSettings(step.CompactionSettings, step.KeepResultTools); err != nil {
 		return err
 	}
+	if err := r.recordRecoverySettings(step.RecoverySettings); err != nil {
+		return err
+	}
 	if !r.run.Sealed {
 		r.run.IndexHead = step.IndexHead
 	}
@@ -275,6 +287,9 @@ func (r *runReader) recordCompactionSettings(settings *compaction.Settings, keep
 	if r.run.CompactionSettings != nil && (*r.run.CompactionSettings != *settings || !slices.Equal(r.run.KeepResultTools, keep)) {
 		return fmt.Errorf("conflicting recorded compaction settings")
 	}
+	if r.run.CompactionSettings == nil {
+		r.run.Recall = compaction.NewRecall(*settings)
+	}
 	r.run.CompactionSettings = settings
 	r.run.KeepResultTools = slices.Clone(keep)
 	return nil
@@ -291,8 +306,36 @@ func (r *runReader) readSeal(event *runlog.Event) error {
 	if err := r.recordCompactionSettings(seal.CompactionSettings, seal.KeepResultTools); err != nil {
 		return err
 	}
+	if err := r.recordRecoverySettings(seal.RecoverySettings); err != nil {
+		return err
+	}
 	r.run.Sealed = true
 	r.run.IndexHead = seal.IndexHead
 	_, err := r.render(seal.IndexHead)
 	return err
+}
+
+func (r *runReader) readRecallCharge(event *runlog.Event) error {
+	var charge hooks.ContextRecalledEvent
+	if err := json.Unmarshal(event.Payload, &charge); err != nil {
+		return err
+	}
+	expected := r.run.Recall
+	accepted := expected.Charge(charge.Kind == recall.Read)
+	if accepted == (charge.Outcome == "exhausted") || expected.Discovery != charge.RemainingDiscovery || expected.Reads != charge.RemainingReads {
+		return fmt.Errorf("runrecord: inconsistent recall charge")
+	}
+	r.run.Recall = expected
+	return nil
+}
+
+func (r *runReader) recordRecoverySettings(settings *run.ContextRecovery) error {
+	if settings == nil {
+		return nil
+	}
+	if r.run.RecoverySettings != nil && *r.run.RecoverySettings != *settings {
+		return fmt.Errorf("conflicting recorded recovery settings")
+	}
+	r.run.RecoverySettings = settings
+	return nil
 }

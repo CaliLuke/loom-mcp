@@ -41,7 +41,7 @@ func TestCompactedReceiptChain(t *testing.T) {
 	var previous *runstore.Hash
 	for step := 50; step < 1000; step += 50 {
 		view.TailFrom = index.MessageID(2 + 2*step)
-		loaded, err := rt.loadView(t.Context(), "root", "run", view)
+		loaded, err := rt.loadTestView(t.Context(), "root", "run", view)
 		require.NoError(t, err)
 		require.NotNil(t, loaded.View)
 		assertCompactedGrammar(t, loaded)
@@ -97,11 +97,11 @@ func TestCompactedCutAndGrammar(t *testing.T) {
 	view := base.view()
 	view.Budget = compactionBudget()
 	view.TailFrom = 3
-	loaded, err := rt.loadView(t.Context(), "root", "run", view)
+	loaded, err := rt.loadTestView(t.Context(), "root", "run", view)
 	require.ErrorContains(t, err, "cut")
 	assert.Nil(t, loaded)
 	view.TailFrom = 4
-	loaded, err = rt.loadView(t.Context(), "root", "run", view)
+	loaded, err = rt.loadTestView(t.Context(), "root", "run", view)
 	require.NoError(t, err)
 	assertCompactedGrammar(t, loaded)
 }
@@ -154,18 +154,18 @@ func TestCheckpointBudgetAndCaches(t *testing.T) {
 	view.TailFrom = 4
 	view.Budget = index.RenderBudget{KeepUserTokens: 400, MaxSummaryTokens: 16000, ReceiptTokens: 240, FramingTokens: 200}
 	rt := New(WithRunStore(store))
-	first, err := rt.loadView(t.Context(), "root", "run", view)
+	first, err := rt.loadTestView(t.Context(), "root", "run", view)
 	require.NoError(t, err)
 	require.NotNil(t, first.View)
 	view.IndexHead, view.Pending = first.Head, nil
 	view.Pinned = first.View.Pinned
 	store.reads.Store(0)
-	same, err := rt.loadView(t.Context(), "root", "run", view)
+	same, err := rt.loadTestView(t.Context(), "root", "run", view)
 	require.NoError(t, err)
 	assert.Equal(t, first, same)
 	assert.Zero(t, store.reads.Load())
 	view.Budget = compactionBudget()
-	small, err := rt.loadView(t.Context(), "root", "run", view)
+	small, err := rt.loadTestView(t.Context(), "root", "run", view)
 	require.NoError(t, err)
 	assert.LessOrEqual(t, len(small.Messages[0].Parts[0].(model.TextPart).Text), checkpoint.MaxBytes(view.Budget))
 	assert.Contains(t, small.Messages[0].Parts[0].(model.TextPart).Text, "summary shortened")
@@ -178,15 +178,15 @@ func TestCheckpointBudgetAndCaches(t *testing.T) {
 	assert.Zero(t, store.reads.Load())
 	assert.NotEqual(t, small.Messages[0], changedPins)
 	assert.Equal(t, tail, cache.tailMessages)
-	warm, err := rt.loadView(t.Context(), "root", "run", view)
+	warm, err := rt.loadTestView(t.Context(), "root", "run", view)
 	require.NoError(t, err)
-	cold, err := New(WithRunStore(store)).loadView(t.Context(), "root", "cold", view)
+	cold, err := New(WithRunStore(store)).loadTestView(t.Context(), "root", "cold", view)
 	require.NoError(t, err)
 	assert.Equal(t, warm, cold, "budget shrink and canonical pin selection are cache-independent")
 
 	// Receipt-only successors retain all summary evidence, even under a smaller budget.
 	view.TailFrom = 6
-	next, err := rt.loadView(t.Context(), "root", "run", view)
+	next, err := rt.loadTestView(t.Context(), "root", "run", view)
 	require.NoError(t, err)
 	data, err := store.Get(t.Context(), "root", next.View.Checkpoint)
 	require.NoError(t, err)
@@ -221,7 +221,7 @@ func TestClearedView(t *testing.T) {
 			view.Budget = compactionBudget()
 			view.TailFrom = 4
 			view.ClearedThrough = 5
-			loaded, err := rt.loadView(t.Context(), "root", "run", view)
+			loaded, err := rt.loadTestView(t.Context(), "root", "run", view)
 			require.NoError(t, err)
 			assertCompactedGrammar(t, loaded)
 			result := loaded.Messages[2].Parts[0].(model.ToolResultPart)
@@ -237,7 +237,7 @@ func TestClearedView(t *testing.T) {
 			} else {
 				assert.Equal(t, checkpoint.ClearedResult(24, "call-1", "first error"), result.Content)
 			}
-			again, err := rt.loadView(t.Context(), "root", "run", view)
+			again, err := rt.loadTestView(t.Context(), "root", "run", view)
 			require.NoError(t, err)
 			assert.Equal(t, canonicalIndexMessages(t, loaded.Messages), canonicalIndexMessages(t, again.Messages))
 		})
@@ -255,7 +255,7 @@ func TestReceiptTextAndPrivacy(t *testing.T) {
 	view.TailFrom = 7
 	view.Budget = compactionBudget()
 	rt := New(WithRunStore(store))
-	loaded, err := rt.loadView(t.Context(), "root", "run", view)
+	loaded, err := rt.loadTestView(t.Context(), "root", "run", view)
 	require.NoError(t, err)
 	assertCompactedGrammar(t, loaded)
 	data, err := store.Get(t.Context(), "root", loaded.View.Checkpoint)
@@ -326,7 +326,7 @@ func TestTailInheritsHiddenCalls(t *testing.T) {
 	view := base.view()
 	view.TailFrom = 5
 	view.Budget = compactionBudget()
-	loaded, err := rt.loadView(t.Context(), "root", "run", view)
+	loaded, err := rt.loadTestView(t.Context(), "root", "run", view)
 	require.NoError(t, err)
 	assertCompactedGrammar(t, loaded)
 	require.Len(t, loaded.Messages[2].Parts, 1)
@@ -340,7 +340,7 @@ func TestTailInheritsHiddenCalls(t *testing.T) {
 	view.IndexHead = loaded.Head
 	view.Pending = nil
 	view.ClearedThrough = 6
-	next, err := rt.loadView(t.Context(), "root", "run", view)
+	next, err := rt.loadTestView(t.Context(), "root", "run", view)
 	require.NoError(t, err)
 	assert.Same(t, message, cache.checkpointMessage)
 	assert.NotEqual(t, firstKey, cache.tailKey)
@@ -350,7 +350,7 @@ func TestTailInheritsHiddenCalls(t *testing.T) {
 	require.NoError(t, base.appendEntry(index.MessageEntry{Kind: index.Assistant, Hash: compactionPut(t, store, []*model.Message{{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "more"}}}}), Role: model.ConversationRoleAssistant, Bytes: 4}))
 	view.Pending = base.view().Pending
 	oldKey := cache.tailKey
-	next, err = rt.loadView(t.Context(), "root", "run", view)
+	next, err = rt.loadTestView(t.Context(), "root", "run", view)
 	require.NoError(t, err)
 	assert.NotEqual(t, oldKey, cache.tailKey)
 	assert.Same(t, message, cache.checkpointMessage)
@@ -372,7 +372,7 @@ func TestCompactedGrammarRejectsInvalidTail(t *testing.T) {
 			view := base.view()
 			view.TailFrom = 4
 			view.Budget = compactionBudget()
-			loaded, err := rt.loadView(t.Context(), "root", "run", view)
+			loaded, err := rt.loadTestView(t.Context(), "root", "run", view)
 			require.ErrorContains(t, err, "grammar")
 			assert.Nil(t, loaded)
 		})
@@ -413,7 +413,7 @@ func TestClearedCanonicalSize(t *testing.T) {
 	view.TailFrom = 4
 	view.ClearedThrough = 5
 	view.Budget = compactionBudget()
-	loaded, err := New(WithRunStore(store)).loadView(t.Context(), "root", "run", view)
+	loaded, err := New(WithRunStore(store)).loadTestView(t.Context(), "root", "run", view)
 	require.NoError(t, err)
 	assert.Equal(t, checkpoint.ClearedResult(100002, "call-1", ""), loaded.Messages[2].Parts[0].(model.ToolResultPart).Content)
 	assert.Zero(t, store.reads)

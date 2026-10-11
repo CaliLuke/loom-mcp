@@ -181,7 +181,7 @@ func (e *recordingWorkflowExecutor) Execute(ctx context.Context, meta *agentsrun
 	case workflow.Finalize:
 		result = &workflow.FinalizeResult{OK: true, Approved: &approved}
 
-	case tools.ToolUnavailable:
+	case tools.ToolUnavailable, tools.RecallContext:
 		return nil, errors.New("unexpected workflow tool: " + string(call.Name))
 	default:
 		return nil, errors.New("unexpected workflow tool: " + string(call.Name))

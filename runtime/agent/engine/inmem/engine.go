@@ -35,6 +35,7 @@ type (
 		sealActivities          map[string]sealActivityDef
 		contentActivities       map[string]contentActivityDef
 		childDispatchActivities map[string]childDispatchActivityDef
+		recallActivities        map[string]recallActivityDef
 		toolActivities          map[string]toolActivityDef
 
 		// statuses tracks workflow status by run ID (inmem uses workflow ID as run ID).
@@ -84,6 +85,10 @@ type (
 	}
 	contentActivityDef struct {
 		handler func(context.Context, *api.RecordContentInput) (*api.RecordContentOutput, error)
+		opts    engine.ActivityOptions
+	}
+	recallActivityDef struct {
+		handler func(context.Context, *api.RecallActivityInput) (*api.RecallActivityOutput, error)
 		opts    engine.ActivityOptions
 	}
 	childDispatchActivityDef struct {
@@ -953,4 +958,51 @@ func (e *eng) SignalByID(ctx context.Context, workflowID, runID, name string, pa
 		return engine.ErrWorkflowNotFound
 	}
 	return h.Signal(ctx, name, payload)
+}
+
+// RegisterRecallActivity registers bounded transcript lookup.
+func (e *eng) RegisterRecallActivity(_ context.Context, name string, opts engine.ActivityOptions, fn func(context.Context, *api.RecallActivityInput) (*api.RecallActivityOutput, error)) error {
+	if name == "" {
+		return errors.New("recall activity name is required")
+	}
+	if fn == nil {
+		return errors.New("recall activity handler is required")
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.recallActivities == nil {
+		e.recallActivities = make(map[string]recallActivityDef)
+	}
+	if _, dup := e.recallActivities[name]; dup {
+		return fmt.Errorf("recall activity %q already registered", name)
+	}
+	e.recallActivities[name] = recallActivityDef{
+		handler: fn,
+		opts:    opts,
+	}
+	return nil
+}
+
+// ExecuteRecallActivity schedules a recorded bounded lookup.
+func (w *wfCtx) ExecuteRecallActivity(ctx context.Context, call engine.RecallActivityCall) (*api.RecallActivityOutput, error) {
+	if call.Name == "" {
+		return nil, errors.New("recall activity name is required")
+	}
+	if call.Input == nil {
+		return nil, errors.New("recall activity input is required")
+	}
+	w.eng.mu.RLock()
+	def, ok := w.eng.recallActivities[call.Name]
+	w.eng.mu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("recall activity %q not registered", call.Name)
+	}
+	timeout := call.Options.StartToCloseTimeout
+	if timeout == 0 {
+		timeout = def.opts.StartToCloseTimeout
+	}
+	actCtx, cancel := withOptionalTimeout(ctx, timeout)
+	defer cancel()
+	out, err := def.handler(actCtx, call.Input)
+	return out, normalizeError(err)
 }

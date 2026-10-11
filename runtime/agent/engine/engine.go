@@ -133,6 +133,9 @@ type (
 		// RegisterRecordContentActivity registers ordered workflow content storage.
 		RegisterRecordContentActivity(ctx context.Context, name string, opts ActivityOptions, fn func(context.Context, *api.RecordContentInput) (*api.RecordContentOutput, error)) error
 
+		// RegisterRecallActivity registers activity-only transcript lookup.
+		RegisterRecallActivity(ctx context.Context, name string, opts ActivityOptions, fn func(context.Context, *api.RecallActivityInput) (*api.RecallActivityOutput, error)) error
+
 		// RegisterChildDispatchActivity registers pre-child validation.
 		RegisterChildDispatchActivity(ctx context.Context, name string, opts ActivityOptions, fn func(context.Context, *api.ChildDispatchInput) (*api.ChildDispatchOutput, error)) error
 
@@ -267,6 +270,9 @@ type (
 
 		// ExecuteRecordContentActivity stores ordered content outside workflow execution.
 		ExecuteRecordContentActivity(ctx context.Context, call RecordContentActivityCall) (*api.RecordContentOutput, error)
+
+		// ExecuteRecallActivity recalls eligible evidence outside the workflow.
+		ExecuteRecallActivity(ctx context.Context, call RecallActivityCall) (*api.RecallActivityOutput, error)
 
 		// ExecuteChildDispatchActivity validates a child before it starts.
 		ExecuteChildDispatchActivity(ctx context.Context, call ChildDispatchActivityCall) (*api.ChildDispatchOutput, error)
@@ -567,5 +573,12 @@ type RecordContentActivityCall struct {
 type ChildDispatchActivityCall struct {
 	Name    string
 	Input   *api.ChildDispatchInput
+	Options ActivityOptions
+}
+
+// RecallActivityCall schedules a bounded transcript lookup.
+type RecallActivityCall struct {
+	Name    string
+	Input   *api.RecallActivityInput
 	Options ActivityOptions
 }

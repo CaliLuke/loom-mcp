@@ -71,14 +71,14 @@ func TestIndexLoaderGrowth(t *testing.T) {
 					var before goruntime.MemStats
 					goruntime.ReadMemStats(&before)
 					if warm {
-						_, err := rt.loadView(t.Context(), "root", "run", index.ViewRef{IndexHead: base.IndexHead})
+						_, err := rt.loadTestView(t.Context(), "root", "run", index.ViewRef{IndexHead: base.IndexHead})
 						require.NoError(t, err)
 					}
 					store.reads.Store(0)
 					store.bytes.Store(0)
 					var start goruntime.MemStats
 					goruntime.ReadMemStats(&start)
-					view, err := rt.loadView(t.Context(), "root", "run", input.View)
+					view, err := rt.loadTestView(t.Context(), "root", "run", input.View)
 					require.NoError(t, err)
 					var allocated goruntime.MemStats
 					goruntime.ReadMemStats(&allocated)

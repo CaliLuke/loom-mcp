@@ -14,7 +14,7 @@ import (
 
 func activities() []activityCase {
 	return []activityCase{
-		hookCase(), plannerCase(), toolCase(), finishCase(), contentCase(), dispatchCase(), sealCase(),
+		hookCase(), plannerCase(), toolCase(), finishCase(), contentCase(), dispatchCase(), sealCase(), recallCase(),
 	}
 }
 
@@ -109,5 +109,18 @@ func sealCase() activityCase {
 		},
 		invoke: func(w engine.WorkflowContext, in any, opts engine.ActivityOptions) (any, error) {
 			return w.ExecuteSealRecordActivity(w.Context(), engine.SealRecordActivityCall{Name: activityName, Input: in.(*api.SealRecordInput), Options: opts})
+		}}
+}
+
+func recallCase() activityCase {
+	return activityCase{name: "recall", input: &api.RecallActivityInput{RunID: testRunID, Scope: rootRunID, Head: indexRef, PageBytes: 512, ScanBytes: 8_000_000, Call: planner.ToolRequest{Name: tools.RecallContext, ToolCallID: testCallID, Payload: rawjson.Message(`{"list":{"from":1,"through":3}}`)}},
+		output: &api.RecallActivityOutput{Result: &api.ToolOutput{Preview: "context lookup result", Refs: tools.ResultRefs{Result: "sha256:recall"}}, Bytes: 42},
+		register: func(ctx context.Context, e engine.Engine, opts engine.ActivityOptions, fn func(context.Context, any) (any, error)) error {
+			return e.RegisterRecallActivity(ctx, activityName, opts, func(ctx context.Context, in *api.RecallActivityInput) (*api.RecallActivityOutput, error) {
+				return typedResult[*api.RecallActivityOutput](fn(ctx, in))
+			})
+		},
+		invoke: func(w engine.WorkflowContext, in any, opts engine.ActivityOptions) (any, error) {
+			return w.ExecuteRecallActivity(w.Context(), engine.RecallActivityCall{Name: activityName, Input: in.(*api.RecallActivityInput), Options: opts})
 		}}
 }

@@ -91,6 +91,10 @@ func (e *toolBatchExec) dispatchToolCalls(wfCtx engine.WorkflowContext, calls []
 func (e *toolBatchExec) prepareToolDispatch(ctx context.Context, b *toolCallBatch, call planner.ToolRequest, i int) (*planner.ToolRequest, error) {
 	call = e.normalizeToolCall(call, i)
 	b.calls[i] = call
+	if call.Name == tools.RecallContext {
+		return e.prepareRecallDispatch(ctx, b, call)
+	}
+
 	if call.Error != nil {
 		if err := e.publishToolCallScheduled(ctx, call, e.toolQueue(call.Name)); err != nil {
 			return nil, err
@@ -100,6 +104,7 @@ func (e *toolBatchExec) prepareToolDispatch(ctx context.Context, b *toolCallBatc
 		}
 		return nil, nil
 	}
+
 	if _, hasSpec := e.r.toolSpec(call.Name); hasSpec {
 		if err := e.publishToolCallScheduled(ctx, call, e.toolQueue(call.Name)); err != nil {
 			return nil, err
@@ -135,6 +140,9 @@ func (e *toolBatchExec) dispatchToolRequestError(ctx context.Context, b *toolCal
 }
 
 func (e *toolBatchExec) dispatchResolvedToolCall(ctx context.Context, wfCtx engine.WorkflowContext, b *toolCallBatch, call planner.ToolRequest, index int) error {
+	if call.Name == tools.RecallContext {
+		return e.dispatchRecall(ctx, wfCtx, b, call)
+	}
 	spec, ts, hasTS := e.loadToolRegistration(call.Name)
 	if !hasTS {
 		return e.dispatchActivityToolCall(ctx, wfCtx, b, call, spec, hasTS, ts)

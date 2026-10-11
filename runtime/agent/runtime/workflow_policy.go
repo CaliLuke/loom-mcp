@@ -137,6 +137,7 @@ func (r *Runtime) preparePrePlanToolPolicy(
 	candidates = r.applyPerRunOverrides(ctx, input, candidates)
 	allowed := candidates
 	var labels map[string]string
+	disabled := false
 	if r.Policy != nil {
 		decision, err := r.Policy.Decide(ctx, runtimePolicyInput(r, base, candidates, caps, nil))
 		if err != nil {
@@ -145,6 +146,7 @@ func (r *Runtime) preparePrePlanToolPolicy(
 		applyPolicyLabels(base, input, decision.Labels)
 		labels = decision.Labels
 		if decision.DisableTools {
+			disabled = true
 			allowed = nil
 		} else {
 			allowed = filterToolCalls(candidates, decision.AllowedTools)
@@ -165,8 +167,9 @@ func (r *Runtime) preparePrePlanToolPolicy(
 	}
 	return prePlanPolicyResult{
 		Envelope: toolPolicyEnvelope{
-			Active:  true,
-			Allowed: toolHandles(allowed),
+			Disabled: disabled,
+			Active:   true,
+			Allowed:  toolHandles(allowed),
 		},
 		Caps:   caps,
 		Labels: labels,

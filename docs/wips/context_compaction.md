@@ -605,13 +605,21 @@ recovery handle the cases where it underestimates.
 
 The pure renderer measures framing bytes exactly before allocating section
 space. Any framing deficit beyond `FramingTokens × 2` is taken from the
-receipt allowance first, then the summary allowance; user text keeps its
-allowance. It never clips the assembled checkpoint to establish the bound.
-`MinCheckpointBytes(b)` is `max(512, 2 × KeepUserTokens + Fmax)` bytes, where
-`Fmax` is the largest possible header and labels (392 bytes on the supported
-64-bit platform). This reserves the full user allowance and guarantees enough
-framing, receipt and summary capacity for every header. Smaller total budgets
-return `ErrCheckpointBudget`; K17 rejects them during override validation.
+receipt allowance above its two compact-line floor first, then the summary
+allowance above its compact closing-line floor when a summary exists. User
+text keeps its allowance, with at least a compact users line. It never clips
+assembled text to establish the bound. When full aggregates do not fit, use
+`… [receipt rc-xxxxxxxx]`, `… [earlier rc-xxxxxxxx]` and
+`… [users rc-xxxxxxxx]`; a shortened summary uses
+`[full text: checkpoint rN:ck-xxxxxxxx]` when its full closing line does not fit.
+`MinCheckpointBytes(b)` is
+`max(512, max(24, 2 × KeepUserTokens) + Fmax + Rmin + Smin)` bytes.
+On the supported 64-bit platform, `Fmax=392`, `Rmin=52` and `Smin=56`.
+Tiny nominal components borrow available capacity for these floors. At or
+above the threshold, every omitted item keeps its discovery reference.
+Smaller total budgets return `ErrCheckpointBudget`; K17 rejects them during
+override validation. At default B=2,900 budgets, the minimum is 790 bytes,
+below the 1,444-byte maximum.
 The default `FramingTokens` remains 200.
 
 - A summary within the current `MaxSummaryTokens` renders whole. A larger one,
@@ -635,7 +643,10 @@ The default `FramingTokens` remains 200.
   receipt handle. The full receipt stays in the stored records, and
   `recall_context` pages through it from the handle (4.18).
 
-**No rendered text names `recall_context`.** Placeholders, pin previews and
+**No rendered text names `recall_context`.** A retained recall call uses
+`toolu_x (context lookup: <bounded args>)`; its full Tool remains in the record.
+Compaction-enabled registration rejects application tool identifiers or
+provider names containing the reserved name. Placeholders, pin previews and
 receipt lines give IDs and ranges only. How to use them is in `recall_context`'s own
 description (4.18), which the model sees only while the tool is advertised
 and callable, so nothing in the view recommends a tool that is disabled,
@@ -1434,7 +1445,7 @@ any window:
 | `MaxSummaryTokens` | min(0.10 × B, 16k) |
 | `ReceiptTokens` | min(0.03 × B, 6k) |
 | `FramingTokens` | 200 (checkpoint labels and headers; exact deficit charged to receipt, then summary) |
-| `MinCheckpointBytes(b)` | max(512, 2 × KeepUserTokens + largest framing bytes), a renderer threshold |
+| `MinCheckpointBytes(b)` | max(512, max(24, 2 × KeepUserTokens) + largest framing bytes + compact receipt and summary floors), a renderer threshold |
 | `GuardMargin` | 0.10 |
 | `MaxSummarisedResultTokens` | 0.5 × the summariser's B |
 | `MaxSummaryChunks` | 8 |
@@ -1450,9 +1461,11 @@ The resident budgets (`KeepRecentTokens`, `KeepUserTokens`,
 any B of 2,900 tokens or more, which covers 4k windows. Overrides are validated when B is first known, and fail fast
 if the resident budgets plus `FramingTokens` exceed 0.5 × B. K17 also rejects
 checkpoint overrides whose `MaxBytes(b)` is below `MinCheckpointBytes(b)`:
-max(512, 2 × KeepUserTokens + largest framing bytes). This guarantees capacity
-for exact framing after receipt and summary donations. `MinCheckpointBytes`
-is a renderer function of the current budget, not a token setting.
+max(512, max(24, 2 × KeepUserTokens) + largest framing bytes + compact receipt
+and summary floors). This guarantees capacity for handles and exact framing
+after receipt and summary donations. `MinCheckpointBytes`
+is a renderer function of the current budget, not a token setting. At B=2,900,
+K12 budgets give MinCheckpointBytes=790 and MaxBytes=1,444.
 
 **Enablement.** Overflow recovery (4.15) is on for every agent: without it the
 run would fail. Threshold compaction (the trigger, tier 1, eviction,
@@ -1472,6 +1485,14 @@ three diagnostic hooks run only for compaction-enabled agents in K12; K14 widens
 their enablement. `KeepResultTools` sets immutable result
 entry `Keep` bits. `DisableRecall` belongs to `ContextRecovery` (K13), not this
 option.
+
+**K13 runtime lookup settings.** `WithContextRecovery(agentID,
+ContextRecovery{DisableRecall: true})` provides the resolved, stamped lookup
+setting; K14 extends this minimal struct. `ContextCompaction` carries
+`RecallDiscoveryCalls` and `RecallReadCalls` (zero resolves to 20, negatives
+are rejected). Read/list/find dispatch and counters ship under protocol 8.
+K13 resolves current-run evidence and injected From records; its default
+RunChain resolves no rN labels until K18.
 
 **DSL.**
 
@@ -1536,8 +1557,10 @@ never mention it (4.6).
 Input, one of three kinds. **Reads** return content:
 
 - a tool use ID or message ID from a receipt line, placeholder, pin or user
-  index line, optionally qualified by a chain label, with an `offset` to page a
-  large result or message;
+  index line, optionally qualified by a chain label, with a required nonnegative
+  byte `offset` (start at zero) to page a large result or message, and
+  `part: result|arguments` to select eligible text
+  or the original tool arguments;
 - a checkpoint ID from a bounded summary (`r1:ck-91b2c3d4`), with an `offset`,
   which pages the full stored summary.
 
@@ -1554,7 +1577,7 @@ cursor for the next page:
 **Searches** find content by text:
 
 - `find` with a literal string, which scans the eligible evidence behind the
-  checkpoint (messages, results, summaries; the current run first, then
+  checkpoint (eligible index messages and cleared results; the current run first, then
   earlier runs through `From`), newest first. A call scans at most
   `RecallScanBytes` and returns at most ten matches, each an ID, an offset
   and a one-line snippet, plus a cursor that continues the scan. A match's
@@ -1572,12 +1595,18 @@ The handler resolves a handle only by walking the chain of the current
 checkpoint, including its `From` links, so a handle cannot name a record
 outside it, and every run the walk enters passes the checks of 4.3.
 
-Every output goes through the model-facing renderer (4.4, P4). Pages are
-smaller than `ProtectRecentToolTokens`. Each call emits `context_recalled`.
+Every output goes through the model-facing renderer (4.4, P4). `PageBytes` is
+`max(512, ProtectRecentToolTokens)` bytes. Read offsets snap to UTF-8 rune
+boundaries and outputs give `next_offset`. Cursors are opaque unpadded base32
+of `{kind, handle|range|scan, position}`; decoding checks shape only, and every
+call re-resolves the selector within the current chain. Each call emits
+`context_recalled`.
 In a parent run, a child's tool result is the child's final output.
 
 **Budget (D16).** Discovery (listings and searches) and reads have separate
-allowances, so paging through receipts cannot use up the reads that fetch
+allowances. Rejected and malformed calls are charged too; malformed known
+operations keep their kind, while an absent or ambiguous kind charges
+discovery. Paging through receipts cannot use up the reads that fetch
 the evidence. Each starts at `RecallDiscoveryCalls` and `RecallReadCalls`
 (20 each) and gains half that again, rounded up, at every compaction, because each
 compaction hides new evidence; unused allowance accumulates up to three times

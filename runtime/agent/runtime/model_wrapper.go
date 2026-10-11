@@ -302,8 +302,10 @@ type toolUnavailableConfiguredClient struct {
 }
 
 type toolPolicyEnvelope struct {
-	Active  bool
-	Allowed []tools.Ident
+	Disabled   bool
+	Active     bool
+	Allowed    []tools.Ident
+	ExtraTools []*model.ToolDefinition
 }
 
 type toolPolicyConfiguredClient struct {
@@ -319,7 +321,7 @@ func newToolUnavailableConfiguredClient(inner model.Client) model.Client {
 }
 
 func newToolPolicyConfiguredClient(inner model.Client, policy toolPolicyEnvelope) model.Client {
-	if inner == nil || !policy.Active {
+	if inner == nil || (!policy.Active && len(policy.ExtraTools) == 0) {
 		return inner
 	}
 	return &toolPolicyConfiguredClient{
@@ -339,11 +341,13 @@ func (c *toolUnavailableConfiguredClient) Stream(ctx context.Context, req *model
 }
 
 func (c *toolPolicyConfiguredClient) Complete(ctx context.Context, req *model.Request) (*model.Response, error) {
+	applyExtraTools(req, c.policy.ExtraTools)
 	applyModelToolPolicy(req, c.policy)
 	return c.inner.Complete(ctx, req)
 }
 
 func (c *toolPolicyConfiguredClient) Stream(ctx context.Context, req *model.Request) (model.ValidatedStreamer, error) {
+	applyExtraTools(req, c.policy.ExtraTools)
 	applyModelToolPolicy(req, c.policy)
 	return c.inner.Stream(ctx, req)
 }
@@ -444,8 +448,10 @@ func applyModelToolPolicy(req *model.Request, policy toolPolicyEnvelope) {
 
 func cloneToolPolicyEnvelope(in toolPolicyEnvelope) toolPolicyEnvelope {
 	return toolPolicyEnvelope{
-		Active:  in.Active,
-		Allowed: cloneToolIdents(in.Allowed),
+		Active:     in.Active,
+		Disabled:   in.Disabled,
+		Allowed:    cloneToolIdents(in.Allowed),
+		ExtraTools: append([]*model.ToolDefinition(nil), in.ExtraTools...),
 	}
 }
 

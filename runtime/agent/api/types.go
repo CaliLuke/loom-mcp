@@ -33,6 +33,10 @@ type (
 	RunInput struct {
 		// ContextCompaction is runtime-stamped configuration for this run.
 		ContextCompaction *ContextCompaction `json:"context_compaction,omitzero"`
+		// ContextRecovery is the resolved runtime-stamped lookup configuration.
+		ContextRecovery ContextRecovery `json:"context_recovery"`
+		// RecoveryAgents snapshots child recovery settings independently of workers.
+		RecoveryAgents map[agent.Ident]ContextRecovery `json:"recovery_agents,omitzero"`
 		// CompactionAgents snapshots child-agent settings so child starts replay independently of worker options.
 		CompactionAgents map[agent.Ident]ContextCompaction `json:"compaction_agents,omitzero"`
 		// WorkflowProtocolVersion is stamped by the runtime and must match the
@@ -391,6 +395,8 @@ type (
 	PlanActivityInput struct {
 		// Models is the sorted snapshot of adopted model rates and budgets.
 		Models []ModelContext `json:"models,omitzero"`
+		// ExtraTools contains workflow-owned specs added to the model catalog this turn.
+		ExtraTools []*model.ToolDefinition `json:"extra_tools,omitzero"`
 		// AgentID identifies which agent is being planned.
 		AgentID agent.Ident
 
@@ -410,6 +416,9 @@ type (
 
 		// Finalize requests a final turn with no further tool calls.
 		Finalize *planner.Termination
+
+		// ToolsDisabled records an explicit policy decision disabling tools this turn.
+		ToolsDisabled bool `json:"tools_disabled,omitzero"`
 
 		// ToolPolicyActive indicates that AllowedTools is the canonical per-turn
 		// model-visible and execution-visible tool allowlist.
@@ -464,6 +473,8 @@ type (
 		KeepRecentTokens        int
 		ProtectRecentToolTokens int
 		MinSavingTokens         int
+		RecallDiscoveryCalls    int
+		RecallReadCalls         int
 		KeepResultTools         []tools.Ident
 	}
 	// ModelContext carries the last adopted calibration for one model.

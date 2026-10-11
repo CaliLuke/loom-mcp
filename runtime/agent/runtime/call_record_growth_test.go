@@ -70,7 +70,7 @@ func TestCallRecordGrowth(t *testing.T) {
 					if d.Tier != compaction.None {
 						compacted++
 					}
-					loaded, err := rt.loadView(t.Context(), "root", "run", ref)
+					loaded, err := rt.loadTestView(t.Context(), "root", "run", ref)
 					require.NoError(t, err)
 					loadedMessages = loaded.Messages
 					if loaded.View != nil {

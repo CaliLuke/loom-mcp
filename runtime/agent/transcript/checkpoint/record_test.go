@@ -132,3 +132,17 @@ func TestUnsafeEvictDropsSummaryRejected(t *testing.T) {
 		})
 	}
 }
+
+func TestFromRecordRecallLookup(t *testing.T) {
+	record := index.CheckpointRecord{Receipt: []index.ReceiptLine{{Kind: "call", ToolUseID: "toolu_lookup", Tool: "runtime.recall_context", Text: `{"list":{"handle":"rc-deadbeef"}}`}}}
+	in, err := FromRecord(t.Context(), recordSource(t, map[runstore.Hash]any{"latest": record}, nil), "latest", nil, 0)
+	require.NoError(t, err)
+	for item := range in.Receipt {
+		assert.True(t, item.Lookup)
+		assert.Equal(t, "runtime.recall_context", item.Tool, "record keeps the full identifier")
+	}
+	rendered, err := Render(in, index.RenderBudget{KeepUserTokens: 500, MaxSummaryTokens: 500, ReceiptTokens: 500, FramingTokens: 200}, DefaultLimits, nil)
+	require.NoError(t, err)
+	assert.Contains(t, rendered.Parts[0].(model.TextPart).Text, "context lookup:")
+	assert.NotContains(t, rendered.Parts[0].(model.TextPart).Text, "recall_context")
+}

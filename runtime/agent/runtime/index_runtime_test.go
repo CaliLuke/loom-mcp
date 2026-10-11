@@ -111,11 +111,11 @@ func TestViewCommitRetryAndImmutableBookkeepingSegment(t *testing.T) {
 	call := planner.ToolRequest{Name: "control.progress", ToolCallID: "hidden"}
 	testRecordAssistant(t, rt, base, []planner.ToolRequest{call})
 	original := base.view()
-	first, err := rt.loadView(t.Context(), base.RunContext.RootRunID, "run", original)
+	first, err := rt.loadTestView(t.Context(), base.RunContext.RootRunID, "run", original)
 	require.NoError(t, err)
 	// A crashed worker has not returned the new head. Retry the same pending input.
 	cold := New(WithRunStore(store))
-	retry, err := cold.loadView(t.Context(), base.RunContext.RootRunID, "run", original)
+	retry, err := cold.loadTestView(t.Context(), base.RunContext.RootRunID, "run", original)
 	require.NoError(t, err)
 	assert.Equal(t, first.Head, retry.Head)
 	writes := store.snapshot()
@@ -124,7 +124,7 @@ func TestViewCommitRetryAndImmutableBookkeepingSegment(t *testing.T) {
 	before := testStoredBytes(t, rt, base.RunContext.RootRunID, first.Head)
 	base.adopt(&PlanActivityOutput{IndexHead: first.Head})
 	require.NoError(t, base.structural(index.HideBookkeeping, []string{"hidden"}))
-	hidden, err := rt.loadView(t.Context(), base.RunContext.RootRunID, "run", base.view())
+	hidden, err := rt.loadTestView(t.Context(), base.RunContext.RootRunID, "run", base.view())
 	require.NoError(t, err)
 	assert.Empty(t, hidden.Messages)
 	assert.Equal(t, before, testStoredBytes(t, rt, base.RunContext.RootRunID, first.Head))
@@ -137,20 +137,20 @@ func TestViewCannotPublishHeadBeforeStoreOrWalkWrongPredecessor(t *testing.T) {
 	base := testWorkflowInput(t, rt, &planner.PlanInput{})
 	require.NoError(t, base.structural(index.PolicyDenial, nil))
 	store.failAt = store.attempts + 1
-	out, err := rt.loadView(t.Context(), base.RunContext.RootRunID, "run", base.view())
+	out, err := rt.loadTestView(t.Context(), base.RunContext.RootRunID, "run", base.view())
 	require.ErrorIs(t, err, runstore.ErrContentTooLarge)
 	assert.Nil(t, out)
 	assert.Empty(t, base.IndexHead)
 	store.failAt = 0
-	first, err := rt.loadView(t.Context(), base.RunContext.RootRunID, "run", base.view())
+	first, err := rt.loadTestView(t.Context(), base.RunContext.RootRunID, "run", base.view())
 	require.NoError(t, err)
 	base.adopt(&PlanActivityOutput{IndexHead: first.Head})
 	require.NoError(t, base.structural(index.PolicyDenial, nil))
 	bad := base.view()
 	bad.IndexHead = ""
-	_, err = rt.loadView(t.Context(), base.RunContext.RootRunID, "wrong", bad)
+	_, err = rt.loadTestView(t.Context(), base.RunContext.RootRunID, "wrong", bad)
 	require.Error(t, err, "wrong prev cannot reconstruct a noninitial ID")
-	_, err = rt.loadView(t.Context(), base.RunContext.RootRunID, "missing", index.ViewRef{IndexHead: "sha256:missing"})
+	_, err = rt.loadTestView(t.Context(), base.RunContext.RootRunID, "missing", index.ViewRef{IndexHead: "sha256:missing"})
 	require.ErrorIs(t, err, runstore.ErrNotFound)
 }
 
@@ -187,7 +187,7 @@ func TestIndexSegmentContentCapSplitsWithoutLosingEntries(t *testing.T) {
 	// A split batch must still render as one user message on a cold worker.
 	last, _, err := storeIndexSegments(t.Context(), store, "root", "", "", entries)
 	require.NoError(t, err)
-	view, err := rt.loadView(t.Context(), "root", "run", index.ViewRef{IndexHead: last})
+	view, err := rt.loadTestView(t.Context(), "root", "run", index.ViewRef{IndexHead: last})
 	require.NoError(t, err)
 	require.Len(t, view.Messages, 1)
 	assert.Len(t, view.Messages[0].Parts, len(entries))
@@ -207,10 +207,10 @@ func TestWarmViewAppendsOnlyNewReferenceProjections(t *testing.T) {
 	store := &indexReadStore{Store: storeinmem.New()}
 	rt := New(WithRunStore(store))
 	view := testOutputView(t, rt, []*api.ToolCallOutput{{ToolCallID: "first", Result: rawjson.Message(`{"value":1}`)}})
-	first, err := rt.loadView(t.Context(), "root", "run", view)
+	first, err := rt.loadTestView(t.Context(), "root", "run", view)
 	require.NoError(t, err)
 	reads := store.reads
-	same, err := rt.loadView(t.Context(), "root", "run", index.ViewRef{IndexHead: first.Head})
+	same, err := rt.loadTestView(t.Context(), "root", "run", index.ViewRef{IndexHead: first.Head})
 	require.NoError(t, err)
 	assert.Equal(t, reads, store.reads, "adopted warm head reads no old content")
 	assert.Same(t, first.Outputs[0], same.Outputs[0], "metadata is derived once per worker")
@@ -222,7 +222,7 @@ func TestWarmViewAppendsOnlyNewReferenceProjections(t *testing.T) {
 	hash := testPutBytes(t, rt, "root", []byte(`{"answer":true}`))
 	require.NoError(t, base.appendEntry(index.MessageEntry{Kind: index.TypedInput, InputID: "answer", Hash: hash}))
 	reads = store.reads
-	next, err := rt.loadView(t.Context(), "root", "run", base.view())
+	next, err := rt.loadTestView(t.Context(), "root", "run", base.view())
 	require.NoError(t, err)
 	assert.Equal(t, 2, store.reads-reads, "one new segment and its typed answer")
 	assert.Same(t, first.Outputs[0], next.Outputs[0])
@@ -230,6 +230,6 @@ func TestWarmViewAppendsOnlyNewReferenceProjections(t *testing.T) {
 	// Pending chains bind their exact predecessor, even when entry IDs fit.
 	corrupted := base.view()
 	corrupted.Pending[0].Chain = first.Head
-	_, err = rt.loadView(t.Context(), "root", "run", corrupted)
+	_, err = rt.loadTestView(t.Context(), "root", "run", corrupted)
 	require.ErrorContains(t, err, "pending index chain mismatch")
 }

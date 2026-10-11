@@ -8,6 +8,7 @@ import (
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 )
 
@@ -39,6 +40,7 @@ func FromRecord(ctx context.Context, source index.Source, hash runstore.Hash, en
 				item := ReceiptItem{Origin: line.Origin, Unsummarised: line.Unsummarised}
 				if line.Kind == "call" {
 					item.ToolUseID, item.Tool, item.Args = line.ToolUseID, line.Tool, line.Text
+					item.Lookup = tools.Ident(line.Tool) == tools.RecallContext
 				} else {
 					item.AssistantID, item.Text = line.From, line.Text
 				}

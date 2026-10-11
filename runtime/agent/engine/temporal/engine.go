@@ -810,3 +810,18 @@ func (e *Engine) releaseWorkflowContext(runID string, wf engine.WorkflowContext)
 	}
 	e.workflowContexts.CompareAndDelete(runID, wf)
 }
+
+// RegisterRecallActivity registers bounded transcript lookup.
+func (e *Engine) RegisterRecallActivity(_ context.Context, name string, opts engine.ActivityOptions, fn func(context.Context, *api.RecallActivityInput) (*api.RecallActivityOutput, error)) error {
+	if err := e.requireWorkerMode("register recall activities"); err != nil {
+		return err
+	}
+	opts = e.applyActivityClassDefaults(activityKindHook, opts)
+	// Wrap to inject originating WorkflowContext into activity context so runtime code
+	// can start child workflows (agent-as-tool) with engine-owned context.
+	wrapped := func(ctx context.Context, in *api.RecallActivityInput) (*api.RecallActivityOutput, error) {
+		out, err := fn(e.injectWorkflowContextIntoActivity(ctx), in)
+		return out, classifyTemporalCancellation(err)
+	}
+	return e.registerActivityWithCtx(name, opts, wrapped)
+}

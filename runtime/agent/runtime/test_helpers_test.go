@@ -22,6 +22,7 @@ import (
 	sessioninmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/session/inmem"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 )
 
 // testWorkflowContext is a lightweight engine.WorkflowContext implementation used by tests.
@@ -804,6 +805,9 @@ type stubPlanner struct {
 }
 
 func (s *stubPlanner) PlanStart(ctx context.Context, input *planner.PlanInput) (*planner.PlanResult, error) {
+	if err := checkFrameworkViewNames(input.Messages); err != nil {
+		return nil, err
+	}
 	if s.start != nil {
 		return s.start(ctx, input)
 	}
@@ -811,6 +815,9 @@ func (s *stubPlanner) PlanStart(ctx context.Context, input *planner.PlanInput) (
 }
 
 func (s *stubPlanner) PlanResume(ctx context.Context, input *planner.PlanResumeInput) (*planner.PlanResult, error) {
+	if err := checkFrameworkViewNames(input.Messages); err != nil {
+		return nil, err
+	}
 	if s.resume != nil {
 		return s.resume(ctx, input)
 	}
@@ -1100,4 +1107,44 @@ func (r *routeWorkflowContext) ExecuteSealRecordActivity(ctx context.Context, ca
 		panic("routeWorkflowContext seal runtime is required")
 	}
 	return r.hookRuntime.SealRecordActivity(ctx, call.Input)
+}
+
+func (t *testWorkflowContext) ExecuteRecallActivity(ctx context.Context, call engine.RecallActivityCall) (*api.RecallActivityOutput, error) {
+	rt := t.finishRuntime
+	if rt == nil {
+		rt = t.runtime
+	}
+	if rt == nil {
+		rt = t.hookRuntime
+	}
+	if rt == nil {
+		return nil, fmt.Errorf("test finish runtime is required")
+	}
+	return rt.RecallActivity(ctx, call.Input)
+}
+
+func (r *routeWorkflowContext) ExecuteRecallActivity(ctx context.Context, call engine.RecallActivityCall) (*api.RecallActivityOutput, error) {
+	return r.hookRuntime.RecallActivity(ctx, call.Input)
+}
+
+func (s *stubEngine) RegisterRecallActivity(context.Context, string, engine.ActivityOptions, func(context.Context, *api.RecallActivityInput) (*api.RecallActivityOutput, error)) error {
+	return nil
+}
+
+// loadTestView checks every directly loaded runtime-test view, including views
+// that never reach a planner/model call. Production loading remains unchanged.
+func (r *Runtime) loadTestView(ctx context.Context, root, runID string, view index.ViewRef) (*loadedView, error) {
+	loaded, err := r.loadView(ctx, root, runID, view)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkFrameworkViewNames(loaded.Messages); err != nil {
+		return nil, err
+	}
+	for _, output := range loaded.Outputs {
+		if err := checkFrameworkText(output.Preview); err != nil {
+			return nil, err
+		}
+	}
+	return loaded, nil
 }

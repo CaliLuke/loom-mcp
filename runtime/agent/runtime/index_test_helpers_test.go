@@ -70,7 +70,7 @@ func testStoredTranscript(t *testing.T, rt *Runtime, out *PlanActivityOutput, ro
 
 func testView(t *testing.T, rt *Runtime, base *workflowPlanInput) *loadedView {
 	t.Helper()
-	view, err := rt.loadView(t.Context(), base.RunContext.RootRunID, base.RunContext.RunID, base.view())
+	view, err := rt.loadTestView(t.Context(), base.RunContext.RootRunID, base.RunContext.RunID, base.view())
 	require.NoError(t, err)
 	return view
 }
@@ -124,7 +124,7 @@ func testHideBookkeeping(t *testing.T, rt *Runtime, base *workflowPlanInput, res
 
 func testPlannerView(t *testing.T, rt *Runtime, input *PlanActivityInput) *loadedView {
 	t.Helper()
-	out, err := rt.loadView(t.Context(), input.RunContext.RootRunID, input.RunID, input.View)
+	out, err := rt.loadTestView(t.Context(), input.RunContext.RootRunID, input.RunID, input.View)
 	require.NoError(t, err)
 	return out
 }
@@ -141,7 +141,7 @@ func (w *testWorkflowContext) storedPlannerOutput(ctx context.Context, input *Pl
 	if root == "" {
 		root = "test-root"
 	}
-	view, err := rt.loadView(ctx, root, input.RunID, input.View)
+	view, err := rt.loadTestView(ctx, root, input.RunID, input.View)
 	if err != nil {
 		return nil, err
 	}

@@ -201,7 +201,7 @@ func TestPlannerViewRejectsMissingOutputMetadata(t *testing.T) {
 	rt := New()
 	base := &workflowPlanInput{}
 	require.NoError(t, base.appendEntry(index.MessageEntry{Kind: index.Structural, Structural: &index.StructuralEntry{Kind: index.PolicyDenial, ProtocolVersion: index.TemplateProtocolVersion}, Output: "sha256:missing"}))
-	_, err := rt.loadView(t.Context(), "root", "run", base.view())
+	_, err := rt.loadTestView(t.Context(), "root", "run", base.view())
 	require.ErrorIs(t, err, runstore.ErrNotFound)
 }
 

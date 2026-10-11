@@ -16,3 +16,8 @@ func CheckpointID(recordID string) string {
 	hash := sha256.Sum256([]byte(recordID))
 	return fmt.Sprintf("ck-%x", hash[:4])
 }
+
+// compactHandle preserves discovery when a counted aggregate cannot fit.
+func compactHandle(part, recordID string) string {
+	return fmt.Sprintf("… [%s %s]\n", part, Handle(part, recordID))
+}

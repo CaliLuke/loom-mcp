@@ -367,3 +367,11 @@ func (w *cancelOnPlannerWorkflowContext) ExecuteSealRecordActivity(ctx context.C
 	}
 	return &api.SealRecordOutput{IndexHead: call.Input.IndexHead}, nil
 }
+
+func (panicWorkflowContext) ExecuteRecallActivity(context.Context, engine.RecallActivityCall) (*api.RecallActivityOutput, error) {
+	panic("unexpected record content activity")
+}
+
+func (*cancelOnPlannerWorkflowContext) ExecuteRecallActivity(context.Context, engine.RecallActivityCall) (*api.RecallActivityOutput, error) {
+	panic("unexpected record content activity")
+}

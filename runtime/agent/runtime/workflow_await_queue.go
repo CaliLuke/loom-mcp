@@ -410,6 +410,7 @@ func (r *Runtime) executeConfirmedToolCall(ctx context.Context, wfCtx engine.Wor
 	if call.ToolCallID == "" {
 		return nil, nil, nil, errors.New("confirmed call is missing its canonical ID")
 	}
+	chargeRecallCalls(base, []planner.ToolRequest{call})
 	grouped, timeouts := r.groupToolCallsByTimeout([]planner.ToolRequest{call}, input, toolOpts.StartToCloseTimeout)
 	finishBy := confirmationFinishBy(deadlines)
 	outcomes, timedOut, err := r.executeGroupedToolCalls(

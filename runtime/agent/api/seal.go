@@ -10,6 +10,8 @@ import (
 // SealRecordInput fixes the terminal index and event identity before scheduling.
 // Retries must receive the same pending entries, key and workflow timestamp.
 type SealRecordInput struct {
+	// ContextRecovery is the resolved run configuration.
+	ContextRecovery ContextRecovery
 	// ContextCompaction preserves stamped settings even for a run with no adopted planner step.
 	ContextCompaction *ContextCompaction `json:"context_compaction,omitzero"`
 	// RootRunID is the shared content storage scope for the run tree.

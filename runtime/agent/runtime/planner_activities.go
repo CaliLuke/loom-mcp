@@ -327,8 +327,9 @@ func (r *Runtime) canonicalizePlanActivityToolCalls(result *planner.PlanResult, 
 	}
 	calls := r.applyPerRunOverrides(context.Background(), &RunInput{Policy: &PolicyOverrides{RestrictToTool: input.CallFilter.RestrictToTool, AllowedTags: input.CallFilter.AllowedTags, DeniedTags: input.CallFilter.DeniedTags}}, result.ToolCalls)
 	calls = r.rewriteUnknownToolCalls(calls, toolPolicyEnvelope{
-		Active:  input.ToolPolicyActive,
-		Allowed: cloneToolIdents(input.AllowedTools),
+		Active:     input.ToolPolicyActive,
+		Allowed:    cloneToolIdents(input.AllowedTools),
+		ExtraTools: input.ExtraTools,
 	})
 	base := &workflowPlanInput{RunContext: input.RunContext}
 	parent := newChildTracker(input.RunContext.ParentToolCallID)
@@ -465,8 +466,9 @@ func (r *Runtime) plannerContext(ctx context.Context, input *PlanActivityInput, 
 		recovery:    recovery,
 		recording:   recording,
 		toolPolicy: toolPolicyEnvelope{
-			Active:  input.ToolPolicyActive,
-			Allowed: cloneToolIdents(input.AllowedTools),
+			Active:     input.ToolPolicyActive,
+			Allowed:    cloneToolIdents(input.AllowedTools),
+			ExtraTools: input.ExtraTools,
 		},
 	})
 	return &reg, agentCtx, nil

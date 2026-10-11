@@ -223,6 +223,8 @@ func newFromOptions(opts Options) *Runtime {
 		models:               make(map[string]model.Client),
 		contextLimits:        opts.ContextLimits,
 		contextCompaction:    opts.ContextCompaction,
+		contextRecovery:      opts.ContextRecovery,
+		recallAuthorizer:     opts.RecallAuthorizer,
 		runHandles:           make(map[string]engine.WorkflowHandle),
 		agentToolSpecs:       make(map[agent.Ident][]tools.ToolSpec),
 		endedStreamSessions:  make(map[string]struct{}),
@@ -243,6 +245,7 @@ func newFromOptions(opts Options) *Runtime {
 func resolveRuntimeOptions(opts Options) Options {
 	opts.ContextLimits = cloneContextLimits(opts.ContextLimits)
 	opts.ContextCompaction = cloneCompactionOptions(opts.ContextCompaction)
+	opts.ContextRecovery = cloneRecoveryOptions(opts.ContextRecovery)
 	if opts.ViewCacheRuns < 0 {
 		panic("runtime: view cache runs must be greater than zero")
 	}

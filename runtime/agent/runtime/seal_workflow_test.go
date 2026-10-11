@@ -83,7 +83,7 @@ func TestWorkflowTerminalPathsSeal(t *testing.T) {
 			}
 			require.GreaterOrEqual(t, sealed, 0)
 			assert.Greater(t, completed, sealed)
-			view, err := rt.loadView(t.Context(), "root", "run", index.ViewRef{IndexHead: head})
+			view, err := rt.loadTestView(t.Context(), "root", "run", index.ViewRef{IndexHead: head})
 			require.NoError(t, err)
 			assert.Equal(t, "seed", agentMessageText(view.Messages[0]))
 			if path == "finish" || path == "finalizer" {
@@ -130,7 +130,7 @@ func TestWorkflowFailureSealsPendingToolTurn(t *testing.T) {
 				}
 			}
 			require.NotEmpty(t, sealed.IndexHead)
-			view, err := rt.loadView(t.Context(), "root", "run", index.ViewRef{IndexHead: sealed.IndexHead})
+			view, err := rt.loadTestView(t.Context(), "root", "run", index.ViewRef{IndexHead: sealed.IndexHead})
 			require.NoError(t, err)
 			require.Len(t, view.Messages, 3)
 			assert.Equal(t, model.ConversationRoleAssistant, view.Messages[1].Role)

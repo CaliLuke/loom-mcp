@@ -91,6 +91,7 @@ func (c *simplePlannerContext) ModelClient(id string) (model.Client, bool) {
 	// Model interceptors observe the fully decorated request and their final
 	// response/error is the only outcome eligible for workflow recovery.
 	cli = newModelInterceptedClient(cli, c.rt.interceptorsForAgent(c.agent), c.agent, c.runID, c.sessionID, c.turnID, id, c.recovery, func(req *model.Request) {
+		applyExtraTools(req, c.toolPolicy.ExtraTools)
 		applyCachePolicy(req, c.cache)
 		ensureToolUnavailableDefinition(req)
 		applyModelToolPolicy(req, c.toolPolicy)

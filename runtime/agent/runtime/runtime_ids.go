@@ -97,6 +97,9 @@ func generateDeterministicToolCallID(runID, turnID string, attempt int, toolName
 		toolName = defaultToolName
 	}
 	safeTool := strings.ReplaceAll(string(toolName), ".", "-")
+	if toolName == tools.RecallContext {
+		safeTool = "context-lookup"
+	}
 	tid := turnID
 	if tid == "" {
 		tid = "no-turn"

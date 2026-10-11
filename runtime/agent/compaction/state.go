@@ -17,6 +17,8 @@ type (
 		KeepRecentTokens        int
 		ProtectRecentToolTokens int
 		MinSavingTokens         int
+		RecallDiscoveryCalls    int
+		RecallReadCalls         int
 	}
 	// ModelState holds the last view-bearing measurements for one model. Rate is
 	// replaced only by usage-bearing facts, independently of the latest overhead.
@@ -33,6 +35,7 @@ type (
 	// is the first entry of an open await/confirmation/clarification, set by the
 	// caller from workflow state before Decide; zero means no open suffix.
 	State struct {
+		Recall       RecallAllowances
 		Models       map[string]ModelState
 		MinB         int
 		NoProgressAt int

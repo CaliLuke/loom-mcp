@@ -630,3 +630,21 @@ func (e *Engine) activityDefaultsFor(name string) engine.ActivityOptions {
 	defer e.mu.Unlock()
 	return e.activityOptions[name]
 }
+
+// ExecuteRecallActivity schedules a recorded bounded lookup.
+func (w *temporalWorkflowContext) ExecuteRecallActivity(ctx context.Context, call engine.RecallActivityCall) (*api.RecallActivityOutput, error) {
+	if call.Name == "" {
+		return nil, errors.New("recall activity name is required")
+	}
+	if call.Input == nil {
+		return nil, errors.New("recall activity input is required")
+	}
+
+	actx := workflow.WithActivityOptions(w.ctx, w.activityOptionsFor(call.Name, call.Options))
+	fut := workflow.ExecuteActivity(actx, call.Name, call.Input)
+	var out *api.RecallActivityOutput
+	if err := fut.Get(actx, &out); err != nil {
+		return nil, normalizeTemporalError(err)
+	}
+	return out, nil
+}

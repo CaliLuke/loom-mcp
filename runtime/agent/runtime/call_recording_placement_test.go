@@ -106,7 +106,7 @@ func TestCallRecordingUsesPrePolicyCommittedView(t *testing.T) {
 		assert.Empty(t, started.Request.View.Pending)
 		assert.Equal(t, []callrecord.MessageSegment{{ViewFrom: 1, ViewTo: 2}}, started.Request.Messages)
 		_, err = callrecord.Rebuild(ctx, rt.RunStore, "root-run", started, func(ctx context.Context, recorded index.ViewRef) ([]*model.Message, error) {
-			loaded, err := rt.loadView(ctx, "root-run", "child-run", recorded)
+			loaded, err := rt.loadTestView(ctx, "root-run", "child-run", recorded)
 			if err != nil {
 				return nil, err
 			}

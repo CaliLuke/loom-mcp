@@ -229,6 +229,9 @@ func (r *Runtime) recoveryToolCatalog(catalog toolPolicyEnvelope) []string {
 }
 
 func toolAllowedByEnvelope(name tools.Ident, catalog toolPolicyEnvelope) bool {
+	if name == tools.RecallContext && len(catalog.ExtraTools) == 0 && !slices.Contains(catalog.Allowed, name) {
+		return false
+	}
 	if !catalog.Active {
 		return true
 	}

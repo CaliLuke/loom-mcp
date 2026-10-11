@@ -46,6 +46,7 @@ func (r *Runtime) SealRecordActivity(ctx context.Context, input *api.SealRecordI
 		return nil, fmt.Errorf("seal record index: %w", err)
 	}
 	sealed := hooks.NewRunSealedEvent(input.RunID, head, input.ProtocolVersion, input.Timestamp)
+	sealed.RecoverySettings = new(input.ContextRecovery)
 	if input.ContextCompaction != nil {
 		settings := pureCompactionSettings(input.ContextCompaction)
 		sealed.CompactionSettings = &settings
@@ -73,7 +74,7 @@ func (r *Runtime) sealWorkflowRecord(wfCtx engine.WorkflowContext, input *RunInp
 	view := base.view()
 	out, err := detached.ExecuteSealRecordActivity(detached.Context(), engine.SealRecordActivityCall{
 		Name:  SealRecordActivityName(input.AgentID),
-		Input: &api.SealRecordInput{RootRunID: input.RootRunID, RunID: input.RunID, ContextCompaction: cloneCompaction(base.compaction), ProtocolVersion: base.protocolVersion, IndexHead: view.IndexHead, Pending: view.Pending, EventKey: "run_sealed:" + input.RunID, Timestamp: wfCtx.Now()},
+		Input: &api.SealRecordInput{RootRunID: input.RootRunID, RunID: input.RunID, ContextCompaction: cloneCompaction(base.compaction), ContextRecovery: base.recovery, ProtocolVersion: base.protocolVersion, IndexHead: view.IndexHead, Pending: view.Pending, EventKey: "run_sealed:" + input.RunID, Timestamp: wfCtx.Now()},
 	})
 	if err != nil {
 		return fmt.Errorf("seal workflow record: %w", err)

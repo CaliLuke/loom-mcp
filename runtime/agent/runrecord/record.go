@@ -5,6 +5,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/callrecord"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/compaction"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
@@ -27,6 +28,10 @@ type (
 	}
 	// Run holds one run's transcript and evidence in canonical order.
 	Run struct {
+		// RecoverySettings is the resolved runtime-stamped lookup configuration.
+		RecoverySettings *run.ContextRecovery `json:"recovery_settings,omitzero"`
+		// Recall reconstructs independently charged and refilled allowances.
+		Recall compaction.RecallAllowances `json:"recall,omitzero"`
 		// CompactionSettings contains client-stamped threshold settings from adoption records.
 		CompactionSettings *compaction.Settings `json:"compaction_settings,omitzero"`
 		// KeepResultTools contains the recorded result retention list.

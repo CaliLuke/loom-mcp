@@ -234,7 +234,8 @@ Anthropic and Bedrock view grammars; views without checkpoints retain the existi
 resume-time Bedrock validation. Successful activity outputs may return `ViewUpdate`;
 recovery outputs never adopt it. Protocol 7 covers these view updates, recorded
 request facts and model rates, entry size metadata and stamped run settings.
-Drain older workflows before upgrading; v5 and v6 fixtures retain mismatch
+The current protocol is 8 (lookup activity and counters). Drain older workflows
+before upgrading; v5, v6 and v7 fixtures retain mismatch
 rejection before effects. Structural templates remain version 5.
 
 ### Opt-in context compaction
@@ -4882,14 +4883,22 @@ summary's run and record ID.
 `Render` produces one user-role message, text first and kept non-text parts
 after it. Its text bound is `MaxBytes(b) = 2 × (KeepUserTokens +
 MaxSummaryTokens + ReceiptTokens + FramingTokens)` under the current budget.
-Framing is measured exactly; any deficit consumes receipt allowance first,
-then summary allowance. `MinCheckpointBytes(b)` reserves the full user
-allowance plus the largest possible header and labels, with a 512-byte floor:
-`max(512, 2 × KeepUserTokens + 392)` bytes on the supported 64-bit platform.
-Smaller total budgets return `ErrCheckpointBudget`. At or above that threshold,
-framing plus receipt/summary capacity covers every header without consuming
-user bytes. The default framing remains 200 tokens. Renderer labels and
-placeholders recommend no tool.
+Framing is measured exactly; deficits consume receipt bytes above its two
+compact-line floor, then summary bytes above its compact closing-line floor
+when a summary exists. Compact fallbacks preserve `[receipt rc-xxxxxxxx]`,
+`[earlier rc-xxxxxxxx]`, `[users rc-xxxxxxxx]` and
+`[full text: checkpoint rN:ck-xxxxxxxx]`. Tiny component budgets borrow unused
+framing or donor capacity for these references; assembled text is never clipped.
+`MinCheckpointBytes(b)` reserves the full user allowance (at least the 24-byte
+compact users line), largest header/labels, 52 receipt bytes and the largest
+compact summary closing line (56 bytes on the supported 64-bit platform):
+`max(512, max(24, 2 × KeepUserTokens) + 500)` bytes.
+Smaller total budgets return `ErrCheckpointBudget`. The default framing remains
+200 tokens. At B=2,900, default checkpoint budgets give a 790-byte minimum and
+1,444-byte maximum. Renderer labels and placeholders recommend no tool.
+`ReceiptItem.Lookup` renders a retained lookup call as
+`toolu_x (context lookup: <bounded args>)`, preserving the call ID and hiding
+its tool name. K12's `FromRecord` must set this flag for the runtime lookup tool.
 
 `transcript.AssembleView` strips thinking, including opaque redacted
 reasoning, before the tail and retains tail blocks intact. It marks the
@@ -4911,6 +4920,83 @@ K18 supplies continuation positions, carried origins and earlier totals.
 
 Golden checkpoints are in
 `runtime/agent/transcript/checkpoint/testdata/{correction,cross_run}.golden`.
+
+## Pure recall contracts
+
+`runtime/agent/transcript/recall` defines the spec for
+`tools.RecallContext` (`runtime.recall_context`), with all usage guidance in
+`Description`. `ParseInput` accepts exactly one operation: `read` with `id`,
+`part` (`result` or `arguments`), byte `offset` and optional `run`; `list` with
+a handle or inclusive `from`/`through` range and optional run; or literal,
+case-sensitive UTF-8 `find` text. Lists and searches accept a continuation
+cursor. Invalid known operations retain `Input.Kind` for allowance charging;
+an ambiguous or unrecognized kind is empty and charges discovery. Parser
+errors expose only typed `recall_invalid_input`, never input fragments.
+
+The workflow advertises this tool on the first shortened view, including an
+eviction intent whose checkpoint is stored by the loader, and on subsequent
+steps. It adds the definition to the model catalog and active AllowedTools.
+Tools-disabled, recovery-disabled and finalization turns omit it. Unadvertised
+calls follow ToolUnavailable.
+
+Configure allowances with `ContextCompaction.RecallDiscoveryCalls` and
+`RecallReadCalls` (zero selects 20; negative values fail registration options).
+`compaction.State.Recall` charges read calls separately from list/find, in
+original call order before timeout grouping, including malformed and rejected
+calls. Every committed compaction refills each allowance with
+`compaction.Refill(a, initial) = min(a + ceil(initial/2), 3*initial)`.
+Exhaustion stores an ordinary eligible result with `code`, `allowance`,
+`other_remaining` and `refills_at: "next compaction"`.
+
+`runtime.WithContextRecovery(agentID, runtime.ContextRecovery{DisableRecall: true})`
+turns lookup off and emits `context_recall_disabled` once at the first shortened
+view. K13 introduces this minimal recovery settings struct; K14 extends it.
+Resolved settings and child-agent settings are stamped into RunInput and the
+canonical RunRecord. ContextCompaction does not own DisableRecall.
+
+`RecallActivity` performs all lookup I/O and stores its model-facing output
+before returning a result reference and bounded preview. Custom engines implement
+`RegisterRecallActivity` and `ExecuteRecallActivity`. The handler derives the
+session from the trusted run, walks Prev before From, and authorizes each entered
+run before reading content. Install `WithRecallAuthorizer(func(context.Context,
+RecallAccess) error)` for application authorization. Its access envelope contains
+SessionID, RunID, TargetRunID and Scope. Only eligible hashes are read; Record,
+Output and server-only metadata never supply lookup text.
+
+Receipt handles list all lines from the addressed record through its current-run
+Prev chain, newest first; earlier handles list predecessor-run lines; users
+handles list original user first lines. Range listings include model-visible
+text, calls, results and structural messages. Reads pair parallel results by
+ToolUseID, and original user text always comes from index entries. Full stored
+summaries page from their ck- IDs. Removed content returns recall_unavailable;
+unknown evidence returns recall_not_found; authorization denial returns
+recall_unauthorized. Images/documents return recall_unsupported_part with
+format/bytes and available text until K22.
+
+Read pages use max(512, ProtectRecentToolTokens) bytes and snap offsets to UTF-8
+boundaries. Follow next_offset. Find scans hidden eligible entries and cleared
+results, current run then From runs, newest first, up to 8 MB or ten matches;
+each match contains id, run, original byte offset and a snippet of at most 160
+bytes. Follow the same literal selector with its cursor. EncodeCursor/DecodeCursor
+use deterministic unpadded base32 over kind, handle/range/scan and position.
+Every call binds and re-resolves the selector; cursors grant no authority.
+Run-qualified rN labels resolve only through recall.RunChain; K13's default
+resolves none. K18 supplies production continuation labels. Thirty-two-bit handle
+collisions select the first matching reachable record deterministically.
+
+Each invocation records one keyed context_recalled event with kind, outcome
+(ok/exhausted/rejected/unsupported), code, tool_use_id, bytes, remaining counters
+and step. Exhaustion emits recall_budget_exhausted once per allowance episode,
+reset by refill. RunRecord rebuilds and validates recorded charges and settings.
+Workflow protocol 8 covers these settings, counters, activity and catalog
+envelopes; drain older workflows before upgrading. The recorded v8 fixture
+replays a real compacted lookup; v5–v7 fixtures remain. Structural templates
+remain version 5.
+
+FromRecord preserves the canonical tool name in the stored record and marks
+lookup receipt items so rendered lines say context lookup. Runtime-generated
+lookup IDs also omit the reserved name. Compaction-enabled registration rejects
+application identifiers or provider names containing recall_context.
 
 ## Engine conformance
 

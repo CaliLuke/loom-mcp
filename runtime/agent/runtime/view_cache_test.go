@@ -36,7 +36,7 @@ func TestViewCacheEvictionDuringLoad(t *testing.T) {
 	}
 	done := make(chan result, 1)
 	go func() {
-		view, err := rt.loadView(t.Context(), "root", "A", base.view())
+		view, err := rt.loadTestView(t.Context(), "root", "A", base.view())
 		done <- result{view: view, err: err}
 	}()
 	select {
@@ -44,14 +44,14 @@ func TestViewCacheEvictionDuringLoad(t *testing.T) {
 	case <-t.Context().Done():
 		t.Fatal("load did not reach the store")
 	}
-	_, err := rt.loadView(t.Context(), "root", "B", index.ViewRef{})
+	_, err := rt.loadTestView(t.Context(), "root", "B", index.ViewRef{})
 	require.NoError(t, err)
 	require.NotContains(t, rt.viewCaches, "root\x00A", "an active load does not prevent eviction")
 	unblock()
 	loaded := <-done
 	require.NoError(t, loaded.err)
 	assert.NotContains(t, rt.viewCaches, "root\x00A", "finishing an evicted load does not reinsert it")
-	cold, err := rt.loadView(t.Context(), "root", "A", index.ViewRef{IndexHead: loaded.view.Head})
+	cold, err := rt.loadTestView(t.Context(), "root", "A", index.ViewRef{IndexHead: loaded.view.Head})
 	require.NoError(t, err)
 	assert.Equal(t, loaded.view, cold, "eviction leaves the active cache pointer intact")
 }
@@ -69,7 +69,7 @@ func TestViewCacheLRU(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			rt := New(WithViewCacheRuns(2))
 			for _, runID := range tc.loads {
-				_, err := rt.loadView(t.Context(), "root", runID, index.ViewRef{})
+				_, err := rt.loadTestView(t.Context(), "root", runID, index.ViewRef{})
 				require.NoError(t, err)
 				assert.LessOrEqual(t, len(rt.viewCaches), 2)
 			}
@@ -94,21 +94,21 @@ func TestEvictedViewReconstructsNextStep(t *testing.T) {
 			rt := New(WithRunStore(store), WithViewCacheRuns(2))
 			baseline := New(WithRunStore(store))
 			previous := index.ViewRef{IndexHead: base.IndexHead}
-			_, err := baseline.loadView(t.Context(), "root", "A", previous)
+			_, err := baseline.loadTestView(t.Context(), "root", "A", previous)
 			require.NoError(t, err)
-			first, err := rt.loadView(t.Context(), "root", "A", previous)
+			first, err := rt.loadTestView(t.Context(), "root", "A", previous)
 			require.NoError(t, err)
 			if evict {
 				for _, runID := range []string{"B", "C"} {
-					_, err := rt.loadView(t.Context(), "root", runID, previous)
+					_, err := rt.loadTestView(t.Context(), "root", runID, previous)
 					require.NoError(t, err)
 				}
 				require.NotContains(t, rt.viewCaches, "root\x00A")
 			}
-			expected, err := baseline.loadView(t.Context(), "root", "A", base.view())
+			expected, err := baseline.loadTestView(t.Context(), "root", "A", base.view())
 			require.NoError(t, err)
 			store.reads.Store(0)
-			actual, err := rt.loadView(t.Context(), "root", "A", base.view())
+			actual, err := rt.loadTestView(t.Context(), "root", "A", base.view())
 			require.NoError(t, err)
 			assert.Equal(t, expected, actual, "messages, outputs, typed answers and committed head survive eviction")
 			assert.Equal(t, canonicalIndexMessages(t, expected.Messages), canonicalIndexMessages(t, actual.Messages))

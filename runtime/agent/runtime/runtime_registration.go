@@ -152,6 +152,10 @@ func (r *Runtime) validateAgentRegistration(reg AgentRegistration) error {
 	if _, enabled := r.contextCompaction[reg.ID]; enabled && reg.Policy.History != nil {
 		return fmt.Errorf("%w: context compaction cannot be combined with HistoryPolicy for %q", ErrInvalidConfig, reg.ID)
 	}
+	if err := r.validateRecallRegistration(reg); err != nil {
+		return err
+	}
+
 	if reg.Planner == nil {
 		return fmt.Errorf("%w: missing planner", ErrInvalidConfig)
 	}
@@ -162,20 +166,8 @@ func (r *Runtime) validateAgentRegistration(reg AgentRegistration) error {
 		return err
 	}
 
-	if reg.Workflow.Handler == nil {
-		return fmt.Errorf("%w: missing workflow handler", ErrInvalidConfig)
-	}
-	if reg.ExecuteToolActivity == "" {
-		return fmt.Errorf("%w: missing execute tool activity name", ErrInvalidConfig)
-	}
-	if reg.PlanActivityName == "" {
-		return fmt.Errorf("%w: missing plan activity name", ErrInvalidConfig)
-	}
-	if reg.ResumeActivityName == "" {
-		return fmt.Errorf("%w: missing resume activity name", ErrInvalidConfig)
-	}
-	if r.Engine == nil {
-		return ErrEngineNotConfigured
+	if err := r.validateAgentExecution(reg); err != nil {
+		return err
 	}
 	if err := r.validateMemoryPreloadPolicy(reg); err != nil {
 		return err
@@ -310,6 +302,9 @@ func (r *Runtime) registerAgentActivities(ctx context.Context, reg AgentRegistra
 	}, r.RecordContentActivity); err != nil {
 		return err
 	}
+	if err := r.Engine.RegisterRecallActivity(ctx, RecallActivityName(reg.ID), engine.ActivityOptions{Queue: reg.Workflow.TaskQueue, StartToCloseTimeout: defaultExecuteToolActivityTimeout, RetryPolicy: engine.RetryPolicy{MaxAttempts: 3}}, r.RecallActivity); err != nil {
+		return err
+	}
 	if err := r.Engine.RegisterChildDispatchActivity(ctx, ChildDispatchActivityName(reg.ID), engine.ActivityOptions{
 		Queue: reg.Workflow.TaskQueue, StartToCloseTimeout: defaultExecuteToolActivityTimeout, RetryPolicy: engine.RetryPolicy{MaxAttempts: 3},
 	}, r.ChildDispatchActivity); err != nil {
@@ -392,6 +387,13 @@ func validateToolsetRegistration(ts ToolsetRegistration) error {
 func (r *Runtime) storeRegisteredToolset(ts ToolsetRegistration) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	for id, reg := range r.agents {
+		if _, enabled := r.contextCompaction[id]; enabled && len(reg.Specs) == 0 {
+			if err := validateRecallNames(ts.Specs); err != nil {
+				return fmt.Errorf("%w: %w", ErrInvalidConfig, err)
+			}
+		}
+	}
 	r.addToolsetLocked(ts)
 	registerToolsetHints(ts)
 	return nil
@@ -554,4 +556,48 @@ func validateAgentToolsetRoute(ts ToolsetRegistration) error {
 		agentID,
 		strings.Join(missing, ", "),
 	)
+}
+
+func (r *Runtime) validateRecallRegistration(reg AgentRegistration) error {
+	if _, enabled := r.contextCompaction[reg.ID]; !enabled {
+		return nil
+	}
+	if err := validateRecallNames(reg.Specs); err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidConfig, err)
+	}
+	for _, ts := range reg.Toolsets {
+		if err := validateRecallNames(ts.Specs); err != nil {
+			return fmt.Errorf("%w: %w", ErrInvalidConfig, err)
+		}
+	}
+	if len(reg.Specs) == 0 {
+		r.mu.RLock()
+		defer r.mu.RUnlock()
+		for _, spec := range r.toolSpecs {
+			if err := validateRecallNames([]tools.ToolSpec{spec}); err != nil {
+				return fmt.Errorf("%w: %w", ErrInvalidConfig, err)
+			}
+		}
+	}
+	return nil
+}
+
+func (r *Runtime) validateAgentExecution(reg AgentRegistration) error {
+	if reg.Workflow.Handler == nil {
+		return fmt.Errorf("%w: missing workflow handler", ErrInvalidConfig)
+	}
+	if reg.ExecuteToolActivity == "" {
+		return fmt.Errorf("%w: missing execute tool activity name", ErrInvalidConfig)
+	}
+	if reg.PlanActivityName == "" {
+		return fmt.Errorf("%w: missing plan activity name", ErrInvalidConfig)
+	}
+	if reg.ResumeActivityName == "" {
+		return fmt.Errorf("%w: missing resume activity name", ErrInvalidConfig)
+	}
+	if r.Engine == nil {
+		return ErrEngineNotConfigured
+	}
+
+	return nil
 }

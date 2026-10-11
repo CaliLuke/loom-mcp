@@ -16,3 +16,7 @@ package tools
 // hallucinate tool names. The tool returns a structured error and a retry hint
 // instructing the model to select from the advertised tool list.
 const ToolUnavailable Ident = "runtime.tool_unavailable"
+
+// RecallContext is the runtime-owned tool for discovery and reads of hidden
+// model-visible conversation evidence within an authorized checkpoint chain.
+const RecallContext Ident = "runtime.recall_context"

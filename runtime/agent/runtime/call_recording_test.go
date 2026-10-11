@@ -352,13 +352,19 @@ func (s *recordingTestStore) PutCall(ctx context.Context, scope string, record r
 	return s.Store.PutCall(ctx, scope, record)
 }
 
-func (c *recordingTestClient) Complete(context.Context, *model.Request) (*model.Response, error) {
+func (c *recordingTestClient) Complete(_ context.Context, request *model.Request) (*model.Response, error) {
+	if err := checkFrameworkViewNames(request.Messages); err != nil {
+		return nil, err
+	}
 	c.sent++
 	c.store.writes = append(c.store.writes, "send")
 	return c.response, c.err
 }
 
-func (c *recordingTestClient) Stream(context.Context, *model.Request) (model.ValidatedStreamer, error) {
+func (c *recordingTestClient) Stream(_ context.Context, request *model.Request) (model.ValidatedStreamer, error) {
+	if err := checkFrameworkViewNames(request.Messages); err != nil {
+		return nil, err
+	}
 	c.sent++
 	c.store.writes = append(c.store.writes, "send")
 	if c.err != nil {

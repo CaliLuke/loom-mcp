@@ -19,6 +19,7 @@ type (
 	compactionWorkflowContext struct {
 		engine.WorkflowContext
 		settings map[agent.Ident]ContextCompaction
+		recovery map[agent.Ident]ContextRecovery
 	}
 )
 
@@ -39,11 +40,17 @@ func cloneCompactionOptions(options map[agent.Ident]ContextCompaction) map[agent
 	owned := make(map[agent.Ident]ContextCompaction, len(options))
 	for id, config := range options {
 		trigger := config.TriggerAt
-		if id == "" || trigger.Tokens < 0 || trigger.Bytes < 0 || (trigger.Tokens == 0) != (trigger.Bytes == 0) || trigger.Tokens > trigger.Bytes || config.KeepRecentTokens < 0 || config.ProtectRecentToolTokens < 0 || config.MinSavingTokens < 0 {
+		if id == "" || trigger.Tokens < 0 || trigger.Bytes < 0 || (trigger.Tokens == 0) != (trigger.Bytes == 0) || trigger.Tokens > trigger.Bytes || config.KeepRecentTokens < 0 || config.ProtectRecentToolTokens < 0 || config.MinSavingTokens < 0 || config.RecallDiscoveryCalls < 0 || config.RecallReadCalls < 0 {
 			panic(fmt.Sprintf("runtime: invalid context compaction settings for %q", id))
 		}
 		if trigger.Tokens == 0 {
 			config.TriggerAt.Tokens, config.TriggerAt.Bytes = 85, 100
+		}
+		if config.RecallDiscoveryCalls == 0 {
+			config.RecallDiscoveryCalls = 20
+		}
+		if config.RecallReadCalls == 0 {
+			config.RecallReadCalls = 20
 		}
 		config.KeepResultTools = slices.Clone(config.KeepResultTools)
 		owned[id] = config
@@ -61,13 +68,15 @@ func cloneCompaction(settings *ContextCompaction) *ContextCompaction {
 }
 
 func pureCompactionSettings(settings *ContextCompaction) compaction.Settings {
-	return compaction.Settings{TriggerAt: settings.TriggerAt, KeepRecentTokens: settings.KeepRecentTokens, ProtectRecentToolTokens: settings.ProtectRecentToolTokens, MinSavingTokens: settings.MinSavingTokens}
+	return compaction.Settings{TriggerAt: settings.TriggerAt, KeepRecentTokens: settings.KeepRecentTokens, ProtectRecentToolTokens: settings.ProtectRecentToolTokens, MinSavingTokens: settings.MinSavingTokens, RecallDiscoveryCalls: settings.RecallDiscoveryCalls, RecallReadCalls: settings.RecallReadCalls}
 }
 
 func (r *Runtime) stampContextCompaction(input *RunInput) {
 	if input == nil {
 		return
 	}
+	input.ContextRecovery = r.contextRecovery[input.AgentID]
+	input.RecoveryAgents = cloneRecoveryOptions(r.contextRecovery)
 	input.ContextCompaction = nil
 	input.CompactionAgents = cloneCompactionOptions(r.contextCompaction)
 	if settings, enabled := input.CompactionAgents[input.AgentID]; enabled {
@@ -76,6 +85,9 @@ func (r *Runtime) stampContextCompaction(input *RunInput) {
 }
 
 func inheritCompaction(ctx context.Context, input *RunInput) {
+	recovery, _ := ctx.Value(recoverySettingsKey{}).(map[agent.Ident]ContextRecovery)
+	input.ContextRecovery = recovery[input.AgentID]
+	input.RecoveryAgents = cloneRecoveryOptions(recovery)
 	settings, _ := ctx.Value(compactionSettingsKey{}).(map[agent.Ident]ContextCompaction)
 	input.CompactionAgents = cloneCompactionOptions(settings)
 	if config, enabled := settings[input.AgentID]; enabled {
@@ -88,10 +100,11 @@ func keepCompactionResult(settings *ContextCompaction, tool tools.Ident) bool {
 }
 
 func (c compactionWorkflowContext) Context() context.Context {
-	return context.WithValue(c.WorkflowContext.Context(), compactionSettingsKey{}, c.settings)
+	ctx := context.WithValue(c.WorkflowContext.Context(), compactionSettingsKey{}, c.settings)
+	return context.WithValue(ctx, recoverySettingsKey{}, c.recovery)
 }
 
 func (c compactionWorkflowContext) WithCancel() (engine.WorkflowContext, func()) {
 	derived, cancel := c.WorkflowContext.WithCancel()
-	return compactionWorkflowContext{WorkflowContext: derived, settings: c.settings}, cancel
+	return compactionWorkflowContext{WorkflowContext: derived, settings: c.settings, recovery: c.recovery}, cancel
 }

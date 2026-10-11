@@ -14,10 +14,12 @@ type (
 	// ReceiptItem supplies a tool call and/or assistant text from the record chain.
 	ReceiptItem struct {
 		ToolUseID, Tool, Args string
-		AssistantID           index.MessageID
-		Text                  string
-		Unsummarised          []ByteRange
-		Origin                *index.Origin
+		// Lookup hides the runtime lookup tool name while retaining its call ID.
+		Lookup       bool
+		AssistantID  index.MessageID
+		Text         string
+		Unsummarised []ByteRange
+		Origin       *index.Origin
 	}
 	// EarlierCounts carries bounded receipt totals for predecessor runs.
 	EarlierCounts struct {
@@ -41,6 +43,7 @@ const (
 	// MaxReceiptLineBytes caps one rendered receipt line including its newline.
 	MaxReceiptLineBytes    = 512
 	receiptRangeLabelBytes = 64
+	compactReceiptBytes    = len("… [receipt rc-xxxxxxxx]\n") + len("… [earlier rc-xxxxxxxx]\n")
 )
 
 // renderReceipt traverses the chain once and retains only bounded newest lines.
@@ -63,7 +66,17 @@ func renderReceipt(items iter.Seq[ReceiptItem], earlier EarlierCounts, maxBytes 
 			return text.String()
 		}
 		if len(shown) == 0 {
-			// Never cut a handle to fit a component budget too small for its aggregates.
+			current, previous = "", ""
+			if omitted.calls != 0 || omitted.assistants != 0 {
+				current = compactHandle("receipt", recordID)
+			}
+			if earlier.Calls != 0 || earlier.Assistants != 0 {
+				previous = compactHandle("earlier", recordID)
+			}
+			if len(current)+len(previous) <= maxBytes {
+				return current + previous
+			}
+			// Render reserves both compact lines; standalone smaller budgets cannot.
 			return ""
 		}
 		last := shown[len(shown)-1]
@@ -120,6 +133,10 @@ func receiptLines(item ReceiptItem, currentPos int) []receiptLine {
 			id = fmt.Sprintf("r%d:%s", pos, id)
 		}
 		text := fmt.Sprintf("%s %s(%s)", id, item.Tool, item.Args)
+		if item.Lookup {
+			prefix := id + " (context lookup: "
+			text = prefix + HeadTail(item.Args, max(0, MaxReceiptLineBytes-len(prefix)-2)) + ")"
+		}
 		for _, span := range item.Unsummarised {
 			text += fmt.Sprintf("; bytes %s–%s not summarised", thousands(span.From), thousands(span.Through))
 		}

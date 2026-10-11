@@ -53,7 +53,7 @@ func TestRenderMinimum(t *testing.T) {
 	for _, tt := range []struct {
 		users   int
 		minimum int
-	}{{0, 512}, {60, 512}, {127, 646}, {3000, 6392}} {
+	}{{0, 524}, {60, 620}, {127, 754}, {3000, 6500}} {
 		b := index.RenderBudget{KeepUserTokens: tt.users}
 		assert.Equal(t, tt.minimum, MinCheckpointBytes(b))
 		in := Input{Through: ^index.MessageID(0), ContinuedFrom: int(^uint(0) >> 1)}
@@ -80,13 +80,13 @@ func TestRenderBudgetCases(t *testing.T) {
 		minimum int
 		below   bool
 	}{
-		{"zero", index.RenderBudget{}, 512, true},
-		{"seed 1102 trial 24", trial24, 646, true},
-		{"donors two bytes short", index.RenderBudget{KeepUserTokens: 127, MaxSummaryTokens: 60, ReceiptTokens: 82, FramingTokens: 53}, 646, true},
-		{"donors exact", index.RenderBudget{KeepUserTokens: 127, MaxSummaryTokens: 60, ReceiptTokens: 83, FramingTokens: 53}, 646, false},
-		{"summary alone", index.RenderBudget{KeepUserTokens: 127, MaxSummaryTokens: 196}, 646, false},
-		{"receipt alone", index.RenderBudget{KeepUserTokens: 127, ReceiptTokens: 196}, 646, false},
-		{"framing alone", index.RenderBudget{KeepUserTokens: 127, FramingTokens: 196}, 646, false},
+		{"zero", index.RenderBudget{}, 524, true},
+		{"seed 1102 trial 24", trial24, 754, true},
+		{"donors two bytes short", index.RenderBudget{KeepUserTokens: 127, MaxSummaryTokens: 60, ReceiptTokens: 136, FramingTokens: 53}, 754, true},
+		{"donors exact", index.RenderBudget{KeepUserTokens: 127, MaxSummaryTokens: 60, ReceiptTokens: 137, FramingTokens: 53}, 754, false},
+		{"summary alone", index.RenderBudget{KeepUserTokens: 127, MaxSummaryTokens: 250}, 754, false},
+		{"receipt alone", index.RenderBudget{KeepUserTokens: 127, ReceiptTokens: 250}, 754, false},
+		{"framing alone", index.RenderBudget{KeepUserTokens: 127, FramingTokens: 250}, 754, false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.minimum, MinCheckpointBytes(tt.budget))
@@ -156,8 +156,18 @@ func TestRenderProperty(t *testing.T) {
 			total += measure(part)
 		}
 		assert.LessOrEqual(t, total, b.KeepUserTokens/4)
-		if b.KeepUserTokens >= 256 {
-			assertUserDiscovery(t, msg, in)
+		assertUserDiscovery(t, msg, in)
+		if summaryText(msg) != Qualify(in.Summary.Text, in.RunPos[in.Summary.Run], in.CurrentPos) {
+			assert.Contains(t, text, "checkpoint r"+fmt.Sprint(in.RunPos[in.Summary.Run])+":"+CheckpointID(in.Summary.ID)+"]")
+		}
+		for item := range in.Receipt {
+			if !strings.Contains(text, item.ToolUseID+" ") || !strings.Contains(text, Label(item.AssistantID, item.Origin, in.CurrentPos)+", assistant:") {
+				assert.Contains(t, text, Handle("receipt", in.ID))
+				break
+			}
+		}
+		if in.Earlier.Calls != 0 || in.Earlier.Assistants != 0 {
+			assert.Contains(t, text, Handle("earlier", in.ID))
 		}
 	}
 	assert.Positive(t, accepted)
@@ -184,7 +194,7 @@ func TestRenderShrunkBudget(t *testing.T) {
 
 // TestRenderNoToolName checks that framework renderings recommend no tool.
 func TestRenderNoToolName(t *testing.T) {
-	in := Input{ID: "record", CurrentPos: 1, Through: 3, Users: []UserMessage{user(1, "task")}, Pinned: []index.MessageID{1}, Summary: &Summary{Run: "current", ID: "summary", Text: strings.Repeat("fact\n", 1000)}, RunPos: map[string]int{"current": 1}, Receipt: receiptSeq([]ReceiptItem{{ToolUseID: "toolu", Tool: "search", Args: "id=2"}})}
+	in := Input{ID: "record", CurrentPos: 1, Through: 3, Users: []UserMessage{user(1, "task")}, Pinned: []index.MessageID{1}, Summary: &Summary{Run: "current", ID: "summary", Text: strings.Repeat("fact\n", 1000)}, RunPos: map[string]int{"current": 1}, Receipt: receiptSeq([]ReceiptItem{{ToolUseID: "toolu", Tool: "runtime.recall_context", Args: "id=2", Lookup: true}})}
 	b := index.RenderBudget{KeepUserTokens: 300, MaxSummaryTokens: 100, ReceiptTokens: 100, FramingTokens: 200}
 	msg, err := Render(in, b, DefaultLimits, nil)
 	require.NoError(t, err)
@@ -206,14 +216,20 @@ func TestRenderFramingDeficit(t *testing.T) {
 
 // TestSectionBudgets checks receipt-first then summary framing donations.
 func TestSectionBudgets(t *testing.T) {
-	budget := index.RenderBudget{MaxSummaryTokens: 100, ReceiptTokens: 100, FramingTokens: 100}
-	for _, tt := range []struct{ framing, summary, receipt int }{{150, 200, 200}, {250, 200, 150}, {450, 150, 0}, {600, 0, 0}} {
-		summary, receipt, err := sectionBudgets(budget, tt.framing)
+	budget := index.RenderBudget{KeepUserTokens: 12, MaxSummaryTokens: 100, ReceiptTokens: 100, FramingTokens: 100}
+	for _, tt := range []struct{ framing, summary, receipt int }{{150, 200, 200}, {250, 200, 150}, {450, 98, 52}, {492, 56, 52}} {
+		summary, receipt, err := sectionBudgets(budget, tt.framing, true)
 		require.NoError(t, err)
 		assert.Equal(t, tt.summary, summary)
 		assert.Equal(t, tt.receipt, receipt)
 	}
-	_, _, err := sectionBudgets(budget, 601)
+	_, _, err := sectionBudgets(budget, 493, true)
+	require.ErrorIs(t, err, ErrCheckpointBudget)
+	summary, receipt, err := sectionBudgets(budget, 548, false)
+	require.NoError(t, err)
+	assert.Zero(t, summary)
+	assert.Equal(t, 52, receipt)
+	_, _, err = sectionBudgets(budget, 549, false)
 	assert.ErrorIs(t, err, ErrCheckpointBudget)
 }
 

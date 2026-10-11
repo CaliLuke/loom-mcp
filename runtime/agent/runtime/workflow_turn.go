@@ -240,6 +240,7 @@ func (r *Runtime) prepareToolTurnExecution(
 	if err != nil {
 		return nil, err
 	}
+	chargeRecallCalls(base, execCalls)
 	grouped, timeouts := r.groupToolCallsByTimeout(execCalls, input, toolOpts.StartToCloseTimeout)
 	return &preparedToolTurn{
 		allowed:       allowed,
@@ -325,6 +326,7 @@ func (r *Runtime) resumeAfterToolTurn(
 	}
 	resumeReq.CallFilter = planToolFilter(input)
 	resumeReq.ToolPolicyActive = policyResult.Envelope.Active
+	resumeReq.ToolsDisabled = policyResult.Envelope.Disabled
 	resumeReq.AllowedTools = cloneToolIdents(policyResult.Envelope.Allowed)
 	resumeReq.PolicyCaps = st.Caps
 	resumeReq.RunContext.Labels = cloneLabels(base.RunContext.Labels)

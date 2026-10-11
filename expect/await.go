@@ -90,7 +90,8 @@ func decodeAwait(event *trajectory.ObservedEvent) (planner.AwaitItem, error) {
 		hooks.PromptRendered, hooks.PlannerStep, hooks.RunSealed,
 		hooks.ContextCompacted, hooks.ContextCompactionSkipped,
 		hooks.ContextOverflow, hooks.ContextRequestGrowth,
-		hooks.ContextUnmeasured, hooks.ContextLimitsUnknown, hooks.ContextBudgetTooSmall:
+		hooks.ContextUnmeasured, hooks.ContextLimitsUnknown, hooks.ContextBudgetTooSmall,
+		hooks.ContextRecalled, hooks.ContextRecallDisabled, hooks.RecallBudgetExhausted:
 		// These events do not carry a planner AwaitItem.
 		return item, nil
 	default:

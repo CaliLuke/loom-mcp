@@ -23,6 +23,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	agentsruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,7 +40,7 @@ import (
 type historyReplayPlanner struct{}
 
 const (
-	workflowHistoryFile        = "testdata/workflow_protocol_v7.json"
+	workflowHistoryFile        = "testdata/workflow_protocol_v8.json"
 	workflowHistoryIdentity    = "loom-mcp-history-recorder"
 	workflowHistoryStickyQueue = "loom-mcp-history-recorder-sticky"
 )
@@ -54,6 +55,7 @@ func TestGeneratedFeatureWorkflowReplay(t *testing.T) {
 		{name: "current"},
 		{name: "protocol 5 rejected before effects", previous: 5},
 		{name: "protocol 6 rejected before effects", previous: 6},
+		{name: "protocol 7 rejected before effects", previous: 7},
 		{name: "future", rewrite: true},
 		{name: "missing", rewrite: true, missing: true},
 	} {
@@ -122,7 +124,7 @@ func recordWorkflowHistory(t *testing.T, temporalClient client.Client) {
 	registerHistoryReplayAgent(t, fx)
 	_, err := fx.rt.CreateSession(ctx, "sess-protocol-history")
 	require.NoError(t, err)
-	out, err := coordinator.NewClient(fx.rt).Run(ctx, "sess-protocol-history", []*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "record this request"}}}}, agentsruntime.WithRunID("run-protocol-history"))
+	out, err := coordinator.NewClient(fx.rt).Run(ctx, "sess-protocol-history", []*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "record this request"}}}, {Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: strings.Repeat("earlier answer ", 2000)}}}, {Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "continue"}}}}, agentsruntime.WithRunID("run-protocol-history"))
 	require.NoError(t, err)
 	assert.Equal(t, "history replay complete", messageText(out.Final))
 	history := &historypb.History{}
@@ -195,7 +197,8 @@ func registerHistoryReplayAgent(t *testing.T, fx *featureRuntime) {
 			messages, err := in.View.LoadMessages(ctx)
 			require.NoError(t, err)
 			require.GreaterOrEqual(t, len(messages), 2)
-			assert.Equal(t, "record this request", messageText(messages[0]))
+			assert.Equal(t, true, messages[0].Meta[transcript.CheckpointMetaKey], "child validation must receive the compacted parent checkpoint")
+			assert.Contains(t, messageText(messages[0]), "record this request")
 			return agentsruntime.NewAgentToolValidationError("topic requires evidence", []*tools.FieldIssue{{Field: "topic", Constraint: "invalid_format"}}, nil)
 		}
 	})
@@ -210,12 +213,22 @@ func (historyReplayPlanner) PlanStart(ctx context.Context, input *planner.PlanIn
 	}
 	return &planner.PlanResult{ToolCalls: []planner.ToolRequest{{
 		Name: workflow.Draft, ToolCallID: "history-draft", Payload: rawjson.Message(`{"topic":"history replay"}`),
-	}, {Name: delegated.Summarize, ToolCallID: "history-child", Payload: rawjson.Message(`{"topic":"history replay"}`)}}}, nil
+	}}}, nil
 }
 
 func (historyReplayPlanner) PlanResume(ctx context.Context, input *planner.PlanResumeInput) (*planner.PlanResult, error) {
 	if err := measureHistoryRequest(ctx, input.Agent, input.Messages); err != nil {
 		return nil, err
+	}
+	seenRecall := false
+	for _, result := range input.ToolOutputs {
+		seenRecall = seenRecall || result.Name == tools.RecallContext
+	}
+	if !seenRecall && input.Finalize == nil {
+		return &planner.PlanResult{ToolCalls: []planner.ToolRequest{
+			{Name: delegated.Summarize, ToolCallID: "history-child", Payload: rawjson.Message(`{"topic":"history replay"}`)},
+			{Name: tools.RecallContext, ToolCallID: "history-recall", Payload: rawjson.Message(`{"read":{"id":"1","part":"result","offset":0}}`)},
+		}}, nil
 	}
 	return &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: &model.Message{
 		Role:  model.ConversationRoleAssistant,
@@ -230,7 +243,13 @@ func assertHistoryToolContent(t *testing.T, history *historypb.History, protocol
 	counts := make(map[string]int)
 	seedCalls, resultBatches, toolCompletions, childValidations := 0, 0, 0, 0
 	var childHead string
+	childHeadAdopted := false
 	plannerSteps := 0
+	resumeSchedules := 0
+	wantSteps, wantTools, wantBatches := 2, 2, 1
+	if protocol >= 8 {
+		wantSteps, wantTools, wantBatches = 3, 3, 2
+	}
 	var finalTranscript runstore.Hash
 	var sealInput *api.SealRecordInput
 	for _, event := range history.Events {
@@ -258,7 +277,11 @@ func assertHistoryToolContent(t *testing.T, history *historypb.History, protocol
 				assert.Equal(t, "run-protocol-history", input.RootRunID)
 				if input.SeedMessages {
 					seedCalls++
-					require.Len(t, input.Items, 1)
+					if protocol >= 8 {
+						require.Len(t, input.Items, 3)
+					} else {
+						require.Len(t, input.Items, 1)
+					}
 					var message model.Message
 					require.NoError(t, json.Unmarshal(input.Items[0], &message))
 					assert.Equal(t, "record this request", messageText(&message))
@@ -266,10 +289,22 @@ func assertHistoryToolContent(t *testing.T, history *historypb.History, protocol
 					resultBatches++
 					require.NotEmpty(t, input.Items)
 				}
+			case agentsruntime.RecallActivityName(coordinator.AgentID):
+				var input api.RecallActivityInput
+				require.NoError(t, json.Unmarshal(data, &input))
+				assert.Equal(t, "run-protocol-history", input.RunID)
+				assert.Equal(t, "run-protocol-history", input.Scope)
+				assert.NotNil(t, input.ViewRef.Checkpoint)
+				assert.Equal(t, tools.RecallContext, input.Call.Name)
 			case agentsruntime.ChildDispatchActivityName(coordinator.AgentID):
 				var input api.ChildDispatchInput
 				require.NoError(t, json.Unmarshal(data, &input))
 				assert.Equal(t, delegated.Summarize, input.Call.Name)
+				assert.Equal(t, "history-child", input.Call.ToolCallID)
+				if protocol >= 8 {
+					assert.NotNil(t, input.View.Checkpoint, "child admission must load a compacted parent view")
+					assert.Greater(t, input.View.TailFrom, index.MessageID(1))
+				}
 				assert.Equal(t, "run-protocol-history", input.ParentRun.RootRunID)
 				assert.NotEmpty(t, input.View.IndexHead)
 				require.Len(t, input.View.Pending, 1)
@@ -291,7 +326,8 @@ func assertHistoryToolContent(t *testing.T, history *historypb.History, protocol
 				if protocol >= 6 {
 					wantStep := 1
 					if name == "features.coordinator.resume" {
-						wantStep = 2
+						resumeSchedules++
+						wantStep = 1 + resumeSchedules
 					}
 					assert.Equal(t, wantStep, input.Step)
 				}
@@ -304,9 +340,12 @@ func assertHistoryToolContent(t *testing.T, history *historypb.History, protocol
 						assert.Equal(t, 6000, input.Models[0].Budget)
 					}
 					assert.NotEmpty(t, input.View.Pending)
-					assert.Equal(t, childHead, string(input.View.IndexHead), "resume adopts the head committed by child validation")
-					for _, entry := range input.View.Pending {
-						assert.NotEqual(t, "assistant", string(entry.Kind), "committed assistant entries are no longer pending")
+					if childHead != "" && !childHeadAdopted {
+						assert.Equal(t, childHead, string(input.View.IndexHead), "resume adopts the head committed by child validation")
+						for _, entry := range input.View.Pending {
+							assert.NotEqual(t, "assistant", string(entry.Kind), "committed assistant entries are no longer pending")
+						}
+						childHeadAdopted = true
 					}
 				}
 			case agentsruntime.SealRecordActivityName(coordinator.AgentID):
@@ -324,7 +363,7 @@ func assertHistoryToolContent(t *testing.T, history *historypb.History, protocol
 			case agentsruntime.FinishRunActivityName(coordinator.AgentID):
 				var input api.FinishRunInput
 				require.NoError(t, json.Unmarshal(data, &input))
-				require.Len(t, input.ToolEvents, 2)
+				require.Len(t, input.ToolEvents, wantTools)
 				assert.NotEmpty(t, input.ToolEvents[0].Refs.Result)
 				assert.Empty(t, input.ToolEvents[0].Result)
 				assert.NotNil(t, input.ToolEvents[1].Error)
@@ -360,7 +399,11 @@ func assertHistoryToolContent(t *testing.T, history *historypb.History, protocol
 					assert.Equal(t, output.CallKeys[0], output.Facts[0].Call)
 					assert.True(t, output.Facts[0].ViewBearing)
 				}
-				require.Len(t, output.ToolCallRefs, 2)
+				if protocol >= 8 {
+					require.Len(t, output.ToolCallRefs, 1)
+				} else {
+					require.Len(t, output.ToolCallRefs, 2)
+				}
 			case "features.coordinator.resume":
 				var output api.PlanActivityOutput
 				require.NoError(t, json.Unmarshal(data, &output, jsonopts.FormatDurationAsNano(true)))
@@ -381,20 +424,24 @@ func assertHistoryToolContent(t *testing.T, history *historypb.History, protocol
 			require.NoError(t, json.Unmarshal(completed.Result.Payloads[0].Data, &output))
 			assert.NotEmpty(t, output.ToolEventsRef)
 			assert.NotEmpty(t, output.FinalRef)
-			assert.Equal(t, 2, output.ToolEventCount)
+			assert.Equal(t, wantTools, output.ToolEventCount)
 		}
 		assert.Nil(t, event.GetStartChildWorkflowExecutionInitiatedEventAttributes(), "rejected validation must not start a child")
 	}
 	if protocol >= 6 {
 		require.NotNil(t, sealInput)
 		assert.Equal(t, 1, counts[agentsruntime.SealRecordActivityName(coordinator.AgentID)])
-		assert.Equal(t, 2, plannerSteps)
+		assert.Equal(t, wantSteps, plannerSteps)
 	}
 	assert.Equal(t, 1, counts[agentsruntime.FinishRunActivityName(coordinator.AgentID)])
 	assert.Equal(t, 1, seedCalls)
-	assert.Equal(t, 1, resultBatches)
+	assert.Equal(t, wantBatches, resultBatches)
 	assert.Equal(t, 1, toolCompletions)
 	assert.Equal(t, 1, childValidations)
+	assert.True(t, childHeadAdopted, "a subsequent resume must adopt the child-validation head")
+	if protocol >= 8 {
+		assert.Equal(t, 1, counts[agentsruntime.RecallActivityName(coordinator.AgentID)])
+	}
 }
 
 // historyHookInputs expands the ordered batch without treating its command as an event.
@@ -411,7 +458,7 @@ func historyHookInputs(t *testing.T, data []byte) []*api.HookActivityInput {
 	assert.LessOrEqual(t, len(inputs), 3)
 	assert.Equal(t, hooks.PlannerStep, inputs[0].Type)
 	for _, input := range inputs[1:] {
-		assert.Contains(t, []hooks.EventType{hooks.RunPhaseChanged, hooks.ContextCompacted}, input.Type)
+		assert.Contains(t, []hooks.EventType{hooks.RunPhaseChanged, hooks.ContextCompacted, hooks.ContextCompactionSkipped}, input.Type)
 	}
 	return inputs
 }

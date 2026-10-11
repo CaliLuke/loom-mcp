@@ -17,7 +17,7 @@ type WorkflowProtocolMismatchError struct {
 // WorkflowProtocolVersion is the version of the agent workflow's inputs, outputs,
 // signals and state. Every change to workflow code must bump it. Running workflows
 // must be drained before deploying a new version.
-const WorkflowProtocolVersion = 7
+const WorkflowProtocolVersion = 8
 
 // ErrWorkflowProtocolMismatch matches WorkflowProtocolMismatchError via errors.Is.
 var ErrWorkflowProtocolMismatch = errors.New("workflow protocol mismatch")

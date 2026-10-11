@@ -130,7 +130,7 @@ func TestWorkflowCompactionReconstruction(t *testing.T) {
 	// A durable but unadopted tiny-budget call must not disable the recorded run.
 	provider.limits.ContextWindow = 1
 	orphanView := base.view()
-	loaded, err := rt.loadView(t.Context(), "root", "run", orphanView)
+	loaded, err := rt.loadTestView(t.Context(), "root", "run", orphanView)
 	require.NoError(t, err)
 	seq, err := rt.RunStore.NextSeq(t.Context(), "root", "run")
 	require.NoError(t, err)
@@ -265,7 +265,7 @@ func TestWorkflowCompactionDecisions(t *testing.T) {
 	prepareCompaction(base, &input)
 	assert.Equal(t, compaction.Evict, base.compactionDecision.Tier)
 	assert.Positive(t, base.compactionDecision.State.NoProgressAt)
-	loaded, err := rt.loadView(t.Context(), "root", "run", input.View)
+	loaded, err := rt.loadTestView(t.Context(), "root", "run", input.View)
 	require.NoError(t, err)
 	base.compactionState = base.compactionDecision.State
 	base.compactionView = input.View
@@ -328,7 +328,7 @@ func TestWorkflowTierOne(t *testing.T) {
 			if saving == 100 {
 				assert.Equal(t, compaction.Clear, base.compactionDecision.Tier)
 				assert.Equal(t, index.MessageID(5), input.View.ClearedThrough)
-				loaded, err := rt.loadView(t.Context(), "root", "run", input.View)
+				loaded, err := rt.loadTestView(t.Context(), "root", "run", input.View)
 				require.NoError(t, err)
 				text := loaded.Messages[2].Parts[0].(model.ToolResultPart).Content.(string)
 				assert.Len(t, text, 18000, "Keep remains whole")
@@ -348,7 +348,7 @@ func TestCompactionAdoptionSurvivesDiagnosticFailure(t *testing.T) {
 	base.compaction = &ContextCompaction{}
 	view := base.view()
 	view.TailFrom, view.Budget = 4, compactionBudget()
-	loaded, err := rt.loadView(t.Context(), "root", "run", view)
+	loaded, err := rt.loadTestView(t.Context(), "root", "run", view)
 	require.NoError(t, err)
 	key := runstore.CallKey{RunID: "run", Seq: 1, Attempt: 1}
 	out := &PlanActivityOutput{IndexHead: loaded.Head, View: loaded.View, Facts: []contextmeasure.RequestFacts{{Call: key, Model: "m"}}, CallKeys: []runstore.CallKey{key}}

@@ -952,3 +952,34 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   990.001 bytes), keep_recent 2242.624 (1239.443), compress 2669.240 (3937.941),
   real_compaction 2740.337 (542.128), with two evictions after 1,000 seed turns.
   Entry-size metadata moved all four modes; index/checkpoint setup writes are excluded.
+
+- K13 uses workflow protocol 8 (structural templates remain 5). Custom engines
+  register/execute RecallActivity and engine conformance includes its typed
+  values, errors, attempts and options. A real v8 recorded history exercises
+  compaction, a lookup activity and finalization; retain earlier histories.
+- WithContextCompaction carries RecallDiscoveryCalls/RecallReadCalls (zero=20).
+  compaction.State.Recall charges original call order before timeout grouping;
+  committed compaction refills ceil(initial/2), capped at 3*initial. Malformed
+  known reads spend reads; list/find and unknown kinds spend discovery.
+- K13 adds minimal ContextRecovery{DisableRecall}, configured through
+  WithContextRecovery(agentID, settings), stamped into RunInput and RunRecord.
+  K14 extends it. Never put DisableRecall on ContextCompaction.
+- Advertise tools.RecallContext only on shortened views (including pending
+  eviction intents), then keep it sticky. Omit it on disabled recovery/tool
+  turns and finalization. Unadvertised calls become ToolUnavailable.
+- recall.Handler derives the session from LoadRun and resolves only reachable
+  Prev/From records; WithRecallAuthorizer runs once for every entered run before
+  content reads. Never fetch Record/Output/server-only hashes. Parallel reads
+  pair ToolUseIDs; users come from original index entries. RunChain defaults to
+  no rN resolution until K18.
+- Read pages are max(512, ProtectRecentToolTokens) bytes with UTF-8 offsets;
+  find scans 8 MB/ten matches with 160-byte snippets. Opaque base32 cursors
+  bind selectors and re-resolve on every call. Activity results are stored
+  eligible refs with context lookup previews. Multimodal recall remains K22.
+- ContextRecalled records one keyed charge/outcome per call; exhaustion emits
+  once per allowance episode, reset on refill; disabled emits once at first
+  shortened view. RunRecord validates reconstructed charges and stamped settings.
+- FromRecord marks lookup receipt items; rendering and generated lookup IDs omit
+  recall_context. Compaction-enabled application names/provider names must not
+  contain the reserved substring. Compact handle floors preserve discovery;
+  B=2,900 gives MinCheckpointBytes 790 <= MaxBytes 1,444.

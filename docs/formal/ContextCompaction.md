@@ -402,10 +402,17 @@ resolves it only by walking the current checkpoint's `From` chain.
 | `UnsafeRecallReadsRecord` | Recall resolves server-only data | `RecallNeverExposesServerData` |
 | `WitnessReadAfterRefill` | The agent reads again after exhausting its allowance | its witness |
 
-Limits: a listing returns a handle's lines in one call (paging and cursors
-are K13's tests); `find` is not modelled (K13); one earlier run, so the chain
-has two records and handles from older checkpoints of the same run are not
-exercised.
+Limits: a listing returns a handle's lines in one call. K13's
+`TestHandlerPagingOffsetsAndFindContinuation` and `TestCursorRoundTrip`
+prove page offsets, scan continuation and selector binding;
+`TestHandlerFindMiddleLargeResultAndUnsupported` proves literal find in a
+5 MB result. `TestHandlerUserTextFromRecordAndSummaryPages` reproduces full
+stored UTF-8 summaries. The model has one earlier run and two records;
+`TestRecallDiscoverableKindSequences` exhausts short kind sequences with
+one to three Prev records and injected From, and `TestRecallScript1000Steps`
+proves rendered-input discovery at 200k/8k with call-count testdata.
+The RecallDiscovery module is unchanged; all 12 checked-in configurations
+pass with their expected success, witness or fault counterexample.
 
 # OverflowGuard.tla
 

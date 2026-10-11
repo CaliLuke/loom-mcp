@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/compaction"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/internal/cancellation"
@@ -74,8 +75,9 @@ func (r *Runtime) ExecuteWorkflow(wfCtx engine.WorkflowContext, input *RunInput)
 	}
 	protocolVersion := input.WorkflowProtocolVersion
 	settings := cloneCompaction(input.ContextCompaction)
+	recoverySettings := input.ContextRecovery
 	agentSettings := cloneCompactionOptions(input.CompactionAgents)
-	wfCtx = compactionWorkflowContext{WorkflowContext: wfCtx, settings: agentSettings}
+	wfCtx = compactionWorkflowContext{WorkflowContext: wfCtx, settings: agentSettings, recovery: cloneRecoveryOptions(input.RecoveryAgents)}
 	input, err = r.prepareEffectiveRunInput(wfCtx.Context(), reg, input, runCtx)
 	if err != nil {
 		return nil, err
@@ -85,7 +87,10 @@ func (r *Runtime) ExecuteWorkflow(wfCtx engine.WorkflowContext, input *RunInput)
 	}
 	runCtx = workflowRunContext(input)
 	defer r.cleanupWorkflowRun(input.RunID)
-	planInput := &workflowPlanInput{AgentID: input.AgentID, RunContext: runCtx, protocolVersion: protocolVersion, compaction: settings}
+	planInput := &workflowPlanInput{AgentID: input.AgentID, RunContext: runCtx, protocolVersion: protocolVersion, compaction: settings, recovery: recoverySettings}
+	if settings != nil {
+		planInput.compactionState.Recall = compaction.NewRecall(pureCompactionSettings(settings))
+	}
 	finalStatus := runStatusSuccess
 	var finalErr error
 	defer r.finishWorkflowExecution(wfCtx, input, planInput, runCtx, turnID, &out, &retErr, &finalStatus, &finalErr)
@@ -433,6 +438,7 @@ func (r *Runtime) startWorkflowRun(
 	}
 	state.caps = policyResult.Caps
 	startReq.ToolPolicyActive = policyResult.Envelope.Active
+	startReq.ToolsDisabled = policyResult.Envelope.Disabled
 	startReq.AllowedTools = cloneToolIdents(policyResult.Envelope.Allowed)
 	startReq.PolicyCaps = state.caps
 	startReq.RunContext.Labels = cloneLabels(planInput.RunContext.Labels)

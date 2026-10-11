@@ -89,11 +89,20 @@ func (r *Runtime) adoptCompaction(wf engine.WorkflowContext, base *workflowPlanI
 			base.compactionSuppressed = base.compactionDecision.Skipped == compaction.NoProgress
 		}
 		base.compactionState = base.compactionDecision.State
+		if base.compactionDecision.Tier == compaction.Clear || base.compactionDecision.Tier == compaction.Evict {
+			base.compactionState.Recall = base.compactionState.Recall.Refilled(pureCompactionSettings(base.compaction))
+			base.recallEpisode++
+			base.recallExhausted = nil
+		}
 		if out.View != nil {
 			base.compactionState.Rendered = compaction.RenderedCheckpoint{Hash: string(out.View.Checkpoint), TailFrom: view.TailFrom, Budget: view.Budget, Bytes: out.View.CheckpointBytes}
 		}
 	}
 	base.compactionState = compaction.Observe(base.compactionState, out.Facts)
+	if err := r.publishRecallDisabled(wf, base, input, view); err != nil {
+		return err
+	}
+
 	flags := base.compactionState.Flags
 	diagnostics := []struct {
 		kind            hooks.EventType
@@ -111,6 +120,17 @@ func (r *Runtime) adoptCompaction(wf engine.WorkflowContext, base *workflowPlanI
 			}
 			*diagnostic.published = true
 		}
+	}
+	return nil
+}
+
+func (r *Runtime) publishRecallDisabled(wf engine.WorkflowContext, base *workflowPlanInput, input PlanActivityInput, view index.ViewRef) error {
+	if base.recovery.DisableRecall && (view.Checkpoint != nil || view.ClearedThrough > 0) && !base.recallDisabledPublished {
+		event := hooks.NewContextDiagnosticEvent(input.RunID, input.AgentID, input.RunContext.SessionID, hooks.ContextRecallDisabled, wf.Now())
+		if err := r.publishHook(wf.Context(), event, input.RunContext.TurnID); err != nil {
+			return err
+		}
+		base.recallDisabledPublished = true
 	}
 	return nil
 }

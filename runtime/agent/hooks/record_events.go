@@ -7,6 +7,7 @@ import (
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/compaction"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
@@ -18,6 +19,8 @@ type (
 	PlannerStepEvent struct {
 		// CompactionSettings is the client-stamped configuration, repeated on canonical adoption records.
 		CompactionSettings *compaction.Settings `json:"compaction_settings,omitzero"`
+		// RecoverySettings records resolved lookup settings independently of compaction.
+		RecoverySettings *run.ContextRecovery `json:"recovery_settings,omitzero"`
 		// KeepResultTools preserves the run configuration independently of worker options.
 		KeepResultTools []tools.Ident `json:"keep_result_tools,omitzero"`
 		// CheckpointBytes is the adopted rendered size, qualified by ViewRef.
@@ -45,7 +48,9 @@ type (
 	RunSealedEvent struct {
 		// CompactionSettings and KeepResultTools are the stamped run configuration.
 		CompactionSettings *compaction.Settings `json:"compaction_settings,omitzero"`
-		KeepResultTools    []tools.Ident        `json:"keep_result_tools,omitzero"`
+		// RecoverySettings records resolved lookup settings independently of compaction.
+		RecoverySettings *run.ContextRecovery `json:"recovery_settings,omitzero"`
+		KeepResultTools  []tools.Ident        `json:"keep_result_tools,omitzero"`
 		baseEvent
 		// ProtocolVersion is the workflow input version validated before execution.
 		ProtocolVersion int
@@ -85,7 +90,7 @@ const (
 // commit protocol. The reserved kinds acquire producers in later phases.
 func IsRecordEvent(kind EventType) bool {
 	return kind == PlannerStep || kind == RunSealed || kind == ContextCompacted ||
-		kind == ContextCompactionSkipped || kind == ContextOverflow || kind == ChildRunLinked
+		kind == ContextCompactionSkipped || kind == ContextOverflow || kind == ChildRunLinked || kind == ContextRecalled
 }
 
 // NewPlannerStepEvent constructs a replay-stable adoption record with workflow time.
@@ -125,17 +130,11 @@ func (e *ContextRequestGrowthEvent) Type() EventType {
 }
 
 func decodeRecordEvent(input *ActivityInput) (Event, bool, error) {
-	if input.Type == ContextCompacted || input.Type == ContextCompactionSkipped {
-		var p ContextCompactionEvent
-		if err := decodeHookPayload(input, &p); err != nil {
-			return nil, false, err
-		}
-		p.baseEvent = baseEvent{runID: input.RunID, agentID: input.AgentID, sessionID: input.SessionID}
-		p.kind = input.Type
-		return &p, true, nil
+	if event, ok, err := decodeRecallEvent(input); ok || err != nil {
+		return event, ok, err
 	}
-	if input.Type == ContextUnmeasured || input.Type == ContextLimitsUnknown || input.Type == ContextBudgetTooSmall {
-		return &ContextDiagnosticEvent{baseEvent: baseEvent{runID: input.RunID, agentID: input.AgentID, sessionID: input.SessionID}, kind: input.Type}, true, nil
+	if event, ok, err := decodeContextEvent(input); ok || err != nil {
+		return event, ok, err
 	}
 	if input.Type == PlannerStep {
 		var p PlannerStepEvent
@@ -163,5 +162,43 @@ func decodeRecordEvent(input *ActivityInput) (Event, bool, error) {
 		p.sessionID = input.SessionID
 		return &p, true, nil
 	}
+	return nil, false, nil
+}
+
+func decodeRecallEvent(input *ActivityInput) (Event, bool, error) {
+	if input.Type == ContextRecalled {
+		var event ContextRecalledEvent
+		if err := decodeHookPayload(input, &event); err != nil {
+			return nil, false, err
+		}
+		event.baseEvent = baseEvent{runID: input.RunID, agentID: input.AgentID, sessionID: input.SessionID}
+		return &event, true, nil
+	}
+	if input.Type == RecallBudgetExhausted {
+		var event RecallBudgetExhaustedEvent
+		if err := decodeHookPayload(input, &event); err != nil {
+			return nil, false, err
+		}
+		event.baseEvent = baseEvent{runID: input.RunID, agentID: input.AgentID, sessionID: input.SessionID}
+		return &event, true, nil
+	}
+
+	return nil, false, nil
+}
+
+func decodeContextEvent(input *ActivityInput) (Event, bool, error) {
+	if input.Type == ContextCompacted || input.Type == ContextCompactionSkipped {
+		var p ContextCompactionEvent
+		if err := decodeHookPayload(input, &p); err != nil {
+			return nil, false, err
+		}
+		p.baseEvent = baseEvent{runID: input.RunID, agentID: input.AgentID, sessionID: input.SessionID}
+		p.kind = input.Type
+		return &p, true, nil
+	}
+	if input.Type == ContextUnmeasured || input.Type == ContextLimitsUnknown || input.Type == ContextBudgetTooSmall || input.Type == ContextRecallDisabled {
+		return &ContextDiagnosticEvent{baseEvent: baseEvent{runID: input.RunID, agentID: input.AgentID, sessionID: input.SessionID}, kind: input.Type}, true, nil
+	}
+
 	return nil, false, nil
 }

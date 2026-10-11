@@ -135,6 +135,8 @@ type (
 		models            map[string]model.Client
 		contextLimits     map[string]model.ContextLimits
 		contextCompaction map[agent.Ident]ContextCompaction
+		contextRecovery   map[agent.Ident]ContextRecovery
+		recallAuthorizer  func(context.Context, RecallAccess) error
 
 		// Per-agent tool specs registered during agent registration for introspection.
 		agentToolSpecs map[agent.Ident][]tools.ToolSpec
@@ -205,6 +207,10 @@ type (
 		ContextLimits map[string]model.ContextLimits
 		// ContextCompaction enables threshold compaction per agent.
 		ContextCompaction map[agent.Ident]ContextCompaction
+		// ContextRecovery configures lookup independently of threshold compaction.
+		ContextRecovery map[agent.Ident]ContextRecovery
+		// RecallAuthorizer authorizes every run whose eligible evidence is read.
+		RecallAuthorizer func(context.Context, RecallAccess) error
 		// Engine is the workflow backend adapter (Temporal by default).
 		Engine engine.Engine
 		// MemoryStore persists run transcripts and annotations.

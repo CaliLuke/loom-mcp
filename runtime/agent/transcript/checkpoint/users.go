@@ -48,6 +48,8 @@ type (
 	}
 )
 
+const compactUsersBytes = len("… [users rc-xxxxxxxx]\n")
+
 // DefaultLimits holds the design's pin and index defaults.
 var DefaultLimits = Limits{MaxPins: 32, UserIndexLineBytes: 160, MaxPinnedParts: 2}
 
@@ -91,10 +93,17 @@ func renderUsers(in userInput) userSection {
 	if len(ordered) == 0 {
 		return userSection{}
 	}
-	remaining := max(0, in.budget.KeepUserTokens*BytesPerToken)
+	remaining := max(compactUsersBytes, in.budget.KeepUserTokens*BytesPerToken)
 	rows, selected := pinnedRows(in, ordered)
 	for _, row := range rows {
 		remaining -= len(row.text)
+	}
+	// Demote pins only when they would consume the compact discovery reserve.
+	for len(rows) < len(ordered) && remaining < compactUsersBytes && len(rows) > 0 {
+		last := rows[len(rows)-1]
+		rows = rows[:len(rows)-1]
+		delete(selected, last.key)
+		remaining += len(last.text)
 	}
 	rows = selectIndexRows(in, ordered, rows, selected, remaining)
 	slices.SortStableFunc(rows, func(a, b userRow) int {
@@ -235,6 +244,9 @@ func selectIndexRows(in userInput, ordered []UserMessage, rows []userRow, select
 		return append(rows, allRows...)
 	}
 	reserve := userCollapseReserve(in, ordered, selected)
+	if reserve > remaining {
+		reserve = compactUsersBytes
+	}
 	remaining -= reserve
 	for _, row := range allRows {
 		if len(row.text) > remaining {
@@ -245,8 +257,13 @@ func selectIndexRows(in userInput, ordered []UserMessage, rows []userRow, select
 		remaining -= len(row.text)
 	}
 	collapsed := collapsedUsers(in, ordered, selected)
-	if collapsed.text != "" && len(collapsed.text) <= remaining+reserve {
-		rows = append(rows, collapsed)
+	if collapsed.text != "" {
+		if len(collapsed.text) > remaining+reserve {
+			collapsed.text = compactHandle("users", in.recordID)
+		}
+		if len(collapsed.text) <= remaining+reserve {
+			rows = append(rows, collapsed)
+		}
 	}
 	return rows
 }

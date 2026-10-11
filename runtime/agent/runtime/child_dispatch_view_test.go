@@ -33,7 +33,7 @@ func TestChildDispatchAdoptsHeadAndKeepsWarmPlanner(t *testing.T) {
 					rt := New(WithRunStore(store))
 					base := buildGrowthIndex(t, store, steps)
 					base.CallRefs = map[string]runstore.Hash{"held-call": "sha256:held"}
-					previous, err := rt.loadView(t.Context(), "root", "run", index.ViewRef{IndexHead: base.IndexHead})
+					previous, err := rt.loadTestView(t.Context(), "root", "run", index.ViewRef{IndexHead: base.IndexHead})
 					require.NoError(t, err)
 					cfg, call := registerChildHeadValidator(t, rt, func(ctx context.Context, in *AgentToolValidationInput) *AgentToolValidationError {
 						if load {

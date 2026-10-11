@@ -70,7 +70,8 @@ func recordedRun(t *testing.T, scenario runtimeScenario) *runrecord.RunRecord {
 			hooks.PromptRendered, hooks.PlannerStep, hooks.RunSealed,
 			hooks.ContextCompacted, hooks.ContextCompactionSkipped,
 			hooks.ContextOverflow, hooks.ContextRequestGrowth,
-			hooks.ContextUnmeasured, hooks.ContextLimitsUnknown, hooks.ContextBudgetTooSmall:
+			hooks.ContextUnmeasured, hooks.ContextLimitsUnknown, hooks.ContextBudgetTooSmall,
+			hooks.ContextRecalled, hooks.ContextRecallDisabled, hooks.RecallBudgetExhausted:
 			// The fixture answers only the four planner AwaitItem kinds.
 			return nil
 		}

@@ -289,7 +289,7 @@ func TestReminderEstimateAfterEviction(t *testing.T) {
 		require.NoError(t, base.appendEntry(index.MessageEntry{Kind: index.Message, Role: "assistant", Bytes: 4, Hash: compactionPut(t, rt.RunStore, message)}))
 		view.IndexHead, view.Pending = base.IndexHead, base.Entries[base.Committed:]
 		decision := compaction.Decide(state, base.Entries, view, settings)
-		loaded, err := rt.loadView(t.Context(), "root", "run", decision.View)
+		loaded, err := rt.loadTestView(t.Context(), "root", "run", decision.View)
 		require.NoError(t, err)
 		require.NotNil(t, loaded.View)
 		view = decision.View
@@ -314,7 +314,7 @@ func TestCanonicalPinsEquivalent(t *testing.T) {
 	require.NoError(t, base.appendEntry(index.MessageEntry{Kind: index.Message, Role: "assistant", Hash: compactionPut(t, rt.RunStore, assistant), Bytes: 4}))
 	view := base.view()
 	view.TailFrom, view.Budget = 9, compactionBudget()
-	loaded, err := rt.loadView(t.Context(), "root", "run", view)
+	loaded, err := rt.loadTestView(t.Context(), "root", "run", view)
 	require.NoError(t, err)
 	require.NotEmpty(t, loaded.View.Pinned)
 	view.IndexHead, view.Pending, view.Checkpoint = loaded.Head, nil, &loaded.View.Checkpoint
@@ -322,7 +322,7 @@ func TestCanonicalPinsEquivalent(t *testing.T) {
 	assert.Equal(t, []index.MessageID{1, 8}, view.Pinned)
 	for _, budget := range []int{400, 40} {
 		view.Budget.KeepUserTokens = budget
-		loaded, err := rt.loadView(t.Context(), "root", "run", view)
+		loaded, err := rt.loadTestView(t.Context(), "root", "run", view)
 		require.NoError(t, err)
 		in, err := checkpoint.FromRecord(t.Context(), func(ctx context.Context, h runstore.Hash) ([]byte, error) {
 			return rt.RunStore.Get(ctx, "root", h)
@@ -331,7 +331,7 @@ func TestCanonicalPinsEquivalent(t *testing.T) {
 		assert.Equal(t, checkpoint.SelectPins(in.Users, view.Budget, checkpoint.DefaultLimits), loaded.View.Pinned)
 		view.Pinned = loaded.View.Pinned
 		for _, runtime := range []*Runtime{rt, New(WithRunStore(rt.RunStore))} {
-			loaded, err := runtime.loadView(t.Context(), "root", "run", view)
+			loaded, err := runtime.loadTestView(t.Context(), "root", "run", view)
 			require.NoError(t, err)
 			assert.Equal(t, view.Pinned, loaded.View.Pinned)
 			want, err := checkpoint.Project(t.Context(), func(ctx context.Context, h runstore.Hash) ([]byte, error) {
@@ -376,7 +376,7 @@ func TestMessageToolReceiptCoverage(t *testing.T) {
 			}
 			view := base.view()
 			view.TailFrom, view.Budget = 6, compactionBudget()
-			loaded, err := rt.loadView(t.Context(), "root", "run", view)
+			loaded, err := rt.loadTestView(t.Context(), "root", "run", view)
 			require.NoError(t, err)
 			data, err := rt.RunStore.Get(t.Context(), "root", loaded.View.Checkpoint)
 			require.NoError(t, err)

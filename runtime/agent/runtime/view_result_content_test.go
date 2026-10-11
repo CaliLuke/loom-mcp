@@ -60,7 +60,7 @@ func TestViewLoadsOnlyInlineResultContent(t *testing.T) {
 			require.NoError(t, err)
 			base := &workflowPlanInput{RunContext: run.Context{RunID: "run", RootRunID: "root"}}
 			require.NoError(t, base.appendEntry(index.MessageEntry{Kind: index.ToolResult, Hash: hash, Output: outputHash, Bytes: len(data), Batch: 1, ToolUseIDs: []string{"call"}, Result: &index.ResultProjection{Preview: index.TextParameter{Text: tc.preview}, Bounds: tc.bounds}}))
-			view, err := rt.loadView(t.Context(), "root", "run", base.view())
+			view, err := rt.loadTestView(t.Context(), "root", "run", base.view())
 			require.NoError(t, err)
 			if tc.bytes > transcript.MaxToolResultContentBytes {
 				assert.Zero(t, store.reads, "omitted content must not be fetched, even for reference validation")

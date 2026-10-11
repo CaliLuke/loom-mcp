@@ -9,6 +9,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/reminder"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/recall"
 )
 
 // addToolsetLocked registers a toolset and its specs without acquiring the lock.
@@ -32,6 +33,9 @@ func (r *Runtime) addToolSpecsLocked(specs []tools.ToolSpec) {
 
 // toolSpec retrieves a tool spec by fully qualified name. Thread-safe.
 func (r *Runtime) toolSpec(name tools.Ident) (tools.ToolSpec, bool) {
+	if name == tools.RecallContext {
+		return recall.Spec(), true
+	}
 	r.mu.RLock()
 	spec, ok := r.toolSpecs[name]
 	r.mu.RUnlock()

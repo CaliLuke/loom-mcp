@@ -237,6 +237,7 @@ func (r *Runtime) runPlanActivity(
 	}
 	input.Step = base.step + 1
 	prepareCompaction(base, &input)
+	prepareRecall(base, &input)
 	if err := enforcePlanActivityInputBudget(input); err != nil {
 		return nil, err
 	}
@@ -404,6 +405,7 @@ func plannerAdoptionEvent(wfCtx engine.WorkflowContext, base *workflowPlanInput,
 		view.Pinned = append([]index.MessageID(nil), out.View.Pinned...)
 	}
 	event := hooks.NewPlannerStepEvent(input.RunID, input.AgentID, input.RunContext.SessionID, input.Step, view, out.CallKeys, base.protocolVersion, wfCtx.Now())
+	event.RecoverySettings = new(base.recovery)
 	event.Recovery, event.Recovering = out.Recovery != nil, input.Recovery != nil
 	if base.compaction != nil {
 		settings := pureCompactionSettings(base.compaction)

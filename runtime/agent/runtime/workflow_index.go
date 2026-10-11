@@ -18,27 +18,34 @@ import (
 // workflowPlanInput keeps transcript history as references. Loaded planner messages
 // never become workflow state; content holds only the current uncommitted step.
 type workflowPlanInput struct {
-	AgentID                agent.Ident
-	RunContext             run.Context
-	Entries                []index.MessageEntry
-	IndexHead              runstore.Hash
-	Committed              int
-	CallRefs               map[string]runstore.Hash
-	unindexedCalls         []planner.ToolRequest
-	unindexedResults       map[string]*planner.ToolResult
-	content                *workflowContentBatch
-	protocolVersion        int
-	step                   int
-	requestGrowthPublished bool
-	producingCall          *runstore.CallKey
-	transcriptSize         contextmeasure.MessageSize
-	compactionView         index.ViewRef
-	checkpointBytes        int
-	compaction             *ContextCompaction
-	compactionState        compaction.State
-	compactionDecision     compaction.Decision
-	compactionFlags        compaction.Flags
-	compactionSuppressed   bool
+	AgentID                 agent.Ident
+	RunContext              run.Context
+	Entries                 []index.MessageEntry
+	IndexHead               runstore.Hash
+	Committed               int
+	CallRefs                map[string]runstore.Hash
+	unindexedCalls          []planner.ToolRequest
+	unindexedResults        map[string]*planner.ToolResult
+	content                 *workflowContentBatch
+	protocolVersion         int
+	step                    int
+	requestGrowthPublished  bool
+	producingCall           *runstore.CallKey
+	transcriptSize          contextmeasure.MessageSize
+	compactionView          index.ViewRef
+	checkpointBytes         int
+	compaction              *ContextCompaction
+	compactionState         compaction.State
+	compactionDecision      compaction.Decision
+	compactionFlags         compaction.Flags
+	compactionSuppressed    bool
+	recovery                ContextRecovery
+	recallAdvertised        bool
+	recallAvailable         bool
+	recallDisabledPublished bool
+	recallCharges           map[string]recallCharge
+	recallExhausted         map[bool]bool
+	recallEpisode           int
 }
 
 func workflowText(ctx context.Context, text string) (index.TextParameter, error) {
