@@ -101,6 +101,30 @@ the model. Decide returns `*Decision` and runs no tools. Repeat takes
 `func(testing.TB)`. Save/load full request fixtures only under a gitignored
 application path. Re-capture when planner decoration changes tool definitions.
 
+## Eval runner
+
+- Run matrices with `eval.Run` and `eval.NewHarnessFunc(register, setup, base...)`.
+  Factories receive the variant and supplied options, forward options and return
+  fresh harnesses. Use ScriptedModel for per-harness scripts; never share scripts.
+- Put labels and cloned run policy on Variant; put model and context runtime
+  settings in Variant.Options. WithDefaultRunOptions precedes caller options on
+  Run, RunSession and CaptureFirstRequest; RunID remains reserved.
+- Plan validates all scenarios and selector intersections. OR within each kind,
+  AND across kinds; item selectors may be scenario/item. Records keep declaration
+  order while starts use longest timeouts first (zero longest). Zero repeats and
+  concurrency mean one. OnAttempt is serial and includes skipped records last.
+- Verdicts use error, failed, pending, passed precedence. Gating claims remain
+  pending until judged; informational claims do not gate. Groups reports counts.
+  HarnessErr includes factory/setup/panic/reuse/Close errors. NotRun distinguishes
+  canceled, token_limit and live_model_disabled. Cancellation/live gating return
+  partial reports and errors; token stops and quality failures do not.
+- Usage counts completed calls in all returned run records, descendants and
+  abandoned attempts included, once. Direct Decide calls in Assert and unreturned
+  Drive runs are excluded. MaxTokens stops starts at >=; running attempts finish,
+  allowing Concurrency-1 additional attempts beyond the crossing attempt. Runs()
+  exports completed session evidence, retained in memory. Key storage by
+  AttemptKey; isolated harnesses may repeat run/session IDs.
+
 ## Diagnose failures
 
 Inspect Run's harness error before its populated Result. `RunErr` is the agent

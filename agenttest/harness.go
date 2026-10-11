@@ -60,31 +60,33 @@ type AnsweredAwait struct {
 // Harness owns an isolated in-memory runtime and its test lifecycle.
 // Runs may execute concurrently; Close prevents further starts and reports leaks.
 type Harness struct {
-	rt               *runtime.Runtime
-	tb               testing.TB
-	stubs            stubTable
-	scripts          map[string]*Script
-	models           map[string]model.Client
-	capturing        map[string]*captureState
-	timeout          time.Duration
-	eventsUnverified bool
-	responder        Responder
-	provider         trace.TracerProvider
-	mu               sync.Mutex
-	sessionCounter   uint64
-	runCounter       uint64
-	closed           bool
-	runs             map[string]*harnessRun
+	rt                *runtime.Runtime
+	tb                testing.TB
+	stubs             stubTable
+	scripts           map[string]*Script
+	models            map[string]model.Client
+	capturing         map[string]*captureState
+	defaultRunOptions []RunOption
+	timeout           time.Duration
+	eventsUnverified  bool
+	responder         Responder
+	provider          trace.TracerProvider
+	mu                sync.Mutex
+	sessionCounter    uint64
+	runCounter        uint64
+	closed            bool
+	runs              map[string]*harnessRun
 }
 
 type harnessOptions struct {
-	runtime        []runtime.RuntimeOption
-	scripts        map[string]*Script
-	live           []string
-	timeout        time.Duration
-	responder      Responder
-	provider       trace.TracerProvider
-	passthroughAll bool
+	defaultRunOptions []RunOption
+	runtime           []runtime.RuntimeOption
+	scripts           map[string]*Script
+	live              []string
+	timeout           time.Duration
+	responder         Responder
+	provider          trace.TracerProvider
+	passthroughAll    bool
 }
 
 type harnessRun struct {
@@ -118,7 +120,7 @@ func NewHarness(ctx context.Context, register Register, opts ...Option) (*Harnes
 	probe.Hooks = hooks.NewBus()
 	probe.Tracer = configureTracer(&options)
 	h := &Harness{
-		scripts: options.scripts, timeout: options.timeout, responder: options.responder, provider: options.provider,
+		defaultRunOptions: slices.Clone(options.defaultRunOptions), scripts: options.scripts, timeout: options.timeout, responder: options.responder, provider: options.provider,
 		runs: make(map[string]*harnessRun), models: make(map[string]model.Client), capturing: make(map[string]*captureState),
 		stubs: stubTable{
 			entries: make(map[tools.Ident]stubEntry), counts: make(map[tools.Ident]int),
@@ -166,6 +168,16 @@ func New(t testing.TB, register Register, opts ...Option) *Harness {
 func WithRuntimeOptions(opts ...runtime.RuntimeOption) Option {
 	return func(options *harnessOptions) error {
 		options.runtime = append(options.runtime, opts...)
+		return nil
+	}
+}
+
+// WithDefaultRunOptions applies opts to every Run, RunSession and
+// CaptureFirstRequest invocation before caller options. WithRunID remains reserved.
+func WithDefaultRunOptions(opts ...RunOption) Option {
+	owned := slices.Clone(opts)
+	return func(options *harnessOptions) error {
+		options.defaultRunOptions = append(options.defaultRunOptions, owned...)
 		return nil
 	}
 }
@@ -351,13 +363,10 @@ func (h *Harness) runCapture(ctx context.Context, id agent.Ident, sessionID stri
 	if err := h.stubDiagnostics(false); err != nil {
 		return nil, err
 	}
-	// Probe with a sentinel so even WithRunID("") is rejected.
-	probe := runtime.RunInput{RunID: "agenttest-reserved"}
-	for _, option := range opts {
-		option(&probe)
-	}
-	if probe.RunID != "agenttest-reserved" {
-		return nil, errors.New("agenttest: RunID is reserved")
+	var err error
+	opts, err = h.prepareRunOptions(opts)
+	if err != nil {
+		return nil, err
 	}
 	client, err := h.rt.Client(id)
 	if err != nil {
@@ -461,4 +470,17 @@ func (h *Harness) registerModels(options harnessOptions) error {
 		}
 	}
 	return h.installGates()
+}
+
+// prepareRunOptions applies defaults before callers and rejects every RunID override.
+func (h *Harness) prepareRunOptions(opts []RunOption) ([]RunOption, error) {
+	opts = append(slices.Clone(h.defaultRunOptions), opts...)
+	probe := runtime.RunInput{RunID: "agenttest-reserved"}
+	for _, option := range opts {
+		option(&probe)
+	}
+	if probe.RunID != "agenttest-reserved" {
+		return nil, errors.New("agenttest: RunID is reserved")
+	}
+	return opts, nil
 }

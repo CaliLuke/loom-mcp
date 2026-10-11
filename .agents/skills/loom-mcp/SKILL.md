@@ -589,6 +589,10 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - Use top-level `eval` for immutable Go/JSONL datasets, scenario validation and
   single-attempt Execute over agenttest sessions. Claim declares criteria only;
   eval does not import eval/judge. See references/runtime-contracts.md.
+- Plan/Run adds validated variant matrices, fresh harnesses, bounded concurrency,
+  verdicts, token limits and partial reports. WithDefaultRunOptions forwards run
+  defaults through every harness run path. See references/agent-testing.md for
+  runner usage and references/runtime-contracts.md for lifecycle and accounting.
 - Keep generated assistant imports in the fixture module. The root module's
   eval tests cover pure contracts and custom callbacks without fixture imports.
 - Execute supports concurrent use of one harness. Drive, Assert and expectation

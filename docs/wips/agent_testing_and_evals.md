@@ -331,7 +331,7 @@ The command is the application's own `main`:
 ```go
 func main() {
 	evalcli.Main(evalcli.Config{
-		Harness:   func(ctx context.Context) (*agenttest.Harness, error) { ... },
+		Harness:   eval.NewHarnessFunc(register, setup),
 		Scenarios: []eval.Scenario{refundsScenario, ordersScenario},
 	})
 }
@@ -760,23 +760,37 @@ func Execute(ctx context.Context, h *agenttest.Harness, s Scenario, item Item) (
 
 ### B2. Runner
 
-- Runs scenarios × items × repeats with bounded concurrency. Each attempt has a
-  unique session.
-- **Variants.** An experiment may declare named variants. A variant is a set of
-  run labels (which select prompt-registry overrides) and `PolicyOverrides`
-  (including the context settings of `context_compaction.md` 4.17). Attempts
-  run per variant, so the matrix is variants × scenarios × items × repeats.
-  Without variants, an experiment has one implicit variant.
-- Per-attempt timeout covers the run and the judging.
-- Selection by scenario, tag, or item. Empty, duplicate, and unknown selectors
-  are rejected.
-- Every selected attempt gets exactly one finished record. Cancellation stops
-  new attempts, cancels running ones, and saves the partial experiment.
-- Longest timeouts start first; records keep declaration order.
-- Infrastructure errors are recorded separately from quality failures.
-- A token or cost limit stops new attempts when exceeded (`--max-tokens`).
-- Progress is printed as attempts finish; the summary lists failing attempts
-  first.
+- Runs variants × scenarios × items × repeats with bounded concurrency and a
+  fresh harness/session per attempt. Harness-local run/session IDs can repeat;
+  `AttemptKey{Variant, Scenario, Item, Repeat}` is the identity.
+- **Variants.** Each carries labels, cloned per-run `PolicyOverrides` and opaque
+  agenttest options. Per-agent context compaction/recovery are runtime options in
+  `Variant.Options`, not policy fields. No variants means `default`.
+- `HarnessFunc(ctx, variant, opts...)` forwards supplied options and returns a new
+  harness. `NewHarnessFunc(register, setup, base...)` provides the standard builder.
+  Scripts and stubs are isolated per harness; use ScriptedModel, not shared scripts.
+- Scenario timeout covers Drive and Assert; judging is a later layer. Zero
+  repeats/concurrency means one. All repeats run without early quality exit.
+- Select variants, scenarios, tags and bare/qualified scenario/item IDs. OR within
+  each kind, AND across kinds; empty, duplicate, unknown and ineffective selectors
+  and an empty plan are joined errors. Validate every scenario before selection.
+- Exactly one record per planned key, including `not_run` records for unstarted
+  work. Cancellation preserves completed evidence and returns the partial report
+  with the context cause. Harness Close always runs for each newly built harness.
+- Longest timeouts start first (zero longest); records keep declaration order.
+  OnAttempt is serial, once per record, with skipped records delivered last.
+- Infrastructure errors are separate from quality failures. Verdict precedence is
+  error, failed, pending, passed; gating claims stay pending until T17 judges them.
+  Groups reports counts without gating. Live-disabled factories stop new work and
+  return an error; the runner never enables live models.
+- Tokens count all completed calls in returned records, including descendants and
+  abandoned attempts. Direct Decide calls in Assert and unreturned Drive runs are
+  excluded. MaxTokens stops starts at >= the limit; running attempts finish, so up
+  to Concurrency-1 additional attempts may finish beyond the crossing attempt.
+  No cost limit. Token stops return no error. Concurrent skipped keys may differ.
+- Records expose version-1 runrecord exports, session IDs and optional trace IDs
+  for T13. Exports remain in memory. Progress printing and failing-first summaries
+  belong to T15; T12 supplies OnAttempt and Groups.
 
 ### B3. Experiment record and local store
 

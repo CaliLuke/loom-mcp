@@ -112,6 +112,33 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   concurrency-safe. Runner selection, repeats, variants, storage and judging
   remain separate from single-attempt Execute.
 
+## Eval Runner
+
+- eval.Plan validates all config and selector intersections, then enumerates
+  variant/scenario/item/repeat keys. eval.Run creates one fresh harness per attempt
+  and closes it once. HarnessFunc forwards options; NewHarnessFunc applies base
+  options before variant options and closes failed or panicking setup.
+- Variants carry labels, per-run cloned Policy and agenttest Options for models
+  and context runtime settings. WithDefaultRunOptions runs before caller options
+  on every harness run path; reserved RunID validation includes defaults.
+- Selection is OR within each kind and AND across kinds, with bare or qualified
+  item IDs. All scenarios are validated. Zero repeats/concurrency means one.
+  Longest timeouts start first (zero longest); records keep declaration order.
+- Verdict precedence is error, failed, pending, passed. Unjudged gating claims
+  remain pending. HarnessErr records factory/setup/panic/reuse/Close failures.
+  Groups counts verdicts without gating. OnAttempt is serial, once per record,
+  including not-run records last in declaration order.
+- MaxTokens uses >= and counts all completed calls in returned records, including
+  descendants and abandoned attempts; positive TotalTokens wins over the sum of
+  token components. Decide calls inside Assert and unreturned Drive runs are not
+  counted. Running attempts finish after a token stop, allowing Concurrency-1
+  additional attempts beyond the crossing attempt; skipped keys may vary.
+- Cancellation and disabled live factories return partial reports with an error;
+  token stops and recorded failures do not. Run never enables live models. Every
+  planned key retains a record, with nil Outcome iff NotRun is set. Runs exports
+  each completed session run and descendants with session/trace IDs; exports stay
+  in memory. AttemptKey identifies attempts because run/session IDs may repeat.
+
 ## Planner Streaming
 
 - `PlannerContext.ModelClient(id)` returns a runtime-decorated client.

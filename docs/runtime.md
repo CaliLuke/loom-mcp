@@ -1586,6 +1586,80 @@ Execute calls may share a harness; callbacks and predicates must be safe for
 concurrent use. Selection, repeats, variants, storage and judging are separate
 layers.
 
+### Eval runner
+
+`eval.Plan(config)` validates every scenario, variant and selector before listing
+attempt keys. `eval.Run(ctx, config)` executes that matrix with a fresh harness
+per attempt. Supply the application's registration and scenarios:
+
+<!-- snippet: eval-runner -->
+```go
+report, err := eval.Run(ctx, eval.Config{
+	Harness:   eval.NewHarnessFunc(register, nil),
+	Scenarios: scenarios,
+	Variants: []eval.Variant{
+		{ID: "baseline", Labels: map[string]string{"prompt": "baseline"}},
+		{ID: "candidate", Policy: &api.PolicyOverrides{PerTurnMaxToolCalls: 1}},
+	},
+	Repeats:     5,
+	Concurrency: 2,
+	MaxTokens:   10000,
+})
+```
+
+An omitted variant list creates `default`; zero `Repeats` or `Concurrency` means
+one. Variant IDs are unique dataset-style IDs. Labels scope prompt overrides,
+and `Policy` is cloned per run. Put model overrides and per-agent context settings
+in `Variant.Options`, using `ScriptedModel` or
+`WithRuntimeOptions(runtime.WithContextCompaction(...))`. `NewHarnessFunc` applies
+base options before variant options, runs optional setup and closes failed setups.
+A custom factory receives `(ctx, variant, opts...)`, must forward `opts` to
+`NewHarness`, and must return a new harness each time. Use `ScriptedModel` to build
+fresh scripts; sharing a `ScriptedModelFrom` script breaks attempt isolation.
+`agenttest.WithDefaultRunOptions` applies labels/policy before caller run options
+on Run, RunSession and CaptureFirstRequest; `WithRunID` stays reserved.
+
+`Config.Select` supports variants, scenarios, tags and bare or `scenario/item`
+IDs. Selectors use OR within a kind and AND across kinds. Validation joins empty,
+duplicate, unknown, ineffective selectors and an empty resulting plan into one
+error. All scenarios are validated, including unselected ones.
+
+Keys are `variant:scenario:item:repeat` with repeats starting at one; records and
+zero-based `Index` values keep variant, scenario, dataset item, repeat declaration
+order. Starts use descending scenario timeout, with zero longest and stable ties.
+Scenario timeout covers Drive and Assert, not factory setup or future judging.
+Factories, Drive, Assert and predicates must cooperate with cancellation and be
+safe for concurrent calls. Every newly built harness is closed once; reuse is an
+error. Run/session IDs can repeat across attempts, so use `AttemptKey` as identity.
+
+Outcome verdict precedence is `error`, `failed`, `pending`, `passed`: execution
+errors win over failed checks or thresholded scores, which win over unjudged
+gating claims. Informational claims do not gate. Factory/setup errors, panics
+(with stack), reused harnesses and Close failures go in `HarnessErr` and give an
+`error` verdict. Repeats all run; `Report.Groups()` counts each verdict without
+gating an experiment. `OnAttempt` is serial and fires once per record in completion
+order, then once for each skipped record in declaration order. Callback order
+under concurrency is nondeterministic.
+
+`MaxTokens` zero is unlimited. Usage sums every completed recorded model call,
+including abandoned attempts and descendants, once per returned session run.
+Tokens use positive TotalTokens, otherwise input + output + both cache counts.
+Direct Decide calls in Assert and runs omitted by custom Drive are not counted.
+At `Tokens >= MaxTokens`, new attempts stop; running attempts finish normally,
+so up to `Concurrency-1` additional attempts may finish beyond the crossing one.
+Skipped records have nil Outcome and `NotRun: token_limit`; this stop is not an
+error. Concurrent completion order can change which keys are skipped.
+
+Cancellation keeps finished evidence, cancels running work and marks unstarted
+records `canceled`; Run returns the partial report with the context cause. The
+runner never enables live clients. A factory error matching `ErrLiveModelDisabled`
+stops new attempts, marks them `live_model_disabled` and returns the partial report
+with that error. Other recorded failures leave Run's error nil. Invalid config
+returns no report. `AttemptRecord.Runs()` exposes each completed run's version-1
+`runrecord.Export`, session ID and optional trace ID, preserving a completed prefix
+on errors. Reports retain all exports in memory; storage, CLI output and judging
+belong to later layers.
+
 ### Run-log result references and upgrade
 
 Every `ToolResultReceivedEvent` carries `Refs` for the stored eligible result,
