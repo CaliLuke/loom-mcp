@@ -844,7 +844,10 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   and marks the checkpoint. ValidateView applies GrammarBedrock/Anthropic,
   first-user/post-checkpoint-assistant constraints and bidirectional tool
   handshakes. K12 applies both grammars to checkpoint views at load;
-  uncompacted views keep the existing resume-only ValidateBedrock.
+  uncompacted views keep the existing resume-only ValidateBedrock. Child
+  admission loads compacted parent views with ValidateChildAdmissionView,
+  which permits only the trailing unanswered calls of the in-flight assistant
+  turn; planner views keep strict validation.
 
 ## Engine Conformance
 

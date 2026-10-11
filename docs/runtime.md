@@ -4860,6 +4860,9 @@ checkpoint with `CheckpointMetaKey`. `ValidateView` ignores system messages,
 requires a first user and an assistant after the checkpoint, validates
 bidirectional complete tool handshakes, and applies `GrammarBedrock` role
 alternation/thinking or `GrammarAnthropic`.
+Compacted parent views loaded for child admission permit trailing unanswered
+calls from the in-flight assistant turn; every other grammar check and planner
+request validation remains unchanged.
 
 K12 implements `FromRecord`, user content and citation metadata loading,
 repeatable newest-first receipt traversal, selected pins, view assembly, grammar

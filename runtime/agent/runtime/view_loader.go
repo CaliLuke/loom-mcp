@@ -16,6 +16,8 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 )
 
+type viewLoadPurpose uint8
+
 type runViewCache struct {
 	mu                sync.Mutex
 	recency           *list.Element // Protected by Runtime.viewMu, independent of active loads.
@@ -47,9 +49,20 @@ type loadedView struct {
 	Typed    []planner.TypedInputOutput
 }
 
+const (
+	plannerView viewLoadPurpose = iota
+	childAdmissionView
+)
+
 // loadView commits pending entries before exposing the head. The cache extends
 // only an adopted lineage; retries reuse identical segment bytes and hashes.
 func (r *Runtime) loadView(ctx context.Context, root, runID string, view index.ViewRef) (*loadedView, error) {
+	return r.loadViewForPurpose(ctx, root, runID, view, plannerView)
+}
+
+// loadViewForPurpose shares canonical loading while selecting the grammar for
+// planner requests or child admission during an unfinished assistant turn.
+func (r *Runtime) loadViewForPurpose(ctx context.Context, root, runID string, view index.ViewRef, purpose viewLoadPurpose) (*loadedView, error) {
 	if root == "" || r.RunStore == nil {
 		return nil, fmt.Errorf("view loader requires root scope and run store")
 	}
@@ -69,7 +82,7 @@ func (r *Runtime) loadView(ctx context.Context, root, runID string, view index.V
 		cache.reset()
 		return nil, err
 	}
-	messages, update, err := cache.renderView(ctx, r.RunStore, root, source, view)
+	messages, update, err := cache.renderView(ctx, r.RunStore, root, source, view, purpose)
 	if err != nil {
 		return nil, err
 	}

@@ -25,6 +25,35 @@ const (
 
 // ValidateView validates the loaded conversation, ignoring system messages.
 func ValidateView(messages []*model.Message, grammar Grammar) error {
+	return validateView(messages, grammar, false)
+}
+
+// ValidateChildAdmissionView validates a parent conversation during child
+// dispatch. Only trailing unanswered assistant calls are permitted; all earlier
+// handshakes and provider role and thinking requirements remain mandatory.
+func ValidateChildAdmissionView(messages []*model.Message, grammar Grammar) error {
+	return validateView(messages, grammar, true)
+}
+
+// AssembleView strips reasoning before the tail and retains the tail intact.
+func AssembleView(system []*model.Message, checkpoint *model.Message, tail []*model.Message) []*model.Message {
+	messages := make([]*model.Message, 0, len(system)+len(tail)+1)
+	for _, message := range system {
+		messages = append(messages, withoutReasoning(message))
+	}
+	if checkpoint != nil {
+		message := withoutReasoning(checkpoint)
+		if message.Meta == nil {
+			message.Meta = map[string]any{}
+		}
+		message.Meta[CheckpointMetaKey] = true
+		messages = append(messages, message)
+	}
+	return append(messages, tail...)
+}
+
+// validateView keeps every handshake check except the admission-only EOF rule.
+func validateView(messages []*model.Message, grammar Grammar, allowTrailingCalls bool) error {
 	alternating, thinking := grammar.viewRules()
 	var previous model.ConversationRole
 	pending := map[string]bool{}
@@ -61,27 +90,10 @@ func ValidateView(messages []*model.Message, grammar Grammar) error {
 		checkpointNext = message.Meta[CheckpointMetaKey] == true
 		previous = message.Role
 	}
-	if len(pending) > 0 {
+	if len(pending) > 0 && !allowTrailingCalls {
 		return fmt.Errorf("view ends with unanswered tool calls")
 	}
 	return nil
-}
-
-// AssembleView strips reasoning before the tail and retains the tail intact.
-func AssembleView(system []*model.Message, checkpoint *model.Message, tail []*model.Message) []*model.Message {
-	messages := make([]*model.Message, 0, len(system)+len(tail)+1)
-	for _, message := range system {
-		messages = append(messages, withoutReasoning(message))
-	}
-	if checkpoint != nil {
-		message := withoutReasoning(checkpoint)
-		if message.Meta == nil {
-			message.Meta = map[string]any{}
-		}
-		message.Meta[CheckpointMetaKey] = true
-		messages = append(messages, message)
-	}
-	return append(messages, tail...)
 }
 
 // withoutReasoning owns the parts and metadata containers before filtering them.

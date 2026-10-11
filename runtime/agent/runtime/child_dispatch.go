@@ -111,7 +111,7 @@ func (r *Runtime) validateChildDispatch(wf engine.WorkflowContext, id agent.Iden
 }
 
 func (l *parentViewLoader) LoadMessages(ctx context.Context) ([]*model.Message, error) {
-	view, err := l.runtime.loadView(ctx, l.parent.RootRunID, l.parent.RunID, l.view)
+	view, err := l.runtime.loadViewForPurpose(ctx, l.parent.RootRunID, l.parent.RunID, l.view, childAdmissionView)
 	if err != nil {
 		l.mu.Lock()
 		l.loadErr = err

@@ -31,7 +31,7 @@ func clearedText(ctx context.Context, source index.Source, entries []index.Messa
 
 // renderView isolates compacted projections from the full append-only index.
 // Cache misses are deterministic reconstructions; returned messages are owned.
-func (c *runViewCache) renderView(ctx context.Context, store runstore.Store, scope string, source index.Source, view index.ViewRef) ([]*model.Message, *api.ViewUpdate, error) {
+func (c *runViewCache) renderView(ctx context.Context, store runstore.Store, scope string, source index.Source, view index.ViewRef, purpose viewLoadPurpose) ([]*model.Message, *api.ViewUpdate, error) {
 	compacted := view.TailFrom > 1 || view.ClearedThrough > 0 || view.Checkpoint != nil
 	if !compacted {
 		if err := c.renderer.Append(ctx, c.entries[c.rendered:], source); err != nil {
@@ -65,7 +65,7 @@ func (c *runViewCache) renderView(ctx context.Context, store runstore.Store, sco
 		return nil, nil, err
 	}
 
-	messages, err := c.assembleView(from)
+	messages, err := c.assembleView(from, purpose)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -74,18 +74,23 @@ func (c *runViewCache) renderView(ctx context.Context, store runstore.Store, sco
 }
 
 // assembleView validates checkpoint projections against both provider grammars.
+// Child admission permits only the trailing unanswered assistant tool turn.
 // Clear-only and full projections retain the existing resume-time validator.
-func (c *runViewCache) assembleView(from index.MessageID) ([]*model.Message, error) {
+func (c *runViewCache) assembleView(from index.MessageID, purpose viewLoadPurpose) ([]*model.Message, error) {
 	var message *model.Message
 	if from > 1 {
 		message = c.checkpointMessage
 	}
 	messages := transcript.AssembleView(c.systemMessages, message, c.tailMessages)
 	if message != nil {
-		if err := transcript.ValidateView(messages, transcript.GrammarAnthropic{}); err != nil {
+		validate := transcript.ValidateView
+		if purpose == childAdmissionView {
+			validate = transcript.ValidateChildAdmissionView
+		}
+		if err := validate(messages, transcript.GrammarAnthropic{}); err != nil {
 			return nil, fmt.Errorf("compacted Anthropic grammar: %w", err)
 		}
-		if err := transcript.ValidateView(messages, transcript.GrammarBedrock{}); err != nil {
+		if err := validate(messages, transcript.GrammarBedrock{}); err != nil {
 			return nil, fmt.Errorf("compacted Bedrock grammar: %w", err)
 		}
 	}
