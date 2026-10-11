@@ -66,7 +66,7 @@ func TestBuildRealRuntimeClarificationPlacement(t *testing.T) {
 		"run_phase_changed:0", "run_phase_changed:0",
 		"model:1", "tool:1", "planner_note:1", "thinking_block:1", "run_phase_changed:1", "await_clarification:1",
 		"model:2", "answer:2", "planner_note:2", "thinking_block:2",
-		"model:3", "planner_note:3", "thinking_block:3", "run_completed:3",
+		"run_completed:2",
 	}, describeSteps(got.Steps))
 	for _, step := range got.Steps {
 		if step.Event == nil {

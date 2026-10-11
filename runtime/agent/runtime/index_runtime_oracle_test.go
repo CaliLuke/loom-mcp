@@ -115,13 +115,9 @@ func TestRuntimeIndexOracleTurnConfirmationAndAwait(t *testing.T) {
 		assertIndexMessages(t, cloneMessages(expected), in.Messages)
 		switch resumed {
 		case 1:
-			// The existing mixed confirmation path invokes resume again before
-			// consuming its result; preserve that behavior in this oracle.
-			return oracleFinal(), nil
-		case 2:
 			expected = append(expected, qMessage, &model.Message{Role: model.ConversationRoleUser, Parts: []model.Part{model.ToolResultPart{ToolUseID: "questions-1", Content: map[string]any{"answer": "yes"}}}})
 			return &planner.PlanResult{Await: planner.NewAwait(planner.AwaitQuestionsItem(&planner.AwaitQuestions{ID: "q", ToolName: "test.questions", ToolCallID: "questions-1", Payload: rawjson.Message(`{}`)}))}, nil
-		case 3:
+		case 2:
 			expected = append(expected, eMessage, &model.Message{Role: model.ConversationRoleUser, Parts: []model.Part{model.ToolResultPart{ToolUseID: "external-1", Content: map[string]any{"answer": "yes"}}, model.ToolResultPart{ToolUseID: "external-2", Content: map[string]any{"answer": "yes"}}}})
 			return &planner.PlanResult{Await: planner.NewAwait(planner.AwaitExternalToolsItem(&planner.AwaitExternalTools{ID: "e", Items: []planner.AwaitToolItem{
 				{Name: "test.external", ToolCallID: "external-1", Payload: rawjson.Message(`{"a":1}`)},
@@ -147,7 +143,7 @@ func TestRuntimeIndexOracleTurnConfirmationAndAwait(t *testing.T) {
 		}
 		return nil
 	})
-	assert.Equal(t, 4, resumed)
+	assert.Equal(t, 3, resumed)
 }
 
 func TestRuntimeIndexOracleClarificationAndTyped(t *testing.T) {

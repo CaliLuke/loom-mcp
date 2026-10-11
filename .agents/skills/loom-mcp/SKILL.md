@@ -69,7 +69,7 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   recorded-history replay test. Drain running workflows before deploying the
   new version; mismatched and unstamped inputs fail before workflow effects.
 
-- Current workflow protocol is 9. Every agent observes adopted call facts,
+- Current workflow protocol is 10. Every agent observes adopted call facts,
   sends sorted Models and runs the advisory guard, bounded overflow recovery and
   recall advertising. Threshold compaction stays opt-in. The existing
   run.ContextRecovery adds GuardMargin (zero=10%) beside DisableRecall; RunInput
@@ -81,8 +81,8 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   the observed provider overflow with its typed byte shortfall, emits
   context_budget_too_small and spends no retry. Views carry monotone
   PreviewThrough/ForceClearThrough and shared preview limits, including forced
-  Keep placeholders. The real v9 history covers recovery, lookup and finalization;
-  v5-v8 reject before effects. Structural templates stay version 5.
+  Keep placeholders. The real v10 history covers recovery, a confirmation-gated tool turn with
+  one resume, lookup and finalization; v5-v9 reject before effects. Structural templates stay version 5.
 
 - Workflow protocol 6 uses immutable `runtime/agent/transcript/index` entries
   and linked segments. Workflows retain entries and IndexHead; planner activity
@@ -391,7 +391,10 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   `runtime.WithToolConfirmation(...)` for runtime overrides. The runtime emits
   `AwaitConfirmation`, resumes through `ProvideConfirmation`, records
   `ToolAuthorization`, executes only approved calls, and synthesizes
-  schema-compliant denied results.
+  schema-compliant denied results. After the entire await queue is satisfied,
+  the workflow schedules one logical planner resume and acts on its result.
+  This includes planner awaits mixed with tool calls and tool pauses. Resume
+  activities remain retryable.
 - Service-level `StaticPrompt(...)` declarations are order-independent from
   `MCP(...)`. The service must still declare MCP.
 - MCP is a two-way bridge:

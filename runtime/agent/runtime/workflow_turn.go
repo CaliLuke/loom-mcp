@@ -107,17 +107,7 @@ func (r *Runtime) executeAndAdvanceToolTurn(
 	if err := applyExecutedToolTurn(wfCtx.Context(), r, base, st, turn.toExecute, vals); err != nil {
 		return nil, err
 	}
-	if out, err := r.finishOrContinueToolTurn(wfCtx, reg, input, base, st, resumeOpts, toolOpts, deadlines, turnID, parentTracker, ctrl, turn, vals, toolPauses, timedOut); err != nil || out != nil {
-		return out, err
-	}
-	if len(turn.confirmations) == 0 && result.Await == nil && len(toolPauses) == 0 &&
-		r.allSuccessfulBookkeepingResults(vals) {
-		if result.FinalResponse != nil || result.FinalToolResult != nil {
-			return r.finishWithoutToolCalls(wfCtx.Context(), input, base, st, turnID)
-		}
-		return nil, errors.New("successful bookkeeping-only tool turn must also complete or await")
-	}
-	return r.resumeAfterToolTurn(wfCtx, reg, input, base, st, resumeOpts, deadlines, turnID)
+	return r.finishOrContinueToolTurn(wfCtx, reg, input, base, st, resumeOpts, toolOpts, deadlines, turnID, parentTracker, ctrl, turn, vals, toolPauses, timedOut)
 }
 
 func (r *Runtime) finishOrContinueToolTurn(
@@ -581,7 +571,29 @@ func (r *Runtime) handleToolTurnPostExecution(
 	if out, err := r.applyFailureAndProtectionPolicy(wfCtx, reg, input, base, st, turnID, ctrl, deadlines, lastToolResults); err != nil || out != nil {
 		return out, err
 	}
-	return nil, nil
+	return r.advanceToolTurnWithoutAwait(wfCtx, reg, input, base, st, resumeOpts, deadlines, turnID, lastToolResults)
+}
+
+// advanceToolTurnWithoutAwait completes bookkeeping or resumes a turn after its
+// failure policy. Await turns advance through handleAwaitQueue instead.
+func (r *Runtime) advanceToolTurnWithoutAwait(
+	wfCtx engine.WorkflowContext,
+	reg AgentRegistration,
+	input *RunInput,
+	base *workflowPlanInput,
+	st *runLoopState,
+	resumeOpts engine.ActivityOptions,
+	deadlines *runDeadlines,
+	turnID string,
+	lastToolResults []*planner.ToolResult,
+) (*RunOutput, error) {
+	if st.Result.Await == nil && r.allSuccessfulBookkeepingResults(lastToolResults) {
+		if st.Result.FinalResponse != nil || st.Result.FinalToolResult != nil {
+			return r.finishWithoutToolCalls(wfCtx.Context(), input, base, st, turnID)
+		}
+		return nil, errors.New("successful bookkeeping-only tool turn must also complete or await")
+	}
+	return r.resumeAfterToolTurn(wfCtx, reg, input, base, st, resumeOpts, deadlines, turnID)
 }
 
 func (r *Runtime) applyFailureAndProtectionPolicy(

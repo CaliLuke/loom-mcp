@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"example.com/agentfeatures/gen/features/agents/coordinator"
 	"example.com/agentfeatures/gen/features/agents/specialist/exports/delegated"
@@ -41,7 +42,7 @@ import (
 type historyReplayPlanner struct{}
 
 const (
-	workflowHistoryFile        = "testdata/workflow_protocol_v9.json"
+	workflowHistoryFile        = "testdata/workflow_protocol_v10.json"
 	workflowHistoryIdentity    = "loom-mcp-history-recorder"
 	workflowHistoryStickyQueue = "loom-mcp-history-recorder-sticky"
 )
@@ -58,6 +59,7 @@ func TestGeneratedFeatureWorkflowReplay(t *testing.T) {
 		{name: "protocol 6 rejected before effects", previous: 6},
 		{name: "protocol 7 rejected before effects", previous: 7},
 		{name: "protocol 8 rejected before effects", previous: 8},
+		{name: "protocol 9 rejected before effects", previous: 9},
 		{name: "future", rewrite: true},
 		{name: "missing", rewrite: true, missing: true},
 	} {
@@ -104,7 +106,7 @@ func TestGeneratedFeatureWorkflowReplay(t *testing.T) {
 			t.Cleanup(func() {
 				require.NoError(t, eng.Close())
 			})
-			fx := newFeatureRuntime(t, agentsruntime.WithEngine(eng))
+			fx := newFeatureRuntime(t, agentsruntime.WithEngine(eng), historyConfirmation())
 			registerHistoryReplayAgent(t, fx)
 			err = eng.ReplayWorkflowHistory(silentTemporalLogger{}, history)
 			if test.rewrite || test.previous != 0 {
@@ -122,11 +124,17 @@ func recordWorkflowHistory(t *testing.T, temporalClient client.Client) {
 	ctx, cancel := temporalScenarioContext(t)
 	defer cancel()
 	eng := newTemporalAcceptanceEngine(t, temporalClient)
-	fx := newFeatureRuntime(t, agentsruntime.WithEngine(eng), agentsruntime.WithContextCompaction(coordinator.AgentID, agentsruntime.ContextCompaction{}), agentsruntime.WithContextLimits(map[string]model.ContextLimits{"history": {ContextWindow: 6000}}))
+	fx := newFeatureRuntime(t, agentsruntime.WithEngine(eng), historyConfirmation(), agentsruntime.WithContextCompaction(coordinator.AgentID, agentsruntime.ContextCompaction{}), agentsruntime.WithContextLimits(map[string]model.ContextLimits{"history": {ContextWindow: 6000}}))
 	registerHistoryReplayAgent(t, fx)
 	_, err := fx.rt.CreateSession(ctx, "sess-protocol-history")
 	require.NoError(t, err)
-	out, err := coordinator.NewClient(fx.rt).Run(ctx, "sess-protocol-history", []*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "record this request"}}}, {Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "earlier answer"}}}, {Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: strings.Repeat("earlier history ", 2000)}}}, {Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "recent answer"}}}, {Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "continue"}}}}, agentsruntime.WithRunID("run-protocol-history"))
+	handle, err := coordinator.NewClient(fx.rt).Start(ctx, "sess-protocol-history", []*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "record this request"}}}, {Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "earlier answer"}}}, {Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: strings.Repeat("earlier history ", 2000)}}}, {Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "recent answer"}}}, {Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "continue"}}}}, agentsruntime.WithRunID("run-protocol-history"))
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		return fx.recorder.count(hooks.AwaitConfirmation) == 1
+	}, 5*time.Second, 10*time.Millisecond)
+	require.NoError(t, fx.rt.ProvideConfirmation(ctx, &api.ConfirmationDecision{RunID: "run-protocol-history", Approved: true, RequestedBy: "history-recorder"}))
+	out, err := handle.Wait(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, "history replay complete", messageText(out.Final))
 	history := &historypb.History{}
@@ -186,6 +194,19 @@ func assertWorkflowHistoryAnonymized(t *testing.T, history *historypb.History) {
 	require.NoError(t, err)
 	assert.Positive(t, identities)
 	assert.Positive(t, stickyQueues)
+}
+
+func historyConfirmation() agentsruntime.RuntimeOption {
+	return agentsruntime.WithToolConfirmation(&agentsruntime.ToolConfirmationConfig{Confirm: map[tools.Ident]*agentsruntime.ToolConfirmation{
+		workflow.Draft: {
+			Prompt: func(context.Context, *planner.ToolRequest) (string, error) {
+				return "Draft for history replay?", nil
+			},
+			DeniedResult: func(context.Context, *planner.ToolRequest) (any, error) {
+				return &workflow.DraftResult{OK: false}, nil
+			},
+		},
+	}})
 }
 
 func registerHistoryReplayAgent(t *testing.T, fx *featureRuntime) {
@@ -255,6 +276,7 @@ func assertHistoryToolContent(t *testing.T, history *historypb.History, protocol
 	childHeadAdopted := false
 	plannerSteps := 0
 	resumeSchedules := 0
+	confirmationSignals := 0
 	wantSteps, wantTools, wantBatches := 2, 2, 1
 	if protocol >= 8 {
 		wantSteps, wantTools, wantBatches = 3, 3, 2
@@ -262,6 +284,9 @@ func assertHistoryToolContent(t *testing.T, history *historypb.History, protocol
 	var finalTranscript runstore.Hash
 	var sealInput *api.SealRecordInput
 	for _, event := range history.Events {
+		if signal := event.GetWorkflowExecutionSignaledEventAttributes(); signal != nil && signal.SignalName == api.SignalProvideConfirmation {
+			confirmationSignals++
+		}
 		if scheduled := event.GetActivityTaskScheduledEventAttributes(); scheduled != nil {
 			name := scheduled.ActivityType.Name
 			schedules[event.EventId] = name
@@ -461,6 +486,10 @@ func assertHistoryToolContent(t *testing.T, history *historypb.History, protocol
 	assert.Equal(t, 1, toolCompletions)
 	assert.Equal(t, 1, childValidations)
 	assert.True(t, childHeadAdopted, "a subsequent resume must adopt the child-validation head")
+	if protocol >= 10 {
+		assert.Equal(t, 1, confirmationSignals)
+		assert.Equal(t, 2, counts["features.coordinator.resume"], "one resume after confirmation and one after its chosen tools")
+	}
 	if protocol >= 8 {
 		assert.Equal(t, 1, counts[agentsruntime.RecallActivityName(coordinator.AgentID)])
 	}

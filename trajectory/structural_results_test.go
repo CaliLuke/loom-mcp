@@ -166,10 +166,6 @@ func TestBuildRealRuntimeStructuralResults(t *testing.T) {
 				agenttest.Respond(agenttest.RawToolCall(test.callName, rawjson.Message(`{}`)), agenttest.CallID("call")),
 				agenttest.Respond(agenttest.Text("done")),
 			}
-			// The confirmation path invokes the resume planner twice.
-			if test.name == "confirmation denial" {
-				turns = append(turns, agenttest.Respond(agenttest.Text("done")))
-			}
 			script, err := agenttest.NewScript(turns...)
 			require.NoError(t, err)
 			bus := hooks.NewBus()
@@ -283,7 +279,7 @@ func TestBuildRealRuntimeStructuralResults(t *testing.T) {
 			got, err := trajectory.Build(rec, "run", trajectory.Options{})
 			require.NoError(t, err)
 			steps := recordSteps(got)
-			require.Len(t, steps, len(turns)+1)
+			require.Len(t, steps, 3)
 			tool := steps[1].Tool
 			require.NotNil(t, tool)
 			assert.Equal(t, test.resultName, tool.Name)

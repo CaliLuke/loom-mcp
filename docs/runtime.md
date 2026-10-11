@@ -183,7 +183,7 @@ Typed consumers can call
 eligible bytes and decode them with the generated result codec. Empty or missing
 hashes fail. Tool activities return references; terminal completion decoding runs in the finish activity.
 
-### Transcript index and planner views (protocol 9)
+### Transcript index and planner views (protocol 10)
 
 The workflow keeps immutable `index.MessageEntry` values and a committed
 `IndexHead`, rather than accumulated messages, tool outputs, typed answers, or a
@@ -234,8 +234,8 @@ Anthropic and Bedrock view grammars; views without checkpoints retain the existi
 resume-time Bedrock validation. Successful activity outputs may return `ViewUpdate`;
 output-validation recovery outputs never adopt it. Protocol 7 introduced these view updates, recorded
 request facts and model rates, entry size metadata and stamped run settings.
-The current protocol is 9 (overflow recovery). Drain older workflows
-before upgrading; v5–v8 fixtures retain mismatch
+The current protocol is 10 (single resume after awaits). Drain older workflows
+before upgrading; v5–v9 fixtures retain mismatch
 rejection before effects. Structural templates remain version 5.
 
 ### Opt-in context compaction
@@ -2600,6 +2600,10 @@ At execution time, the workflow:
 - Executes the tool only when approved.
 - When denied, synthesizes a **schema-compliant** tool result (so the transcript remains valid and
   the planner can react to the denial deterministically).
+- Schedules one logical planner resume after the entire await queue is satisfied.
+  The workflow acts on that result, including its tools or final answer. This also
+  applies to planner awaits in the same turn as tool calls and to tool pauses.
+  Resume activities remain retryable.
 
 #### Confirmation protocol
 
@@ -4162,12 +4166,12 @@ external `Client`, also supply `ClientOptions` with that client's converter
 external client whose converter configuration was not supplied.
 
 The generated fixture keeps a completed history under
-`integration_tests/fixtures/agent_features/testdata/workflow_protocol_v6.json`.
-The scrubbed recording includes a tool call, rejected child-dispatch validation,
-seed/result content batches, planner-step commits and terminal finish activity.
-The unchanged protocol 5 fixture verifies rejection before workflow effects;
-protocol versions must match, so workers running protocol 6 cannot replay it
-as a successful run. Run
+`integration_tests/fixtures/agent_features/testdata/workflow_protocol_v10.json`.
+The scrubbed recording includes overflow recovery, a confirmation-gated tool turn,
+one resume that selects child validation and context lookup, seed/result content
+batches, planner-step commits and terminal finish activity. The unchanged protocol
+5–9 fixtures verify rejection before workflow effects; protocol versions must
+match, so workers running protocol 10 cannot replay them as successful runs. Run
 `go test -C integration_tests/fixtures/agent_features ./... -run '^TestGeneratedFeatureWorkflowReplay$'`
 for offline replay. To re-record it against the pinned Temporal development
 server, run
@@ -5230,7 +5234,8 @@ Each invocation records one keyed context_recalled event with kind, outcome
 and step. Exhaustion emits recall_budget_exhausted once per allowance episode,
 reset by refill. RunRecord rebuilds and validates recorded charges and settings.
 Workflow protocol 9 adds overflow recovery to these lookup contracts. The recorded
-v9 fixture exercises bounded recovery and lookup; v5–v8 fail before effects.
+v10 fixture exercises bounded recovery, lookup and a single resume after an await;
+v5–v9 fail before effects.
 Structural templates remain version 5.
 
 FromRecord preserves the canonical tool name in the stored record and marks

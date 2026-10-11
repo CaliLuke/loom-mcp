@@ -8,6 +8,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/agenttest"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
@@ -58,18 +59,17 @@ func TestHarnessConfirmation(t *testing.T) {
 				}, DeniedResult: func(context.Context, *planner.ToolRequest) (any, error) {
 					return map[string]any{"value": "denied"}, nil
 				}}}})),
-				// This works around a known runtime defect: confirmation answers resume
-				// planning twice (workflow_await_queue.go:276 and workflow_turn.go:120).
-				// The defect is tracked as a follow-up; this is not intended behavior.
 				agenttest.WithResponder(agenttest.Responder{rule}), agenttest.ScriptedModel("model",
 					agenttest.Respond(agenttest.RawToolCall("echo.echo", rawjson.Message(`{}`))),
-					agenttest.Respond(agenttest.Text("first confirmation resume")),
-					agenttest.Respond(agenttest.Text("second confirmation resume"))))
+					agenttest.Respond(agenttest.Text("first confirmation resume"))))
 			h.Passthrough(echoTool())
 			result, err := h.Run(t.Context(), "root", nil)
 			require.NoError(t, err)
 			require.NoError(t, result.RunErr)
 			require.Len(t, result.Awaits, 1)
+			require.NotNil(t, result.Output.Final)
+			assert.Equal(t, "first confirmation resume", result.Output.Final.Parts[0].(model.TextPart).Text)
+			assert.Len(t, h.Script("model").Requests(), 2)
 			assert.Equal(t, hooks.AwaitConfirmation, result.Awaits[0].Kind)
 			assert.Equal(t, approved, result.Awaits[0].Answer.(*api.ConfirmationDecision).Approved)
 			assert.Contains(t, result.Trajectory.Render(trajectory.RenderOptions{}), map[bool]string{true: `"Approved":true`, false: `"Approved":false`}[approved])

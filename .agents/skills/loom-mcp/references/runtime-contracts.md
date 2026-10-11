@@ -566,6 +566,10 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   tools. Confirmed calls emit `AwaitConfirmation`, resume through
   `ProvideConfirmation`, record a `ToolAuthorization` hook/stream event, execute
   only when approved, and return schema-compliant denied results when rejected.
+  After the entire await queue is satisfied, the workflow schedules one logical
+  planner resume and acts on that result, including its tools or final answer.
+  This also holds for planner awaits mixed with tool calls and tool pauses.
+  Resume activities remain retryable.
 - Tool-produced artifacts use `artifact.Content` on `planner.ToolResult.Artifacts`;
   runtime persistence converts them to workflow-safe `artifact.Ref` values on
   planner outputs, API tool events, hook payloads, and memory records.
@@ -1088,8 +1092,9 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   ContextRecovery.DisableRecall and per-episode refill rules still apply.
   HistoryPolicy receives the recovered loaded view. Compress planners that build
   unrelated requests fail not_view_bearing at the observed provider overflow.
-- Real workflow_protocol_v9.json records overflow recovery, lookup and finalization;
-  v5-v8 fixtures reject before effects. Structural templates stay version 5.
+- Protocol 10 records overflow recovery, a confirmation-gated tool turn with
+  one resume, lookup and finalization in workflow_protocol_v10.json; v5-v9
+  fixtures reject before effects. Structural templates stay version 5.
   Anthropic/Bedrock Claude recognize older input-length/max_tokens overflow text;
   OpenAI recognizes nested response.failed/error.code mid-stream and Anthropic
   handles status-200 SSE error events. Tests cite documented recorded-body shapes.
