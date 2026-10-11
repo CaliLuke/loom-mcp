@@ -749,6 +749,9 @@
     "Trajectory": {
       "type": "object",
       "properties": {
+        "trace_id": {
+          "type": "string"
+        },
         "run_id": {
           "type": "string"
         },

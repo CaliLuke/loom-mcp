@@ -57,8 +57,14 @@ func NewClueMetrics() Metrics {
 // invoking runtime methods (typically done via clue.ConfigureOpenTelemetry or
 // environment variables like OTEL_EXPORTER_OTLP_ENDPOINT).
 func NewClueTracer() Tracer {
-	tracer := otel.Tracer("github.com/CaliLuke/loom-mcp/v2/agents/runtime")
-	return &ClueTracer{tracer: tracer}
+	return NewTracer(otel.GetTracerProvider())
+}
+
+// NewTracer constructs runtime tracing with the supplied provider. It does not
+// consult or modify the global provider, so independent runtimes can safely trace
+// in parallel. The caller owns the provider's lifecycle.
+func NewTracer(provider trace.TracerProvider) Tracer {
+	return &ClueTracer{tracer: provider.Tracer("github.com/CaliLuke/loom-mcp/v2/agents/runtime")}
 }
 
 // Debug emits a debug-level log message with structured key-value pairs.

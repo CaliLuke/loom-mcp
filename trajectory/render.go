@@ -68,6 +68,9 @@ func (r *renderer) run(t *Trajectory, indent string, depth int) {
 	r.line(indent, "Run: "+t.RunID)
 	r.line(indent, "Session: "+t.SessionID)
 	r.line(indent, "Agent: "+string(t.AgentID))
+	if t.TraceID != "" {
+		r.line(indent, "Trace: "+t.TraceID)
+	}
 	status := t.Status
 	if !t.StatusVerified {
 		status += " (unverified)"

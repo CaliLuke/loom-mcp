@@ -1223,7 +1223,7 @@ when preserving the evidence.
 | Object | Fields and meaning |
 | --- | --- |
 | `Document` | `schema`: version identifier; `trajectory`: one run; `session`: array in caller order. Exactly one member is present. |
-| `Trajectory` | `run_id`, `session_id`, `agent_id`: identities; `steps`: causal slice; `final`: model message or null; `status`: observed terminal status; `status_verified`: observer trust; `totals`: run-local recorded counts. |
+| `Trajectory` | `run_id`, `session_id`, `agent_id`: identities; optional `trace_id`: caller tracing correlation; `steps`: causal slice; `final`: model message or null; `status`: observed terminal status; `status_verified`: observer trust; `totals`: run-local recorded counts. |
 | `Step` | `kind`: `model`, `tool`, `await`, `answer` or `event`; `step`: planner schedule number; optional `entry_id`: index entry identity; `verified`: evidence trust; exactly one populated `model`, `tool`, `event` or `answer` member. |
 | `ModelStep` | `key`: `RunID`, `Seq`, `Attempt`; `class`: `adopted`, `abandoned` or `incomplete`; `activity`: `planner` or `summarize`; `step`: recorded planner number; `model`, `model_id`: provider and registration identity; `usage`: token counts; `latency`: duration; optional `error`: `kind`, `message`; optional `facts`: request measurements; `chosen`: tool calls; `system_hash`, `tools_hash`, `request_digest`: full request provenance; `prompts`: prompt refs. |
 | `TokenUsage` | `Model`, `ModelClass`: attribution; `InputTokens`, `OutputTokens`, `TotalTokens`, `CacheReadTokens`, `CacheWriteTokens`: disjoint normalized token counts. |
@@ -1245,6 +1245,50 @@ types are the five `await_*` kinds. A step cannot populate multiple members.
 `Verified` describes the evidence boundary, not whether a model or tool succeeded:
 abandoned and incomplete recorded calls are still verified. BeforeEvent makes
 observations unverified, while recorded calls, results and answers remain verified.
+
+### Harness
+
+`agenttest.New(t, register, opts...)` constructs an isolated in-memory runtime
+and reports script and lifecycle leaks at test cleanup. The `register` callback
+wires application agents and real tool executors, including generated
+`Register…Agent` and `RegisterUsedToolsets` functions. Scripted overrides are
+registered afterward; other application model clients remain available.
+
+```go
+h := agenttest.New(t, register,
+    agenttest.ScriptedModel("chat", agenttest.Respond(agenttest.Text("done"))),
+    agenttest.WithResponder(agenttest.Responder{agenttest.Clarify("yes")}),
+)
+result, err := h.Run(t.Context(), AgentID, agenttest.User("hello"))
+if err != nil {
+    t.Fatal(err)
+}
+expect.Require(t, expect.Trajectory(result.Trajectory), expect.Completed())
+```
+
+`Result` includes `Output`, `RunErr`, the sealed `Record`, `Trajectory`, and
+answered `Awaits`. Agent failures populate `RunErr`; setup, timeout, unanswered
+await and reconstruction failures return an error. The default wall-clock run
+limit is 30 seconds; change it with `WithRunTimeout`. An unmatched await cancels
+the run and returns `ErrUnansweredAwait`. Responder rules use the first match;
+callbacks must return promptly and support concurrent runs.
+
+`RunSession(ctx, agent, turns...)` returns ordered runs in one new session and
+stops on the first harness error. Earlier history comes only from the agent's
+memory policy; the harness carries no transcript between turns.
+`WithRuntimeOptions` configures application policies, memory and interceptors,
+but rejects overrides of the owned engine, stores, hook bus and tracer.
+`WithRunID` is reserved for the harness's deterministic per-instance IDs.
+
+`Runtime.HasEventInterceptors()` conservatively detects event middleware across
+all registered agents. The harness marks observed status/events unverified when
+it is true; recorded model, tool and answer evidence remains verified.
+`WithTracerProvider(provider)` uses `telemetry.NewTracer(provider)` and opens a
+root `agenttest.run` span without changing the global provider. Its trace ID is
+available on `Result.TraceID` and optional `Trajectory.TraceID` (`trace_id` in
+v1 JSON); Render prints `Trace: <id>` after `Agent:` when present. The caller owns
+the provider's export configuration and shutdown. No live model is enabled by
+default, and the harness has no Temporal mode.
 
 ### Expectations
 

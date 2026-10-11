@@ -1,0 +1,8 @@
+Run: agenttest-r1
+Session: agenttest-s1
+Agent: assistant.assistant_runtime
+Sealed: true
+Model: fixture
+Tool: projected.projected_status_tool Result: {"status":"ready"}
+Model: fixture
+Final: ready

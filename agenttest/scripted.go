@@ -1,4 +1,3 @@
-// Package agenttest provides deterministic model scripts for agent tests.
 package agenttest
 
 import (
