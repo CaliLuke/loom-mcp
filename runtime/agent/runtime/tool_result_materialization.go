@@ -15,6 +15,7 @@ package runtime
 
 import (
 	"context"
+	"encoding/json/v2"
 	"fmt"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
@@ -34,10 +35,7 @@ func (r *Runtime) materializeToolResult(ctx context.Context, call planner.ToolRe
 	if !ok {
 		return nil, fmt.Errorf("tool %q is not registered", call.Name)
 	}
-	if err := r.applyResultMaterializer(ctx, spec, call, result); err != nil {
-		return nil, err
-	}
-	if err := r.enforceToolResultContracts(spec, call, result); err != nil {
+	if err := r.prepareToolResult(ctx, spec, call, result); err != nil {
 		return nil, err
 	}
 	if err := r.persistToolResultArtifacts(ctx, call, result); err != nil {
@@ -52,6 +50,15 @@ func (r *Runtime) materializeToolResult(ctx context.Context, call planner.ToolRe
 		resultJSON = rawjson.Message(encoded)
 	}
 	return resultJSON, nil
+}
+
+// prepareToolResult shares the materialize-then-validate pipeline between
+// submission preflight and activity consumption, without persisting artifacts.
+func (r *Runtime) prepareToolResult(ctx context.Context, spec tools.ToolSpec, call planner.ToolRequest, result *planner.ToolResult) error {
+	if err := r.applyResultMaterializer(ctx, spec, call, result); err != nil {
+		return err
+	}
+	return r.enforceToolResultContracts(spec, call, result)
 }
 
 func (r *Runtime) persistToolResultArtifacts(ctx context.Context, call planner.ToolRequest, result *planner.ToolResult) error {
@@ -217,18 +224,29 @@ func (r *Runtime) providedToolSpec(call planner.ToolRequest, item *api.ProvidedT
 	return spec, nil
 }
 
-// decodeProvidedToolResultValue decodes caller input without materialization or writes.
+// decodeProvidedToolResultValue owns caller input before decoding so materializers
+// cannot mutate submission metadata or apply enrichment twice through shared pointers.
 func decodeProvidedToolResultValue(spec tools.ToolSpec, call planner.ToolRequest, item *api.ProvidedToolResult) (*planner.ToolResult, error) {
 	if item == nil {
 		return nil, toolResultContractErrorf("await: nil tool result")
 	}
+	// Match the signal wire boundary on both engines and isolate mutable metadata
+	// before the preflight or activity materializer receives it.
+	data, err := json.Marshal(item)
+	if err != nil {
+		return nil, toolResultContractErrorf("await: encode tool result for %s: %v", call.Name, err)
+	}
+	var owned api.ProvidedToolResult
+	if err := json.Unmarshal(data, &owned); err != nil {
+		return nil, toolResultContractErrorf("await: decode tool result for %s: %v", call.Name, err)
+	}
+	item = &owned
 	resultProvided := hasNonNullJSON(item.Result.RawMessage())
 	if item.Error != nil && resultProvided {
 		return nil, toolResultContractErrorf("await: tool result for %s is invalid: error and result are both set", call.Name)
 	}
 	bounds := cloneProvidedToolBounds(item.Bounds)
 	var decoded any
-	var err error
 	if resultProvided && item.Error == nil {
 		decoded, err = spec.Result.Codec.FromJSON(item.Result.RawMessage())
 		if err != nil {

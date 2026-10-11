@@ -2740,31 +2740,42 @@ err := rt.ProvideToolResults(ctx, &api.ToolResultsSet{
 ```
 
 `ProvideToolResults` validates the complete submission before it stores content or
-sends a signal. The await ID must match a pending question or external-tool await.
-The submission must contain exactly one result for each awaited call, with the
-matching tool name. The client runtime must register the tool specs and result
-codecs used by the worker.
+sends a signal. The await ID must match the first remaining question or
+external-tool await in queue order. The submission must contain exactly one result
+for each awaited call, with the matching tool name.
 
-The runtime decodes each result with its registered codec and applies the shared
-tool-result contract, including bounds and retry hints. Invalid submissions return
-a non-retryable `*engine.ApplicationError` with type
-`runtime.ToolResultContractErrorType` (`"tool_result_contract"`). The run stays
-awaiting, with no content writes or signals from the rejected submission. The
-caller can correct the submission and send it again.
+All prompts remain visible, but the `tool_awaits` query exposes only this first
+tool-channel await. An answer for another ID returns a `*runtime.ToolAwaitNotReadyError`
+as the cause of a non-retryable `*engine.ApplicationError` with type
+`runtime.ToolResultContractErrorType` (`"tool_result_contract"`). Callers can detect
+this cause with `errors.As`. The run stays paused without content writes or signals
+from the rejected submission. An unknown or consumed ID returns the same error.
+Retry only after the query advertises the requested ID. Tool uses and results
+remain recorded together in queue order, followed by one logical planner resume.
+
+The runtime decodes each result, runs its registered materializer, then applies the
+shared tool-result contract, including bounds and retry hints. The client runtime
+must register the same tool specs, result codecs, and materializers as the worker.
+For provided results, materializers must be deterministic and free of I/O and side
+effects. Preflight discards enrichment. The activity repeats materialization from
+the original submission and owns artifact writes. A materializer can add required
+Bounds before validation. Invalid result contracts return a non-retryable
+`tool_result_contract` error before content writes or signals.
 
 Custom engines must implement `engine.ToolAwaitQuerier` for this API. The
-`tool_awaits` query returns pending await IDs and call identities from workflow
-state. Both built-in engines support this query. Materializers and artifact writes
-remain in workflow activities. Workflow-side validation remains active for direct
-signals and reports contract errors with the same type.
+`tool_awaits` query returns the head await ID, call identities, and call payloads
+from workflow state. Both built-in engines support this query. Workflow-side
+validation remains active for direct signals. Direct signal callers must preserve
+queue order themselves.
 
-This validation change adds no workflow commands and requires no protocol bump.
+These preflight and query changes add no workflow commands. Workflow protocol
+remains 13, with no new replay fixture required.
 
 Provided tool results are strict boundary inputs:
 
 - each item must be exactly one of: `Error` or non-null `Result`,
-- if the tool is bounded and successful, `Bounds` must be present and satisfy
-  bounded-result invariants.
+- if the tool is bounded and successful, `Bounds` must be present after
+  materialization and satisfy bounded-result invariants.
 
 Those rules apply only at execution/history boundaries. Once the runtime projects
 tool output into transcript messages, models never see raw `Result` bytes or

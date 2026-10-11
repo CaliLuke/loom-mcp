@@ -30,6 +30,10 @@ func TestProvideToolResultsRejectsInvalidSubmissionWithoutChangingRun(t *testing
 				rt := New(WithEngine(eng), WithRunStore(store), WithHooks(bus))
 				spec := providedValidationSpec()
 				var materializations atomic.Int32
+				expectedPreflightCalls := int32(0)
+				if defect == "contract violation" {
+					expectedPreflightCalls = 1
+				}
 				require.NoError(t, rt.RegisterToolset(ToolsetRegistration{Name: "test", Specs: []tools.ToolSpec{spec}, ResultMaterializer: func(context.Context, ToolCallMeta, *planner.ToolRequest, *planner.ToolResult) error {
 					materializations.Add(1)
 					return nil
@@ -47,7 +51,7 @@ func TestProvideToolResultsRejectsInvalidSubmissionWithoutChangingRun(t *testing
 				registerContentAgent(t, rt, &stubPlanner{start: func(context.Context, *planner.PlanInput) (*planner.PlanResult, error) {
 					return &planner.PlanResult{Await: planner.NewAwait(item)}, nil
 				}, resume: func(ctx context.Context, in *planner.PlanResumeInput) (*planner.PlanResult, error) {
-					assert.Equal(t, int32(1), materializations.Load(), "only workflow activity materializes the accepted result")
+					assert.Equal(t, expectedPreflightCalls+2, materializations.Load(), "valid results materialize in preflight and activity")
 					awaits, err := eng.(engine.ToolAwaitQuerier).QueryToolAwaits(ctx, "root")
 					require.NoError(t, err)
 					assert.Empty(t, awaits, "consumed awaits must no longer accept results")
@@ -82,7 +86,7 @@ func TestProvideToolResultsRejectsInvalidSubmissionWithoutChangingRun(t *testing
 					before := store.snapshot()
 					err := client.ProvideToolResults(t.Context(), submission)
 					assertToolResultContractError(t, err)
-					assert.Zero(t, materializations.Load(), "preflight must not invoke the materializer")
+					assert.Equal(t, expectedPreflightCalls, materializations.Load(), "identity and decode failures precede materialization")
 					assert.Equal(t, before, store.snapshot(), "invalid input must not write content")
 					snapshot, err := rt.GetRunSnapshot(t.Context(), "root")
 					require.NoError(t, err)

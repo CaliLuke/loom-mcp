@@ -85,6 +85,11 @@ type (
 	//   may normalize the typed semantic result before canonical encoding.
 	// - Materializers must be deterministic and must not perform I/O when they run
 	//   inside workflow code.
+	// - Provided-result preflight also invokes the materializer before validation.
+	//   Client and worker runtimes must register the same materializer.
+	// - For provided results, materializers must be deterministic and free of
+	//   I/O and side effects.
+	//   Preflight discards enrichment; activities repeat it before persistence.
 	ResultMaterializer func(ctx context.Context, meta ToolCallMeta, call *planner.ToolRequest, result *planner.ToolResult) error
 
 	// ToolExecutionResult captures the runtime-owned outcome of one tool

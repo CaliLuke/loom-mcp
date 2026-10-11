@@ -11,8 +11,20 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 )
 
-// validateProvidedToolResults performs read-only preflight before content writes
-// or signal delivery. Materialization and artifact persistence remain activity-owned.
+// ToolAwaitNotReadyError identifies a submission whose await is not the current
+// tool-channel head. The ID can also be unknown or already consumed. Callers must
+// wait until QueryToolAwaits advertises this ID before resubmitting.
+type ToolAwaitNotReadyError struct {
+	ID string
+}
+
+// Error describes the unavailable tool await.
+func (e *ToolAwaitNotReadyError) Error() string {
+	return fmt.Sprintf("await %q is not yet awaited or is no longer pending", e.ID)
+}
+
+// validateProvidedToolResults materializes and validates before content writes
+// or signal delivery. Artifact persistence remains activity-owned.
 func (r *Runtime) validateProvidedToolResults(ctx context.Context, rs *api.ToolResultsSet) error {
 	status, err := r.Engine.QueryRunStatus(ctx, rs.RunID)
 	if err != nil {
@@ -51,16 +63,18 @@ func (r *Runtime) validateProvidedToolResults(ctx context.Context, rs *api.ToolR
 			if err != nil {
 				return err
 			}
-			if err := validateToolResultContract(spec, call, result); err != nil {
+			if err := r.prepareToolResult(ctx, spec, call, result); err != nil {
 				return err
 			}
 		}
 		return nil
 	}
-	return toolResultContractErrorf("await: no pending tool await matches id %q", rs.ID)
+	err = &ToolAwaitNotReadyError{ID: rs.ID}
+	return engine.NewNonRetryableApplicationError(err.Error(), ToolResultContractErrorType, nil, err)
 }
 
-// setToolAwaitsQuery publishes immutable ID/name snapshots. Replacing the handler
+// setToolAwaitsQuery publishes only the first remaining tool-channel await.
+// Other signal channels do not block it. Replacing the handler
 // advances pending state without adding workflow commands or racing in-memory queries.
 func setToolAwaitsQuery(wf engine.WorkflowContext, items []planner.AwaitItem) error {
 	awaits := make([]planner.AwaitExternalTools, 0, len(items))
@@ -72,14 +86,14 @@ func setToolAwaitsQuery(wf engine.WorkflowContext, items []planner.AwaitItem) er
 			if q == nil {
 				return fmt.Errorf("await questions item %d missing payload", i)
 			}
-			await = planner.AwaitExternalTools{ID: q.ID, Items: []planner.AwaitToolItem{{Name: q.ToolName, ToolCallID: q.ToolCallID}}}
+			await = planner.AwaitExternalTools{ID: q.ID, Items: []planner.AwaitToolItem{{Name: q.ToolName, ToolCallID: q.ToolCallID, Payload: slices.Clone(q.Payload)}}}
 		case planner.AwaitItemKindExternalTools:
 			if item.ExternalTools == nil {
 				return fmt.Errorf("await external_tools item %d missing payload", i)
 			}
 			await.ID = item.ExternalTools.ID
 			for _, call := range item.ExternalTools.Items {
-				await.Items = append(await.Items, planner.AwaitToolItem{Name: call.Name, ToolCallID: call.ToolCallID})
+				await.Items = append(await.Items, planner.AwaitToolItem{Name: call.Name, ToolCallID: call.ToolCallID, Payload: slices.Clone(call.Payload)})
 			}
 		case planner.AwaitItemKindClarification, planner.AwaitItemKindTypedInput:
 			continue
@@ -87,11 +101,15 @@ func setToolAwaitsQuery(wf engine.WorkflowContext, items []planner.AwaitItem) er
 			continue
 		}
 		awaits = append(awaits, await)
+		break
 	}
 	return wf.SetQueryHandler(engine.QueryToolAwaits, func() ([]planner.AwaitExternalTools, error) {
 		out := slices.Clone(awaits)
 		for i := range out {
 			out[i].Items = slices.Clone(out[i].Items)
+			for j := range out[i].Items {
+				out[i].Items[j].Payload = slices.Clone(out[i].Items[j].Payload)
+			}
 		}
 		return out, nil
 	})

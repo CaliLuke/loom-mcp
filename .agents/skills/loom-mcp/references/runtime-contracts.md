@@ -648,14 +648,20 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   OnMissingFields policy (finalize, resume, await_clarification and default),
   before policy handling. Valid runs are unchanged; this validation and error
   classification correction does not require a workflow protocol bump.
-- `ProvideToolResults` validates the pending await ID, exact call IDs, tool names,
-  registered specs, result codecs and the shared tool-result contract before
-  content writes or signals. Invalid submissions return a root non-retryable
-  `tool_result_contract` error and leave the run awaiting a corrected submission.
-  Client runtimes must register the worker's tool specs and codecs. Custom engines
-  must implement `engine.ToolAwaitQuerier`; built-in engines expose the read-only
-  `tool_awaits` query. Materialization remains activity-owned. This change adds no
-  workflow commands and requires no protocol bump.
+- `ProvideToolResults` accepts only the first remaining tool-channel await.
+  The read-only `tool_awaits` query exposes this head, including call payloads.
+  Other IDs return a root non-retryable `tool_result_contract` error with a
+  `ToolAwaitNotReadyError` cause, detectable with `errors.As`. Unknown and consumed
+  IDs return the same error. Retry only after the query advertises the ID.
+  Rejections leave the run paused without content writes or signals.
+  Tool uses and results remain paired at consumption in queue order (RB3).
+  Preflight validates call identities and decodes results, then runs the same
+  materializer-before-contract pipeline as the activity. Client runtimes must
+  register the worker's specs, codecs, and materializers. For provided results,
+  materializers must be deterministic and free of I/O and side effects.
+  Preflight discards enrichment. Activities repeat it and own artifact writes.
+  Custom engines must implement `engine.ToolAwaitQuerier`. These query and
+  preflight changes add no workflow commands. Protocol remains 13.
 - Generated validation errors use fixed framework text. Do not preserve raw Goa
   validation messages because they can contain submitted values. Bound generated
   retry hints after all field-contract enrichment and before durable storage.
