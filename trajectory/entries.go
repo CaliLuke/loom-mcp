@@ -43,8 +43,13 @@ func (r *runBuilder) readEntry(step int, entry index.MessageEntry) error {
 			return err
 		}
 		return r.readFinal(entry)
-	case index.ToolResult:
-		return r.readToolResult(entry)
+	case index.ToolResult, index.Structural:
+		// Structural results carry the same canonical output metadata as normal
+		// results. Successful bookkeeping results and projection-only structural
+		// operations are indexed without an output and are not eval steps.
+		if entry.Output != "" {
+			return r.readToolResult(entry)
+		}
 	case index.Clarification, index.TypedInput:
 		data, err := r.owner.content(entry.Hash)
 		if err != nil {
@@ -58,8 +63,8 @@ func (r *runBuilder) readEntry(step int, entry index.MessageEntry) error {
 		}
 		answer := &AnswerStep{Kind: entry.Kind, InputID: entry.InputID, Content: data}
 		r.group(step).entries = append(r.group(step).entries, Step{Kind: StepAnswer, Step: step, EntryID: entry.ID, Verified: true, Answer: answer})
-	case index.Message, index.Structural:
-		// Caller messages and structural projection operations are not eval steps.
+	case index.Message:
+		// Caller messages are not eval steps.
 	}
 	return nil
 }
