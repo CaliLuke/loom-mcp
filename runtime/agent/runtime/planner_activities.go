@@ -6,6 +6,7 @@ import (
 	"encoding/json/jsontext"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
@@ -189,6 +190,23 @@ func nonRetryableProviderError(err error) error {
 	return err
 }
 
+// validatePlannerClarificationQuestions rejects blank prompts before committing
+// presentations or storing any content from the planner result.
+func validatePlannerClarificationQuestions(result *planner.PlanResult) error {
+	if result.Await == nil {
+		return nil
+	}
+	for i, item := range result.Await.Items {
+		if item.Clarification != nil && strings.TrimSpace(item.Clarification.Question) == "" {
+			return engine.NewNonRetryableApplicationError(
+				fmt.Sprintf("planner await item %d is invalid: clarification question must be nonempty", i),
+				"planner_contract", nil, nil,
+			)
+		}
+	}
+	return nil
+}
+
 func normalizeTranscriptRawJSON(messages []*model.Message) {
 	for msgIdx := range messages {
 		msg := messages[msgIdx]
@@ -299,6 +317,7 @@ func (r *Runtime) completePlanActivity(
 	recorder *modelRecoveryRecorder,
 ) (*PlanActivityOutput, error) {
 	if err := r.preparePlanActivityCalls(ctx, input, result); err != nil {
+		events.discardModelPresentations(ctx)
 		return nil, err
 	}
 	if err := events.hookError(); err != nil {
@@ -490,8 +509,12 @@ func (r *Runtime) plannerContext(ctx context.Context, input *PlanActivityInput, 
 	return &reg, agentCtx, nil
 }
 
-// preparePlanActivityCalls completes policy and identity changes before storage.
+// preparePlanActivityCalls validates clarification questions and completes policy
+// and identity changes before presentation commit and storage.
 func (r *Runtime) preparePlanActivityCalls(ctx context.Context, input *PlanActivityInput, result *planner.PlanResult) error {
+	if err := validatePlannerClarificationQuestions(result); err != nil {
+		return err
+	}
 	if input.Finalize != nil && len(result.ToolCalls) > 0 {
 		calls, err := r.finalizationActivityCalls(ctx, input, result.ToolCalls)
 		if err != nil {

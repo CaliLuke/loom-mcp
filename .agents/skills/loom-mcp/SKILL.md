@@ -195,6 +195,13 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - Sequential workflow step names must be unique because generated planners use
   them as tool-call IDs for output correlation. Reject duplicates during design
   validation, before code generation.
+- Planner await clarification questions and missing-fields retry hints must
+  contain non-whitespace question text. Reject blank planner questions inside
+  the planner activity before committing model presentations or storing result
+  content; discard staged presentations. Use non-retryable
+  `engine.ApplicationError` failures with type `planner_contract` for planner
+  awaits and `tool_result_contract` for missing-fields retry hints. Preserve
+  valid question text.
 - Planner turns are workflow activities, not exactly-once method calls. Generated
   registrations retry failed plan/resume activities up to three attempts by
   default, so model calls and direct side effects can repeat after a late attempt

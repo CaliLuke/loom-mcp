@@ -4,9 +4,11 @@ package runtime
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/CaliLuke/loom-mcp/v2/boundedresult"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
@@ -17,6 +19,7 @@ import (
 // Contract:
 //   - Tool results are never nil.
 //   - Result and Error are mutually exclusive.
+//   - Missing-fields retry hints carry a nonempty clarification question.
 //   - Unbounded tools never carry bounds metadata.
 //   - Error results never carry bounds metadata.
 //   - Successful bounded results must carry bounds.
@@ -29,6 +32,12 @@ func validateToolResultContract(spec tools.ToolSpec, call planner.ToolRequest, t
 	}
 	if tr.Result != nil && tr.Error != nil {
 		return fmt.Errorf("tool %q result is invalid: error and result are both set (tool_call_id=%s)", call.Name, call.ToolCallID)
+	}
+	if hint := tr.RetryHint; hint != nil && hint.Reason == planner.RetryReasonMissingFields && strings.TrimSpace(hint.ClarifyingQuestion) == "" {
+		return engine.NewNonRetryableApplicationError(
+			fmt.Sprintf("tool %q result is invalid: missing-fields clarification question must be nonempty (tool_call_id=%s)", call.Name, call.ToolCallID),
+			"tool_result_contract", nil, nil,
+		)
 	}
 	return validateToolBoundsContract(spec, call, tr.Error, tr.Bounds)
 }

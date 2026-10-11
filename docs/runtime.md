@@ -2276,6 +2276,11 @@ The runtime contract enforces that a `Pause` must not be paired with a tool
 error and must carry a non-nil payload (validated by
 `validateToolPauseContract`).
 
+A tool result with `RetryHint.Reason == planner.RetryReasonMissingFields` must
+provide a nonempty `ClarifyingQuestion`. Empty and whitespace-only questions fail
+tool-result validation with a non-retryable `*engine.ApplicationError` whose
+`Type` is `tool_result_contract`.
+
 > **Breaking change (v0.52.0)**: the executor signature changed from
 > `func(ctx, *ToolRequest) (*planner.ToolResult, error)` to
 > `func(ctx, *ToolRequest) (*ToolExecutionResult, error)`. Custom executors,
@@ -2499,6 +2504,12 @@ return &planner.PlanResult{
     },
 }
 ```
+
+`AwaitClarification.Question` must be nonempty and must contain non-whitespace
+text. Start and resume planner activities reject blank questions before committing
+model presentations or storing planner-result content. The activity fails with a
+non-retryable `*engine.ApplicationError` whose `Type` is `planner_contract`;
+staged model presentations are discarded. Valid question text is preserved.
 
 The runtime pauses the workflow and emits an `AwaitClarification` event. Callers
 respond via:

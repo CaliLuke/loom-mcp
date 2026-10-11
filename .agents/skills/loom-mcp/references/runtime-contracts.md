@@ -217,6 +217,11 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   configured activity retries are exhausted or the error is non-retryable.
 - `PlanResult.RetryHint` is successful planner output used to recover from tool
   failures. It is separate from engine activity retries.
+- `AwaitClarification.Question` must contain non-whitespace text. Start and
+  resume planner activities reject blank questions before committing model
+  presentations or storing planner-result content, discard staged presentations,
+  and return a non-retryable `*engine.ApplicationError` with type
+  `planner_contract`. Valid question text is preserved.
 
 ## Cancellation Classification
 
@@ -541,6 +546,10 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - Use generated `tool_specs.Specs` and codecs for payload/result schema and encoding needs.
 - Do not introspect `docs.json` at runtime.
 - Tool results and retry hints should stay structured; avoid best-effort coercion when contracts fail.
+- A tool result with `RetryHint.Reason == planner.RetryReasonMissingFields`
+  requires a nonempty, non-whitespace `ClarifyingQuestion`. Tool-result contract
+  validation rejects blank questions with a non-retryable
+  `*engine.ApplicationError` of type `tool_result_contract`.
 - Generated validation errors use fixed framework text. Do not preserve raw Goa
   validation messages because they can contain submitted values. Bound generated
   retry hints after all field-contract enrichment and before durable storage.
