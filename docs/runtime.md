@@ -183,7 +183,7 @@ Typed consumers can call
 eligible bytes and decode them with the generated result codec. Empty or missing
 hashes fail. Tool activities return references; terminal completion decoding runs in the finish activity.
 
-### Transcript index and planner views (protocol 10)
+### Transcript index and planner views (protocol 11)
 
 The workflow keeps immutable `index.MessageEntry` values and a committed
 `IndexHead`, rather than accumulated messages, tool outputs, typed answers, or a
@@ -234,8 +234,8 @@ Anthropic and Bedrock view grammars; views without checkpoints retain the existi
 resume-time Bedrock validation. Successful activity outputs may return `ViewUpdate`;
 output-validation recovery outputs never adopt it. Protocol 7 introduced these view updates, recorded
 request facts and model rates, entry size metadata and stamped run settings.
-The current protocol is 10 (single resume after awaits). Drain older workflows
-before upgrading; v5–v9 fixtures retain mismatch
+The current protocol is 11 (recorded clarification exchanges and ordered await handshakes). Drain older workflows
+before upgrading; v5–v10 fixtures retain mismatch
 rejection before effects. Structural templates remain version 5.
 
 ### Opt-in context compaction
@@ -421,6 +421,19 @@ all-hidden result messages without changing earlier entries or segment hashes.
 Rendering preserves caller history, assistant batch grouping, confirmation pairs,
 transcript attachment once to the last assistant message of a turn, result order,
 joined reminders, clarification/resume messages, and finalize synthetics/hints.
+Each nonempty clarification answer records its actual question as an assistant
+message immediately before the user answer. This applies to planner awaits,
+tool pauses, and missing-fields clarification, including await-only turns. Tool
+results remain before that question/answer pair. The question is stored through
+`RecordContent`, with a measured, immutable `Message` entry; the answer remains a
+`Clarification` entry. Empty answers add no question or visible answer. Compacted
+and uncompacted views use the same entries and preserve provider role alternation
+without changing historical entry rendering. Questions and external-tool answers
+use assistant tool-use/user tool-result pairs recorded together when each answer
+is consumed, in await queue order. Publishing all prompts first does not place
+unanswered tool uses ahead of another item's clarification. Typed answers stay
+outside model messages. RunRecord reconstructs these same exchanges from their content refs.
+
 Typed entries never render as model messages. Canonical JSON message equality is
 the observable contract on both Temporal and in-memory engines; codec-collapsed
 Go representations are not distinct messages. Resume-only `ValidateBedrock`,
@@ -4166,12 +4179,13 @@ external `Client`, also supply `ClientOptions` with that client's converter
 external client whose converter configuration was not supplied.
 
 The generated fixture keeps a completed history under
-`integration_tests/fixtures/agent_features/testdata/workflow_protocol_v10.json`.
-The scrubbed recording includes overflow recovery, a confirmation-gated tool turn,
-one resume that selects child validation and context lookup, seed/result content
+`integration_tests/fixtures/agent_features/testdata/workflow_protocol_v11.json`.
+The scrubbed recording includes overflow recovery, a confirmation-gated tool turn
+with clarification, its recorded assistant question and user answer, one resume
+that selects child validation and context lookup, seed/result/question content
 batches, planner-step commits and terminal finish activity. The unchanged protocol
-5–9 fixtures verify rejection before workflow effects; protocol versions must
-match, so workers running protocol 10 cannot replay them as successful runs. Run
+5–10 fixtures verify rejection before workflow effects; protocol versions must
+match, so workers running protocol 11 cannot replay them as successful runs. Run
 `go test -C integration_tests/fixtures/agent_features ./... -run '^TestGeneratedFeatureWorkflowReplay$'`
 for offline replay. To re-record it against the pinned Temporal development
 server, run
@@ -5234,8 +5248,9 @@ Each invocation records one keyed context_recalled event with kind, outcome
 and step. Exhaustion emits recall_budget_exhausted once per allowance episode,
 reset by refill. RunRecord rebuilds and validates recorded charges and settings.
 Workflow protocol 9 adds overflow recovery to these lookup contracts. The recorded
-v10 fixture exercises bounded recovery, lookup and a single resume after an await;
-v5–v9 fail before effects.
+v11 fixture exercises bounded recovery, lookup and a single resume after
+confirmation and clarification, including the recorded question/answer pair;
+v5–v10 fail before effects.
 Structural templates remain version 5.
 
 FromRecord preserves the canonical tool name in the stored record and marks

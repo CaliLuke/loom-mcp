@@ -1092,9 +1092,9 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   ContextRecovery.DisableRecall and per-episode refill rules still apply.
   HistoryPolicy receives the recovered loaded view. Compress planners that build
   unrelated requests fail not_view_bearing at the observed provider overflow.
-- Protocol 10 records overflow recovery, a confirmation-gated tool turn with
-  one resume, lookup and finalization in workflow_protocol_v10.json; v5-v9
-  fixtures reject before effects. Structural templates stay version 5.
+- Protocol 11 records overflow recovery, a confirmation-gated tool turn with
+  a clarification question/answer pair, one resume, lookup and finalization in
+  workflow_protocol_v11.json; v5-v10 fixtures reject before effects. Structural templates stay version 5.
   Anthropic/Bedrock Claude recognize older input-length/max_tokens overflow text;
   OpenAI recognizes nested response.failed/error.code mid-stream and Anthropic
   handles status-200 SSE error events. Tests cite documented recorded-body shapes.

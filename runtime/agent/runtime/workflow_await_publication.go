@@ -9,7 +9,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 )
 
-func (r *Runtime) publishAwaitQueueItem(ctx context.Context, input *RunInput, base *workflowPlanInput, st *runLoopState, turnID string, it planner.AwaitItem, idx int) error {
+func (r *Runtime) publishAwaitQueueItem(ctx context.Context, input *RunInput, base *workflowPlanInput, turnID string, it planner.AwaitItem, idx int) error {
 	if it.Kind == "" {
 		return fmt.Errorf("await item %d missing kind", idx)
 	}
@@ -18,9 +18,9 @@ func (r *Runtime) publishAwaitQueueItem(ctx context.Context, input *RunInput, ba
 	case planner.AwaitItemKindClarification:
 		return r.publishAwaitClarification(ctx, input, base, turnID, it.Clarification, idx)
 	case planner.AwaitItemKindQuestions:
-		return r.publishAwaitQuestions(ctx, input, base, st, turnID, it.Questions, idx)
+		return r.publishAwaitQuestions(ctx, input, base, turnID, it.Questions, idx)
 	case planner.AwaitItemKindExternalTools:
-		return r.publishAwaitExternalTools(ctx, input, base, st, turnID, it.ExternalTools, idx)
+		return r.publishAwaitExternalTools(ctx, input, base, turnID, it.ExternalTools, idx)
 	case planner.AwaitItemKindTypedInput:
 		return r.publishAwaitTypedInput(ctx, input, base, turnID, it.TypedInput, idx)
 	default:
@@ -64,7 +64,7 @@ func (r *Runtime) publishAwaitTypedInput(ctx context.Context, input *RunInput, b
 	), turnID)
 }
 
-func (r *Runtime) publishAwaitQuestions(ctx context.Context, input *RunInput, base *workflowPlanInput, st *runLoopState, turnID string, q *planner.AwaitQuestions, idx int) error {
+func (r *Runtime) publishAwaitQuestions(ctx context.Context, input *RunInput, base *workflowPlanInput, turnID string, q *planner.AwaitQuestions, idx int) error {
 	if q == nil {
 		return fmt.Errorf("await questions item %d missing payload", idx)
 	}
@@ -83,10 +83,6 @@ func (r *Runtime) publishAwaitQuestions(ctx context.Context, input *RunInput, ba
 		q.Title,
 		qs,
 	), turnID); err != nil {
-		return err
-	}
-	call := planner.ToolRequest{Name: q.ToolName, ToolCallID: q.ToolCallID, Payload: q.Payload}
-	if err := base.recordAssistant(st.takeTurnTranscript(), []planner.ToolRequest{call}); err != nil {
 		return err
 	}
 	if q.ToolCallID == "" {
@@ -118,7 +114,7 @@ func awaitQuestionHook(question planner.AwaitQuestion) hooks.AwaitQuestion {
 	}
 }
 
-func (r *Runtime) publishAwaitExternalTools(ctx context.Context, input *RunInput, base *workflowPlanInput, st *runLoopState, turnID string, e *planner.AwaitExternalTools, idx int) error {
+func (r *Runtime) publishAwaitExternalTools(ctx context.Context, input *RunInput, base *workflowPlanInput, turnID string, e *planner.AwaitExternalTools, idx int) error {
 	if e == nil {
 		return fmt.Errorf("await external_tools item %d missing payload", idx)
 	}
@@ -133,9 +129,6 @@ func (r *Runtime) publishAwaitExternalTools(ctx context.Context, input *RunInput
 		e.ID,
 		items,
 	), turnID); err != nil {
-		return err
-	}
-	if err := base.recordAssistant(st.takeTurnTranscript(), awaitCalls); err != nil {
 		return err
 	}
 	return publishAwaitScheduledToolCalls(ctx, r, input, base, turnID, awaitCalls)

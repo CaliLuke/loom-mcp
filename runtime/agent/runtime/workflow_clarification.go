@@ -13,6 +13,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextmeasure"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/interrupt"
@@ -116,7 +118,7 @@ func (r *Runtime) awaitMissingFieldClarification(
 	if ans.ID != "" && ans.ID != awaitID {
 		return nil, fmt.Errorf("unexpected await ID for clarification")
 	}
-	if err := appendClarificationAnswer(base, ans.AnswerRef, ans.AnswerBytes); err != nil {
+	if err := appendClarificationExchange(ctx, base, mf.ClarifyingQuestion, ans.AnswerRef, ans.AnswerBytes); err != nil {
 		return nil, err
 	}
 	if err := r.publishClarificationResumed(ctx, input, base, turnID, ans); err != nil {
@@ -174,6 +176,38 @@ func (r *Runtime) publishClarificationError(
 		base.RunContext.RunID, input.AgentID, base.RunContext.SessionID, "clarification_error", "runtime",
 		map[string]string{resumeMetadataKey: "clarification_error", "await_id": awaitID}, 0,
 	), turnID)
+}
+
+// appendClarificationExchange records the actual prompt before a nonempty answer.
+// Keeping both as immutable entries preserves provider role alternation and exact
+// RunRecord reconstruction without changing the rendering of historical entries.
+func appendClarificationExchange(ctx context.Context, base *workflowPlanInput, question string, ref runstore.Hash, bytes *int) error {
+	if bytes == nil || *bytes < 0 {
+		return fmt.Errorf("clarification measurement is required and must be non-negative")
+	}
+	if *bytes > 0 {
+		message := &model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: question}}}
+		items, err := encodeContentMessages([]*model.Message{message})
+		if err != nil {
+			return err
+		}
+		size, err := contextmeasure.MeasureMessages([]*model.Message{message})
+		if err != nil {
+			return err
+		}
+		wf := engine.WorkflowContextFromContext(ctx)
+		out, err := wf.ExecuteRecordContentActivity(ctx, engine.RecordContentActivityCall{
+			Name:  RecordContentActivityName(base.AgentID),
+			Input: &api.RecordContentInput{RootRunID: base.RunContext.RootRunID, Items: items},
+		})
+		if err != nil {
+			return err
+		}
+		if err := base.appendEntry(index.MessageEntry{Kind: index.Message, Hash: out.Refs[0], Bytes: size.Bytes, NonText: size.NonText, Role: size.Role}); err != nil {
+			return err
+		}
+	}
+	return appendClarificationAnswer(base, ref, bytes)
 }
 
 func appendClarificationAnswer(base *workflowPlanInput, ref runstore.Hash, bytes *int) error {

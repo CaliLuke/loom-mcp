@@ -42,9 +42,11 @@ import (
 type historyReplayPlanner struct{}
 
 const (
-	workflowHistoryFile        = "testdata/workflow_protocol_v10.json"
+	workflowHistoryFile        = "testdata/workflow_protocol_v11.json"
 	workflowHistoryIdentity    = "loom-mcp-history-recorder"
 	workflowHistoryStickyQueue = "loom-mcp-history-recorder-sticky"
+	workflowHistoryQuestion    = "Which topic should the draft use?"
+	workflowHistoryAnswer      = "use the reviewed topic"
 )
 
 func TestGeneratedFeatureWorkflowReplay(t *testing.T) {
@@ -60,6 +62,7 @@ func TestGeneratedFeatureWorkflowReplay(t *testing.T) {
 		{name: "protocol 7 rejected before effects", previous: 7},
 		{name: "protocol 8 rejected before effects", previous: 8},
 		{name: "protocol 9 rejected before effects", previous: 9},
+		{name: "protocol 10 rejected before effects", previous: 10},
 		{name: "future", rewrite: true},
 		{name: "missing", rewrite: true, missing: true},
 	} {
@@ -82,6 +85,9 @@ func TestGeneratedFeatureWorkflowReplay(t *testing.T) {
 			var recordedVersion int
 			require.NoError(t, json.Unmarshal(input["WorkflowProtocolVersion"], &recordedVersion))
 			assertHistoryToolContent(t, history, recordedVersion)
+			if recordedVersion >= 11 {
+				assertHistoryClarification(t, history)
+			}
 			if test.previous != 0 {
 				assert.Equal(t, test.previous, recordedVersion)
 			} else {
@@ -131,9 +137,10 @@ func recordWorkflowHistory(t *testing.T, temporalClient client.Client) {
 	handle, err := coordinator.NewClient(fx.rt).Start(ctx, "sess-protocol-history", []*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "record this request"}}}, {Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "earlier answer"}}}, {Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: strings.Repeat("earlier history ", 2000)}}}, {Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "recent answer"}}}, {Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "continue"}}}}, agentsruntime.WithRunID("run-protocol-history"))
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {
-		return fx.recorder.count(hooks.AwaitConfirmation) == 1
+		return fx.recorder.count(hooks.AwaitConfirmation) == 1 && fx.recorder.count(hooks.AwaitClarification) == 1
 	}, 5*time.Second, 10*time.Millisecond)
 	require.NoError(t, fx.rt.ProvideConfirmation(ctx, &api.ConfirmationDecision{RunID: "run-protocol-history", Approved: true, RequestedBy: "history-recorder"}))
+	require.NoError(t, fx.rt.ProvideClarification(ctx, &api.ClarificationAnswer{RunID: "run-protocol-history", ID: "history-clarification", Answer: workflowHistoryAnswer}))
 	out, err := handle.Wait(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, "history replay complete", messageText(out.Final))
@@ -241,9 +248,10 @@ func (historyReplayPlanner) PlanStart(ctx context.Context, input *planner.PlanIn
 	if err := measureHistoryRequest(ctx, input.Agent, input.Messages); err != nil {
 		return nil, err
 	}
-	return &planner.PlanResult{ToolCalls: []planner.ToolRequest{{
-		Name: workflow.Draft, ToolCallID: "history-draft", Payload: rawjson.Message(`{"topic":"history replay"}`),
-	}}}, nil
+	return &planner.PlanResult{
+		ToolCalls: []planner.ToolRequest{{Name: workflow.Draft, ToolCallID: "history-draft", Payload: rawjson.Message(`{"topic":"history replay"}`)}},
+		Await:     planner.NewAwait(planner.AwaitClarificationItem(&planner.AwaitClarification{ID: "history-clarification", Question: workflowHistoryQuestion})),
+	}, nil
 }
 
 func (historyReplayPlanner) PlanResume(ctx context.Context, input *planner.PlanResumeInput) (*planner.PlanResult, error) {
@@ -255,6 +263,9 @@ func (historyReplayPlanner) PlanResume(ctx context.Context, input *planner.PlanR
 		seenRecall = seenRecall || result.Name == tools.RecallContext
 	}
 	if !seenRecall && input.Finalize == nil {
+		if err := validateHistoryClarification(input.Messages); err != nil {
+			return nil, err
+		}
 		return &planner.PlanResult{ToolCalls: []planner.ToolRequest{
 			{Name: delegated.Summarize, ToolCallID: "history-child", Payload: rawjson.Message(`{"topic":"history replay"}`)},
 			{Name: tools.RecallContext, ToolCallID: "history-recall", Payload: rawjson.Message(`{"read":{"id":"1","part":"result","offset":0}}`)},
@@ -280,6 +291,9 @@ func assertHistoryToolContent(t *testing.T, history *historypb.History, protocol
 	wantSteps, wantTools, wantBatches := 2, 2, 1
 	if protocol >= 8 {
 		wantSteps, wantTools, wantBatches = 3, 3, 2
+	}
+	if protocol >= 11 {
+		wantBatches++ // The clarification question has its own RecordContent activity.
 	}
 	var finalTranscript runstore.Hash
 	var sealInput *api.SealRecordInput
@@ -493,6 +507,70 @@ func assertHistoryToolContent(t *testing.T, history *historypb.History, protocol
 	if protocol >= 8 {
 		assert.Equal(t, 1, counts[agentsruntime.RecallActivityName(coordinator.AgentID)])
 	}
+}
+
+// assertHistoryClarification proves the recorded history includes RB3's content
+// command and adjacent question/answer entries in a checkpoint-bearing resume.
+func assertHistoryClarification(t *testing.T, history *historypb.History) {
+	t.Helper()
+	question, err := json.Marshal(&model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: workflowHistoryQuestion}}})
+	require.NoError(t, err)
+	signals, questionWrites, exchanges := 0, 0, 0
+	for _, event := range history.Events {
+		if signal := event.GetWorkflowExecutionSignaledEventAttributes(); signal != nil && signal.SignalName == api.SignalProvideClarification {
+			signals++
+		}
+		scheduled := event.GetActivityTaskScheduledEventAttributes()
+		if scheduled == nil {
+			continue
+		}
+		data := scheduled.Input.Payloads[0].Data
+		switch scheduled.ActivityType.Name {
+		case agentsruntime.RecordContentActivityName(coordinator.AgentID):
+			var input api.RecordContentInput
+			require.NoError(t, json.Unmarshal(data, &input))
+			for _, item := range input.Items {
+				if bytes.Equal(item, question) {
+					questionWrites++
+				}
+			}
+		case "features.coordinator.resume":
+			var input api.PlanActivityInput
+			require.NoError(t, json.Unmarshal(data, &input))
+			for i, entry := range input.View.Pending {
+				if entry.Kind != index.Clarification {
+					continue
+				}
+				exchanges++
+				require.Positive(t, i)
+				prompt := input.View.Pending[i-1]
+				assert.Equal(t, index.Message, prompt.Kind)
+				assert.Equal(t, model.ConversationRoleAssistant, prompt.Role)
+				assert.Equal(t, len(workflowHistoryQuestion), prompt.Bytes)
+				assert.NotEmpty(t, prompt.Hash)
+				assert.Equal(t, len(workflowHistoryAnswer), entry.Bytes)
+				assert.NotNil(t, input.View.Checkpoint)
+			}
+		}
+	}
+	assert.Equal(t, 1, signals)
+	assert.Equal(t, 1, questionWrites)
+	assert.Equal(t, 1, exchanges)
+}
+
+// validateHistoryClarification checks the real recorder's first resume, before
+// its model call is followed by child validation and context lookup.
+func validateHistoryClarification(messages []*model.Message) error {
+	if err := transcript.ValidateView(messages, transcript.GrammarBedrock{}); err != nil {
+		return err
+	}
+	if err := transcript.ValidateView(messages, transcript.GrammarAnthropic{}); err != nil {
+		return err
+	}
+	if len(messages) < 2 || messageText(messages[len(messages)-2]) != workflowHistoryQuestion || messageText(messages[len(messages)-1]) != workflowHistoryAnswer {
+		return fmt.Errorf("recorded resume must end with the clarification question and answer")
+	}
+	return nil
 }
 
 // historyHookInputs expands the ordered batch without treating its command as an event.

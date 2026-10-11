@@ -277,7 +277,8 @@ func TestQuestionAwaitTerminalResultFinishesRun(t *testing.T) {
 	st := &runLoopState{
 		Result: &planner.PlanResult{Notes: []planner.PlannerAnnotation{{Text: "await completed"}}},
 	}
-	testRecordAssistant(t, rt, base, []planner.ToolRequest{call})
+	// The planner stores the call; answer consumption records its assistant entry.
+	testStoreCalls(t, rt, base, []planner.ToolRequest{call})
 	ctrl := interrupt.NewController(wfCtx)
 	item := planner.AwaitQuestionsItem(&planner.AwaitQuestions{
 		ID: "await-1", ToolName: terminal.Name, ToolCallID: call.ToolCallID, Payload: call.Payload,

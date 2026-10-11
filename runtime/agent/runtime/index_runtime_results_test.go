@@ -113,7 +113,7 @@ func TestRuntimeIndexOracleBatchRemindersAndMissingFields(t *testing.T) {
 			reminder.Text = strings.ReplaceAll(reminder.Text, "Reason: missing_fields\n", "Reason: missing_fields\nMessage: Field contract: object\n")
 			expected[2].Parts[0] = reminder
 			if clarify {
-				expected = append(expected, contentMessage("missing field answer"))
+				expected = append(expected, &model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "Which ID?"}}}, contentMessage("missing field answer"))
 			}
 			registerContentAgent(t, rt, &stubPlanner{start: func(context.Context, *planner.PlanInput) (*planner.PlanResult, error) {
 				return &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: names[0], ToolCallID: "small"}, {Name: names[1], ToolCallID: "large"}, {Name: names[2], ToolCallID: "failed"}}}, nil

@@ -152,6 +152,8 @@ func TestRuntimeIndexOracleClarificationAndTyped(t *testing.T) {
 	rt := New(WithEngine(eng), WithHooks(bus))
 	rounds := 0
 	expected := frozenIndexMessages(t, "TestIndexOracleClarificationResumeAndTypedScript/2/workflow_await_wait.go clarification including empty answer")
+	// RB3 records the question for each nonempty answer; the empty answer adds no prompt.
+	expected = append([]*model.Message{{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "first"}}}}, expected...)
 	payload := rawjson.Message(`{"approved":true}`)
 	registerContentAgent(t, rt, &stubPlanner{start: func(context.Context, *planner.PlanInput) (*planner.PlanResult, error) {
 		return &planner.PlanResult{Await: planner.NewAwait(

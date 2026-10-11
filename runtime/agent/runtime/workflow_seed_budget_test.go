@@ -12,6 +12,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -105,11 +106,14 @@ func TestAwaitBarrierSignalsAroundContentActivityKeepOneResume(t *testing.T) {
 			assistant := &model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.ToolUsePart{ID: call.ToolCallID, Name: string(call.Name), Input: call.Payload}}}
 			result := &model.Message{Role: model.ConversationRoleUser, Parts: []model.Part{model.ToolResultPart{ToolUseID: call.ToolCallID, Content: map[string]any{"ok": true}}}}
 			answerMessage := contentMessage("use loom")
-			want := []*model.Message{seed, assistant, answerMessage, result}
+			question := &model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "Which topic?"}}}
+			want := []*model.Message{seed, question, answerMessage, assistant, result}
 			if duringContent {
-				want = []*model.Message{seed, assistant, result, answerMessage}
+				want = []*model.Message{seed, assistant, result, question, answerMessage}
 			}
 			assertIndexMessages(t, want, view.Messages)
+			assert.NoError(t, transcript.ValidateView(view.Messages, transcript.GrammarBedrock{}))
+			assert.NoError(t, transcript.ValidateView(view.Messages, transcript.GrammarAnthropic{}))
 		})
 	}
 }

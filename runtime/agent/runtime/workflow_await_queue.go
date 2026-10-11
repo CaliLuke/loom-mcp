@@ -92,7 +92,7 @@ func (r *Runtime) handleAwaitQueue(
 	if err := validateAwaitQueueInputs(ctrl, deadlines, confirmations, items); err != nil {
 		return nil, err
 	}
-	if err := r.publishAwaitPrompts(ctx, input, base, st, turnID, confirmations, items); err != nil {
+	if err := r.publishAwaitPrompts(ctx, input, base, turnID, confirmations, items); err != nil {
 		return nil, err
 	}
 	if err := r.publishAwaitPause(ctx, input, base, turnID); err != nil {
@@ -127,12 +127,12 @@ func validateAwaitQueueInputs(ctrl *interrupt.Controller, deadlines *runDeadline
 	return nil
 }
 
-func (r *Runtime) publishAwaitPrompts(ctx context.Context, input *RunInput, base *workflowPlanInput, st *runLoopState, turnID string, confirmations []confirmationAwait, items []planner.AwaitItem) error {
+func (r *Runtime) publishAwaitPrompts(ctx context.Context, input *RunInput, base *workflowPlanInput, turnID string, confirmations []confirmationAwait, items []planner.AwaitItem) error {
 	if err := r.publishAwaitConfirmations(ctx, input, base, turnID, confirmations); err != nil {
 		return err
 	}
 	for i, it := range items {
-		if err := r.publishAwaitQueueItem(ctx, input, base, st, turnID, it, i); err != nil {
+		if err := r.publishAwaitQueueItem(ctx, input, base, turnID, it, i); err != nil {
 			return err
 		}
 	}

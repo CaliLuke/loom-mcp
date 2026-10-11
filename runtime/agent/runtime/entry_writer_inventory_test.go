@@ -73,6 +73,7 @@ func TestEntryWriterInventory(t *testing.T) {
 		"workflow_index_results.go:resultIndexEntry",
 		"workflow_interrupts.go:applyResumeMessages",
 		"workflow_clarification.go:appendClarificationAnswer",
+		"workflow_clarification.go:appendClarificationExchange",
 		"workflow_finalize.go:buildFinalizePlanRequest",
 		"workflow_await_wait.go:waitAwaitTypedInput",
 	}, writers)
@@ -89,14 +90,18 @@ func TestResumeClarificationAndTypedEntrySizes(t *testing.T) {
 	assert.Equal(t, 6, base.Entries[1].Bytes)
 	assert.Equal(t, model.ConversationRoleUser, base.Entries[1].Role)
 	// Both missing-field clarification and explicit await use the same writer.
-	wf := &testWorkflowContext{ctx: t.Context()}
+	rt := New()
+	base.AgentID = "agent"
+	base.RunContext.RootRunID = "root"
+	wf := &testWorkflowContext{ctx: t.Context(), finishRuntime: rt}
 	wf.ensureSignals()
 	wf.clarifyCh <- &api.ClarificationAnswer{ID: "question", AnswerRef: "other", AnswerBytes: new(5)}
-	_, err := waitAwaitClarification(t.Context(), interrupt.NewController(wf), base, 0, &planner.AwaitClarification{ID: "question"})
+	_, err := waitAwaitClarification(wf.Context(), interrupt.NewController(wf), base, 0, &planner.AwaitClarification{ID: "question", Question: "which?"})
 	require.NoError(t, err)
-	assert.Equal(t, 5, base.Entries[2].Bytes)
-	assert.Equal(t, model.ConversationRoleUser, base.Entries[2].Role)
-	rt := New()
+	assert.Equal(t, 6, base.Entries[2].Bytes)
+	assert.Equal(t, model.ConversationRoleAssistant, base.Entries[2].Role)
+	assert.Equal(t, 5, base.Entries[3].Bytes)
+	assert.Equal(t, model.ConversationRoleUser, base.Entries[3].Role)
 	typedBase := testWorkflowInput(t, rt, &planner.PlanInput{})
 	typedWF := &testWorkflowContext{ctx: t.Context(), finishRuntime: rt}
 	typedWF.ensureSignals()

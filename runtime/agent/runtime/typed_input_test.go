@@ -35,7 +35,6 @@ func TestPublishAwaitQueueItemPublishesTypedInput(t *testing.T) {
 		context.Background(),
 		&RunInput{AgentID: agent.Ident("svc.agent")},
 		base,
-		&runLoopState{},
 		"turn-1",
 		planner.AwaitTypedInputItem(&planner.AwaitTypedInput{
 			ID:     "approval",

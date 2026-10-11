@@ -81,7 +81,7 @@ func waitAwaitClarification(ctx context.Context, ctrl *interrupt.Controller, bas
 	if clarification.ID != "" && ans.ID != "" && ans.ID != clarification.ID {
 		return nil, errors.New("unexpected await ID for clarification")
 	}
-	return nil, appendClarificationAnswer(base, ans.AnswerRef, ans.AnswerBytes)
+	return nil, appendClarificationExchange(ctx, base, clarification.Question, ans.AnswerRef, ans.AnswerBytes)
 }
 
 func waitAwaitTypedInput(ctx context.Context, ctrl *interrupt.Controller, input *RunInput, base *workflowPlanInput, timeout time.Duration, typedInput *planner.AwaitTypedInput) ([]*planner.ToolResult, error) {
@@ -152,6 +152,11 @@ func (r *Runtime) waitAwaitQuestions(ctx context.Context, ctrl *interrupt.Contro
 		ToolCallID: questions.ToolCallID,
 		Payload:    questions.Payload,
 	}}
+	// Keep each awaited tool handshake together in queue order. Publishing all
+	// prompts first must not leave tool uses ahead of another item's answer.
+	if err := base.recordAssistant(st.takeTurnTranscript(), allowed); err != nil {
+		return nil, err
+	}
 	return r.consumeProvidedToolResults(ctx, input, base, st, rs, allowed, expected)
 }
 
@@ -165,6 +170,11 @@ func (r *Runtime) waitAwaitExternalTools(ctx context.Context, ctrl *interrupt.Co
 	}
 	allowed, expected, err := buildExternalAwaitRequests(external.Items)
 	if err != nil {
+		return nil, err
+	}
+	// Keep each awaited tool handshake together in queue order. Publishing all
+	// prompts first must not leave tool uses ahead of another item's answer.
+	if err := base.recordAssistant(st.takeTurnTranscript(), allowed); err != nil {
 		return nil, err
 	}
 	return r.consumeProvidedToolResults(ctx, input, base, st, rs, allowed, expected)
