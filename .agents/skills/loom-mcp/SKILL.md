@@ -569,6 +569,16 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   declarations that require a service `MCP(...)` contract must report that
   missing contract separately from general nesting errors.
 
+## Eval Scenarios
+
+- Use top-level `eval` for immutable Go/JSONL datasets, scenario validation and
+  single-attempt Execute over agenttest sessions. Claim declares criteria only;
+  eval does not import eval/judge. See references/runtime-contracts.md.
+- Keep generated assistant imports in the fixture module. The root module's
+  eval tests cover pure contracts and custom callbacks without fixture imports.
+- Execute supports concurrent use of one harness. Drive, Assert and expectation
+  predicates must be concurrency-safe and cooperate with cancellation.
+
 ## Command Reminders
 
 ```bash

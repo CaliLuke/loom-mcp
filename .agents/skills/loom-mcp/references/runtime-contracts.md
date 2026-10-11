@@ -77,6 +77,41 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   `Evaluate` gives checks unique names, and `Require` fails once with all failed
   diagnostics in declaration order. Requiring no expectations fails.
 
+## Eval Scenarios
+
+- `eval.Items` and `eval.JSONL` own immutable datasets and defer errors to Err;
+  empty datasets report ErrEmptyDataset. Items returns deep copies. Hash is
+  sha256:<hex> of canonical version-1 JSONL, or empty for an invalid dataset.
+- JSONL starts with `{"format":"loom-mcp.eval.items","version":1}`. Decode
+  rejects unknown/duplicate members (including raw data/args), invalid UTF-8,
+  blank lines, repeated headers, unsupported versions, non-objects, multiple
+  values per line and lines over 16 MiB. DecodeError carries source/line and
+  unwraps the cause. Encode sorts objects, preserves number tokens and ends
+  each line with LF.
+- Item requires exactly one Input or Turns with no empty turn. IDs/tags match
+  `[A-Za-z0-9][A-Za-z0-9._-]{0,127}`; duplicate IDs/tags are invalid. Persona is
+  reserved; ExpectedOutcome requires Turns. ExpectedTools is a pointer: absent
+  differs from an explicit empty tools list. All strings are valid UTF-8.
+- Scenario requires Agent unless Drive is set, non-negative Timeout, a valid
+  dataset and an assertion source. Validate joins every problem with scenario
+  and item locations. Claim IDs match `[a-z0-9_]{1,64}`, are unique and have
+  non-empty UTF-8 text. Claims are declarations only; no eval/judge import.
+- Execute resolves item Task/Reference before defaults, then runs one session.
+  Drive replaces RunSession; Assert receives Attempt.Subject and the last
+  trajectory's Final. Checks order runs_succeeded, Expect, ExpectedTools, Assert.
+  Scores include tool_correctness; duplicate check/score names receive #n.
+  Scenario claims precede Assert claims; duplicate claim IDs are errors.
+- RunErr is a quality failure in runs_succeeded, independent of event trust.
+  Harness/Drive errors preserve session evidence, empty checks/scores and skip
+  Assert. Callback errors/panics (with stack), timeout and malformed results go
+  to Outcome.Err. Execute's error return covers invalid arguments/nil harness.
+  ErrNoAssertions requires a user check or claim beyond the built-in health
+  check. Passed checks have no diagnostic; failed checks have one. Names are
+  non-empty and score values finite.
+- Timeout covers Drive and Assert cooperatively; callbacks/predicates must be
+  concurrency-safe. Runner selection, repeats, variants, storage and judging
+  remain separate from single-attempt Execute.
+
 ## Planner Streaming
 
 - `PlannerContext.ModelClient(id)` returns a runtime-decorated client.

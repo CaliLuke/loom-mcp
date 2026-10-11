@@ -525,6 +525,23 @@ It yields a check and a
 `tool_correctness` score (matching calls divided by calls made), following
 DeepEval's definition.
 
+The data shape is `*expect.ExpectedTools` on `eval.Item`; nil means absent.
+An explicit empty `tools` list expresses no expected calls. Set `exact` to
+reject extra calls.
+
+```go
+type ExpectedTool struct {
+	Name tools.Ident     `json:"name"`
+	Args json.RawMessage `json:"args,omitzero"`
+}
+
+type ExpectedTools struct {
+	Tools   []ExpectedTool `json:"tools"`
+	Ordered bool           `json:"ordered"`
+	Exact   bool           `json:"exact"`
+}
+```
+
 ---
 
 ## 6. Plan A: agent and tool testing
@@ -653,43 +670,93 @@ Package: `eval` (name per D1).
 ```go
 type Scenario struct {
 	ID        string
-	Task      string           // default task for items without one
-	Reference string           // default reference for items without one
+	Agent     agent.Ident
+	Task      string
+	Reference string
 	Tags      []string
 	Timeout   time.Duration
 	Items     Dataset
-	Claims    []Claim          // judged on every attempt
-	Run       func(ctx context.Context, item Item, h *agenttest.Harness) (Assertions, error)
+	Claims    []Claim
+	Expect    []expect.Expectation
+	Drive     func(ctx context.Context, h *agenttest.Harness, item Item) (*agenttest.SessionResult, error)
+	Assert    func(ctx context.Context, a *Attempt) (Assertions, error)
 }
 
 type Item struct {
-	ID              string
-	Input           string          // single-turn input
-	Turns           []string        // multi-turn scripted user turns
-	Task            string          // what success means; overrides Scenario.Task
-	ExpectedOutcome string          // multi-turn: what the conversation should achieve
-	Persona         string          // reserved for the simulated-user follow-up
-	Reference       string          // shared facts for judging
-	ExpectedTools   []ExpectedTool  // data-driven expectations (5.5)
-	Data            json.RawMessage // application-specific values
+	ID              string                `json:"id"`
+	Input           string                `json:"input,omitempty"`
+	Turns           []string              `json:"turns,omitempty"`
+	Task            string                `json:"task,omitempty"`
+	ExpectedOutcome string                `json:"expected_outcome,omitempty"`
+	Persona         string                `json:"persona,omitempty"`
+	Reference       string                `json:"reference,omitempty"`
+	ExpectedTools   *expect.ExpectedTools `json:"expected_tools,omitempty"`
+	Data            json.RawMessage       `json:"data,omitzero"`
+}
+
+type Claim struct {
+	ID            string
+	Text          string
+	Informational bool
 }
 
 type Assertions struct {
-	Checks []Check
+	Checks []expect.Check
 	Claims []Claim
-	Scores []Score
+	Scores []expect.Score
 }
+
+type Attempt struct {
+	Scenario string
+	Item     Item // Task and Reference resolved
+	Harness  *agenttest.Harness
+	Session  *agenttest.SessionResult
+}
+
+func (a *Attempt) Subject() expect.Subject
+func (a *Attempt) Final() *model.Message
+
+type Outcome struct {
+	Scenario, Item, Task, Reference string
+	Session                         *agenttest.SessionResult
+	Checks                          []expect.Check
+	Scores                          []expect.Score
+	Claims                          []Claim
+	Err                             error
+}
+
+func Items(items ...Item) Dataset
+func JSONL(fsys fs.FS, name string) Dataset
+func (d Dataset) Items() []Item
+func (d Dataset) Len() int
+func (d Dataset) Err() error
+func (d Dataset) Source() string
+func (d Dataset) Hash() string
+func DecodeJSONL(r io.Reader, source string) (Dataset, error)
+func EncodeJSONL(w io.Writer, d Dataset) error
+func Validate(scenarios ...Scenario) error
+func Execute(ctx context.Context, h *agenttest.Harness, s Scenario, item Item) (*Outcome, error)
 ```
 
-- The runner owns execution: it runs the item through the harness and builds
-  the trajectory. `Run` is optional. When present, it receives the item and the
-  harness, may drive the agent itself, and returns extra assertions.
-- `Item.Task` and `Item.Reference` override the scenario defaults.
-- The answer under judgment is the trajectory's final answer. There is no
-  separate output field.
-- Datasets come from a Go slice or a JSONL file; Opik import is optional (B9).
-- A simulated user is a follow-up. `Persona` is in the schema now so datasets
-  do not change shape later; the first version rejects items that set it.
+- T11 owns single-attempt execution. The default `Drive` calls `RunSession` for
+  either input shape; a custom `Drive` returns its session evidence. `Assert`
+  adds assertions over that evidence. Agent is required unless Drive is set.
+- Checks run in order: built-in `runs_succeeded` from RunErr, scenario `Expect`,
+  item `ExpectedTools`, then `Assert`. Quality failures leave `Outcome.Err` nil;
+  infrastructure errors, panics, timeouts and broken assertion contracts set it.
+  The separate error return covers only invalid arguments or a nil harness.
+- Task and Reference resolve from the item before scenario defaults. The final
+  answer is `Attempt.Final()`, from the last session trajectory.
+- Datasets are immutable, with eagerly captured deferred errors. JSONL version 1
+  requires `{"format":"loom-mcp.eval.items","version":1}` on line 1 and strict
+  item objects thereafter. Canonical JSONL preserves number tokens; its SHA-256
+  hash is independent of source-file formatting. Empty datasets are invalid.
+- Scenario and item IDs and tags match `[A-Za-z0-9][A-Za-z0-9._-]{0,127}`.
+  Claim IDs match `[a-z0-9_]{1,64}` and must be unique. Claims are declarations
+  only; T16/T17 owns judging. At least one user check or claim must remain;
+  `runs_succeeded` alone does not satisfy `ErrNoAssertions`.
+- `Persona` remains reserved and rejected. ExpectedOutcome requires Turns.
+- T12 owns selection, repeats, concurrency, variants and attempt records.
 
 ### B2. Runner
 

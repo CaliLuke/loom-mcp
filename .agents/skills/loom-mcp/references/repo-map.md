@@ -28,6 +28,7 @@ Use this map to choose the smallest authoritative source for the task at hand.
 - `features/stream/`: Pulse-backed streaming clients and integrations.
 - `registry/`: internal tool registry implementation.
 - `integration_tests/`: end-to-end scenarios and fixtures.
+- `eval/`: immutable datasets, strict JSONL, scenario validation and single-attempt execution.
 
 ## Skill Reference Files
 

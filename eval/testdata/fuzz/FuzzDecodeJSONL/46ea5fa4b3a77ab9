@@ -1,0 +1,2 @@
+go test fuzz v1
+string("{\"format\":\"loom-mcp.eval.items\",\"version\":1}\n{\"id\":\"0\",\"input\":\"00\",\"expected_tools\":{}} ")

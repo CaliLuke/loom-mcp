@@ -1442,6 +1442,76 @@ expected and 0 otherwise. `expect.Evaluate` returns checks for inspection;
 `expect.Require` reports all failed diagnostics once, in declaration order, and
 fails when given no expectations.
 
+### Eval scenarios and datasets
+
+`eval` binds a dataset item to an `agenttest.Harness` session. Declare immutable
+Go datasets with `eval.Items(...)`, or read files eagerly with
+`eval.JSONL(embedFS, "items.jsonl")` / `eval.JSONL(os.DirFS("testdata"), "items.jsonl")`.
+Constructors defer errors to `Dataset.Err()` so they work in package variables.
+`eval.Validate(scenarios...)` joins all scenario and item problems before running.
+`Dataset.Items()` returns deep copies; `Hash()` is `sha256:<hex>` of canonical
+version-1 JSONL, independent of the source file's whitespace and member order.
+An invalid dataset has an empty hash; an empty dataset reports `ErrEmptyDataset`.
+
+<!-- snippet: eval-scenarios -->
+```go
+scenario := eval.Scenario{
+	ID:    "status",
+	Agent: "assistant.assistant_runtime",
+	Task:  "Report the current status",
+	Items: eval.Items(eval.Item{
+		ID:    "ready",
+		Input: "What is the status?",
+		ExpectedTools: &expect.ExpectedTools{
+			Tools: []expect.ExpectedTool{{Name: "projected.projected_status_tool"}},
+			Exact: true,
+		},
+	}),
+}
+```
+
+JSONL starts with a mandatory header and has one item object per line:
+
+```jsonl
+{"format":"loom-mcp.eval.items","version":1}
+{"id":"ready","input":"What is the status?","expected_tools":{"tools":[{"name":"projected.projected_status_tool"}],"ordered":false,"exact":true}}
+{"id":"conversation","turns":["Hello","Tell me more"],"expected_outcome":"Explain the answer","data":{"ticket":9007199254740993}}
+```
+
+`DecodeJSONL` rejects unknown and duplicate members, invalid UTF-8, blank lines,
+repeated headers, unsupported versions, non-object lines, multiple values per
+line and lines over 16 MiB. Failures expose `*eval.DecodeError` with source and
+one-based line through `errors.As`. `EncodeJSONL` sorts all object members, uses
+LF endings and a final newline, and preserves number tokens in `Data` and tool
+`Args`. Items require a unique ID and exactly one non-empty `Input` or non-empty
+`Turns` without empty turns. `ExpectedOutcome` requires `Turns`; `Persona` is
+reserved and rejected. `ExpectedTools: nil` supplies no tool assertion, while
+an empty list explicitly expects no calls (set `Exact` to reject extra calls).
+
+Call `eval.Execute(ctx, h, scenario, item)` to drive one attempt. Item `Task` and
+`Reference` override scenario defaults; `Attempt.Item` receives the resolved
+values. The default driver uses `RunSession` for both single and multiple turns.
+`Drive` replaces it and must return the session evidence; `Assert` receives an
+`Attempt` with `Subject()` and the last trajectory's `Final()` message.
+
+Checks appear in order: mandatory `runs_succeeded`, scenario `Expect`, item
+`expected_tools` (with the `tool_correctness` score), then `Assert` results.
+The health check reads `Result.RunErr` and remains usable with event interceptors.
+Duplicate check and score names receive `#2`, `#3`, and so on; claim IDs must be
+unique. Claims are declarations for a later judge, with scenario claims first.
+At least one user check or claim must remain after evaluation; the built-in
+health check alone reports `ErrNoAssertions`.
+
+A failed quality check leaves `Outcome.Err` nil. Harness/Drive errors preserve
+the session prefix, leave checks and scores empty, and skip Assert. Assertion
+errors, recovered callback panics (with stack), timeouts and invalid assertion
+results populate `Outcome.Err`. The separate error return is only for invalid
+scenario/item arguments or a nil harness. Scenario `Timeout` covers both Drive
+and Assert; callbacks must cooperate with context cancellation. Concurrent
+Execute calls may share a harness; callbacks and predicates must be safe for
+concurrent use. Selection, repeats, variants, storage and judging are separate
+layers.
+
 ### Run-log result references and upgrade
 
 Every `ToolResultReceivedEvent` carries `Refs` for the stored eligible result,

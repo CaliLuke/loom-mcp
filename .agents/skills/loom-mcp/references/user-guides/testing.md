@@ -14,6 +14,7 @@ Use fast contract tests close to the changed layer, then run the repository veri
 | MCP protocol/transport | `runtime/mcp/...`, generated adapter tests, real client validation where required |
 | Registry/Pulse behavior | `registry/...` and runtime registry tests with Redis-backed integration coverage |
 | Cross-layer user behavior | generated fixture packages and `integration_tests/framework` |
+| Eval dataset/scenario contracts | `eval/*_test.go`; harness execution in assistant fixture `agenttest/scenario_fixture_test.go` |
 
 The agent-feature fixture runs shared generated coordinator scenarios against
 both the in-memory engine and a real Temporal development server. Keep the

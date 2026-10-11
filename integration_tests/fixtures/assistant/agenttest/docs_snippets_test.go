@@ -33,7 +33,7 @@ func TestDocsSnippetsMatchCompiledFixture(t *testing.T) {
 		documents[path] = snippetDocument{text: string(body), allGo: path != "docs/runtime.md"}
 	}
 	sources := make(map[string]string)
-	for _, pattern := range []string{"integration_tests/fixtures/assistant/agenttest/*_test.go", "integration_tests/fixtures/assistant/eval/*_test.go"} {
+	for _, pattern := range []string{"integration_tests/fixtures/assistant/agenttest/*_test.go", "integration_tests/fixtures/assistant/eval/*_test.go", "eval/*_test.go"} {
 		paths, err := fs.Glob(repo.FS(), pattern)
 		require.NoError(t, err)
 		for _, path := range paths {

@@ -12,7 +12,7 @@ import (
 // Omitted Args matches any arguments, while JSON null requires an actual null.
 type ExpectedTool struct {
 	Name tools.Ident     `json:"name"`
-	Args json.RawMessage `json:"args,omitempty"`
+	Args json.RawMessage `json:"args,omitzero"`
 }
 
 // ExpectedTools describes data-driven tool correctness. Ordered uses greedy
