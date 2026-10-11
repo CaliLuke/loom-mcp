@@ -1689,8 +1689,99 @@ skipped records. Later cancellation joins existing errors, preserving
 failures leave Run's error nil. Invalid config returns no report.
 `AttemptRecord.Runs()` exposes each completed run's version-1
 `runrecord.Export`, session ID and optional trace ID, preserving a completed prefix
-on errors. Reports retain all exports in memory; storage, CLI output and judging
-belong to later layers.
+on errors. Reports retain all exports in memory. The experiment store persists those
+exports. CLI output and judging belong to later layers.
+
+### Eval experiment store
+
+`eval.Open(dir)` creates a local store. `eval.DefaultStoreDir(start)` finds
+`.loom-evals` beside the nearest ancestor `go.mod`. Each experiment has a UUIDv7
+directory, an `experiment.json` summary, and one append-only `attempts.jsonl` file.
+Both documents use schema version 1. The JSONL file starts with a format, version,
+and experiment ID header.
+
+Version 1 reserves optional judging fields. `StoredClaim` retains `subject` and
+`tool` alongside the claim ID, text, and informational flag. `StoredJudgment`
+retains `subject` and an optional `step` object with `run`, `index`, `tool`, and
+`call_id`. Only step judgments carry that locator. Attempts can also contain
+`judge_usage` (the same shape as `usage`) and `judge_tokens`. Empty subjects and
+tool selectors, absent steps, and zero judge usage and tokens are omitted.
+The decoder preserves these fields and still rejects unknown members. The current
+writer maps existing `Claim` fields explicitly; judge execution and population of
+the reserved fields belong to the judging layer.
+
+Supply a validated runner configuration and connect the writer before the run:
+
+<!-- snippet: eval-store -->
+```go
+store, err := eval.Open(dir)
+if err != nil {
+	return err
+}
+writer, err := store.Begin(ctx, cfg, eval.ExperimentMeta{Label: "baseline"})
+if err != nil {
+	return err
+}
+cfg.OnAttempt = writer.OnAttempt(cfg.OnAttempt)
+report, runErr := eval.Run(ctx, cfg)
+return errors.Join(runErr, writer.Finish(report, runErr))
+```
+
+`Begin` validates the plan, label, and optional parent ID. It writes and syncs both
+headers in a hidden staging directory before the rename to the final UUID directory.
+It then syncs the store root. Readers ignore hidden staging directories left by failures.
+
+`ExperimentMeta.Identity` can supply exact source provenance.
+Otherwise, detection reads build metadata,
+then tries git in the current directory with a five-second timeout.
+Git status disables optional locks so detection does not refresh the index.
+Missing provenance does not stop the run.
+
+`Append` writes and syncs each attempt once. `Finish` checks the report against the
+planned keys and appends missing records, including not-run records. It atomically
+replaces the summary with status `complete` or `stopped`. Cancellation retains the
+partial report. A crash leaves status `running` and preserves earlier complete lines.
+`Load` accepts a torn final line and sets `TruncatedTail`. It rejects corrupt middle
+lines, unknown or duplicate members, unsupported versions, and invalid exports.
+
+The first persistence error stays in `Writer.Err()`. Later writes return that error.
+`WithOnError` runs once per writer and can cancel the runner context. `OnAttempt`
+still invokes the next callback. Duplicate indices and mismatched keys return
+validation errors. They do not set the sticky persistence error.
+
+`WithMaxRecordBytes` defaults to 128 MiB. An oversized attempt retains its results
+but omits exports and records `storage_error`. The remaining line can exceed the
+limit. That attempt cannot reconstruct a trajectory. The size limit applies only
+to writes.
+
+Each stored run includes its export, final message, event-verification flag,
+session ID, trace ID, and agent error string. `StoredRun.Record`,
+`StoredRun.Trajectory`, and `StoredAttempt.Session` work after the harness closes.
+Dynamic final-message numbers retain their exact JSON tokens. Stored errors retain
+text, not Go error identity. Policy fields retain their Go names in JSON.
+
+Fingerprints use recorded model IDs, prompt references, and existing system and
+tool content hashes. Context hashes cover each root run's recorded configuration.
+Every fingerprint contains sorted unique sets. `Finish` stores their union per
+variant. Opaque harness options are absent from the summary.
+
+`List` sorts summaries by newest start time, then descending ID. `Resolve` accepts
+an ID, a unique prefix of at least eight characters, or `last`. `last` selects the
+newest non-running experiment. `Last(pairs, exclude)` also requires an overlapping
+scenario/item pair and excludes the supplied ID. There is no pointer file.
+`Find` accepts `#index`, `variant:scenario:item:repeat`, or an unambiguous short key.
+`Complete` means a terminal experiment has every planned attempt and no torn tail.
+A stopped experiment can satisfy this condition.
+
+`RerunSelection` includes groups with failed, error, or not-run attempts. It excludes
+passed and pending groups. The returned variants and qualified items form a
+cross-product superset. Every selected group reruns all repeats.
+
+The store contains full prompts, tool results, server-only content, and rejected
+responses. It does not redact or upload data. New directories use mode 0700 and
+new files use mode 0600. `Open` preserves existing directory permissions.
+The caller owns those permissions. The store writes its own `.gitignore` containing `*` and never
+deletes experiments. Redaction would invalidate exported request digests.
 
 ### Eval judge
 

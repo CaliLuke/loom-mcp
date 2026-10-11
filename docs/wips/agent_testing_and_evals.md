@@ -799,20 +799,34 @@ Identity of an experiment:
 - experiment ID (UUIDv7), start time, label, parent experiment (for re-runs);
 - git commit and dirty flag; loom-mcp and loom versions;
 - agent IDs, model IDs per model class, judge model and judge prompt hash;
-- prompt references (from the run log) and hashes of rendered system messages
-  and tool definitions (from captured requests);
+- prompt references from recorded `Started.Prompts`, plus existing system and
+  tool content hashes from `Started.Request.System` and `.Tools`;
 - dataset hash, items, repeats;
 - per variant: its labels, policy overrides, the context configuration
   fingerprint, and the prompt references it resolved.
 
 Each attempt records: scenario, item, repeat index, each run as a self-contained
 `runrecord.Export` (`context_compaction.md` 4.5), checks, judgments, scores,
-tokens, latency, trace ID, and any infrastructure error. Trajectories are
-derived from those exports; model calls are already in the record. Compaction
+tokens, latency, trace ID, and any infrastructure error. Each run also stores its
+final message, `EventsUnverified`, session ID, trace ID, and agent error text.
+Trajectory reconstruction needs these fields beside the export. Compaction
 replay and `show` work after the run's store is gone.
 
+The reserved version-1 schema includes optional claim `subject` and `tool`, decoded
+into `StoredClaim`. Judgments have optional `subject` and `step`, where the step
+locator contains `run`, `index`, `tool`, and `call_id`. Attempts have optional
+`judge_usage` and `judge_tokens`; zero values are omitted. T13 preserves these
+fields on decode. T17 supplies the judging types and populates them when writing.
+The current claim mapping uses explicit fields so extending `Claim` does not
+break the store's build.
+
 Storage: an experiment directory with `experiment.json` and `attempts.jsonl`
-under a gitignored path (D2). The schema is documented and versioned.
+under `.loom-evals` beside the nearest ancestor `go.mod` (D2). The store creates its
+own `.gitignore`. Both schemas use version 1. The JSONL header identifies the
+experiment, and each attempt embeds its exports inline. `last` is computed from
+non-running summaries. Comparison also requires an overlapping scenario/item pair,
+with no pointer file. New directories use mode 0700 and new files use mode 0600.
+The caller owns existing directory permissions, which `Open` preserves.
 
 ### B4. Show
 

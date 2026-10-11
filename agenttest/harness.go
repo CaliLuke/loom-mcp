@@ -39,14 +39,16 @@ type Input []*model.Message
 
 // Result separates the agent outcome from harness setup and observation failures.
 type Result struct {
-	RunID      string
-	SessionID  string
-	TraceID    string
-	Output     *api.RunOutput
-	RunErr     error
-	Record     *runrecord.RunRecord
-	Trajectory *trajectory.Trajectory
-	Awaits     []AnsweredAwait
+	// EventsUnverified reports that a BeforeEvent interceptor may have altered observed events.
+	EventsUnverified bool
+	RunID            string
+	SessionID        string
+	TraceID          string
+	Output           *api.RunOutput
+	RunErr           error
+	Record           *runrecord.RunRecord
+	Trajectory       *trajectory.Trajectory
+	Awaits           []AnsweredAwait
 }
 
 // AnsweredAwait records an await and the typed answer delivered to the runtime.
@@ -402,7 +404,7 @@ func (h *Harness) runCapture(ctx context.Context, id agent.Ident, sessionID stri
 		return nil, fmt.Errorf("agenttest: build %s: %w", runID, err)
 	}
 	tr.TraceID = traceID
-	return &Result{RunID: runID, SessionID: sessionID, TraceID: traceID, Output: run.output, RunErr: run.err, Record: record, Trajectory: tr, Awaits: run.worker.answered()}, h.stubRunErrors(runID)
+	return &Result{EventsUnverified: h.eventsUnverified, RunID: runID, SessionID: sessionID, TraceID: traceID, Output: run.output, RunErr: run.err, Record: record, Trajectory: tr, Awaits: run.worker.answered()}, h.stubRunErrors(runID)
 }
 
 // waitRun separates agent completion from responder and timeout failures, and

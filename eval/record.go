@@ -11,8 +11,10 @@ import (
 
 // AttemptKey identifies an attempt independently of harness-local run IDs.
 type AttemptKey struct {
-	Variant, Scenario, Item string
-	Repeat                  int
+	Variant  string `json:"variant"`
+	Scenario string `json:"scenario"`
+	Item     string `json:"item"`
+	Repeat   int    `json:"repeat"`
 }
 
 // StopReason describes why further attempts did not start.

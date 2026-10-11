@@ -69,6 +69,11 @@ func DecodeRequest(data []byte) (*model.Request, error) {
 	return request, nil
 }
 
+// DecodeMessage restores a recorded message while preserving exact dynamic numeric tokens.
+func DecodeMessage(data []byte) (*model.Message, error) {
+	return decodeMessage(data)
+}
+
 // messageStable checks the ordinary view decoder before a message can use a span.
 func messageStable(data []byte) bool {
 	var message *model.Message

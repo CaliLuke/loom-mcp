@@ -186,6 +186,44 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   ErrLiveModelDisabled, invalid values error, and neither makes a model call.
   Live:false leaves scripted/undeclared clients available without an env check.
 
+## Eval Experiment Store
+
+- eval.Open creates a store with its own .gitignore. DefaultStoreDir finds
+  .loom-evals beside the nearest ancestor go.mod. UUIDv7 directories contain an
+  atomic experiment.json and append-only attempts.jsonl with a version-1 header.
+- Begin validates the plan, label and parent. It stages and syncs both headers
+  before publishing the UUID directory with a rename and root fsync. Readers ignore
+  hidden staging directories left by failures. Writer.OnAttempt appends and syncs
+  one line per index. Finish checks every planned key, appends missing records,
+  and commits complete or stopped status. A crash leaves running status.
+- Write errors stay in Writer.Err. WithOnError fires once, outside the writer
+  lock. Validation errors do not poison the writer. Size overflow omits exports
+  and records storage_error. The default threshold is 128 MiB, on writes only.
+- Load rejects unknown and duplicate members, unsupported schemas and invalid
+  exports. A torn final line sets TruncatedTail and preserves earlier attempts.
+  StoredRun.Record and Trajectory need no harness. Store Final, EventsUnverified
+  and TraceID beside Export.Marshal bytes. DecodeMessage preserves number tokens.
+- Version 1 reserves StoredClaim subject/tool, StoredJudgment subject/step
+  (run, index, tool, call_id), and attempt judge_usage/judge_tokens. Empty optional
+  fields and zero judge usage/tokens are omitted. Decode retains these fields;
+  judging integration populates them. wireClaim uses explicit field mapping so
+  adding fields to Claim does not break the store's build.
+- Fingerprints use recorded Started.ModelID, Class, Prompts, Request.System and
+  Request.Tools. Context hashes cover each root run's context, recovery,
+  compaction and retained-tool configuration. Finish stores sorted set unions per
+  variant. Policy keeps Go field names. Opaque variant Options are not stored.
+- List sorts by descending Started and ID. Resolve accepts a full ID, unique
+  prefix of at least eight characters, or last. Last requires an overlapping
+  scenario/item pair and excludes the supplied ID. Both skip running summaries.
+  There is no last pointer file. Complete includes fully recorded stopped runs.
+- RerunSelection includes failed, error and not_run groups, excluding pending.
+  It returns the accepted variant/item cross-product superset for all repeats.
+- Full prompts, tool results, server-only bytes and rejected responses stay local
+  without redaction. New directories use 0700 and new files use 0600. Open preserves
+  existing directory permissions, which the caller owns. Nothing is uploaded or
+  deleted. Git identity detection disables optional locks and never refreshes the
+  index. Redaction would invalidate exported request digests.
+
 ## Planner Streaming
 
 - `PlannerContext.ModelClient(id)` returns a runtime-decorated client.

@@ -644,6 +644,12 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   verdicts, token limits and partial reports. WithDefaultRunOptions forwards run
   defaults through every harness run path. See references/agent-testing.md for
   runner usage and references/runtime-contracts.md for lifecycle and accounting.
+- Open/Begin/Writer persist version-1 experiments in a self-gitignored local
+  store. New directories use 0700; callers own existing directory permissions. Store full exports plus final messages, EventsUnverified and trace
+  IDs for trajectory parity. Read prompt refs and fingerprints from records.
+  Resolve last from summaries. Reserved v1 judging fields retain claim subjects
+  and tools, judgment subjects and step locators, and judge usage and tokens.
+  Map Claim fields explicitly. See references/runtime-contracts.md.
 - Keep generated assistant imports in the fixture module. The root module's
   eval tests cover pure contracts and custom callbacks without fixture imports.
 - Execute supports concurrent use of one harness. Drive, Assert and expectation

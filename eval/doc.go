@@ -49,7 +49,28 @@
 // because run and session IDs may repeat across isolated harnesses. Exports are
 // retained in memory for the entire experiment.
 //
-// Claim is a declaration only. Storage and judging belong to separate layers.
+// Open creates a self-gitignored experiment store. Begin validates the plan,
+// stages both headers, and atomically publishes the experiment directory.
+// Readers ignore hidden staging directories. Writer.OnAttempt streams complete
+// attempt lines. Finish fills missing records and atomically writes the terminal summary.
+// Write failures are sticky and WithOnError reports the first failure once.
+// Oversized records omit exports and retain a StorageError diagnostic.
+// Schema version 1 reserves StoredClaim subjects and tool selectors, judgment
+// subjects and step locators, and separate judge usage and tokens. These optional
+// fields survive decoding; the current runner does not populate them.
+//
+// Load rejects invalid schemas and exports but retains complete lines before a
+// torn final line. StoredRun.Record and Trajectory restore evidence after harness
+// closure, including final messages, event verification and trace IDs. Fingerprints
+// summarize recorded model/prompt identities and system, tool and context hashes.
+// List, Resolve, Last and Find locate experiments and attempts. RerunSelection
+// selects failed, error and not-run groups as a variant/item cross-product superset.
+// Full prompts and server-only content remain local without redaction. Directories
+// created by the store use mode 0700 and new files use mode 0600. Callers own
+// existing directory permissions, which Open preserves. The store never deletes
+// experiments.
+//
+// Claim is a declaration only. Judging belongs to a separate layer.
 // Execute may run concurrently on one harness; callbacks and expectation predicates
 // must be concurrency-safe and cooperate with cancellation.
 package eval
