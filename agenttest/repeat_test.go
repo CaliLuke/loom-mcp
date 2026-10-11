@@ -93,3 +93,30 @@ func TestRepeatSkipAndInvalidThreshold(t *testing.T) {
 		assert.False(t, called)
 	}
 }
+
+func TestRepeatErrorThenSkipFailsAttempt(t *testing.T) {
+	for _, minPass := range []int{1, 2} {
+		t.Run(map[int]string{1: "threshold_met", 2: "threshold_missed"}[minPass], func(t *testing.T) {
+			tb := &evalTB{TB: t}
+			attempts := 0
+			var report agenttest.RepeatReport
+			runTB(func() {
+				report = agenttest.Repeat(tb, 2, minPass, func(at testing.TB) {
+					attempts++
+					if attempts == 1 {
+						at.Error("failure before skip")
+						at.Skip("skip after failure")
+					}
+				})
+			})
+			assert.False(t, tb.skipped)
+			assert.Equal(t, minPass == 2, tb.failed)
+			assert.Equal(t, 2, report.Attempts)
+			assert.Equal(t, 1, report.Passed)
+			if assert.Len(t, report.Failed, 1) {
+				assert.Equal(t, 1, report.Failed[0].Index)
+				assert.Contains(t, strings.Join(report.Failed[0].Diagnostics, "\n"), "failure before skip")
+			}
+		})
+	}
+}

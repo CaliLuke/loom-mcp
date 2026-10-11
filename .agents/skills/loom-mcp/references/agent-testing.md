@@ -19,8 +19,9 @@ and run with `go -C integration_tests/fixtures/assistant ...`.
   application module, gitignored. Files contain full prompts; reuse them directly
   with a model client and Decide, without constructing a harness.
 
-Register all models inside `register`. Capture gates only models present when
-`New` finishes construction; models registered afterward are not gated.
+Register all models, agents and toolsets inside `register`. Harness construction
+installs capture gates and seals runtime registration. Later registrations,
+including model replacements, return `runtime.ErrRegistrationClosed`.
 `LOOM_LIVE_MODEL` gates only `LiveModel` and `SkipUnlessLive`. Unset or `0` disables,
 `1` enables and any other value fails. LiveModel creates no provider: the
 application registers the named client. Undeclared application clients are not
@@ -66,7 +67,8 @@ Activity tools are strict by default. Register the real toolset even when its
 executor is omitted. Use `Passthrough(tool)` or `PassthroughAll()` to allow real
 execution intentionally; explicit stubs retain precedence. Return/Fail/Handle
 responses are consumed once unless Times or Always changes that. Cleanup reports
-unused finite responses. ArgsEqual uses the typed payload codec's canonical JSON.
+unused finite responses. RawStub result-decoder failures are StubErrors reported
+by Run and Close and retained in stub and harness call records. ArgsEqual uses the typed payload codec's canonical JSON.
 Inline and agent-as-tool tools cannot be stubbed; test children through their own
 models and activity tools.
 
@@ -98,7 +100,11 @@ func guideSelection(t testing.TB, register agenttest.Register) {
 
 Capture returns `(Request, error)`; it propagates a sentinel rather than consuming
 the model. Decide returns `*Decision` and runs no tools. Repeat takes
-`func(testing.TB)`. Save/load full request fixtures only under a gitignored
+`func(testing.TB)`. An attempt that fails and then skips counts as failed; only
+a skip without failure skips the parent and stops. Attempt cleanup restores
+Setenv and Chdir (including PWD) and removes TempDir directories before the next
+attempt. Process-state changes still require a non-parallel parent test.
+Save/load full request fixtures only under a gitignored
 application path. Re-capture when planner decoration changes tool definitions.
 
 ## Eval runner

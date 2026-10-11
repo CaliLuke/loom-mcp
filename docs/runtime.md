@@ -1388,6 +1388,9 @@ underlying client runs. The planner must propagate that error: swallowing or
 retrying it returns `ErrCaptureHandled`, and no model call returns
 `ErrCaptureNoModelCall`. Tools scheduled before the model call follow the normal
 strict stub rules. The capture can run concurrently with ordinary harness runs.
+Harness construction installs capture gates and then seals runtime registration.
+Register all models, agents and toolsets in the construction callback; later
+registrations, including model replacements, return `runtime.ErrRegistrationClosed`.
 
 `agenttest.Decide(t, h.Model(id), request)` performs one validated Complete or
 Stream call, returning `Decision` with the request, response, calls and latency.
@@ -1396,7 +1399,11 @@ It adds no `CallInfo`, writes no run record and executes no tools. Use
 `DecideContext` returns errors for callers without a test. `Repeat(t, n, minPass,
 func(testing.TB))` runs all attempts sequentially, isolates errors, Fatal, panic
 and cleanup failures, and reports the threshold with parent Errorf. Attempt
-contexts are cancelled before LIFO cleanup; a skip skips the parent and stops.
+contexts are cancelled before LIFO cleanup. A skip without a failure skips the
+parent and stops; an attempt that fails and then skips counts as failed and
+remaining attempts continue. Setenv and Chdir (including PWD) are restored, and
+TempDir directories are removed, during attempt cleanup before the next attempt.
+Process-state changes retain the parent test's prohibition on parallel tests.
 
 `WithUserMessage`, `WithSystem`, `WithToolSpecs`, `WithModel` and `WithRunID`
 return new requests with deferred errors surfaced by `Err`, `Request`, Marshal
@@ -1460,7 +1467,8 @@ stub payload decode failure is recorded as a `*StubError` with the tool, per-too
 call index, run/tool-call IDs and arguments. The runtime shows the model a tool
 error and can continue. After completion, Run returns the populated Result
 alongside a joined harness error containing that run's StubErrors; Close also
-reports every failure. Result codec rejection follows real-executor semantics:
+reports every failure. RawStub result-decoder rejection is also a StubError.
+Rejection during subsequent runtime result encoding follows real-executor semantics:
 it is a tool error and does not become a StubError. RunSession retains the
 completed run's evidence before stopping on a harness error.
 
@@ -1475,6 +1483,8 @@ bytes and slice slots; typed pointer/map/slice values remain shallow copies.
 `RawStub(h, toolID)` provides the same response API over `rawjson.Message` for
 tools without descriptors. It decodes successful raw results through the
 registered result codec before AfterTool and normal result materialization.
+A decoder failure is recorded as a `*StubError` in both `stub.Calls()` and
+`h.ToolCalls()`, returned by Run, and reported again by Close.
 
 ### Expectations
 

@@ -30,6 +30,8 @@ The root module never imports a fixture module.
 
 Register the agent with its generated `Register…Agent` function and toolsets with
 `RegisterUsedToolsets`. Register every application model inside `register`.
+Construction seals runtime registration after installing capture gates. Later
+model, agent or toolset registrations return `runtime.ErrRegistrationClosed`.
 The fixture's `guidePlanner` advertises both generated lookup and status schemas
 and propagates model errors; its implementation is outside the snippet regions.
 These helpers supply registration and the argument predicate:
@@ -92,6 +94,8 @@ real execution is intentional; explicit stubs still take precedence.
 `Return`, `Fail` and `Handle` append responses, used once unless configured with
 `Times(n)` or `Always()`. Cleanup reports unused finite responses. Stubs preserve
 normal payload validation, AfterTool interceptors and result materialization.
+A RawStub response rejected by the registered result decoder is a `*StubError`,
+reported by Run and Close and retained in both stub and harness call records.
 
 ## Prove selection
 
@@ -129,8 +133,12 @@ func guideSelection(t testing.TB, register agenttest.Register) {
 ```
 
 `Repeat` takes `func(testing.TB)`, runs all attempts, and reports failed attempts'
-diagnostics. `Decide` returns a `*Decision` with request, response, calls and
-latency, without recording a run. Result and completion expectations require a
+diagnostics. An attempt that fails and then skips counts as failed; a skip
+without failure skips the parent and stops. Each attempt restores Setenv and
+Chdir (including PWD) and removes its TempDir directories during LIFO cleanup,
+before the next attempt starts. Process-state changes still require a
+non-parallel parent test. `Decide` returns a `*Decision` with request, response,
+calls and latency, without recording a run. Result and completion expectations require a
 trajectory subject and cannot be checked against model calls alone.
 
 ## Keep a decision as a fixture

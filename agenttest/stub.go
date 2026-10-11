@@ -180,7 +180,8 @@ func (e *StubError) Error() string {
 	return fmt.Sprintf("agenttest: tool %q call %d run %q tool_call %q: %s; args=%s", e.Tool, e.Call, e.RunID, e.ToolCallID, e.Reason, e.Args)
 }
 
-// Unwrap exposes ErrStubExhausted and payload decode errors to errors.Is/As.
+// Unwrap exposes ErrStubExhausted, payload decode errors and RawStub result
+// decode errors to errors.Is/As.
 func (e *StubError) Unwrap() error {
 	return e.cause
 }

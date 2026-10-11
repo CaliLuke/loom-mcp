@@ -35,7 +35,7 @@ type attemptTB struct {
 
 // Repeat runs all n attempts sequentially, accepting at least minPass successes.
 // Each attempt isolates failures, Fatal, panics and cleanup from the parent.
-// A skipped attempt skips the parent and stops further attempts.
+// A skipped attempt with no failure skips the parent and stops further attempts.
 func Repeat(t testing.TB, n, minPass int, fn func(testing.TB)) RepeatReport {
 	t.Helper()
 	if minPass < 1 || minPass > n {
@@ -46,7 +46,7 @@ func Repeat(t testing.TB, n, minPass int, fn func(testing.TB)) RepeatReport {
 	for index := 1; index <= n; index++ {
 		at := runAttempt(t, index, n, fn)
 		report.Attempts++
-		if at.skipped {
+		if at.skipped && !at.failed {
 			t.Skipf("agenttest: Repeat: attempt %d skipped: %v", index, at.diagnostics)
 			return report
 		}

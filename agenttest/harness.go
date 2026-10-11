@@ -138,6 +138,9 @@ func NewHarness(ctx context.Context, register Register, opts ...Option) (*Harnes
 	if err := h.registerModels(options); err != nil {
 		return nil, err
 	}
+	if err := rt.Seal(ctx); err != nil {
+		return nil, fmt.Errorf("agenttest: seal registration after installing capture gates: %w", err)
+	}
 	h.eventsUnverified = rt.HasEventInterceptors()
 	return h, nil
 }
@@ -220,7 +223,8 @@ func User(text string) Input {
 	return Input{&model.Message{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: text}}}}
 }
 
-// Runtime returns the harness-owned runtime for application inspection.
+// Runtime returns the sealed harness-owned runtime for application inspection.
+// Register models, agents and toolsets in the construction callback.
 func (h *Harness) Runtime() *runtime.Runtime {
 	return h.rt
 }
@@ -457,7 +461,7 @@ func (h *Harness) startRun(ctx context.Context, client runtime.AgentClient, sess
 }
 
 // registerModels checks explicit live declarations before scripted overrides and
-// installs the capture layer once, before the first run closes registration.
+// installs the capture layer once, before construction closes registration.
 func (h *Harness) registerModels(options harnessOptions) error {
 	for _, id := range options.live {
 		if _, ok := h.rt.ModelClient(id); !ok {

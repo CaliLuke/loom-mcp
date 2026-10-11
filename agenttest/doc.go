@@ -3,8 +3,10 @@
 //
 // New uses the test context, registers application components, installs scripted
 // model overrides, and reports leaks at test cleanup. NewHarness exposes the same
-// construction for callers that manage Close themselves. The harness owns its
-// engine, run/content stores, session store and hook bus. WithRuntimeOptions may
+// construction for callers that manage Close themselves. Construction seals runtime
+// registration after installing capture gates; register all components in the
+// callback. The harness owns its engine, run/content stores, session store and
+// hook bus. WithRuntimeOptions may
 // configure other runtime policies, memory and interceptors, but cannot replace
 // those owned components or the tracer.
 //
@@ -48,11 +50,13 @@
 // Decide performs one validated model call without CallInfo, recording or tool
 // execution. Check Decision.Calls with expect.Calls. Repeat runs sequential
 // func(testing.TB) attempts, isolating Fatal, panics and cleanup failures before
-// applying its minimum passing threshold. A skipped attempt skips the parent.
+// applying its minimum passing threshold. Only a skip without failure skips the
+// parent. Attempt cleanup restores Setenv/Chdir and removes TempDir directories.
 //
 // Activity tools are strict by default: declare Stub responses or opt into
 // Passthrough / PassthroughAll. Stubs preserve registration, payload preparation,
 // AfterTool and result materialization. Close reports every dispatch failure and
-// unused finite response. RawStub supports registered tools without descriptors.
+// unused finite response. RawStub supports registered tools without descriptors;
+// registered result-decoder failures are StubErrors reported by Run and Close.
 // Inline and agent-as-tool stubbing remain a runtime follow-up.
 package agenttest

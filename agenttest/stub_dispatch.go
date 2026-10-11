@@ -103,8 +103,9 @@ func (s *ToolStub[P, R]) prepare(call planner.ToolRequest) (func(context.Context
 		} else {
 			value, err := resultValue(result)
 			if err != nil {
-				s.complete(slot, global, result, err)
-				return nil, err
+				failure := s.resultDecodeFailure(global, err)
+				s.complete(slot, global, result, failure)
+				return nil, failure
 			}
 			toolResult.Result = value
 			toolResult.Bounds = response.bounds
@@ -112,6 +113,17 @@ func (s *ToolStub[P, R]) prepare(call planner.ToolRequest) (func(context.Context
 		s.complete(slot, global, result, handleErr)
 		return &runtime.BeforeToolDecision{Result: runtime.Executed(toolResult)}, nil
 	}, nil
+}
+
+// resultDecodeFailure records a raw response rejected by the registered decoder.
+// The reserved call slot preserves its arrival index across concurrent handlers.
+func (s *ToolStub[P, R]) resultDecodeFailure(global int, err error) *StubError {
+	s.h.stubs.mu.Lock()
+	defer s.h.stubs.mu.Unlock()
+	call := s.h.stubs.calls[global]
+	failure := &StubError{Tool: call.Tool, Call: call.Call, RunID: call.RunID, ToolCallID: call.ToolCallID, Reason: "result decode failure: " + err.Error(), Args: slices.Clone(call.Raw), cause: err}
+	s.h.stubs.failures = append(s.h.stubs.failures, failure)
+	return failure
 }
 
 func (s *ToolStub[P, R]) complete(slot, global int, result R, err error) {

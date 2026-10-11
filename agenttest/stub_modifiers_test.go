@@ -447,3 +447,35 @@ func TestStubPayloadPreparationAndInterceptorOrder(t *testing.T) {
 	assert.Zero(t, laterBefore)
 	assert.JSONEq(t, `{"value":"adapted"}`, string(stub.Calls()[0].Raw))
 }
+
+func TestRawStubResultDecodeFailure(t *testing.T) {
+	decodeErr := errors.New("invalid raw result")
+	spec := echoSpec()
+	spec.Result.Codec.FromJSON = func([]byte) (any, error) {
+		return nil, decodeErr
+	}
+	h, err := agenttest.NewHarness(t.Context(), registerHarnessAgent("root", harnessPlanner{id: "model", specs: []tools.ToolSpec{spec}}),
+		agenttest.ScriptedModel("model", agenttest.Respond(agenttest.RawToolCall("echo.echo", rawjson.Message(`{"value":"input"}`))), agenttest.Respond(agenttest.Text("done"))))
+	require.NoError(t, err)
+	stub := agenttest.RawStub(h, "echo.echo")
+	stub.Return(rawjson.Message(`{"invalid":true}`))
+	result, runErr := h.Run(t.Context(), "root", nil)
+	closeErr := h.Close()
+	require.NotNil(t, result)
+	require.NoError(t, result.RunErr)
+	var failure *agenttest.StubError
+	if assert.ErrorAs(t, runErr, &failure) {
+		assert.Equal(t, tools.Ident("echo.echo"), failure.Tool)
+		assert.Equal(t, 1, failure.Call)
+		assert.Equal(t, result.RunID, failure.RunID)
+		assert.NotEmpty(t, failure.ToolCallID)
+		assert.JSONEq(t, `{"value":"input"}`, string(failure.Args))
+		assert.ErrorIs(t, failure, decodeErr)
+	}
+	require.ErrorAs(t, closeErr, &failure)
+	require.ErrorIs(t, closeErr, decodeErr)
+	require.Len(t, stub.Calls(), 1)
+	require.ErrorAs(t, stub.Calls()[0].Err, &failure)
+	require.Len(t, h.ToolCalls(), 1)
+	require.ErrorAs(t, h.ToolCalls()[0].Err, &failure)
+}

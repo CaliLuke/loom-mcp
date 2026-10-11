@@ -604,6 +604,18 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   declarations that require a service `MCP(...)` contract must report that
   missing contract separately from general nesting errors.
 
+## Agent Testing
+
+- Harness construction gates models and seals runtime registration. Register all
+  models, agents and toolsets in the callback; later registration and model
+  replacement return `runtime.ErrRegistrationClosed`.
+- RawStub result-decoder failures are dispatch `StubError` values, recorded in
+  stub and harness calls and reported by Run and Close.
+- Repeat counts failure followed by Skip as a failed attempt. Only skips without
+  failure skip the parent and stop. Attempt cleanup restores Setenv and Chdir
+  (including PWD) and removes TempDir directories before the next attempt.
+  Process-state changes retain the parent test's parallel-test restrictions.
+
 ## Eval Scenarios
 
 - Use top-level `eval` for immutable Go/JSONL datasets, scenario validation and

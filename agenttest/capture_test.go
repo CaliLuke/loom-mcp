@@ -3,6 +3,7 @@ package agenttest_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 
@@ -144,6 +145,33 @@ func TestCaptureGateCapabilities(t *testing.T) {
 	require.NoError(t, err)
 	assert.NoError(t, result.RunErr)
 	assert.Equal(t, ids, h.Runtime().ModelIDs())
+}
+
+func TestCaptureRejectsLateModelRegistration(t *testing.T) {
+	for _, replacement := range []bool{false, true} {
+		for _, stream := range []bool{false, true} {
+			t.Run(strings.Join([]string{map[bool]string{false: "new", true: "replacement"}[replacement], map[bool]string{false: "complete", true: "stream"}[stream]}, "/"), func(t *testing.T) {
+				script, err := agenttest.NewScript(agenttest.Respond(agenttest.Text("must not run")))
+				require.NoError(t, err)
+				h := agenttest.New(t, func(ctx context.Context, rt *runtime.Runtime) error {
+					if replacement {
+						if err := rt.RegisterModel("model", script.Client()); err != nil {
+							return err
+						}
+					}
+					return registerCaptureAgent(capturePlanner{stream: stream})(ctx, rt)
+				})
+				require.ErrorIs(t, h.Runtime().RegisterModel("model", script.Client()), runtime.ErrRegistrationClosed)
+				_, captureErr := h.CaptureFirstRequest(t.Context(), "root", nil)
+				if replacement {
+					require.NoError(t, captureErr)
+				} else {
+					require.Error(t, captureErr)
+				}
+				assert.Equal(t, 1, script.Remaining(), "capture must not consume the late client")
+			})
+		}
+	}
 }
 
 func registerCaptureAgent(p capturePlanner) agenttest.Register {
