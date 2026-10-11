@@ -2292,13 +2292,24 @@ return &runtime.ToolExecutionResult{
 ```
 
 The runtime contract enforces that a `Pause` must not be paired with a tool
-error and must carry a non-nil payload (validated by
-`validateToolPauseContract`).
+error and must carry a non-nil clarification payload with an ID and a question
+containing non-whitespace text. Valid question text is preserved.
+
+All tool-result contract violations (result shape, bounds, retry hints, and
+pauses) return a non-retryable `*engine.ApplicationError` whose `Type` is
+`runtime.ToolResultContractErrorType` (`"tool_result_contract"`). This applies
+to activity, provided/external, child agent-as-tool, inline, timeout, and
+synthesized results. The runtime returns the typed error at the root so engine
+adapters, including Temporal, preserve its classification.
 
 A tool result with `RetryHint.Reason == planner.RetryReasonMissingFields` must
-provide a nonempty `ClarifyingQuestion`. Empty and whitespace-only questions fail
-tool-result validation with a non-retryable `*engine.ApplicationError` whose
-`Type` is `tool_result_contract`.
+provide a nonempty, non-whitespace `ClarifyingQuestion`.
+
+**Compatibility:** missing-fields hints without a question now fail validation
+under every `OnMissingFields` policy, including `finalize`, `resume`,
+`await_clarification`, and the default policy. Previously those policies could
+accept a hint without a question. These validation and error-classification
+changes leave valid runs unchanged and do not require a workflow protocol bump.
 
 > **Breaking change (v0.52.0)**: the executor signature changed from
 > `func(ctx, *ToolRequest) (*planner.ToolResult, error)` to
@@ -2527,7 +2538,8 @@ return &planner.PlanResult{
 `AwaitClarification.Question` must be nonempty and must contain non-whitespace
 text. Start and resume planner activities reject blank questions before committing
 model presentations or storing planner-result content. The activity fails with a
-non-retryable `*engine.ApplicationError` whose `Type` is `planner_contract`;
+non-retryable `*engine.ApplicationError` whose `Type` is
+`runtime.PlannerContractErrorType` (`"planner_contract"`);
 staged model presentations are discarded. Valid question text is preserved.
 
 The runtime pauses the workflow and emits an `AwaitClarification` event. Callers

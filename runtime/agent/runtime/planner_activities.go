@@ -200,7 +200,7 @@ func validatePlannerClarificationQuestions(result *planner.PlanResult) error {
 		if item.Clarification != nil && strings.TrimSpace(item.Clarification.Question) == "" {
 			return engine.NewNonRetryableApplicationError(
 				fmt.Sprintf("planner await item %d is invalid: clarification question must be nonempty", i),
-				"planner_contract", nil, nil,
+				PlannerContractErrorType, nil, nil,
 			)
 		}
 	}

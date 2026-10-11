@@ -199,9 +199,16 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   contain non-whitespace question text. Reject blank planner questions inside
   the planner activity before committing model presentations or storing result
   content; discard staged presentations. Use non-retryable
-  `engine.ApplicationError` failures with type `planner_contract` for planner
-  awaits and `tool_result_contract` for missing-fields retry hints. Preserve
-  valid question text.
+  `engine.ApplicationError` failures with type `runtime.PlannerContractErrorType`
+  (`planner_contract`) for planner awaits. All tool-result shape, bounds, retry
+  hint and pause violations use `runtime.ToolResultContractErrorType`
+  (`tool_result_contract`) at the root so engine adapters preserve classification
+  across activity, provided/external, child, inline, timeout and synthesized
+  paths. Pause questions also require non-whitespace text. Preserve valid text.
+  Missing-fields hints without a question now fail under every OnMissingFields
+  policy, including finalize, resume, await_clarification and the default.
+  This validation/classification correction leaves valid runs unchanged and
+  does not require a workflow protocol bump.
 - Planner turns are workflow activities, not exactly-once method calls. Generated
   registrations retry failed plan/resume activities up to three attempts by
   default, so model calls and direct side effects can repeat after a late attempt

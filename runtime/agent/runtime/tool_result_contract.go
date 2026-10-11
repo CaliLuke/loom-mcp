@@ -3,12 +3,10 @@
 package runtime
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/CaliLuke/loom-mcp/v2/boundedresult"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
-	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
@@ -28,16 +26,13 @@ import (
 //   - next cursor is only valid for bounded tools with paging configured.
 func validateToolResultContract(spec tools.ToolSpec, call planner.ToolRequest, tr *planner.ToolResult) error {
 	if tr == nil {
-		return fmt.Errorf("nil tool result for %q (%s)", call.Name, call.ToolCallID)
+		return toolResultContractErrorf("nil tool result for %q (%s)", call.Name, call.ToolCallID)
 	}
 	if tr.Result != nil && tr.Error != nil {
-		return fmt.Errorf("tool %q result is invalid: error and result are both set (tool_call_id=%s)", call.Name, call.ToolCallID)
+		return toolResultContractErrorf("tool %q result is invalid: error and result are both set (tool_call_id=%s)", call.Name, call.ToolCallID)
 	}
 	if hint := tr.RetryHint; hint != nil && hint.Reason == planner.RetryReasonMissingFields && strings.TrimSpace(hint.ClarifyingQuestion) == "" {
-		return engine.NewNonRetryableApplicationError(
-			fmt.Sprintf("tool %q result is invalid: missing-fields clarification question must be nonempty (tool_call_id=%s)", call.Name, call.ToolCallID),
-			"tool_result_contract", nil, nil,
-		)
+		return toolResultContractErrorf("tool %q result is invalid: missing-fields clarification question must be nonempty (tool_call_id=%s)", call.Name, call.ToolCallID)
 	}
 	return validateToolBoundsContract(spec, call, tr.Error, tr.Bounds)
 }
@@ -49,19 +44,19 @@ func validateToolPauseContract(call planner.ToolRequest, tr *planner.ToolResult,
 		return nil
 	}
 	if tr == nil {
-		return fmt.Errorf("tool %q pause is invalid: missing tool result (tool_call_id=%s)", call.Name, call.ToolCallID)
+		return toolResultContractErrorf("tool %q pause is invalid: missing tool result (tool_call_id=%s)", call.Name, call.ToolCallID)
 	}
 	if tr.Error != nil {
-		return fmt.Errorf("tool %q pause is invalid: pause and error are both set (tool_call_id=%s)", call.Name, call.ToolCallID)
+		return toolResultContractErrorf("tool %q pause is invalid: pause and error are both set (tool_call_id=%s)", call.Name, call.ToolCallID)
 	}
 	if pause.Clarification == nil {
-		return fmt.Errorf("tool %q pause is invalid: missing clarification payload (tool_call_id=%s)", call.Name, call.ToolCallID)
+		return toolResultContractErrorf("tool %q pause is invalid: missing clarification payload (tool_call_id=%s)", call.Name, call.ToolCallID)
 	}
 	if pause.Clarification.ID == "" {
-		return fmt.Errorf("tool %q pause is invalid: clarification id is required (tool_call_id=%s)", call.Name, call.ToolCallID)
+		return toolResultContractErrorf("tool %q pause is invalid: clarification id is required (tool_call_id=%s)", call.Name, call.ToolCallID)
 	}
-	if pause.Clarification.Question == "" {
-		return fmt.Errorf("tool %q pause is invalid: clarification question is required (tool_call_id=%s)", call.Name, call.ToolCallID)
+	if strings.TrimSpace(pause.Clarification.Question) == "" {
+		return toolResultContractErrorf("tool %q pause is invalid: clarification question is required (tool_call_id=%s)", call.Name, call.ToolCallID)
 	}
 	return nil
 }
@@ -71,24 +66,24 @@ func validateToolPauseContract(call planner.ToolRequest, tr *planner.ToolResult,
 func validateToolBoundsContract(spec tools.ToolSpec, call planner.ToolRequest, toolErr *planner.ToolError, bounds *agent.Bounds) error {
 	if spec.Bounds == nil {
 		if bounds != nil {
-			return fmt.Errorf("unbounded tool %q returned unexpected bounds metadata (tool_call_id=%s)", call.Name, call.ToolCallID)
+			return toolResultContractErrorf("unbounded tool %q returned unexpected bounds metadata (tool_call_id=%s)", call.Name, call.ToolCallID)
 		}
 		return nil
 	}
 	if toolErr != nil {
 		if bounds != nil {
-			return fmt.Errorf("bounded tool %q returned error with unexpected bounds metadata (tool_call_id=%s)", call.Name, call.ToolCallID)
+			return toolResultContractErrorf("bounded tool %q returned error with unexpected bounds metadata (tool_call_id=%s)", call.Name, call.ToolCallID)
 		}
 		return nil
 	}
 	if bounds == nil {
-		return fmt.Errorf("bounded tool %q returned result without bounds (tool_call_id=%s)", call.Name, call.ToolCallID)
+		return toolResultContractErrorf("bounded tool %q returned result without bounds (tool_call_id=%s)", call.Name, call.ToolCallID)
 	}
 	if bounds.Truncated && !boundedresult.HasContinuation(bounds.NextCursor, bounds.RefinementHint) {
-		return fmt.Errorf("bounded tool %q returned truncated result without next_cursor or refinement_hint (tool_call_id=%s)", call.Name, call.ToolCallID)
+		return toolResultContractErrorf("bounded tool %q returned truncated result without next_cursor or refinement_hint (tool_call_id=%s)", call.Name, call.ToolCallID)
 	}
 	if spec.Bounds.Paging == nil && bounds.NextCursor != nil {
-		return fmt.Errorf("bounded tool %q returned next_cursor but paging is not configured (tool_call_id=%s)", call.Name, call.ToolCallID)
+		return toolResultContractErrorf("bounded tool %q returned next_cursor but paging is not configured (tool_call_id=%s)", call.Name, call.ToolCallID)
 	}
 	return nil
 }

@@ -231,7 +231,8 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   resume planner activities reject blank questions before committing model
   presentations or storing planner-result content, discard staged presentations,
   and return a non-retryable `*engine.ApplicationError` with type
-  `planner_contract`. Valid question text is preserved.
+  `runtime.PlannerContractErrorType` (`planner_contract`). Valid question text
+  is preserved.
 
 ## Cancellation Classification
 
@@ -556,10 +557,18 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - Use generated `tool_specs.Specs` and codecs for payload/result schema and encoding needs.
 - Do not introspect `docs.json` at runtime.
 - Tool results and retry hints should stay structured; avoid best-effort coercion when contracts fail.
-- A tool result with `RetryHint.Reason == planner.RetryReasonMissingFields`
-  requires a nonempty, non-whitespace `ClarifyingQuestion`. Tool-result contract
-  validation rejects blank questions with a non-retryable
-  `*engine.ApplicationError` of type `tool_result_contract`.
+- Every tool-result shape, bounds, retry-hint and pause contract violation
+  returns a root non-retryable `*engine.ApplicationError` with type
+  `runtime.ToolResultContractErrorType` (`tool_result_contract`). Keep the root
+  visible to engine adapters on activity, provided/external, child agent-as-tool,
+  inline, timeout and synthesized paths; a generic error wrapper hides the type
+  from Temporal's outbound converter.
+- Pause questions and `RetryHint.Reason == planner.RetryReasonMissingFields`
+  clarification questions must contain non-whitespace text. Preserve valid text.
+  Compatibility: missing-fields hints without a question now fail under every
+  OnMissingFields policy (finalize, resume, await_clarification and default),
+  before policy handling. Valid runs are unchanged; this validation and error
+  classification correction does not require a workflow protocol bump.
 - Generated validation errors use fixed framework text. Do not preserve raw Goa
   validation messages because they can contain submitted values. Bound generated
   retry hints after all field-contract enrichment and before durable storage.

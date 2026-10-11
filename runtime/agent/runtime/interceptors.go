@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	agent "github.com/CaliLuke/loom-mcp/v2/runtime/agent"
@@ -347,7 +346,7 @@ func runAfterToolInterceptors(
 		return nil, currentErr
 	}
 	if current == nil {
-		return nil, errors.New("tool execution returned nil execution result")
+		return nil, toolResultContractErrorf("tool execution returned nil execution result")
 	}
 	return current, nil
 }

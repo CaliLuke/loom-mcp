@@ -127,10 +127,10 @@ func (r *Runtime) materializeToolExecutionResult(
 	exec *ToolExecutionResult,
 ) (*planner.ToolResult, rawjson.Message, *ToolPause, error) {
 	if exec == nil {
-		return nil, nil, nil, fmt.Errorf("tool %q returned nil execution result", call.Name)
+		return nil, nil, nil, toolResultContractErrorf("tool %q returned nil execution result", call.Name)
 	}
 	if exec.ToolResult == nil {
-		return nil, nil, nil, fmt.Errorf("tool %q returned nil tool result", call.Name)
+		return nil, nil, nil, toolResultContractErrorf("tool %q returned nil tool result", call.Name)
 	}
 	resultJSON, err := r.materializeToolResult(ctx, call, exec.ToolResult)
 	if err != nil {
@@ -146,7 +146,7 @@ func (r *Runtime) materializeToolExecutionResult(
 // when the toolset registered one.
 func (r *Runtime) applyResultMaterializer(ctx context.Context, spec tools.ToolSpec, call planner.ToolRequest, result *planner.ToolResult) error {
 	if result == nil {
-		return fmt.Errorf("nil tool result for %q (%s)", call.Name, call.ToolCallID)
+		return toolResultContractErrorf("nil tool result for %q (%s)", call.Name, call.ToolCallID)
 	}
 	if result.Name == "" {
 		result.Name = call.Name
@@ -197,11 +197,11 @@ func (r *Runtime) decodeProvidedToolResults(ctx context.Context, allowed []plann
 // typed planner result used by the runtime.
 func (r *Runtime) decodeProvidedToolResult(ctx context.Context, spec tools.ToolSpec, call planner.ToolRequest, item *api.ProvidedToolResult) (*planner.ToolResult, rawjson.Message, error) {
 	if item == nil {
-		return nil, nil, fmt.Errorf("await: nil tool result")
+		return nil, nil, toolResultContractErrorf("await: nil tool result")
 	}
 	resultProvided := hasNonNullJSON(item.Result.RawMessage())
 	if item.Error != nil && resultProvided {
-		return nil, nil, fmt.Errorf("await: tool result for %s is invalid: error and result are both set", call.Name)
+		return nil, nil, toolResultContractErrorf("await: tool result for %s is invalid: error and result are both set", call.Name)
 	}
 	bounds := cloneProvidedToolBounds(item.Bounds)
 	var decoded any
@@ -225,7 +225,7 @@ func (r *Runtime) decodeProvidedToolResult(ctx context.Context, spec tools.ToolS
 	}
 	resultJSON, err := r.materializeToolResult(ctx, call, result)
 	if err != nil {
-		return nil, nil, fmt.Errorf("await: %w", err)
+		return nil, nil, err
 	}
 	return result, resultJSON, nil
 }

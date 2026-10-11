@@ -229,7 +229,7 @@ func (e *toolBatchExec) dispatchInlineToolCall(wfCtx engine.WorkflowContext, b *
 		return fmt.Errorf("inline tool %q failed: %w", call.Name, err)
 	}
 	if execResult == nil {
-		return fmt.Errorf("inline tool %q returned nil execution result", call.Name)
+		return toolResultContractErrorf("inline tool %q returned nil execution result", call.Name)
 	}
 	duration := wfCtx.Now().Sub(start)
 	result, resultJSON, pause, err := e.r.materializeToolExecutionResult(ctx, call, execResult)
