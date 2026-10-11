@@ -15,6 +15,7 @@ import (
 	"cloud.google.com/go/auth"
 	"google.golang.org/genai"
 
+	"github.com/CaliLuke/loom-mcp/v2/features/model/internal/contextlimits"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
@@ -28,6 +29,10 @@ type (
 
 	tokenCountingModelsClient interface {
 		CountTokens(ctx context.Context, model string, contents []*genai.Content, config *genai.CountTokensConfig) (*genai.CountTokensResponse, error)
+	}
+
+	contextInfoModelsClient interface {
+		Get(ctx context.Context, model string, config *genai.GetModelConfig) (*genai.Model, error)
 	}
 
 	// Options configures optional Gemini adapter behavior.
@@ -107,6 +112,7 @@ type (
 
 	// Client implements model.Provider using Gemini GenerateContent calls.
 	Client struct {
+		limitsCache    contextlimits.Cache
 		models         ModelsClient
 		defaultModel   string
 		highModel      string

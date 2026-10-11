@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextmeasure"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
@@ -24,14 +25,18 @@ func TestBodyRoundTrip(t *testing.T) {
 	assert.Empty(t, decoded.Context)
 	response := runstore.Hash("response")
 	for _, failure := range []*CallError{nil, {Kind: "stream_abandoned", Message: "not finalized"}} {
-		completion := Completion{Response: &response, Error: failure, Usage: model.TokenUsage{InputTokens: 3, TotalTokens: 3}, Latency: 123456789 * time.Nanosecond}
+		completion := Completion{Response: &response, Error: failure, Usage: model.TokenUsage{InputTokens: 3, TotalTokens: 3}, Latency: 123456789 * time.Nanosecond, Facts: &contextmeasure.RequestFacts{Call: started.Key, Model: "resolved", ContextWindow: 1000, OutputReserve: 100, InputTokens: 3, TextBytes: 9, FixedBytes: 3, NonText: 1500, ViewBearing: true, CountLatency: 42 * time.Nanosecond, Outcome: contextmeasure.OutcomeOK}}
+		if failure != nil {
+			completion.Facts.Outcome = contextmeasure.OutcomeError
+		}
 		encoded, err := Encode(completion)
 		require.NoError(t, err)
 		assert.Contains(t, string(encoded), `"latency":123456789`)
 		got, err := DecodeCompletion(encoded)
 		require.NoError(t, err)
 		assert.Equal(t, completion, got)
-		assert.Nil(t, got.Facts)
+		require.NotNil(t, got.Facts)
+		assert.Equal(t, started.Key, got.Facts.Call)
 		roundTrip, err := Encode(got)
 		require.NoError(t, err)
 		assert.Equal(t, string(encoded), string(roundTrip))

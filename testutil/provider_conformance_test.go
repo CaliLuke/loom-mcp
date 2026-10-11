@@ -17,6 +17,7 @@ func TestRunProviderConformanceRunsRequiredCases(t *testing.T) {
 
 	RunProviderConformance(t, ProviderConformanceSuite{
 		Provider:                      "test",
+		ContextLimits:                 ProviderCapabilityConformance{Supported: providerCase("context_limits")},
 		OrdinaryProviderError:         providerCase("provider_error"),
 		RateLimit:                     providerCase("rate_limit"),
 		MalformedToolCall:             providerCase("malformed_tool_call"),
@@ -54,6 +55,7 @@ func TestRunProviderConformanceRunsRequiredCases(t *testing.T) {
 	})
 
 	require.Equal(t, map[string]bool{
+		"context_limits":          true,
 		"provider_error":          true,
 		"rate_limit":              true,
 		"malformed_tool_call":     true,
@@ -85,6 +87,7 @@ func TestRunProviderConformanceRunsUnsupportedStreamingCase(t *testing.T) {
 
 	RunProviderConformance(t, ProviderConformanceSuite{
 		Provider:                      "test",
+		ContextLimits:                 ProviderCapabilityConformance{Unsupported: providerCase},
 		OrdinaryProviderError:         providerCase,
 		RateLimit:                     providerCase,
 		MalformedToolCall:             providerCase,

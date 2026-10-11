@@ -691,7 +691,7 @@ type RequestFacts struct {
     Call          CallKey // (RunID, Seq, Attempt), see 4.13
     Model         string
     ContextWindow int     // from the adapter's ContextLimits (4.14); 0 if unknown
-    OutputReserve int     // the request's MaxTokens, else min(MaxOutputTokens, ContextWindow / 4)
+    OutputReserve int     // MaxTokens, else DefaultMaxTokens, else min(MaxOutputTokens, ContextWindow / 4)
     ViewBearing   bool    // the request contained messages whose hashes are in the view
     InputTokens   int     // input + cache read + cache write, provider-reported; 0 if not reported
     TextBytes     int     // all text the request carried: system, tools, messages
@@ -709,6 +709,11 @@ measurement only; the request record matches full encodings (4.13). Each
 and guard decisions can be replayed after Temporal history is gone (7.1). If
 every call in an activity is non-view-bearing (a planner that rewrites
 messages), the runtime emits `context_unmeasured` once per run.
+
+**Output reserve.** Use the request's positive `MaxTokens`, otherwise the
+adapter's configured `ContextLimits.DefaultMaxTokens`, otherwise
+`min(MaxOutputTokens, ContextWindow / 4)`. This accounts for adapters that send
+a configured output cap even when the request leaves `MaxTokens` unset.
 
 **Budget.** For a model with known limits, `B(m) = ContextWindow − OutputReserve`.
 Budgets, like rates, are kept per model; settings that are fractions of B use
@@ -734,6 +739,13 @@ rate(m)  = clamp((InputTokens − NonText) / TextBytes, 1/6, 1/2)
 estimate(m) = rate(m) × (FixedBytes + rendered view text bytes) + non-text tokens in view
 ```
 
+The pure `runtime/agent/contextmeasure` package uses `Rate{Tokens, Bytes}`
+and integer ceiling arithmetic. Negative byte/token contributions are treated
+as zero; an unrepresentable estimate saturates at the largest `int`, rather
+than wrapping. Binary document costs round up to a whole token. Canonical
+measurement hashes preserve JSON numeric tokens and sort object keys; metadata
+and cache points do not affect view matching.
+
 Rates are kept per model, because tokenizers differ; the activity input
 carries the rate of every model seen in the run.
 
@@ -753,9 +765,15 @@ guard is on even before the rate is calibrated (below), and the token budget
 is exact for that request apart from thinking blocks. Counting can cost a
 round trip to the provider, so the guard counts only requests whose estimate
 is above `B × TriggerAt`, near the limit, and records the count's latency in
-the call record. The trigger keeps the estimate, because it runs in workflow code and a
-count needs the rendered request. Without a counter, every token figure in
-this design is an estimate and the byte bounds are the only hard ones (P3).
+the call record. The trigger keeps the estimate, because it runs in workflow
+code and a count needs the rendered request.
+
+The measurement-only `GuardTokens` helper accepts a rational trigger fraction
+and `GuardBudget{Tokens, ImageTokens}` so its fallback estimate honors the
+adapter's image cost. `GuardCount.GuardOn` reports eligibility from a positive
+known budget and an exact count or calibrated rate; the helper never rejects a
+request. Rejection wiring belongs to K14. Without a counter, every token figure
+in this design is an estimate and the byte bounds are the only hard ones (P3).
 
 The estimate is a heuristic. An overestimate causes an early compaction; an
 underestimate causes an overflow that recovery handles (4.15). It never fails
@@ -1093,22 +1111,53 @@ several Temporal workers, because the record lives in the shared store.
 
 ```go
 type ContextLimits struct {
-    ContextWindow   int
-    MaxOutputTokens int
+    ContextWindow    int
+    MaxOutputTokens  int
+    DefaultMaxTokens int // configured completion cap when Request.MaxTokens is zero
+    ImageTokens      int // zero selects 1,500 tokens per image for measurement
 }
 
 type ContextInfo interface {
-    ContextLimits(ctx context.Context, modelID string) (ContextLimits, bool)
+    ContextLimits(ctx context.Context, req *model.Request) (ContextLimits, string /* resolved model */, bool)
 }
 ```
 
-Adapters answer from the provider's model API where one exists, otherwise
-from a table in the adapter. Runtime configuration overrides per model ID and
-wins. When a model's limits are unknown, the trigger and the pre-send guard
-are off for that model, overflow recovery (4.15) still applies, and
-`context_limits_unknown` is emitted once per run. Only an agent that declares
-`Context(...)` explicitly fails fast on unknown limits, with an error naming
-the model and the override to set (D12).
+The capability resolves the same request model as completion, including model
+class routing. It returns the resolved provider model ID even when the window
+is unknown. Anthropic's Models API and Gemini's `Models.Get` discover limits in
+activities with a caller-bounded two-second deadline. Successful raw metadata
+is cached per requested model for the client's lifetime. Caller cancellation or
+expiry failures are never cached; other failures retain the table fallback for
+60 seconds before retrying. Provider calls never run in workflow code.
+
+Anthropic `max_input_tokens` and Gemini `InputTokenLimit` describe input limits.
+Cache the raw input allowance and map it after lookup for each request as
+`ContextWindow = input limit + contextmeasure.OutputReserve(req, limits)`.
+The reserve uses request MaxTokens, then DefaultMaxTokens, then the smaller of
+max output and a quarter of the returned window. For that last case, use
+`min(MaxOutputTokens, input limit/3)` with integer division to keep the reserve
+stable on the returned window. Thus `Budget = ContextWindow - OutputReserve`
+equals the published input allowance without subtracting it twice (decision 4),
+including explicit caps that differ from the configured default. Shared context
+windows published in tables are used directly. Table keys must be SDK
+constants or IDs in adapter non-test code, with every figure verified against
+an official provider page. Unlisted models remain unknown; Bedrock, Codex and
+Gemini currently have empty tables under this rule.
+
+`runtime.Options.ContextLimits` (or `WithContextLimits`) overrides positive
+fields by resolved model ID, falling back to the registered client ID when no
+resolved-model entry exists. Zero fields retain adapter values. Construction
+rejects negative fields and `MaxOutputTokens > ContextWindow`. Overrides are
+copied at construction. Ollama's effective `num_ctx` and gateway limits require
+an override. `model.NewClient` and the rate-limit middleware preserve both
+`ContextInfo` and `TokenCounter` through the shared capability construction.
+
+When a model's limits are unknown, the later compaction trigger and pre-send
+guard are off for that model; overflow recovery (4.15) still applies. K12 owns
+`context_limits_unknown` emission, and K16/K17 own explicit `Context(...)`
+fail-fast behavior, with an error naming the model and override to set (D12).
+The adapters expose limits and the recorder stores request measurements; neither
+automatically activates compaction, guard rejection, or unknown-limit events.
 
 ### 4.15 Overflow
 

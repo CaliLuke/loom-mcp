@@ -55,6 +55,7 @@ type ProviderConformanceSuite struct {
 	MultimodalInput               ProviderCapabilityConformance
 	TypedThinking                 ProviderCapabilityConformance
 	ExactTokenCounting            ProviderCapabilityConformance
+	ContextLimits                 ProviderCapabilityConformance
 	ToolNameRoundTrip             ProviderCapabilityConformance
 	Streaming                     ProviderStreamingConformance
 }
@@ -96,6 +97,7 @@ func RunProviderConformance(t *testing.T, suite ProviderConformanceSuite) {
 		{name: "multimodal input", capability: suite.MultimodalInput},
 		{name: "typed thinking", capability: suite.TypedThinking},
 		{name: "exact token counting", capability: suite.ExactTokenCounting},
+		{name: "context limits", capability: suite.ContextLimits},
 		{name: "tool name round trip", capability: suite.ToolNameRoundTrip},
 	}
 	for _, capability := range capabilities {

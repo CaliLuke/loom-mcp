@@ -170,7 +170,7 @@ func (c *sendFirstClient) Complete(ctx context.Context, request *model.Request) 
 	if err != nil {
 		return nil, err
 	}
-	if _, err := c.recording.begin(ctx, request); err != nil {
+	if _, err := c.recording.begin(ctx, request, c.Client); err != nil {
 		return nil, err
 	}
 	return response, nil

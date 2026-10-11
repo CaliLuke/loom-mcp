@@ -113,7 +113,7 @@ func (r *Runtime) RegisterModel(id string, client model.Client) error {
 	if client == nil {
 		return errors.New("model client is required")
 	}
-	r.models[id] = client
+	r.models[id] = r.withContextLimits(id, client)
 	return nil
 }
 

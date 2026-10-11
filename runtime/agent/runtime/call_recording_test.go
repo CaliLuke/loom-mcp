@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/callrecord"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextmeasure"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
@@ -88,10 +89,16 @@ func TestCallRecordingUnary(t *testing.T) {
 			assert.Equal(t, callrecord.ActivityPlanner, started.Activity)
 			if test.completion || test.response {
 				assert.Equal(t, runstore.CallStarted, calls[0].State)
+				assert.Empty(t, calls[0].Completion)
 			} else {
 				completion, decodeErr := callrecord.DecodeCompletion(calls[0].Completion)
 				require.NoError(t, decodeErr)
 				assert.NotNil(t, completion.Response)
+				outcome := contextmeasure.OutcomeOK
+				if test.provider != nil {
+					outcome = contextmeasure.OutcomeError
+				}
+				assert.Equal(t, &contextmeasure.RequestFacts{Call: calls[0].Key, Model: "provider", InputTokens: 2, Outcome: outcome}, completion.Facts)
 				if test.provider != nil {
 					assert.Equal(t, runstore.CallFailed, calls[0].State)
 					require.NotNil(t, completion.Error)
@@ -178,6 +185,14 @@ func TestCallRecordingStream(t *testing.T) {
 			require.Len(t, calls, 1)
 			completion, err := callrecord.DecodeCompletion(calls[0].Completion)
 			require.NoError(t, err)
+			outcome, input := contextmeasure.OutcomeError, 0
+			if mode == "finalize" || mode == "close" || mode == "wrapped_eof" {
+				outcome = contextmeasure.OutcomeOK
+			}
+			if mode != "abandoned" && mode != "setup_error" {
+				input = 2
+			}
+			assert.Equal(t, &contextmeasure.RequestFacts{Call: calls[0].Key, Model: "registered", InputTokens: input, Outcome: outcome}, completion.Facts)
 			if mode == "finalize" || mode == "close" || mode == "wrapped_eof" {
 				assert.Equal(t, runstore.CallCompleted, calls[0].State)
 				assert.NotNil(t, completion.Response)
@@ -305,6 +320,11 @@ func TestCallRecordingStreamConcurrentFinalization(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, calls, 1)
 	assert.Equal(t, runstore.CallCompleted, calls[0].State)
+	completion, err := callrecord.DecodeCompletion(calls[0].Completion)
+	require.NoError(t, err)
+	require.NotNil(t, completion.Facts)
+	assert.Equal(t, calls[0].Key, completion.Facts.Call)
+	assert.Equal(t, contextmeasure.OutcomeOK, completion.Facts.Outcome)
 }
 
 func (s *recordingTestStore) Put(ctx context.Context, scope string, data []byte) (runstore.Hash, error) {

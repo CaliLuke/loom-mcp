@@ -50,11 +50,6 @@ type (
 		limiter *AdaptiveRateLimiter
 	}
 
-	tokenCountingLimitedClient struct {
-		*limitedClient
-		counter model.TokenCounter
-	}
-
 	limitedStreamer struct {
 		inner    model.ValidatedStreamer
 		limiter  *AdaptiveRateLimiter
@@ -193,14 +188,9 @@ func (l *AdaptiveRateLimiter) Middleware() func(model.Client) model.Client {
 			next:    next,
 			limiter: l,
 		}
-		if counter, ok := next.(model.TokenCounter); ok {
-			client.counter = counter
-			return &tokenCountingLimitedClient{
-				limitedClient: client,
-				counter:       counter,
-			}
-		}
-		return client
+		client.counter, _ = next.(model.TokenCounter)
+		info, _ := next.(model.ContextInfo)
+		return model.WithCapabilities(client, client.counter, info)
 	}
 }
 
@@ -230,11 +220,6 @@ func (c *limitedClient) Stream(ctx context.Context, req *model.Request) (model.V
 		inner:   stream,
 		limiter: c.limiter,
 	}, nil
-}
-
-// CountTokens preserves a wrapped provider's exact token-counting capability.
-func (c *tokenCountingLimitedClient) CountTokens(ctx context.Context, req *model.Request) (model.TokenCount, error) {
-	return c.counter.CountTokens(ctx, req)
 }
 
 // Recv delegates to the provider stream. Finalize owns lifecycle observation

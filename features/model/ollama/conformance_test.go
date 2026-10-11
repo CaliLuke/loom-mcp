@@ -39,6 +39,7 @@ func TestClientConformance(t *testing.T) {
 	}
 
 	testutil.RunProviderConformance(t, testutil.ProviderConformanceSuite{
+		ContextLimits:   testutil.ProviderCapabilityConformance{Supported: TestContextLimitsUnknown},
 		Provider:        "ollama",
 		ContextOverflow: testContextOverflow,
 		OrdinaryProviderError: func(t *testing.T) {

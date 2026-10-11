@@ -221,6 +221,7 @@ func newFromOptions(opts Options) *Runtime {
 		toolSpecs:            make(map[tools.Ident]tools.ToolSpec),
 		toolSchemas:          make(map[string]map[string]any),
 		models:               make(map[string]model.Client),
+		contextLimits:        opts.ContextLimits,
 		runHandles:           make(map[string]engine.WorkflowHandle),
 		agentToolSpecs:       make(map[agent.Ident][]tools.ToolSpec),
 		endedStreamSessions:  make(map[string]struct{}),
@@ -239,6 +240,7 @@ func newFromOptions(opts Options) *Runtime {
 // resolveRuntimeOptions defaults the cache bound and validates configuration
 // before construction, preserving validation order and panic behavior.
 func resolveRuntimeOptions(opts Options) Options {
+	opts.ContextLimits = cloneContextLimits(opts.ContextLimits)
 	if opts.ViewCacheRuns < 0 {
 		panic("runtime: view cache runs must be greater than zero")
 	}

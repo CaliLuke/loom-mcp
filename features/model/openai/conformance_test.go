@@ -34,6 +34,7 @@ func TestClientConformance(t *testing.T) {
 	}
 
 	testutil.RunProviderConformance(t, testutil.ProviderConformanceSuite{
+		ContextLimits:   testutil.ProviderCapabilityConformance{Supported: TestContextLimitsTable},
 		Provider:        "openai",
 		ContextOverflow: testContextOverflow,
 		OrdinaryProviderError: func(t *testing.T) {

@@ -11,8 +11,7 @@ type (
 		provider Provider
 	}
 
-	validatedCountingClient struct {
-		*validatedClient
+	validatedTokenCounter struct {
 		counter TokenCounter
 	}
 )
@@ -24,10 +23,12 @@ func NewClient(provider Provider) (Client, error) {
 		return nil, errors.New("model provider is required")
 	}
 	client := &validatedClient{provider: provider}
-	if counter, ok := provider.(TokenCounter); ok && !isNilModelValue(counter) {
-		return &validatedCountingClient{validatedClient: client, counter: counter}, nil
+	var counter TokenCounter
+	if raw, ok := provider.(TokenCounter); ok && !isNilModelValue(raw) {
+		counter = &validatedTokenCounter{counter: raw}
 	}
-	return client, nil
+	info, _ := provider.(ContextInfo)
+	return WithCapabilities(client, counter, info), nil
 }
 
 // Complete validates the request before provider work and accepts only output
@@ -80,7 +81,7 @@ func (c *validatedClient) Stream(ctx context.Context, req *Request) (ValidatedSt
 
 // CountTokens validates the same request contract before delegating to the
 // provider's optional exact token-counting capability.
-func (c *validatedCountingClient) CountTokens(ctx context.Context, req *Request) (TokenCount, error) {
+func (c *validatedTokenCounter) CountTokens(ctx context.Context, req *Request) (TokenCount, error) {
 	request, err := cloneModelRequest(req)
 	if err != nil {
 		return TokenCount{}, err

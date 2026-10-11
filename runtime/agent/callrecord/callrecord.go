@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextmeasure"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/prompt"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
@@ -37,13 +38,12 @@ type (
 	}
 
 	// Completion is the terminal outcome, written after storing any response.
-	// Facts is reserved for K10 and remains nil.
 	Completion struct {
-		Response *runstore.Hash   `json:"response"`
-		Error    *CallError       `json:"error"`
-		Usage    model.TokenUsage `json:"usage"`
-		Latency  time.Duration    `json:"latency"`
-		Facts    *jsontext.Value  `json:"facts"`
+		Response *runstore.Hash               `json:"response"`
+		Error    *CallError                   `json:"error"`
+		Usage    model.TokenUsage             `json:"usage"`
+		Latency  time.Duration                `json:"latency"`
+		Facts    *contextmeasure.RequestFacts `json:"facts"`
 	}
 
 	// CallError preserves the failure classification and diagnostic message.

@@ -10,6 +10,7 @@ import (
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/callrecord"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextmeasure"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
@@ -46,6 +47,7 @@ type (
 		recording *CallRecording
 		record    runstore.CallRecord
 		started   time.Time
+		facts     contextmeasure.RequestFacts
 	}
 )
 
@@ -64,7 +66,7 @@ func NewCallRecording(store runstore.Store, scope string, ref index.ViewRef, vie
 }
 
 func (c *callRecordingClient) Complete(ctx context.Context, req *model.Request) (*model.Response, error) {
-	call, err := c.recording.begin(ctx, req)
+	call, err := c.recording.begin(ctx, req, c.inner)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +91,7 @@ func (c *callRecordingClient) Complete(ctx context.Context, req *model.Request) 
 }
 
 func (c *callRecordingClient) Stream(ctx context.Context, req *model.Request) (model.ValidatedStreamer, error) {
-	call, err := c.recording.begin(ctx, req)
+	call, err := c.recording.begin(ctx, req, c.inner)
 	if err != nil {
 		return nil, err
 	}
@@ -179,7 +181,7 @@ func recordedCallError(err error, kind string) *callrecord.CallError {
 }
 
 // begin validates identity and commits the request before the registered client runs.
-func (r *CallRecording) begin(ctx context.Context, req *model.Request) (*recordedCall, error) {
+func (r *CallRecording) begin(ctx context.Context, req *model.Request, registered model.Client) (*recordedCall, error) {
 	info, ok := model.CallInfoFrom(ctx)
 	if !ok || info.Attempt < 1 || info.Seq < 1 || info.RunID == "" || info.RootRunID == "" || info.RootRunID != r.scope {
 		return nil, fmt.Errorf("record model call: valid CallInfo with positive activity attempt and sequence is required")
@@ -192,6 +194,10 @@ func (r *CallRecording) begin(ctx context.Context, req *model.Request) (*recorde
 		return nil, fmt.Errorf("record model request: %w", err)
 	}
 	key := runstore.CallKey{RunID: info.RunID, Seq: info.Seq, Attempt: info.Attempt}
+	facts, err := r.measureRequest(ctx, req, registered, key, info.ModelID)
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now().UTC()
 	started := callrecord.Started{Key: key, Activity: callrecord.ActivityPlanner, TurnID: info.TurnID, Step: r.step, Request: parts, Started: now, Model: req.Model, ModelID: info.ModelID, Class: req.ModelClass, Prompts: req.PromptRefs}
 	body, err := callrecord.Encode(started)
@@ -208,7 +214,7 @@ func (r *CallRecording) begin(ctx context.Context, req *model.Request) (*recorde
 		r.growth = &RequestGrowth{Key: key, Inside: sizes.Inside, Outside: sizes.Outside}
 	}
 	r.mu.Unlock()
-	return &recordedCall{recording: r, record: record, started: now}, nil
+	return &recordedCall{recording: r, record: record, started: now, facts: facts}, nil
 }
 
 func (c *recordedCall) complete(ctx context.Context, response *model.Response, usage model.TokenUsage, primary error, kind string) (writeErr error) {
@@ -219,7 +225,8 @@ func (c *recordedCall) complete(ctx context.Context, response *model.Response, u
 			c.recording.mu.Unlock()
 		}
 	}()
-	completion := callrecord.Completion{Usage: usage, Latency: time.Since(c.started)}
+	facts := c.facts.WithResult(usage, primary)
+	completion := callrecord.Completion{Usage: usage, Latency: time.Since(c.started), Facts: &facts}
 	if response != nil {
 		data, err := callrecord.Encode(response)
 		if err != nil {
@@ -251,6 +258,27 @@ func (c *recordedCall) complete(ctx context.Context, response *model.Response, u
 		c.recording.mu.Unlock()
 	}
 	return nil
+}
+
+// measureRequest snapshots facts before sending, with limits from the registered
+// client rather than the outer planner wrappers that drop optional capabilities.
+func (r *CallRecording) measureRequest(ctx context.Context, req *model.Request, registered model.Client, key runstore.CallKey, modelID string) (contextmeasure.RequestFacts, error) {
+	var limits model.ContextLimits
+	resolved := req.Model
+	if contextInfo, ok := registered.(model.ContextInfo); ok {
+		var known bool
+		limits, resolved, known = contextInfo.ContextLimits(ctx, req)
+		if !known {
+			limits.ContextWindow = 0
+		}
+	}
+	facts, err := contextmeasure.Measure(req, limits, r.view)
+	if err != nil {
+		return contextmeasure.RequestFacts{}, fmt.Errorf("measure model request: %w", err)
+	}
+	facts.Call = key
+	facts.Model = firstNonEmpty(resolved, req.Model, modelID)
+	return facts, nil
 }
 
 // finishActivity preserves the activity error and rejects outputs after a failed write.

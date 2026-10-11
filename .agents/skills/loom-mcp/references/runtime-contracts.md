@@ -216,6 +216,42 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   1. Custom adapters set `engine.WithActivityAttempt`; absence reads as zero.
 - `Runtime.ModelClient(id)` bypasses planner decoration and neither attaches
   `CallInfo` nor allocates a sequence.
+- `model.ContextInfo.ContextLimits(ctx, req)` returns limits, the resolved model
+  ID, and whether its window is known. `ContextLimits` includes ContextWindow,
+  MaxOutputTokens, DefaultMaxTokens and ImageTokens (zero means 1,500).
+  `model.WithCapabilities` preserves exactly the optional ContextInfo and
+  TokenCounter method sets through NewClient and adaptive rate limiting.
+- Anthropic optionally accepts ModelsClient via Options.Models; NewFromAPIKey
+  wires it. Gemini optionally discovers Models.Get. Lookup runs in activities,
+  never workflows, with a caller-bounded two-second deadline. Raw successes
+  cache per requested model for the client's lifetime. Caller cancellation/expiry
+  failures are never cached; other failures retain fallback for 60 seconds.
+  After lookup, API input limits map per request to ContextWindow = input limit
+  + contextmeasure.OutputReserve(req, limits), preserving the input allowance
+  after reserve subtraction. The quarter-window fallback solves to min(max
+  output, input limit/3), keeping the returned reserve stable. Shared table
+  windows stay unchanged. Table IDs must be dependency SDK constants or adapter non-test
+  IDs; verify every figure from an official provider page. Bedrock, Codex and
+  Gemini fallback tables are currently empty; Ollama/gateway require overrides.
+- Options.ContextLimits / WithContextLimits overrides positive fields by resolved
+  model, falling back to registered client ID. Zero retains adapter values.
+  Copy the configuration at construction; reject negatives and max output above
+  the supplied window. The innermost recorder queries the registered client
+  boundary, so overrides apply even when outer planner wrappers drop capabilities.
+- `runtime/agent/contextmeasure` supplies pure RequestFacts and RequestOutcome
+  types, separate text/fixed/non-text measurement, metadata/cache-independent
+  view hashes, rational bounded calibration and ceiling estimates. Binary image
+  and document uploads never count as text; odd document byte costs round up.
+  Output reserve prefers request MaxTokens, then DefaultMaxTokens, then the
+  smaller of MaxOutputTokens and a quarter window. Estimates saturate at MaxInt.
+- GuardTokens uses GuardBudget (Tokens plus adapter ImageTokens) and a rational
+  trigger fraction. Above the strict threshold it attempts one count, trusts
+  Exact only, and adds replayed thinking text/redacted bytes at the rate.
+  GuardCount.GuardOn requires a positive known budget and exact or calibrated
+  measurement. Zero triggerAt disables counting while retaining the estimate
+  and calibrated GuardOn; only the estimation rate defaults to 1/3.
+  There is no rejection wiring. K12 owns facts/rates in activity
+  shapes and trigger/events; K14 owns rejections. No K10 protocol/activity bump.
 - Planner call recording sits inside model interceptors, capturing the decorated
   request against the committed pre-history-policy view (loaded IndexHead, no
   Pending). Recording is required in planner contexts. Missing CallInfo or
@@ -227,6 +263,17 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - Stream recording sums usage chunks and writes synchronously in Finalize or
   Close. Every activity exit marks open streams stream_abandoned. Terminal store
   failures propagate and can leave started evidence.
+- Every terminal recorder call has typed callrecord.Completion.Facts:
+  contextmeasure.RequestFacts with snake_case JSON tags, Call equal to the
+  stored key, resolved Model,
+  limits, reserve, view participation and text/fixed/non-text pre-send measures.
+  Measure after BuildRequest; preserve facts through unary, stream setup failure,
+  Finalize, Close and abandonment. WithResult adds input+cache reads+writes and
+  classifies ok/context_overflow/error. Started records have no facts.
+  CountLatency stays zero until later guard counting is wired. Canonical
+  measurement matching ignores Meta/cache; K8 request rebuilding still uses full
+  encodings. RunRecord exposes facts through Completion and preserves them in
+  Export/FromExport, retaining strict unknown-member decoding.
 - Protocol 6 planner activity output carries all started CallKeys, the first
   RequestGrowth, and ProducingCall (last completed call that emitted planner
   events). All output keys are adopted independently of ProducingCall. Step is

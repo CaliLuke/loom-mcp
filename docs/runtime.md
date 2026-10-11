@@ -2985,19 +2985,67 @@ error wrapping rather than gaining new classifications.
 This table describes the adapter contract in this repository. Individual model
 families may impose additional provider-side restrictions.
 
-| Provider | Complete | Stream | Structured output | Tool choice | Cache checkpoints | Thinking/reasoning | Exact `TokenCounter` |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Anthropic | yes | yes | no | yes | yes | typed thinking and redacted thinking | no |
-| Bedrock | yes | yes | unary and stream | yes | yes | typed thinking, including adaptive models | yes |
-| OpenAI Responses | yes | yes | unary and stream; not with tools | yes | ignored on replay | reasoning summaries become typed thinking | no |
-| Codex subscription | yes | SSE and WebSocket | no | yes | no | typed summaries and encrypted replay | no |
-| Gemini / Vertex | yes | no (`ErrStreamingUnsupported`) | unary; not with tools | yes | no | yes | yes |
-| Ollama | yes | yes | unary and stream; not with tools | limited by local API/model | no | native typed thinking | no |
+| Provider | Complete | Stream | Structured output | Tool choice | Cache checkpoints | Thinking/reasoning | Exact `TokenCounter` | Context limits |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Anthropic | yes | yes | no | yes | yes | typed thinking and redacted thinking | no | Models API; verified table fallback. API `input limit + OutputReserve(req, limits)` |
+| Bedrock | yes | yes | unary and stream | yes | yes | typed thinking, including adaptive models | yes | table empty; unknown unless overridden |
+| OpenAI Responses | yes | yes | unary and stream; not with tools | yes | ignored on replay | reasoning summaries become typed thinking | no | verified table; unlisted models unknown |
+| Codex subscription | yes | SSE and WebSocket | no | yes | no | typed summaries and encrypted replay | no | table empty; unknown unless overridden |
+| Gemini / Vertex | yes | no (`ErrStreamingUnsupported`) | unary; not with tools | yes | no | yes | yes | Models.Get `input limit + OutputReserve(req, limits)`; empty table fallback |
+| Ollama | yes | yes | unary and stream; not with tools | limited by local API/model | no | native typed thinking | no | effective num_ctx unknown unless overridden |
+
+### ContextLimits
+
+`model.ContextInfo` is optional. Its `ContextLimits(ctx, req)` method resolves
+completion's model routing and returns `(model.ContextLimits, resolvedModel,
+known)`. `known` means the context window is known. `ContextWindow` and
+`MaxOutputTokens` are token limits; `DefaultMaxTokens` is the configured output
+cap sent when `Request.MaxTokens` is zero. `ImageTokens == 0` selects the later
+measurement default of 1,500. Limits alone do not activate compaction or a guard.
+
+Anthropic optionally accepts `anthropic.Options.Models` (`ModelsClient`);
+`NewFromAPIKey` wires the SDK Models API automatically. Gemini discovers the
+optional `Get` interface on its models client. Query from activities, never
+workflow code, with a two-second deadline bounded by the caller's context.
+Successful raw metadata is cached per requested model for the client's lifetime.
+A failure caused by the caller's cancelled or expired context is never cached;
+other failures retain the table fallback for 60 seconds before retrying.
+
+Their APIs publish **input** limits. After each cache lookup, map them for the
+current request as `ContextWindow = input limit + contextmeasure.OutputReserve(req, limits)`.
+The reserve uses request `MaxTokens`, then configured `DefaultMaxTokens`, then
+`min(MaxOutputTokens, ContextWindow/4)`. It is stable when evaluated against the
+returned window, so subtracting it preserves the published input allowance even
+when the request changes its completion cap. When the quarter-window fallback
+applies to an input-only limit, the reserve is `min(MaxOutputTokens, input limit/3)`
+with integer division. Shared windows from tables are used directly. Tables
+contain only eligible SDK constants or non-test adapter IDs with verified
+official figures; unknown IDs stay unknown.
+
+Configure overrides before registration:
+
+```go
+rt := runtime.New(runtime.WithContextLimits(map[string]model.ContextLimits{
+    "my-provider-model": {ContextWindow: 200000, MaxOutputTokens: 8192},
+    "gateway":           {ContextWindow: 128000, MaxOutputTokens: 4096},
+}))
+```
+
+Positive fields replace adapter values independently. Zero fields retain them.
+An entry for the resolved provider model takes precedence; if absent, the
+registered client ID is the fallback. Overrides are copied at construction,
+which rejects negative fields and `MaxOutputTokens > ContextWindow` (include a
+window when overriding the output limit). A window override can make an unknown
+model known. Ollama's deployment-specific `num_ctx` and gateway models need
+application-supplied overrides. A gateway has no remote capability channel;
+its override key is `Request.Model`, falling back to its registered client ID.
+`model.NewClient` and the rate-limit middleware preserve optional limits and
+counting capabilities through `model.WithCapabilities`.
 
 Every provider runs `testutil.RunProviderConformance`. The suite requires one
 supported or unsupported case for each provider capability. These capabilities
-include multimodal input, typed thinking, exact token counting, and tool-name
-round trips. Streaming providers prove setup, receive, terminal, and
+include multimodal input, typed thinking, exact token counting, context limits,
+and tool-name round trips. Streaming providers prove setup, receive, terminal, and
 receive-time rate-limit behavior. Every adapter also supplies a recorded-body
 context-overflow case, including a streaming case where streaming is supported.
 Ollama explicitly proves its absence of an overflow mapping.
@@ -3062,6 +3110,50 @@ resp, err := modelClient.Complete(ctx, &model.Request{
     PromptRefs: []prompt.PromptRef{content.Ref},
 })
 ```
+
+### RequestFacts
+
+Facts use snake_case JSON field names in durable call records and exports.
+
+Planner model calls record `*contextmeasure.RequestFacts` in
+`callrecord.Completion.Facts`. The recorder measures the effective request after
+interceptors and request decoration, using `ContextInfo` on the registered
+client so runtime limits overrides apply. It keeps those pre-send measurements
+through unary and streaming completion. Direct `Runtime.ModelClient` calls and
+interceptor short-circuits remain outside planner call recording.
+
+Facts include the call key, resolved model, context window, output reserve,
+view participation, text/fixed byte counts, non-text token estimate, normalized
+input usage and outcome. Unknown limits give a zero window. Without a resolved
+provider model, the request model or registered client ID supplies the key.
+Output reserve uses request `MaxTokens`, then configured `DefaultMaxTokens`,
+then `min(MaxOutputTokens, ContextWindow / 4)`.
+
+`TextBytes` includes provider-facing text, tool definitions and JSON payloads,
+document names/context/text/chunks, and replayed thinking text/redacted bytes.
+`FixedBytes` is the system/tool portion of those bytes. Image and binary-document
+uploads contribute only to `NonText`: the configured image cost (default 1,500),
+ceiling-rounded document bytes at one token per two bytes, and the image cost
+for a document URI. Metadata, cache points and thinking signatures do not count
+as text. `ViewBearing` matches canonical role/parts hashes against the committed
+pre-history-policy view snapshot, excluding `Meta` and cache points. This is
+separate from the full-encoding request match used to reconstruct call evidence.
+
+Every terminal call has facts: unary success/failure, stream setup failure,
+`Finalize`, `Close`, and `stream_abandoned`. Only started records have no facts.
+`InputTokens` sums input, cache reads and cache writes; missing usage gives zero.
+Streaming facts use the usage chunks observed by the recorder, including those
+received before closing or abandoning a stream. Outcomes are `ok`, `overflow`
+for provider `context_overflow`, and `error` for other failures.
+`pre_send_rejected` is reserved for later guard wiring. `CountLatency` is optional
+and remains zero here because recording does not invoke token counting.
+
+`runrecord.Read` exposes facts through each call's `Completion`; `Export` and
+`FromExport` preserve them, including nanosecond durations. K10 adds no workflow
+or activity-output fields and does not change the workflow protocol. K12 owns
+`RequestFacts` in `PlanActivityOutput`, per-model rates in activity input,
+trigger decisions and `context_unmeasured` / `context_limits_unknown` events;
+K14 owns guard rejection.
 
 ### Rate Limiting
 

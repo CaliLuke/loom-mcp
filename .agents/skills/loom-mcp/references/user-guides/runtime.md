@@ -2,6 +2,53 @@
 
 Understand how the loom-mcp runtime orchestrates agents, enforces policies, and manages state.
 
+
+## Context limits
+
+`model.ContextInfo.ContextLimits(ctx, req)` returns token limits, a resolved
+provider model ID, and whether the context window is known. `ContextLimits`
+includes ContextWindow, MaxOutputTokens, DefaultMaxTokens and ImageTokens;
+ImageTokens zero selects the measurement default of 1,500.
+
+Anthropic Options.Models optionally supplies ModelsClient; NewFromAPIKey wires
+it. Gemini discovers optional Models.Get. Query in activities, never workflows.
+Lookups use a caller-bounded two-second deadline. Raw successes cache per
+requested model for the client's lifetime; caller cancellation/expiry failures
+are never cached, and other failures retain fallback for 60 seconds. After
+lookup, input limits map per request to input + contextmeasure.OutputReserve(req,
+limits), so Budget preserves the published allowance with explicit, configured
+or fallback reserves. The quarter-window case uses min(max output, input/3) to
+keep the reserve stable. Published shared table windows remain unchanged.
+Only eligible SDK constants or adapter non-test IDs enter verified tables.
+Bedrock, Codex and Gemini fallback tables are empty; Ollama/gateway need overrides.
+
+Use runtime.WithContextLimits (or Options.ContextLimits) before registration.
+Positive fields replace adapter values, zero retains them. Resolve provider
+model keys first, registered client IDs second. Configuration is copied and
+rejects negatives or MaxOutputTokens > ContextWindow; include a window when
+setting max output. NewClient and rate limiting preserve both optional limits
+and counting. Limits alone do not activate compaction or guard rejection.
+
+## Request facts
+
+Planner calls write typed contextmeasure.RequestFacts in every terminal
+callrecord.Completion, including setup failure, stream Finalize/Close and
+abandonment. Started evidence has no facts. Limits come from the registered
+client after request decoration and interceptors, preserving runtime overrides.
+Pre-send measurements are kept through completion; InputTokens adds input plus
+cache reads/writes and Outcome is ok, overflow for context_overflow, or error.
+Call matches the stored CallKey; Model uses the resolved provider key, falling
+back to the request model or registered ID. Output reserve prefers request
+MaxTokens, configured DefaultMaxTokens, then min(max output, quarter window).
+Image/document upload bytes never count as text; binary documents round up at
+one token per two bytes. ViewBearing ignores Meta/cache points when matching
+the committed pre-policy view snapshot, independently of K8 evidence matching.
+Facts persist snake_case JSON fields.
+CountLatency is optional and zero until later counting is wired. GuardTokens
+zero triggerAt disables counting; its estimation rate still defaults to 1/3. RunRecord
+Read/Export/FromExport retain all facts and nanosecond durations. K12 owns
+activity facts/rates and measurement events; K14 owns guard rejection.
+
 ## Provider errors and context overflow
 
 `model.ProviderError` kinds are `auth`, `invalid_request`, `context_overflow`,

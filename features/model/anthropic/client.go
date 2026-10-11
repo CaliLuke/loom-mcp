@@ -20,6 +20,7 @@ import (
 	"github.com/anthropics/anthropic-sdk-go/packages/ssestream"
 
 	"github.com/CaliLuke/loom-mcp/v2/features/model/internal/claudecaps"
+	"github.com/CaliLuke/loom-mcp/v2/features/model/internal/contextlimits"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
@@ -36,6 +37,8 @@ type (
 
 	// Options configures optional Anthropic adapter behavior.
 	Options struct {
+		// Models optionally discovers model token limits through the Models API.
+		Models ModelsClient
 		// DefaultModel is the default Claude model identifier used when
 		// model.Request.Model is empty. Use the typed model constants from
 		// github.com/anthropics/anthropic-sdk-go (for example,
@@ -71,6 +74,8 @@ type (
 
 	// Client implements model.Provider on top of Anthropic Claude Messages.
 	Client struct {
+		models       ModelsClient
+		limitsCache  contextlimits.Cache
 		msg          MessagesClient
 		defaultModel string
 		highModel    string
@@ -96,6 +101,7 @@ func New(msg MessagesClient, opts Options) (*Client, error) {
 	thinkBudget := opts.ThinkingBudget
 
 	c := &Client{
+		models:       opts.Models,
 		msg:          msg,
 		defaultModel: opts.DefaultModel,
 		highModel:    opts.HighModel,
@@ -115,7 +121,7 @@ func NewFromAPIKey(apiKey, defaultModel string) (*Client, error) {
 		return nil, errors.New("api key is required")
 	}
 	ac := sdk.NewClient(option.WithAPIKey(apiKey))
-	return New(&ac.Messages, Options{DefaultModel: defaultModel})
+	return New(&ac.Messages, Options{DefaultModel: defaultModel, Models: &ac.Models})
 }
 
 // Complete issues a non-streaming Messages.New request and translates the
