@@ -1916,8 +1916,10 @@ Each request uses `Complete`, temperature zero, no thinking and a forced private
 Labels are `entailed`, `contradicted`, `not_addressed` and `indeterminate`; results
 retain input claim order. Strict JSON v2 rejects duplicate keys, unknown members,
 missing claims and invalid labels. Up to three corrections follow the first call.
-Raw clients receive the invalid call plus an error tool result; malformed JSON
-arguments are represented as a string, or base64 when their bytes are not UTF-8.
+Raw clients receive the invalid call plus an error tool result only when its tool
+name is declared and its arguments form a JSON object. Malformed or non-object
+arguments and wrong-tool calls receive a user-message diagnostic instead, with
+the rejected arguments as text (base64 when their bytes are not UTF-8).
 Validated clients hide rejected content, so corrections name only the rejection
 kind. Other provider errors return immediately. `ErrInvalidOutput` marks exhausted
 corrections. Usage and latency include corrections and exclude calibration; errors
@@ -1933,12 +1935,16 @@ as `not_addressed`, with `NoCall: true`, no usage and no calibration.
 
 The first non-empty judgment runs calibration once per Judge, shared by concurrent
 calls. Four built-in examples cover all labels, followed by `Config.Examples`.
-Each example gets one call with no corrections, under a shared two-minute default
-`CalibrationTimeout`. The first caller's context owns calibration; other callers
-can cancel their wait. Exact label agreement passes. A completed failure is
+Non-empty examples get one call with no corrections, under a shared two-minute
+default `CalibrationTimeout`. Blank examples make no call and label every claim
+`not_addressed`. The first caller's context owns calibration; other callers can
+cancel their wait. If that caller's context cancels or expires during calibration,
+a later call retries calibration on the same Judge. Existing waiters retain the
+interrupted attempt's outcome. Exact label agreement passes. A completed failure is
 cached too, and later judgments have `Calibrated: false`. Infrastructure failures
-are not cached and do not block judging. One Judge retains its outcome; create a
-new Judge to retry. `Recalibrate` bypasses a completed cache entry.
+are not cached and do not block judging. Other infrastructure failures, including
+the judge's own calibration timeout, remain retained by that Judge; create a new
+Judge to retry those failures. `Recalibrate` bypasses a completed cache entry.
 
 `PromptHash()` identifies the versioned prompt contract. `CalibrationKey()` also
 includes the model, output-token cap and canonical examples. The default cache is

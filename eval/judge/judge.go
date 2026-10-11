@@ -67,14 +67,12 @@ type Config struct {
 
 // Judge evaluates claims using a fixed model and prompt contract.
 type Judge struct {
-	cfg             Config
-	promptHash      string
-	examples        []Example
-	calibrationKey  string
-	calibrationMu   sync.Mutex
-	calibrationDone chan struct{}
-	calibration     *Calibration
-	calibrationErr  error
+	cfg            Config
+	promptHash     string
+	examples       []Example
+	calibrationKey string
+	calibrationMu  sync.Mutex
+	calibration    *calibrationAttempt
 }
 
 var (

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 	"time"
 	"unicode/utf8"
 )
@@ -33,29 +34,42 @@ type ExampleResult struct {
 	Err       string
 }
 
+// calibrationAttempt publishes an immutable outcome to its own waiters on close.
+type calibrationAttempt struct {
+	done   chan struct{}
+	result *Calibration
+	err    error
+}
+
 // CalibrationKey returns the canonical model, prompt, output-cap and examples digest.
 func (j *Judge) CalibrationKey() string {
 	return j.calibrationKey
 }
 
-// Calibrate runs once per Judge, sharing the outcome with concurrent callers.
+// Calibrate shares one attempt's outcome with concurrent callers.
 // The first caller's context controls the run; other waiters can cancel their wait.
-// Completed failures are cached. Infrastructure errors are retained only by this Judge.
+// Caller cancellation permits a later retry. Other infrastructure errors are
+// retained only by this Judge; completed passes and failures are cached.
 func (j *Judge) Calibrate(ctx context.Context) (*Calibration, error) {
 	j.calibrationMu.Lock()
-	first := j.calibrationDone == nil
+	first := j.calibration == nil
 	if first {
-		j.calibrationDone = make(chan struct{})
+		j.calibration = &calibrationAttempt{done: make(chan struct{})}
 	}
-	done := j.calibrationDone
+	attempt := j.calibration
 	j.calibrationMu.Unlock()
 	if first {
-		j.calibration, j.calibrationErr = j.runCalibration(ctx)
-		close(done)
+		attempt.result, attempt.err = j.runCalibration(ctx)
+		j.calibrationMu.Lock()
+		if ctx.Err() != nil && errors.Is(attempt.err, ctx.Err()) {
+			j.calibration = nil
+		}
+		close(attempt.done)
+		j.calibrationMu.Unlock()
 	}
 	select {
-	case <-done:
-		return cloneCalibration(j.calibration), j.calibrationErr
+	case <-attempt.done:
+		return cloneCalibration(attempt.result), attempt.err
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
@@ -132,6 +146,12 @@ func (j *Judge) calibrateExample(ctx context.Context, example Example) (ExampleR
 	if err != nil {
 		result.Err = err.Error()
 		return result, err
+	}
+	if strings.TrimSpace(example.Input.Text) == "" {
+		for _, claim := range example.Input.Claims {
+			result.Got[claim.ID] = NotAddressed
+		}
+		return result, nil
 	}
 	judged, err := j.call(ctx, req, example.Input, 0)
 	if err != nil {

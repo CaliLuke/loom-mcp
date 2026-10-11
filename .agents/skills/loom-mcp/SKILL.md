@@ -706,8 +706,13 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   sets Input.Truncated; the judge never cuts input. Default request cap is 512 KiB
   and schemas are capped at 1 MiB. Corrections also obey the request cap.
 - Calibration runs once per Judge, with four built-ins plus user examples and
-  one call per example. Cache completed passes and failures, never infrastructure
-  failures or judgments. Recalibrate bypasses completed cache entries. See
+  one call per non-empty example. Blank examples make no call and label every
+  claim not_addressed. Caller cancellation or deadline expiry permits a later
+  calibration retry on the same Judge; other infrastructure failures remain
+  retained by that Judge. Cache completed passes and failures, never infrastructure
+  failures or judgments. Raw corrections echo only declared tools with JSON object
+  inputs; malformed inputs and wrong tools receive user-message diagnostics.
+  Recalibrate bypasses completed cache entries. See
   references/runtime-contracts.md and docs/runtime.md for correction and cache rules.
 - Config.Live uses agenttest.LiveModelEnabled; scripted clients leave it false.
 

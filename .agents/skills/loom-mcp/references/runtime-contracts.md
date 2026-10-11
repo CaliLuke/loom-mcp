@@ -193,8 +193,9 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   the other labels are contradicted, not_addressed and indeterminate.
 - JSON v2 rejects duplicate/unknown members; keys must exactly match the claims,
   labels must be valid and rationales non-empty UTF-8. Three corrections maximum
-  follow the first call. Raw corrections echo tool calls with error results;
-  malformed JSON is carried as text (base64 for invalid UTF-8). Validated output
+  follow the first call. Raw corrections echo declared tool calls with JSON object
+  inputs and error results. Malformed/non-object arguments and wrong tools receive
+  user-message diagnostics with argument text (base64 for invalid UTF-8). Validated output
   rejections get a user correction naming Kind without hidden output. Other
   provider errors return immediately; exhausted corrections wrap ErrInvalidOutput.
 - Input.Truncated announces renderer elision in the prompt and Result. The judge
@@ -203,11 +204,15 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   calibration. Errors can return partial results.
 - Calibration is singleflight per Judge under the initiating context and a
   two-minute default CalibrationTimeout. Four built-ins precede user Examples;
-  each gets one call without correction. All labels must match. PromptHash hashes
+  each non-empty example gets one call without correction. Blank examples make no
+  call and label every claim not_addressed. All labels must match. PromptHash hashes
   the versioned prompt contract; CalibrationKey adds model, output cap and examples.
 - Cache completed passes and failures until Recalibrate; infrastructure failures
   are not cached and keep Result.Calibrated false without blocking judging. A Judge
-  retains its outcome; retry with a new Judge. Default cache is process-wide;
+  retains its outcome except when the initiating caller's context cancels or
+  expires: a later call retries on the same Judge, while existing waiters retain
+  the interrupted attempt's outcome. Other infrastructure errors, including the
+  judge's own calibration timeout, require a new Judge to retry. Default cache is process-wide;
   NewMemoryCache isolates suites and NewDirCache atomically replaces <hex>.json.
   Corrupt files miss. The CLI can use the store's _calibration directory. Judgment
   results are never cached.

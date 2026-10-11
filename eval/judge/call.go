@@ -70,12 +70,17 @@ func correction(response *model.Response, rejected *model.OutputValidationError,
 	result := &model.Message{Role: model.ConversationRoleUser}
 	for i, call := range response.ToolCalls {
 		input, err := model.DecodeSchemaJSON(call.Payload)
-		if err != nil {
-			// Malformed JSON (including duplicate members) cannot be embedded as raw
-			// JSON in a request. A string retains the exact invalid payload for repair.
-			input = string(call.Payload)
+		_, object := input.(map[string]any)
+		if err != nil || !object || call.Name != toolName {
+			// Invalid tool blocks cannot be replayed to providers. Keep the
+			// diagnostic and rejected payload in a user message instead.
+			payload := string(call.Payload)
 			if !utf8.Valid(call.Payload) {
-				input = "Invalid UTF-8 JSON (base64): " + base64.StdEncoding.EncodeToString(call.Payload)
+				payload = "Invalid UTF-8 JSON (base64): " + base64.StdEncoding.EncodeToString(call.Payload)
+			}
+			return []*model.Message{
+				textMessage(model.ConversationRoleAssistant, "The previous tool output was invalid."),
+				textMessage(model.ConversationRoleUser, fmt.Sprintf("Correct the output: %s\nRejected tool %q arguments:\n%s\nCall %s with every claim and a valid label and rationale.", diagnostic, call.Name, payload, toolName)),
 			}
 		}
 		id := call.ID

@@ -140,9 +140,11 @@ func TestRawCorrections(t *testing.T) {
 			encoded, err := callrecord.Encode(reqs[1].Messages[len(reqs[0].Messages):])
 			require.NoError(t, err)
 			assert.Contains(t, string(encoded), tt.diagnostic)
-			if tt.tool != "" {
+			if tt.tool == toolName && tt.name != "duplicate" && tt.name != "escaped duplicate" && tt.name != "UTF8 rationale" {
 				assert.Contains(t, string(encoded), `"IsError":true`)
 				assert.Contains(t, string(encoded), `"Role":"assistant"`)
+			} else {
+				assert.NotContains(t, string(encoded), `"Kind":"tool_use"`)
 			}
 			assert.NoError(t, script.Err())
 		})
