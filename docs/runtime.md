@@ -5662,10 +5662,20 @@ format/bytes and available text until K22.
 Read pages use max(512, ProtectRecentToolTokens) bytes and snap offsets to UTF-8
 boundaries. Follow next_offset. Find scans hidden eligible entries and cleared
 results, current run then From runs, newest first, up to 8 MB or ten matches;
-each match contains id, run, original byte offset and a snippet of at most 160
-bytes. Follow the same literal selector with its cursor. EncodeCursor/DecodeCursor
-use deterministic unpadded base32 over kind, handle/range/scan and position.
-Every call binds and re-resolves the selector; cursors grant no authority.
+each match contains id, run, part (`result` or `arguments`), original byte offset
+and a snippet of at most 160 bytes. Read using the returned id, run, part and
+offset so argument matches retrieve arguments, while message and result matches
+retrieve their original text.
+
+Follow the same literal selector with its cursor. Find cursors anchor to a run,
+immutable entry, text/call chunk and byte offset within that chunk. Compaction
+cannot shift a continuation into already scanned text. Continuations finish the
+older traversal; start a fresh find to include newly hidden entries ahead of the
+anchor. Invalid anchors and legacy find cursors without an anchor return
+recall_invalid_input; restart without a cursor. EncodeCursor/DecodeCursor use
+deterministic unpadded base32 over kind, handle/range/scan and position, plus the
+anchor for find. Every call binds and re-resolves the selector through the current
+checkpoint chain; cursors grant no authority.
 Run-qualified rN labels resolve only through recall.RunChain; K13's default
 resolves none. K18 supplies production continuation labels. Thirty-two-bit handle
 collisions select the first matching reachable record deterministically.

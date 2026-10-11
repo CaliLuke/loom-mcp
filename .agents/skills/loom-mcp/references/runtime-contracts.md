@@ -1234,8 +1234,13 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   pair ToolUseIDs; users come from original index entries. RunChain defaults to
   no rN resolution until K18.
 - Read pages are max(512, ProtectRecentToolTokens) bytes with UTF-8 offsets;
-  find scans 8 MB/ten matches with 160-byte snippets. Opaque base32 cursors
-  bind selectors and re-resolve on every call. Activity results are stored
+  find scans 8 MB/ten matches with 160-byte snippets. Each match includes its
+  read part (result or arguments); read with the returned id, run, part and offset.
+  Find cursors anchor to run, immutable entry, text/call chunk and byte offset,
+  so compaction cannot shift continuation. Start a fresh search for newly hidden
+  content ahead of the anchor. Invalid anchors and legacy unanchored find cursors
+  return recall_invalid_input; restart without a cursor. Opaque base32 cursors
+  bind selectors and re-resolve through the current chain on every call. Activity results are stored
   eligible refs with context lookup previews. Multimodal recall remains K22.
 - ContextRecalled records one keyed charge/outcome per call; exhaustion emits
   once per allowance episode, reset on refill; disabled emits once at first

@@ -8,12 +8,31 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 )
 
-type scanText struct{ id, run, text string }
+type scanText struct {
+	id, run, text string
+	part          Part
+}
 
 type findScan struct {
-	selector                          Cursor
-	position, skipped, scanned, limit int
-	response                          Response
+	selector                 Cursor
+	position, scanned, limit int
+	seeking                  bool
+	response                 Response
+}
+
+// findCursor binds an untrusted continuation to its literal search selector.
+func findCursor(in FindInput) (Cursor, error) {
+	if in.Cursor == "" {
+		return Cursor{Kind: Find, Scan: in.Text}, nil
+	}
+	cursor, err := DecodeCursor(in.Cursor)
+	if err != nil {
+		return Cursor{}, err
+	}
+	if cursor.Kind != Find || cursor.Scan != in.Text {
+		return Cursor{}, invalidInput()
+	}
+	return cursor, nil
 }
 
 func findContinuation(response Response, selector Cursor, position int) (Response, error) {
@@ -31,8 +50,7 @@ func scanLimit(limit int) int {
 }
 
 func (r *callReader) find(ctx context.Context, in FindInput) (Response, error) {
-	selector := Cursor{Kind: Find, Scan: in.Text}
-	position, err := cursorPosition(in.Cursor, selector)
+	selector, err := findCursor(in)
 	if err != nil {
 		return Response{}, err
 	}
@@ -42,7 +60,7 @@ func (r *callReader) find(ctx context.Context, in FindInput) (Response, error) {
 	}
 
 	limit := scanLimit(r.req.ScanBytes)
-	scan := findScan{selector: selector, position: position, limit: limit}
+	scan := findScan{selector: selector, position: selector.Position, seeking: selector.Anchor != nil, limit: limit}
 
 	for _, node := range runs {
 		entries, err := r.loadEntries(ctx, node.run, node.scope)
@@ -57,18 +75,19 @@ func (r *callReader) find(ctx context.Context, in FindInput) (Response, error) {
 			if entry.Kind == index.TypedInput {
 				continue
 			}
-			chunks, err := r.scanChunks(ctx, node, entry)
+			if scan.seeking && (node.run != selector.Anchor.Run || entry.ID != selector.Anchor.Entry) {
+				continue
+			}
+			complete, err := r.scanEntry(ctx, node, entry, &scan)
 			if err != nil {
 				return Response{}, err
 			}
-			for _, chunk := range chunks {
-				if complete := scan.append(chunk, in.Text); complete {
-					return findContinuation(scan.response, selector, scan.skipped)
-				}
+			if complete {
+				return findContinuation(scan.response, scan.selector, scan.position)
 			}
 		}
 	}
-	if position > scan.skipped {
+	if scan.seeking {
 		return Response{}, invalidInput()
 	}
 	return scan.response, nil
@@ -90,28 +109,50 @@ func (r *callReader) scanRuns(ctx context.Context) ([]recordNode, error) {
 	return runs, nil
 }
 
-func (scan *findScan) append(chunk scanText, needle string) bool {
-	if scan.skipped+len(chunk.text) <= scan.position {
-		scan.skipped += len(chunk.text)
-		return false
+// scanEntry resumes at the anchored chunk before scanning the rest of an entry.
+func (r *callReader) scanEntry(ctx context.Context, node recordNode, entry index.MessageEntry, scan *findScan) (bool, error) {
+	chunks, err := r.scanChunks(ctx, node, entry)
+	if err != nil {
+		return false, err
 	}
-	offset := max(0, scan.position-scan.skipped)
+	for at, chunk := range chunks {
+		anchor := FindAnchor{Run: node.run, Entry: entry.ID, Chunk: at}
+		if scan.seeking {
+			if anchor != *scan.selector.Anchor {
+				continue
+			}
+			if scan.position > len(chunk.text) {
+				return false, invalidInput()
+			}
+			scan.seeking = false
+		}
+		scan.selector.Anchor = &anchor
+		if scan.append(chunk, scan.selector.Scan) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// append scans immutable chunk text within the remaining byte and match budgets.
+func (scan *findScan) append(chunk scanText, needle string) bool {
+	offset := scan.position
 	for offset < len(chunk.text) {
 		available := min(len(chunk.text)-offset, scan.limit-scan.scanned)
 		if available <= 0 {
-			scan.skipped += offset
+			scan.position = offset
 			return true
 		}
 		end := offset + available
 		hit := strings.Index(chunk.text[offset:end], needle)
 		if hit >= 0 {
 			hit += offset
-			scan.response.Matches = append(scan.response.Matches, Match{ID: chunk.id, Run: chunk.run, Offset: hit, Snippet: chunk.text[hit:snap(chunk.text, min(hit+160, len(chunk.text)))]})
+			scan.response.Matches = append(scan.response.Matches, Match{ID: chunk.id, Run: chunk.run, Part: chunk.part, Offset: hit, Snippet: chunk.text[hit:snap(chunk.text, min(hit+160, len(chunk.text)))]})
 			consumed := hit + len(needle) - offset
 			scan.scanned += consumed
 			offset += consumed
 			if len(scan.response.Matches) == 10 {
-				scan.skipped += offset
+				scan.position = offset
 				return true
 			}
 		} else {
@@ -124,12 +165,12 @@ func (scan *findScan) append(chunk scanText, needle string) bool {
 			scan.scanned += available
 			offset += consumed
 			if end < len(chunk.text) {
-				scan.skipped += offset
+				scan.position = offset
 				return true
 			}
 		}
 	}
-	scan.skipped += len(chunk.text)
+	scan.position = 0
 	return false
 }
 
@@ -142,13 +183,13 @@ func (r *callReader) scanChunks(ctx context.Context, node recordNode, entry inde
 	if entry.Kind == index.ToolResult && len(entry.ToolUseIDs) > 0 {
 		id = entry.ToolUseIDs[0]
 	}
-	chunks := []scanText{{id: id, run: node.run, text: text.text}}
+	chunks := []scanText{{id: id, run: node.run, part: Result, text: text.text}}
 	calls, err := r.calls(ctx, node.scope, entry)
 	if err != nil {
 		return nil, err
 	}
 	for _, call := range calls {
-		chunks = append(chunks, scanText{id: call.ToolCallID, run: node.run, text: string(call.Payload)})
+		chunks = append(chunks, scanText{id: call.ToolCallID, run: node.run, part: Arguments, text: string(call.Payload)})
 	}
 
 	return chunks, nil

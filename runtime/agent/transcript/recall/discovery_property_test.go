@@ -18,7 +18,8 @@ import (
 
 // TestRecallDiscoverableKindSequences enumerates all kind sequences through six,
 // every retained prefix of zero to two receipt lines, and one to three Prev
-// records with an injected From. Parallel results consume B before A.
+// records with an injected From. Users resolve from rendered handles or IDs to
+// original text. Parallel results consume B before A.
 func TestRecallDiscoverableKindSequences(t *testing.T) {
 	cases := 0
 	for n := 0; n <= 6; n++ {
@@ -26,6 +27,7 @@ func TestRecallDiscoverableKindSequences(t *testing.T) {
 			f := newRecallFixture(t)
 			var entries []index.MessageEntry
 			var receipt []index.ReceiptLine
+			var users []checkpoint.UserMessage
 			var pending []string
 			expected := map[string]string{}
 			valid := true
@@ -33,7 +35,9 @@ func TestRecallDiscoverableKindSequences(t *testing.T) {
 				id := index.MessageID(i + 1)
 				switch bits >> (2 * i) & 3 {
 				case 0:
-					entries = append(entries, index.MessageEntry{Kind: index.Message, Role: model.ConversationRoleUser, Hash: f.put(&model.Message{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "user original"}}})})
+					message := &model.Message{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: fmt.Sprintf("user %d original\nuser %d full evidence", id, id)}}}
+					users = append(users, checkpoint.UserMessage{ID: id, Message: message})
+					entries = append(entries, index.MessageEntry{Kind: index.Message, Role: model.ConversationRoleUser, Hash: f.put(message)})
 				case 1:
 					entries = append(entries, index.MessageEntry{Kind: index.Assistant, Role: model.ConversationRoleAssistant, Hash: f.put([]*model.Message{{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "assistant original"}}}})})
 					receipt = append(receipt, index.ReceiptLine{Kind: "assistant", From: id, Through: id, Text: "assistant original"})
@@ -89,7 +93,7 @@ func TestRecallDiscoverableKindSequences(t *testing.T) {
 					// which newest lines fit. It must return all assistant and call lines.
 					newest := roots[len(roots)-1]
 					handle := checkpoint.Handle("receipt", checkpoint.CheckpointID(string(newest)))
-					in := checkpoint.Input{ID: checkpoint.CheckpointID(string(newest)), Through: index.MessageID(n), Earlier: checkpoint.EarlierCounts{Assistants: 1}}
+					in := checkpoint.Input{ID: checkpoint.CheckpointID(string(newest)), Through: index.MessageID(n), Users: users, Earlier: checkpoint.EarlierCounts{Assistants: 1}}
 					in.Receipt = func(yield func(checkpoint.ReceiptItem) bool) {
 						for i := len(receipt) - 1; i >= 0; i-- {
 							line := receipt[i]
@@ -106,6 +110,7 @@ func TestRecallDiscoverableKindSequences(t *testing.T) {
 					rendered, err := checkpoint.Render(in, index.RenderBudget{ReceiptTokens: shown * 125, FramingTokens: 350}, checkpoint.DefaultLimits, nil)
 					require.NoError(t, err)
 					text := rendered.Parts[0].(model.TextPart).Text
+					assertOriginalUsersDiscoverable(t, f, text, newest, users)
 					if len(receipt) > shown {
 						assert.Contains(t, text, handle)
 					}
@@ -139,4 +144,29 @@ func TestRecallDiscoverableKindSequences(t *testing.T) {
 		}
 	}
 	t.Logf("Discoverable exhaustive cases: %d", cases)
+}
+
+// assertOriginalUsersDiscoverable follows the rendered discovery surface before
+// checking that every listed user ID reads the full original, not just its index line.
+func assertOriginalUsersDiscoverable(t *testing.T, f *recallFixture, rendered string, hash runstore.Hash, users []checkpoint.UserMessage) {
+	t.Helper()
+	handle := checkpoint.Handle("users", checkpoint.CheckpointID(string(hash)))
+	if strings.Contains(rendered, handle) {
+		listed := f.call(`{"list":{"handle":` + stringJSON(t, handle) + `}}`)
+		require.Len(t, listed.Entries, len(users))
+		for i, user := range users {
+			assert.Equal(t, strconv.FormatUint(uint64(user.ID), 10), listed.Entries[i].ID)
+			assert.Equal(t, "user", listed.Entries[i].Kind)
+			assert.Equal(t, fmt.Sprintf("user %d original", user.ID), listed.Entries[i].Text)
+		}
+	} else {
+		for _, user := range users {
+			assert.Contains(t, rendered, checkpoint.Label(user.ID, nil, 0))
+		}
+	}
+	for _, user := range users {
+		read := f.call(stringJSON(t, Input{Read: &ReadInput{ID: strconv.FormatUint(uint64(user.ID), 10), Part: Result}}))
+		assert.Empty(t, read.Code)
+		assert.Equal(t, fmt.Sprintf("user %d original\nuser %d full evidence", user.ID, user.ID), read.Text)
+	}
 }

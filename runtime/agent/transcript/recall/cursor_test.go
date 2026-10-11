@@ -12,7 +12,7 @@ func TestCursorRoundTrip(t *testing.T) {
 	for _, cursor := range []Cursor{
 		{Kind: List, Handle: "rc-12345678", Position: 0},
 		{Kind: List, Range: &Range{From: 1, Through: 9, Run: "r2"}, Position: 9},
-		{Kind: Find, Scan: "世界 Case", Position: 8000000},
+		{Kind: Find, Scan: "世界 Case", Anchor: &FindAnchor{Run: "run", Entry: 7, Chunk: 1}, Position: 8000000},
 		// A decoded selector is untrusted; later resolution must reject this handle.
 		{Kind: List, Handle: "outside-chain", Position: 1},
 	} {
@@ -44,5 +44,32 @@ func TestCursorMalformed(t *testing.T) {
 	for _, cursor := range []Cursor{{}, {Kind: List, Handle: "x", Position: -1}, {Kind: Find, Scan: "x", Handle: "y"}} {
 		_, err := EncodeCursor(cursor)
 		require.Error(t, err)
+	}
+}
+
+func TestFindCursorMalformedAnchor(t *testing.T) {
+	for _, anchor := range []string{
+		`null`, `{}`, `{"run":"run","entry":1}`, `{"run":"run","entry":1,"chunk":null}`,
+		`{"run":"run","entry":0,"chunk":0}`, `{"run":"","entry":1,"chunk":0}`,
+		`{"run":"run","entry":1,"chunk":-1}`, `{"run":"run","entry":1,"chunk":0,"scope":"other"}`,
+	} {
+		t.Run(anchor, func(t *testing.T) {
+			raw := `{"kind":"find","scan":"needle","position":0,"anchor":` + anchor + `}`
+			token := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString([]byte(raw))
+			_, err := DecodeCursor(token)
+			var typed *Error
+			require.ErrorAs(t, err, &typed)
+			assert.Equal(t, CodeInvalidInput, typed.Code)
+		})
+	}
+	for _, raw := range []string{
+		`{"kind":"find","scan":"needle","position":10}`,
+		`{"kind":"list","handle":"x","position":0,"anchor":{"run":"run","entry":1,"chunk":0}}`,
+	} {
+		token := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString([]byte(raw))
+		_, err := DecodeCursor(token)
+		var typed *Error
+		require.ErrorAs(t, err, &typed)
+		assert.Equal(t, CodeInvalidInput, typed.Code)
 	}
 }

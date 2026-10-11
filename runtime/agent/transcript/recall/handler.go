@@ -52,9 +52,10 @@ type (
 		Bytes int    `json:"bytes,omitzero"`
 		Error bool   `json:"error,omitzero"`
 	}
-	// Match locates literal eligible text by original byte offset.
+	// Match locates literal eligible text by read part and original byte offset.
 	Match struct {
 		ID      string `json:"id"`
+		Part    Part   `json:"part"`
 		Run     string `json:"run,omitzero"`
 		Offset  int    `json:"offset"`
 		Snippet string `json:"snippet"`
