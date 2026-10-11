@@ -102,8 +102,11 @@ func TestStartWorkflowRejectsDuplicateRunID(t *testing.T) {
 
 	first, err := eng.StartWorkflow(context.Background(), engine.WorkflowStartRequest{ID: "same-run", Workflow: "workflow", Input: &api.RunInput{}})
 	require.NoError(t, err)
-	_, err = eng.StartWorkflow(context.Background(), engine.WorkflowStartRequest{ID: "same-run", Workflow: "workflow", Input: &api.RunInput{}})
+	duplicate, err := eng.StartWorkflow(context.Background(), engine.WorkflowStartRequest{ID: "same-run", Workflow: "workflow", Input: &api.RunInput{}})
+	assert.Nil(t, duplicate)
 	require.ErrorContains(t, err, "already exists")
+	require.ErrorIs(t, err, engine.ErrWorkflowAlreadyStarted)
+	require.NotErrorIs(t, err, engine.ErrWorkflowStartRejected)
 
 	close(release)
 	_, err = first.Wait(context.Background())

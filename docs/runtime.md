@@ -3162,6 +3162,8 @@ type Engine interface {
 }
 ```
 
+`StartWorkflow` requires unique workflow IDs; an already-running ID returns `engine.ErrWorkflowAlreadyStarted`, which does not match `engine.ErrWorkflowStartRejected`.
+
 ### WorkflowContext
 
 Workflow handlers receive a context for deterministic operations:
@@ -4290,8 +4292,8 @@ Run `go test -race ./runtime/agent/engine/inmem -run '^TestConformance$'` for th
 in-memory suite, or `make test-engine-conformance` for both adapters. The latter
 starts a real Temporal dev server using the SDK's CLI download mechanism, has a
 five-minute timeout, and runs under `make itest`. Temporal is skipped with
-`-short`. Current known gaps are Temporal returning an existing handle on an
-active ID conflict, in-memory queue/schedule/heartbeat options, and `await_signal`.
+`-short`. Current known gaps are in-memory queue/schedule/heartbeat options and
+`await_signal`.
 `await_signal` stays a plain skip: `Await` needs a side-effect-free predicate, but
 `Receiver.ReceiveAsync` consumes the signal and no signal-handler primitive is
 available. Conformance workers use one-second workflow-task and sticky timeouts

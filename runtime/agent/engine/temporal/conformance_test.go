@@ -63,7 +63,6 @@ func TestConformance(t *testing.T) {
 	enginetest.RunConformance(t, enginetest.Factory{
 		Durable: true, Retries: true,
 		KnownGaps: map[string]string{
-			"id_conflict":  "E0 follow-up: Temporal StartWorkflow returns the existing handle for an active ID because WorkflowExecutionErrorWhenAlreadyStarted is not set",
 			"await_signal": "E0 follow-up: Await requires a side-effect-free predicate, but Receiver offers only consuming ReceiveAsync and WorkflowContext has no signal handler/coroutine",
 		},
 		New: func(t *testing.T) enginetest.Fixture {

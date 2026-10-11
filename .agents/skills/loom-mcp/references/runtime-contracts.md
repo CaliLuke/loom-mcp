@@ -737,8 +737,7 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   obsolete gap is removed. Deadlines, cancellations, expired scenario contexts
   and untyped errors fail the test. Fixture/setup failures are ordinary failures,
   not accepted gap evidence.
-- Current executable gaps: Temporal returns the existing handle on active ID
-  conflict; inmem omits the activity heartbeat timeout and ignores scheduling
-  mechanics. `await_signal` remains a plain API-gap skip: Await predicates must
+- Current executable gaps: inmem omits the activity heartbeat timeout and
+  ignores scheduling mechanics. `await_signal` remains a plain API-gap skip: Await predicates must
   be side-effect-free, but ReceiveAsync consumes the signal and no workflow
   signal-handler primitive is available.

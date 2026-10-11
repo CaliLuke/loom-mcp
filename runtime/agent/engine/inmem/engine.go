@@ -388,7 +388,7 @@ func (e *eng) reserveWorkflowRun(acceptanceCtx context.Context, id string, h *ha
 		e.statuses = make(map[string]engine.RunStatus)
 	}
 	if _, exists := e.statuses[id]; exists {
-		return fmt.Errorf("workflow ID %q already exists", id)
+		return fmt.Errorf("workflow ID %q already exists: %w", id, engine.ErrWorkflowAlreadyStarted)
 	}
 	if e.handles == nil {
 		e.handles = make(map[string]*handle)

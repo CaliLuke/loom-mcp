@@ -96,6 +96,9 @@ var (
 	ErrWorkflowNotFound = errors.New("workflow not found")
 	// ErrWorkflowCompleted indicates that a workflow exists but no longer accepts signals.
 	ErrWorkflowCompleted = errors.New("workflow completed")
+	// ErrWorkflowAlreadyStarted indicates that the workflow ID conflicts with an existing execution.
+	// It does not imply ErrWorkflowStartRejected.
+	ErrWorkflowAlreadyStarted = errors.New("workflow already started")
 	// ErrWorkflowStartRejected indicates that a workflow start was definitely rejected before acceptance.
 	ErrWorkflowStartRejected = errors.New("workflow start rejected before acceptance")
 )

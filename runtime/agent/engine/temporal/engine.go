@@ -455,8 +455,6 @@ func (e *Engine) RegisterExecuteToolActivity(_ context.Context, name string, opt
 // an existing workflow, or if Temporal client execution fails.
 //
 // Thread-safe: Safe to call concurrently.
-//
-//nolint:unparam // engine.Engine requires returning a workflow handle.
 func (e *Engine) StartWorkflow(ctx context.Context, req engine.WorkflowStartRequest) (engine.WorkflowHandle, error) {
 	if req.Workflow == "" {
 		return nil, definiteStartRejection(fmt.Errorf("temporal engine: workflow name is required"))
@@ -475,8 +473,9 @@ func (e *Engine) StartWorkflow(ctx context.Context, req engine.WorkflowStartRequ
 	}
 
 	opts := client.StartWorkflowOptions{
-		ID:        req.ID,
-		TaskQueue: queue,
+		ID:                                       req.ID,
+		TaskQueue:                                queue,
+		WorkflowExecutionErrorWhenAlreadyStarted: true,
 	}
 	if len(req.Memo) > 0 {
 		opts.Memo = req.Memo
@@ -626,8 +625,12 @@ func classifyTemporalCancellation(err error) error {
 	return err
 }
 
-// classifyTemporalStartError marks only direct, definitive server rejections.
+// classifyTemporalStartError maps duplicate IDs and marks only direct, definitive server rejections.
 func classifyTemporalStartError(err error) error {
+	var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
+	if errors.As(err, &alreadyStarted) {
+		return fmt.Errorf("%w: %w", engine.ErrWorkflowAlreadyStarted, err)
+	}
 	var invalidArgument *serviceerror.InvalidArgument
 	if errors.As(err, &invalidArgument) && cancellation.Exact(err, invalidArgument) {
 		return definiteStartRejection(err)

@@ -72,6 +72,36 @@ func TestStartWorkflowClassifiesTemporalServerRejections(t *testing.T) {
 	}
 }
 
+func TestStartWorkflowRejectsAlreadyStarted(t *testing.T) {
+	t.Parallel()
+
+	service := &testWorkflowService{
+		startErr: serviceerror.NewWorkflowExecutionAlreadyStarted("already started", "request", "existing-run"),
+	}
+	eng, err := NewWorker(Options{
+		Client:        newWorkflowServiceClient(t, service),
+		WorkerOptions: WorkerOptions{TaskQueue: "default.queue"},
+	})
+	require.NoError(t, err)
+	require.NoError(t, eng.RegisterWorkflow(context.Background(), engine.WorkflowDefinition{
+		Name: "registered.workflow",
+		Handler: func(engine.WorkflowContext, *api.RunInput) (*api.RunOutput, error) {
+			return &api.RunOutput{}, nil
+		},
+	}))
+
+	handle, err := eng.StartWorkflow(context.Background(), engine.WorkflowStartRequest{
+		ID: "duplicate-run", Workflow: "registered.workflow",
+	})
+	assert.Nil(t, handle)
+	require.ErrorIs(t, err, engine.ErrWorkflowAlreadyStarted)
+	require.NotErrorIs(t, err, engine.ErrWorkflowStartRejected)
+	var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
+	if assert.ErrorAs(t, err, &alreadyStarted) {
+		assert.Equal(t, "existing-run", alreadyStarted.RunId)
+	}
+}
+
 func TestClassifyTemporalStartErrorOnlyMarksDefiniteRejections(t *testing.T) {
 	t.Parallel()
 
@@ -87,7 +117,8 @@ func TestClassifyTemporalStartErrorOnlyMarksDefiniteRejections(t *testing.T) {
 	}{
 		{name: "invalid argument", err: invalidArgument, reject: true, wantAs: new(*serviceerror.InvalidArgument)},
 		{name: "namespace missing", err: namespaceNotFound, reject: true, wantAs: new(*serviceerror.NamespaceNotFound)},
-		{name: "already started", err: alreadyStarted, wantAs: new(*serviceerror.WorkflowExecutionAlreadyStarted)},
+		{name: "already started", err: alreadyStarted, wantAs: new(*serviceerror.WorkflowExecutionAlreadyStarted), wantIs: engine.ErrWorkflowAlreadyStarted},
+		{name: "wrapped already started", err: fmt.Errorf("wrapped: %w", alreadyStarted), wantAs: new(*serviceerror.WorkflowExecutionAlreadyStarted), wantIs: engine.ErrWorkflowAlreadyStarted},
 		{name: "unavailable", err: &serviceerror.Unavailable{Message: "unavailable"}, wantAs: new(*serviceerror.Unavailable)},
 		{name: "joined mixed outcome", err: errors.Join(invalidArgument, &serviceerror.Unavailable{Message: "unavailable"})},
 		{name: "wrapped rejection remains conservative", err: fmt.Errorf("wrapped: %w", invalidArgument)},
