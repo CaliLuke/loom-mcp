@@ -384,6 +384,19 @@ func (r *runReader) observeStepFacts(keys []runstore.CallKey) error {
 
 func (r *runReader) readCompactionRecord(event *runlog.Event) error {
 	if event.Type == hooks.ContextCompacted || event.Type == hooks.ContextCompactionSkipped {
+		var summary hooks.ContextCompactionEvent
+		if err := json.Unmarshal(event.Payload, &summary); err != nil {
+			return err
+		}
+		if err := r.recordContextSettings(summary.ContextSettings); err != nil {
+			return err
+		}
+		if event.Type == hooks.ContextCompactionSkipped {
+			r.run.Summary = r.run.Summary.Reject(summary.Kind)
+		}
+		if summary.ViewRef != nil && !r.run.Sealed {
+			r.run.IndexHead = summary.ViewRef.IndexHead
+		}
 		if event.Type == hooks.ContextCompacted {
 			settings := compaction.Settings{}
 			if r.run.ContextSettings != nil {

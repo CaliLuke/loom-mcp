@@ -9,7 +9,7 @@ import (
 
 func TestConformance(t *testing.T) {
 	gaps := map[string]string{}
-	for _, kind := range []string{"hook", "planner", "tool", "finish", "record_content", "child_dispatch", "seal", "recall"} {
+	for _, kind := range []string{"hook", "planner", "tool", "finish", "record_content", "child_dispatch", "seal", "recall", "summary"} {
 		gaps["activity_options/"+kind] = "E0 follow-up: inmem applies StartToCloseTimeout only; Queue, ScheduleToStartTimeout, HeartbeatTimeout and retry options are ignored"
 	}
 	enginetest.RunConformance(t, enginetest.Factory{

@@ -36,6 +36,7 @@ type (
 		contentActivities       map[string]contentActivityDef
 		childDispatchActivities map[string]childDispatchActivityDef
 		recallActivities        map[string]recallActivityDef
+		summaryActivities       map[string]summaryActivityDef
 		toolActivities          map[string]toolActivityDef
 
 		// statuses tracks workflow status by run ID (inmem uses workflow ID as run ID).

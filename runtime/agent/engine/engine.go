@@ -133,6 +133,9 @@ type (
 		// RegisterRecordContentActivity registers ordered workflow content storage.
 		RegisterRecordContentActivity(ctx context.Context, name string, opts ActivityOptions, fn func(context.Context, *api.RecordContentInput) (*api.RecordContentOutput, error)) error
 
+		// RegisterSummarizeContextActivity registers recorded summary folding.
+		RegisterSummarizeContextActivity(ctx context.Context, name string, opts ActivityOptions, fn func(context.Context, *api.SummarizeContextInput) (*api.SummarizeContextOutput, error)) error
+
 		// RegisterRecallActivity registers activity-only transcript lookup.
 		RegisterRecallActivity(ctx context.Context, name string, opts ActivityOptions, fn func(context.Context, *api.RecallActivityInput) (*api.RecallActivityOutput, error)) error
 
@@ -270,6 +273,9 @@ type (
 
 		// ExecuteRecordContentActivity stores ordered content outside workflow execution.
 		ExecuteRecordContentActivity(ctx context.Context, call RecordContentActivityCall) (*api.RecordContentOutput, error)
+
+		// ExecuteSummarizeContextActivity folds eligible evidence outside workflows.
+		ExecuteSummarizeContextActivity(ctx context.Context, call SummarizeContextActivityCall) (*api.SummarizeContextOutput, error)
 
 		// ExecuteRecallActivity recalls eligible evidence outside the workflow.
 		ExecuteRecallActivity(ctx context.Context, call RecallActivityCall) (*api.RecallActivityOutput, error)

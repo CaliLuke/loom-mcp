@@ -279,7 +279,7 @@ func TestPlannerStepIncludedInInputBudget(t *testing.T) {
 	var oversized *PlanActivityInputBudgetError
 	require.ErrorAs(t, err, &oversized)
 	assert.Empty(t, wf.plannerCalls)
-	assert.Equal(t, 99, base.step)
+	assert.Equal(t, 100, base.step, "an admitted schedule reserves its identity before preparation")
 }
 
 func assistantCommitResult() *planner.PlanResult {

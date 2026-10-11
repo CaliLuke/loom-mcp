@@ -1148,3 +1148,25 @@ func (r *Runtime) loadTestView(ctx context.Context, root, runID string, view ind
 	}
 	return loaded, nil
 }
+
+func (t *testWorkflowContext) ExecuteSummarizeContextActivity(ctx context.Context, call engine.SummarizeContextActivityCall) (*api.SummarizeContextOutput, error) {
+	rt := t.finishRuntime
+	if rt == nil {
+		rt = t.runtime
+	}
+	if rt == nil {
+		rt = t.hookRuntime
+	}
+	if rt == nil {
+		return nil, fmt.Errorf("test finish runtime is required")
+	}
+	return rt.SummarizeContextActivity(ctx, call.Input)
+}
+
+func (r *routeWorkflowContext) ExecuteSummarizeContextActivity(ctx context.Context, call engine.SummarizeContextActivityCall) (*api.SummarizeContextOutput, error) {
+	return r.hookRuntime.SummarizeContextActivity(ctx, call.Input)
+}
+
+func (s *stubEngine) RegisterSummarizeContextActivity(context.Context, string, engine.ActivityOptions, func(context.Context, *api.SummarizeContextInput) (*api.SummarizeContextOutput, error)) error {
+	return nil
+}

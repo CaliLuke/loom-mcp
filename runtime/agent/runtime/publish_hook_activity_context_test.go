@@ -375,3 +375,11 @@ func (panicWorkflowContext) ExecuteRecallActivity(context.Context, engine.Recall
 func (*cancelOnPlannerWorkflowContext) ExecuteRecallActivity(context.Context, engine.RecallActivityCall) (*api.RecallActivityOutput, error) {
 	panic("unexpected record content activity")
 }
+
+func (panicWorkflowContext) ExecuteSummarizeContextActivity(context.Context, engine.SummarizeContextActivityCall) (*api.SummarizeContextOutput, error) {
+	panic("unexpected record content activity")
+}
+
+func (*cancelOnPlannerWorkflowContext) ExecuteSummarizeContextActivity(context.Context, engine.SummarizeContextActivityCall) (*api.SummarizeContextOutput, error) {
+	panic("unexpected record content activity")
+}

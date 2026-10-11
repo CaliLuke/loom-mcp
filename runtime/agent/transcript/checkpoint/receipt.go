@@ -14,6 +14,10 @@ type (
 	// ReceiptItem supplies a tool call and/or assistant text from the record chain.
 	ReceiptItem struct {
 		ToolUseID, Tool, Args string
+		// PartID identifies an unsummarised part; PartText is the framework annotation.
+		PartID           index.MessageID
+		Part, Bytes      int
+		Format, PartText string
 		// Lookup hides the runtime lookup tool name while retaining its call ID.
 		Lookup       bool
 		AssistantID  index.MessageID
@@ -45,6 +49,16 @@ const (
 	receiptRangeLabelBytes = 64
 	compactReceiptBytes    = len("… [receipt rc-xxxxxxxx]\n") + len("… [earlier rc-xxxxxxxx]\n")
 )
+
+// LookupLine is the shared K13 lookup description, hiding the internal tool name.
+// A negative limit retains all eligible arguments; bounded callers reserve newline bytes.
+func LookupLine(id, args string, maxBytes int) string {
+	prefix := id + " (context lookup: "
+	if maxBytes < 0 {
+		return prefix + args + ")"
+	}
+	return HeadTail(prefix+HeadTail(args, max(0, maxBytes-len(prefix)-1))+")", maxBytes)
+}
 
 // renderReceipt traverses the chain once and retains only bounded newest lines.
 // Aggregate lines are measured exactly, evicting the oldest retained lines
@@ -127,6 +141,13 @@ func receiptLines(item ReceiptItem, currentPos int) []receiptLine {
 	if item.Origin != nil {
 		pos = item.Origin.Pos
 	}
+	if item.PartID != 0 {
+		text := fmt.Sprintf("%s, part %d, %s, %d bytes: %s", Label(item.PartID, item.Origin, currentPos), item.Part, item.Format, item.Bytes, item.PartText)
+		for _, span := range item.Unsummarised {
+			text += fmt.Sprintf("; bytes %s–%s not summarised", thousands(span.From), thousands(span.Through))
+		}
+		return []receiptLine{{text: HeadTail(text, MaxReceiptLineBytes-1) + "\n", pos: pos, assistant: true, label: fmt.Sprintf("%d", item.PartID)}}
+	}
 	if item.ToolUseID != "" {
 		id := item.ToolUseID
 		if pos != currentPos {
@@ -134,8 +155,7 @@ func receiptLines(item ReceiptItem, currentPos int) []receiptLine {
 		}
 		text := fmt.Sprintf("%s %s(%s)", id, item.Tool, item.Args)
 		if item.Lookup {
-			prefix := id + " (context lookup: "
-			text = prefix + HeadTail(item.Args, max(0, MaxReceiptLineBytes-len(prefix)-2)) + ")"
+			text = LookupLine(id, item.Args, MaxReceiptLineBytes-1)
 		}
 		for _, span := range item.Unsummarised {
 			text += fmt.Sprintf("; bytes %s–%s not summarised", thousands(span.From), thousands(span.Through))

@@ -53,8 +53,9 @@ func receiptRecord(ctx context.Context, store runstore.Store, scope string, sour
 	return hash, nil
 }
 
-// receiptLines is the sole receipt-line constructor. It reads only eligible
-// calls and assistant text; record/output/server-only content is never a source.
+// receiptLines constructs the base call and assistant receipts. K15 adds summary
+// annotations separately. Only eligible calls and assistant text are sources;
+// record/output/server-only content is never read.
 func receiptLines(ctx context.Context, source index.Source, entries []index.MessageEntry, through, tailFrom index.MessageID) ([]index.ReceiptLine, error) {
 	hidden := hiddenCalls(entries)
 	var lines []index.ReceiptLine

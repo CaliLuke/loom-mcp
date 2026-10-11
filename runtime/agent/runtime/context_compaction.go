@@ -30,7 +30,7 @@ func WithContextCompaction(id agent.Ident, settings ContextCompaction) RuntimeOp
 		if opts.ContextCompaction == nil {
 			opts.ContextCompaction = make(map[agent.Ident]ContextCompaction)
 		}
-		opts.ContextCompaction[id] = settings
+		opts.ContextCompaction[id] = *cloneCompaction(&settings)
 	}
 }
 
@@ -53,7 +53,7 @@ func cloneCompactionOptions(options map[agent.Ident]ContextCompaction) map[agent
 		if config.RecallReadCalls == 0 {
 			config.RecallReadCalls = 20
 		}
-		config.KeepResultTools = slices.Clone(config.KeepResultTools)
+		config = *cloneCompaction(&config)
 		owned[id] = config
 	}
 	return owned
@@ -64,6 +64,10 @@ func cloneCompaction(settings *ContextCompaction) *ContextCompaction {
 		return nil
 	}
 	owned := *settings
+	if settings.ContextModel != nil {
+		model := *settings.ContextModel
+		owned.ContextModel = &model
+	}
 	owned.KeepResultTools = slices.Clone(settings.KeepResultTools)
 	return &owned
 }
@@ -116,7 +120,15 @@ func resolvedContextSettings(threshold *ContextCompaction, recovery ContextRecov
 	if margin.Bytes == 0 {
 		margin = contextmeasure.Rate{Tokens: 1, Bytes: 10}
 	}
-	return compaction.ContextSettings{Settings: settings, Threshold: threshold != nil, GuardMargin: margin, DisableRecall: recovery.DisableRecall}
+	resolved := compaction.ContextSettings{Settings: settings, Threshold: threshold != nil, GuardMargin: margin, DisableRecall: recovery.DisableRecall}
+	if threshold != nil {
+		resolved.Summary.Settings = threshold.Summary
+		if threshold.ContextModel != nil {
+			resolved.Summary.Enabled = true
+			resolved.Summary.Model = *threshold.ContextModel
+		}
+	}
+	return resolved
 }
 
 func keepCompactionResult(settings *ContextCompaction, tool tools.Ident) bool {

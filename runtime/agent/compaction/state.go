@@ -12,6 +12,8 @@ import (
 type (
 	// ContextSettings snapshots both opt-in thresholds and always-on recovery.
 	ContextSettings struct {
+		// Summary records immutable, client-stamped summary configuration.
+		Summary SummaryConfig `json:"summary,omitzero"`
 		Settings
 		Threshold     bool                `json:"threshold,omitzero"`
 		GuardMargin   contextmeasure.Rate `json:"guard_margin,omitzero"`
@@ -43,6 +45,7 @@ type (
 	// is the first entry of an open await/confirmation/clarification, set by the
 	// caller from workflow state before Decide; zero means no open suffix.
 	State struct {
+		Summary      SummaryState
 		Recall       RecallAllowances
 		Models       map[string]ModelState
 		MinB         int

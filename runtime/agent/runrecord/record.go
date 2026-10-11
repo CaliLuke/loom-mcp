@@ -28,6 +28,8 @@ type (
 	}
 	// Run holds one run's transcript and evidence in canonical order.
 	Run struct {
+		// Summary rebuilds rejection disablement from canonical summary records.
+		Summary compaction.SummaryState `json:"summary,omitzero"`
 		// ContextSettings holds resolved recovery and threshold settings for every agent.
 		ContextSettings *compaction.ContextSettings `json:"context_settings,omitzero"`
 		// RecoverySettings is the resolved runtime-stamped lookup configuration.

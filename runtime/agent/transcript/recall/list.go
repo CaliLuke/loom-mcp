@@ -8,8 +8,11 @@ import (
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/checkpoint"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 )
+
+const callLineKind = "call"
 
 func cursorPosition(token string, selector Cursor) (int, error) {
 	if token == "" {
@@ -31,9 +34,9 @@ func cursorPosition(token string, selector Cursor) (int, error) {
 func describeCall(runID string, call eligibleCall) Line {
 	name := call.Name
 	if tools.Ident(name) == tools.RecallContext {
-		name = "context lookup"
+		return Line{ID: call.ToolCallID, Run: runID, Kind: callLineKind, Text: checkpoint.LookupLine(call.ToolCallID, firstLine(string(call.Payload)), -1)}
 	}
-	return Line{ID: call.ToolCallID, Run: runID, Kind: "call", Text: fmt.Sprintf("%s (%s: %s)", call.ToolCallID, name, firstLine(string(call.Payload)))}
+	return Line{ID: call.ToolCallID, Run: runID, Kind: callLineKind, Text: fmt.Sprintf("%s (%s: %s)", call.ToolCallID, name, firstLine(string(call.Payload)))}
 }
 
 func (r *callReader) list(ctx context.Context, in ListInput) (Response, error) {
@@ -140,13 +143,14 @@ func (r *callReader) handleLines(ctx context.Context, handle string) ([]Line, er
 			line := candidate.record.Receipt[i]
 			id := strconv.FormatUint(uint64(line.From), 10)
 			text := firstLine(line.Text)
-			if line.Kind == "call" {
+			if line.Kind == callLineKind {
 				id = line.ToolUseID
 				name := line.Tool
 				if tools.Ident(name) == tools.RecallContext {
-					name = "context lookup"
+					text = checkpoint.LookupLine(id, text, -1)
+				} else {
+					text = fmt.Sprintf("%s (%s: %s)", id, name, text)
 				}
-				text = fmt.Sprintf("%s (%s: %s)", id, name, text)
 			}
 			lines = append(lines, Line{ID: id, Run: candidate.run, Kind: line.Kind, Text: text})
 		}

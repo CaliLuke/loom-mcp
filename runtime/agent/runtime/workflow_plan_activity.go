@@ -53,14 +53,13 @@ func capPlanActivityOptions(wfCtx engine.WorkflowContext, options engine.Activit
 	return callOpts, nil
 }
 
-// schedulePlanActivity checks the deadline before advancing the step or emitting
-// a planner command. Finalizers pass their separate grace deadline here.
-func schedulePlanActivity(wfCtx engine.WorkflowContext, base *workflowPlanInput, name string, options engine.ActivityOptions, input *PlanActivityInput, deadline time.Time) (*PlanActivityOutput, error) {
+// schedulePlanActivity rechecks the deadline after preparation before emitting a
+// planner command. Finalizers pass their separate grace deadline here.
+func schedulePlanActivity(wfCtx engine.WorkflowContext, name string, options engine.ActivityOptions, input *PlanActivityInput, deadline time.Time) (*PlanActivityOutput, error) {
 	callOpts, err := capPlanActivityOptions(wfCtx, options, deadline)
 	if err != nil {
 		return nil, err
 	}
-	base.step = input.Step
 	return wfCtx.ExecutePlannerActivity(wfCtx.Context(), engine.PlannerActivityCall{
 		Name: name, Input: input, Options: callOpts,
 	})
@@ -247,6 +246,24 @@ func advanceRecoveryPlanInput(input *PlanActivityInput, out *PlanActivityOutput,
 	}
 }
 
+// preparePlanActivity reserves the schedule identity before preparation can
+// publish events, even when no planner command follows.
+func (r *Runtime) preparePlanActivity(wfCtx engine.WorkflowContext, base *workflowPlanInput, options engine.ActivityOptions, input *PlanActivityInput, hardDeadline time.Time) error {
+	if _, err := capPlanActivityOptions(wfCtx, options, hardDeadline); err != nil {
+		return err
+	}
+	// Preparation can publish summary adoption before the planner is scheduled.
+	// Reserve the identity now, even if preparation later consumes the budget.
+	base.step++
+	input.Step = base.step
+	prepareCompaction(base, input)
+	if err := r.prepareWorkflowSummary(wfCtx, base, input, hardDeadline); err != nil {
+		return err
+	}
+	prepareRecall(base, input)
+	return enforcePlanActivityInputBudget(*input)
+}
+
 // runPlanActivity schedules a plan/resume activity with the configured options.
 func (r *Runtime) runPlanActivity(
 	wfCtx engine.WorkflowContext,
@@ -260,13 +277,10 @@ func (r *Runtime) runPlanActivity(
 	if activityName == "" {
 		return nil, errors.New("plan activity not registered")
 	}
-	input.Step = base.step + 1
-	prepareCompaction(base, &input)
-	prepareRecall(base, &input)
-	if err := enforcePlanActivityInputBudget(input); err != nil {
+	if err := r.preparePlanActivity(wfCtx, base, options, &input, hardDeadline); err != nil {
 		return nil, err
 	}
-	out, err := schedulePlanActivity(wfCtx, base, activityName, options, &input, hardDeadline)
+	out, err := schedulePlanActivity(wfCtx, activityName, options, &input, hardDeadline)
 	if err != nil {
 		return nil, err
 	}

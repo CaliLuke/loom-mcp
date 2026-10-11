@@ -5,23 +5,37 @@ import (
 	"time"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/compaction"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/prompt"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 )
 
 type (
 	// ContextCompactionEvent records a committed compaction or a suppressed attempt.
 	ContextCompactionEvent struct {
-		baseEvent  `json:"-"`
-		kind       EventType
-		Reason     string             `json:"reason"`
-		Tier       string             `json:"tier,omitzero"`
-		Units      int                `json:"units"`
-		Calls      int                `json:"calls"`
-		Before     int                `json:"before"`
-		After      int                `json:"after"`
-		Checkpoint *runstore.Hash     `json:"checkpoint,omitzero"`
-		Step       int                `json:"step"`
-		CallKeys   []runstore.CallKey `json:"call_keys"`
+		// Kind is the ordered validation or provider rejection, independent of Reason.
+		Kind              string                      `json:"kind,omitzero"`
+		Model             string                      `json:"model,omitzero"`
+		Usage             model.TokenUsage            `json:"usage,omitzero"`
+		Chunks            int                         `json:"chunks,omitzero"`
+		UnsummarisedBytes int                         `json:"unsummarised_bytes,omitzero"`
+		LooseRefs         int                         `json:"loose_refs,omitzero"`
+		Prompt            *prompt.PromptRef           `json:"prompt,omitzero"`
+		ViewRef           *index.ViewRef              `json:"view_ref,omitzero"`
+		ContextSettings   *compaction.ContextSettings `json:"context_settings,omitzero"`
+		baseEvent         `json:"-"`
+		kind              EventType
+		Reason            string             `json:"reason"`
+		Tier              string             `json:"tier,omitzero"`
+		Units             int                `json:"units"`
+		Calls             int                `json:"calls"`
+		Before            int                `json:"before"`
+		After             int                `json:"after"`
+		Checkpoint        *runstore.Hash     `json:"checkpoint,omitzero"`
+		Step              int                `json:"step"`
+		CallKeys          []runstore.CallKey `json:"call_keys"`
 	}
 	// ContextDiagnosticEvent reports a run-scoped context measurement limitation.
 	ContextDiagnosticEvent struct {

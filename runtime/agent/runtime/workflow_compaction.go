@@ -29,6 +29,7 @@ func compactionModels(state compaction.State) []api.ModelContext {
 
 // prepareCompaction decides from adopted evidence before every schedule, including finalize.
 func prepareCompaction(base *workflowPlanInput, input *PlanActivityInput) {
+	base.summaryApplied = false
 	base.compactionDecision = compaction.Decision{}
 	input.Models = compactionModels(base.compactionState)
 	input.ContextSettings = base.contextSettings
@@ -58,22 +59,12 @@ func prepareCompaction(base *workflowPlanInput, input *PlanActivityInput) {
 }
 
 func compactionRecord(wf engine.WorkflowContext, base *workflowPlanInput, input PlanActivityInput, out *PlanActivityOutput, view index.ViewRef) hooks.Event {
-	if base.compaction == nil || out.Recovery != nil {
+	if base.summaryApplied || base.compaction == nil || out.Recovery != nil {
 		return nil
 	}
 	d := base.compactionDecision
 	if d.Tier == compaction.Clear || d.Tier == compaction.Evict {
-		units, calls := 0, 0
-		for _, unit := range checkpoint.Units(base.Entries, index.RecordedRole, 0) {
-			if unit.From >= max(base.compactionView.TailFrom, 1) && unit.Through < view.TailFrom {
-				units++
-			}
-		}
-		for _, entry := range base.Entries {
-			if entry.ID >= max(base.compactionView.TailFrom, 1) && entry.ID < view.TailFrom {
-				calls += len(entry.Calls)
-			}
-		}
+		units, calls := compactionCounts(base.Entries, max(base.compactionView.TailFrom, 1), view.TailFrom)
 		return hooks.NewContextCompactionEvent(input.RunID, input.AgentID, input.RunContext.SessionID, input.Step, hooks.ContextCompacted, "threshold", string(d.Tier), units, calls, d.Before, d.After, view.Checkpoint, wf.Now())
 	}
 	if d.Skipped != "" {
@@ -93,7 +84,7 @@ func (r *Runtime) adoptCompaction(wf engine.WorkflowContext, base *workflowPlanI
 		if base.compaction != nil && input.Overflow == nil {
 			base.compactionState = base.compactionDecision.State
 		}
-		if base.compactionDecision.Tier == compaction.Clear || base.compactionDecision.Tier == compaction.Evict {
+		if !base.summaryApplied && (base.compactionDecision.Tier == compaction.Clear || base.compactionDecision.Tier == compaction.Evict) {
 			base.compactionState.Recall = base.compactionState.Recall.Refilled(pureCompactionSettings(base.compaction))
 			base.recallEpisode++
 			base.recallExhausted = nil
@@ -141,4 +132,20 @@ func (r *Runtime) publishRecallDisabled(wf engine.WorkflowContext, base *workflo
 		base.recallDisabledPublished = true
 	}
 	return nil
+}
+
+// compactionCounts derives event totals from the immutable evicted prefix.
+func compactionCounts(entries []index.MessageEntry, from, to index.MessageID) (int, int) {
+	units, calls := 0, 0
+	for _, unit := range checkpoint.Units(entries, index.RecordedRole, 0) {
+		if unit.From >= from && unit.Through < to {
+			units++
+		}
+	}
+	for _, entry := range entries {
+		if entry.ID >= from && entry.ID < to {
+			calls += len(entry.Calls)
+		}
+	}
+	return units, calls
 }

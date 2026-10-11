@@ -38,10 +38,13 @@ func FromRecord(ctx context.Context, source index.Source, hash runstore.Hash, en
 			for i := len(record.Receipt) - 1; i >= 0; i-- {
 				line := record.Receipt[i]
 				item := ReceiptItem{Origin: line.Origin, Unsummarised: line.Unsummarised}
-				if line.Kind == "call" {
+				switch line.Kind {
+				case "part":
+					item.PartID, item.Part, item.Format, item.Bytes, item.PartText = line.MessageID, line.Part, line.Format, line.Bytes, line.Text
+				case "call":
 					item.ToolUseID, item.Tool, item.Args = line.ToolUseID, line.Tool, line.Text
 					item.Lookup = tools.Ident(line.Tool) == tools.RecallContext
-				} else {
+				default:
 					item.AssistantID, item.Text = line.From, line.Text
 				}
 				if !yield(item) {
@@ -114,13 +117,8 @@ func readRecords(ctx context.Context, source index.Source, hash runstore.Hash, e
 				return nil, nil, fmt.Errorf("receipt-only checkpoint drops previous summary evidence")
 			}
 		}
-		if record.Through > 0 && (uint64(record.Through) > uint64(len(entries)) || entries[record.Through-1].ID != record.Through || entries[record.Through-1].Chain != record.Chain) {
-			return nil, nil, fmt.Errorf("checkpoint Through/Chain does not match index")
-		}
-		for _, line := range record.Receipt {
-			if line.Kind != "call" && line.Kind != "assistant" {
-				return nil, nil, fmt.Errorf("checkpoint invalid receipt kind %q", line.Kind)
-			}
+		if err := validateRecord(record, entries); err != nil {
+			return nil, nil, err
 		}
 		records = append(records, record)
 		hashes = append(hashes, hash)
@@ -129,6 +127,18 @@ func readRecords(ctx context.Context, source index.Source, hash runstore.Hash, e
 		}
 		hash = *record.Prev
 	}
+}
+
+func validateRecord(record index.CheckpointRecord, entries []index.MessageEntry) error {
+	if record.Through > 0 && (uint64(record.Through) > uint64(len(entries)) || entries[record.Through-1].ID != record.Through || entries[record.Through-1].Chain != record.Chain) {
+		return fmt.Errorf("checkpoint Through/Chain does not match index")
+	}
+	for _, line := range record.Receipt {
+		if line.Kind != "call" && line.Kind != "assistant" && line.Kind != "part" {
+			return fmt.Errorf("checkpoint invalid receipt kind %q", line.Kind)
+		}
+	}
+	return nil
 }
 
 func recordUsers(ctx context.Context, source index.Source, entries []index.MessageEntry, through index.MessageID) ([]UserMessage, error) {

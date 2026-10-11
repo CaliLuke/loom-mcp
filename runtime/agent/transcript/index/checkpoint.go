@@ -33,8 +33,15 @@ type (
 	}
 	// ReceiptLine describes one evicted call, assistant message or unsummarised range.
 	ReceiptLine struct {
-		// Kind is call or assistant.
+		// Kind is call, assistant or part.
 		Kind string `json:"kind"`
+		// MessageID identifies the entry containing an unsummarised part.
+		MessageID MessageID `json:"message_id,omitzero"`
+		// Part is the one-based part within MessageID.
+		Part int `json:"part,omitzero"`
+		// Format and Bytes describe an unaccepted image or document.
+		Format string `json:"format,omitzero"`
+		Bytes  int    `json:"bytes,omitzero"`
 		// ToolUseID identifies a covered model-eligible call.
 		ToolUseID string `json:"tool_use_id,omitzero"`
 		// Unsummarised names result byte ranges not yet summarised.

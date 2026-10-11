@@ -14,7 +14,7 @@ import (
 
 func activities() []activityCase {
 	return []activityCase{
-		hookCase(), plannerCase(), toolCase(), finishCase(), contentCase(), dispatchCase(), sealCase(), recallCase(),
+		hookCase(), plannerCase(), toolCase(), finishCase(), contentCase(), dispatchCase(), sealCase(), recallCase(), summaryCase(),
 	}
 }
 
@@ -122,5 +122,16 @@ func recallCase() activityCase {
 		},
 		invoke: func(w engine.WorkflowContext, in any, opts engine.ActivityOptions) (any, error) {
 			return w.ExecuteRecallActivity(w.Context(), engine.RecallActivityCall{Name: activityName, Input: in.(*api.RecallActivityInput), Options: opts})
+		}}
+}
+
+func summaryCase() activityCase {
+	return activityCase{name: "summary", input: &api.SummarizeContextInput{RunID: testRunID, Scope: rootRunID, From: 1, To: 4}, output: &api.SummarizeContextOutput{From: 1, To: 4, Kind: "empty", CallKeys: []runstore.CallKey{{RunID: testRunID, Seq: 1, Attempt: 1}}},
+		register: func(ctx context.Context, e engine.Engine, opts engine.ActivityOptions, fn func(context.Context, any) (any, error)) error {
+			return e.RegisterSummarizeContextActivity(ctx, activityName, opts, func(ctx context.Context, in *api.SummarizeContextInput) (*api.SummarizeContextOutput, error) {
+				return typedResult[*api.SummarizeContextOutput](fn(ctx, in))
+			})
+		}, invoke: func(w engine.WorkflowContext, in any, opts engine.ActivityOptions) (any, error) {
+			return w.ExecuteSummarizeContextActivity(w.Context(), engine.SummarizeContextActivityCall{Name: activityName, Input: in.(*api.SummarizeContextInput), Options: opts})
 		}}
 }

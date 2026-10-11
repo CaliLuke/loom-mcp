@@ -40,6 +40,8 @@ type workflowPlanInput struct {
 	compactionDecision      compaction.Decision
 	compactionFlags         compaction.Flags
 	compactionSuppressed    bool
+	summaryApplied          bool
+	summariesOffLogged      bool
 	recovery                ContextRecovery
 	recallAdvertised        bool
 	recallAvailable         bool

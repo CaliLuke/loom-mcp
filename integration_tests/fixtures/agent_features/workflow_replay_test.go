@@ -42,7 +42,7 @@ import (
 type historyReplayPlanner struct{}
 
 const (
-	workflowHistoryFile        = "testdata/workflow_protocol_v12.json"
+	workflowHistoryFile        = "testdata/workflow_protocol_v13.json"
 	workflowHistoryIdentity    = "loom-mcp-history-recorder"
 	workflowHistoryStickyQueue = "loom-mcp-history-recorder-sticky"
 	workflowHistoryQuestion    = "Which topic should the draft use?"
@@ -56,8 +56,10 @@ func TestGeneratedFeatureWorkflowReplay(t *testing.T) {
 		missing  bool
 		previous int
 		budget   bool
+		summary  bool
 	}{
 		{name: "current"},
+		{name: "summary adoption", summary: true},
 		{name: "terminal adoption crosses budget", budget: true},
 		{name: "protocol 5 rejected before effects", previous: 5},
 		{name: "protocol 6 rejected before effects", previous: 6},
@@ -66,11 +68,15 @@ func TestGeneratedFeatureWorkflowReplay(t *testing.T) {
 		{name: "protocol 9 rejected before effects", previous: 9},
 		{name: "protocol 10 rejected before effects", previous: 10},
 		{name: "protocol 11 rejected before effects", previous: 11},
+		{name: "protocol 12 rejected before effects", previous: 12},
 		{name: "future", rewrite: true},
 		{name: "missing", rewrite: true, missing: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			historyFile := workflowHistoryFile
+			if test.summary {
+				historyFile = workflowSummaryHistoryFile
+			}
 			if test.budget {
 				historyFile = workflowBudgetHistoryFile
 			}
@@ -90,9 +96,12 @@ func TestGeneratedFeatureWorkflowReplay(t *testing.T) {
 			require.NoError(t, json.Unmarshal(payload.Data, &input))
 			var recordedVersion int
 			require.NoError(t, json.Unmarshal(input["WorkflowProtocolVersion"], &recordedVersion))
-			if test.budget {
+			switch {
+			case test.summary:
+				assertHistorySummary(t, history)
+			case test.budget:
 				assertHistoryBudgetAdoption(t, history)
-			} else {
+			default:
 				assertHistoryToolContent(t, history, recordedVersion)
 				if recordedVersion >= 11 {
 					assertHistoryClarification(t, history)
@@ -123,7 +132,11 @@ func TestGeneratedFeatureWorkflowReplay(t *testing.T) {
 				require.NoError(t, eng.Close())
 			})
 			fx := newFeatureRuntime(t, agentsruntime.WithEngine(eng), historyConfirmation())
-			registerHistoryReplayAgent(t, fx)
+			if test.summary {
+				registerSummaryHistoryAgent(t, fx)
+			} else {
+				registerHistoryReplayAgent(t, fx)
+			}
 			err = eng.ReplayWorkflowHistory(silentTemporalLogger{}, history)
 			if test.rewrite || test.previous != 0 {
 				assert.ErrorContains(t, err, "workflow protocol mismatch")

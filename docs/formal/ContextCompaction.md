@@ -181,8 +181,13 @@ transaction (4.16; fault `advance_two_writes`).
   never exercised; K11's table tests cover it.
 - Adopting a receipt-only `CheckpointRecord` only after the loader stores it
   is abstracted: eviction applies directly.
-- Summary rejection is not modelled; a rejected response is in the call
-  record and nothing refers to it.
+- Summary rejection and the byte/token size rule are not modelled; K15 tests it
+  in `TestSummarizeActivityRejectedResponseRecorded`, `TestWorkflowSummaryAdoption`,
+  `TestSummarySizeUsesRecoveryProjection` and `TestSummaryStoredWholeThenBounded`.
+  `TestWorkflowSummaryDisableAndRecovery` checks three-rejection disablement and
+  record reconstruction. `TestWorkflowSummaryBeforePlanner` proves canonical
+  adoption precedes the planner and fallback uses the same cut. A rejected
+  response is in the call record; no checkpoint, view or index names it.
 - Token arithmetic is abstract: an uncleared result weighs 3, other entries
   1, a summary its cap, a receipt line 1.
 - The estimator, the guard and planners that rewrite requests are in
@@ -305,7 +310,12 @@ transaction (4.16; fault `advance_two_writes`).
 
 - One kind of model-calling activity. `SummarizeContext` attempts follow the
   same rule, with keys in `context_compacted` or `context_compaction_skipped`;
-  K8 and K15 test it.
+  K8 and K15 test it. K15's `TestSummaryCallCommitCrashWindows`,
+  `TestSummaryZombieAttemptAbandoned`, `TestSummaryAdoptionRequiresRecordEvent`,
+  `TestWorkflowSummaryAdoption` and `TestSummarizeActivityFailurePolicy` cover
+  crash classification, late attempts, canonical adoption and fresh retry keys.
+  The three protocol-13 histories in `agent_features` exercise real Temporal
+  replay; protocol 12 is rejected before effects.
 - Store writes succeed when they happen; a failed write is a crash at that
   point.
 

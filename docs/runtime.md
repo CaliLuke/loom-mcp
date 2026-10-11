@@ -183,7 +183,7 @@ Typed consumers can call
 eligible bytes and decode them with the generated result codec. Empty or missing
 hashes fail. Tool activities return references; terminal completion decoding runs in the finish activity.
 
-### Transcript index and planner views (protocol 12)
+### Transcript index and planner views (protocol 13)
 
 The workflow keeps immutable `index.MessageEntry` values and a committed
 `IndexHead`, rather than accumulated messages, tool outputs, typed answers, or a
@@ -234,8 +234,8 @@ Anthropic and Bedrock view grammars; views without checkpoints retain the existi
 resume-time Bedrock validation. Successful activity outputs may return `ViewUpdate`;
 output-validation recovery outputs never adopt it. Protocol 7 introduced these view updates, recorded
 request facts and model rates, entry size metadata and stamped run settings.
-The current protocol is 12 (resume budget enforcement and terminal-result
-adoption across the budget). Drain older workflows before upgrading; v5–v11
+The current protocol is 13 (summary scheduling and adoption, including resume
+budget enforcement). Drain older workflows before upgrading; v5–v12
 fixtures retain mismatch rejection before effects. Structural templates remain version 5.
 
 ### Opt-in context compaction
@@ -4229,16 +4229,17 @@ external `Client`, also supply `ClientOptions` with that client's converter
 external client whose converter configuration was not supplied.
 
 The generated fixture keeps a completed history under
-`integration_tests/fixtures/agent_features/testdata/workflow_protocol_v12.json`.
+`integration_tests/fixtures/agent_features/testdata/workflow_protocol_v13.json`.
 The scrubbed recording includes overflow recovery, a confirmation-gated tool turn
 with clarification, its recorded assistant question and user answer, one resume
 that selects child validation and context lookup, seed/result/question content
 batches, planner-step commits and terminal finish activity. A second recording,
-`workflow_protocol_v12_budget.json`, exercises an external-await resume whose
+`workflow_protocol_v13_budget.json`, exercises an external-await resume whose
 terminal answer arrives within budget, but whose adoption crosses the budget.
-It completes without a finalizer call.
-The unchanged protocol 5–11 fixtures verify rejection before workflow effects;
-protocol versions must match, so workers running protocol 12 cannot replay them
+It completes without a finalizer call. `workflow_protocol_v13_summary.json` records
+a validated summary and its canonical adoption before the single post-await resume.
+The unchanged protocol 5–12 fixtures verify rejection before workflow effects;
+protocol versions must match, so workers running protocol 13 cannot replay them
 as successful runs. Run
 `go test -C integration_tests/fixtures/agent_features ./... -run '^TestGeneratedFeatureWorkflowReplay$'`
 for offline replay. To re-record it against the pinned Temporal development
@@ -5302,9 +5303,9 @@ Each invocation records one keyed context_recalled event with kind, outcome
 and step. Exhaustion emits recall_budget_exhausted once per allowance episode,
 reset by refill. RunRecord rebuilds and validates recorded charges and settings.
 Workflow protocol 9 adds overflow recovery to these lookup contracts. The recorded
-v12 fixture exercises bounded recovery, lookup and a single resume after
+v13 fixture exercises bounded recovery, lookup and a single resume after
 confirmation and clarification, including the recorded question/answer pair.
-The v12 budget fixture covers terminal adoption across the active budget without a finalizer call; v5–v11 fail
+The v13 budget fixture covers terminal adoption across the active budget without a finalizer call; v5–v12 fail
 before effects.
 Structural templates remain version 5.
 
@@ -5312,6 +5313,140 @@ FromRecord preserves the canonical tool name in the stored record and marks
 lookup receipt items so rendered lines say context lookup. Runtime-generated
 lookup IDs also omit the reserved name. Compaction-enabled registration rejects
 application identifiers or provider names containing recall_context.
+
+## Pure context summary helpers
+
+`runtime/agent/transcript/summarize` provides evidence rendering, chunk planning
+and validation without provider, store or workflow effects. The runtime uses it
+through `SummarizeContextActivity`. `RenderInput(Input)` takes entries, a cut `[From, To)`,
+authorized canonical contents and the previous summary's run position. Supply
+bookkeeping declarations beyond the cut too: hidden calls and their results
+must remain excluded. It reads original call arguments and full eligible result
+JSON, including results the planner view represents as omissions. Record/output
+hashes, injected call fields, reasoning and typed-input payloads are excluded.
+Previous bare citations are qualified with `checkpoint.Qualify`.
+
+Evidence units retain message ID, part number and tool use ID. Text/chunk
+documents render as full text. Images and binary/URI documents become attachments
+when the respective capability is enabled; otherwise they become K11-style
+placeholders with `PartAnnotation` metadata and `not summarised: image|document`
+receipt text. Recall calls use K13's shared `checkpoint.LookupLine` representation, including
+canonical and provider names. `RecallNames` supports additional caller aliases.
+
+`PlanChunks` uses recorded summariser `ContextLimits`, the agent summary cap and
+the exact rendered prompt. It uses the uncalibrated 1/3 tokens-per-byte table
+rate, reserves the running summary, and leaves a 10% input margin, rounded up.
+The output cap is `min(MaxSummaryTokens, floor(ContextWindow/5))`; `Bs` is
+`contextmeasure.Budget(limits, Out)`. This satisfies `Out <= floor(Bs/4)`.
+When the window modulo five is four and the agent cap does not bind, the two
+equalities in the design have no integer solution; this cap is conservatively
+one token below `floor(Bs/4)`. A result contributes at most `floor(Bs/2)` table
+tokens, and a plan contains at most eight calls. Splits use UTF-8 rune boundaries.
+`Plan.Unsummarised` contains exact half-open byte ranges into each unit's eligible
+text; result ranges address the original stored JSON. Non-text parts that cannot
+fit a request receive part annotations. `AnnotateReceipts` copies K12 lines,
+converts result ranges to inclusive `index.ByteRange` values on their call lines,
+and appends `Kind: part` lines with message, part, format and byte metadata.
+Ranges in arguments or other text remain part annotations, separate from results.
+
+`RenderChunk` uses the same prompt as planning, quotes every evidence line and
+bounds the quoted running summary to the output allowance at the table rate.
+The activity supplies the previous summary for the first call and each accepted
+fold output for the next call. The activity selects the registered client and
+model class; the client retains its configured provider model. The registered
+client ID is recorded as `CallInfo.ModelID`, rather than sent as a provider name.
+
+`Validate` checks empty, truncated, too large, not smaller, citations, default
+headings and internal tool names in that order. `SummaryBytes` must be the exact
+current checkpoint summary-section allowance after framing. `ReplacedTokens`
+must estimate the old checkpoint plus evicted units as rendered in the view,
+including omissions and cleared placeholders at their rendered size.
+`RenderedCheckpoint` supplies the new checkpoint estimate with reselected pins
+in the same K12 units; raw result size is not a substitute. Resolver/estimate
+errors remain infrastructure errors. Citations use record-authored user lines,
+must be before `To`, and resolve only within the current run before K18. Loose
+forms such as `[Message 57]` and `messages 5–7` count in `LooseRefs` without
+becoming citations. Custom prompts omit heading checks; internal tool names
+always reject. `checkpoint.SummaryBytes` supplies the renderer's exact allowance,
+and K13's `recall.NewCitationResolver` supplies canonical current-run user lines.
+
+`Runtime.SummarizeContextActivity` implements synchronous folding without workflow
+scheduling or adoption. Its `api.SummarizeContextInput` binds `From`/`To` to `ViewRef`,
+the current render `Budget` and estimation `Rate`, model capabilities and prompt
+scope. Pending entries are verified and stored before `IndexHead` is returned.
+Preparation shares eligible reads within the attempt; it does not load planner
+output metadata or server-only hashes. Candidate records are rendered through an
+in-memory overlay with reselected pins before any checkpoint Put. Successful
+outputs contain a stored checkpoint, pins and every started call key. Rejections
+contain a kind and keys, with no checkpoint; existing receipt-only eviction can
+then use the same cut. Size comparison uses the shared K14 result projection,
+including bounded previews and forced placeholders at their rendered size.
+
+The client order is CallInfo, standard request/response validation, call recording,
+then the raw registered model. The recorder writes `Activity: summarize`, the
+preceded planner `Step`, engine `Attempt`, fresh `Seq`, hashed request messages,
+`View: nil`, prompt refs and limits/usage facts. It stores raw responses before
+validation, including `OutputLimited` responses. K15 validates rejected response
+content loaded from that durable recording. Rate-limit, 5xx and provider timeout
+errors retry twice with fresh keys; exhaustion returns `summariser_error`.
+Context overflow returns `summariser_overflow` without retry. Store and activity
+infrastructure errors fail the attempt. Cancellation cannot adopt a late response.
+Checkpoint `Calls` contains only validated successful chunk calls; adoption still
+comes exclusively from canonical record events.
+
+Agent registration installs the embedded `<agent>.context.summary` baseline.
+`ContextCompaction.Summary.Prompt` replaces that baseline, and `.Instructions`
+adds task guidance. The activity resolves scoped overrides once and renders
+`.Previous`, `.Evicted`, `.Instructions`, `.Budget` for each fold. Evidence fields
+are quoted data; planning measures the same resolved template. Every call and
+successful checkpoint retains its resolved `PromptRef`. The legacy `Compress`
+history policy's application-supplied summariser remains unrecorded.
+
+Enable summaries explicitly with a registered model:
+
+```go
+runtime.WithContextCompaction(agentID, runtime.ContextCompaction{
+    ContextModel: &runtime.ContextModel{
+        ID: "summary", Class: model.ModelClassSmall,
+        AcceptsImages: false, AcceptsDocuments: false,
+    },
+    Summary: runtime.SummarySettings{Instructions: "Keep exact identifiers."},
+})
+```
+
+`Seal` rejects an unregistered summary model. Clients snapshot the model and
+summary settings into `RunInput`, including child-agent configuration; canonical
+context settings retain them in `RunRecord`. Without a model, the worker logs
+once per run that summaries are off and continues receipt-only eviction.
+
+Protocol 13 schedules the registered `SummarizeContextActivity` synchronously at
+an eviction cut, before the planner call. Correction and overflow retries preserve
+their recovered view and never schedule a summary. Finalizers never summarize,
+and an expired active budget prevents summary scheduling. The finalizer uses the
+committed view with tier-1 clearing and receipt-only eviction still available.
+The summary timeout allows 24 planner-call timeouts (eight folds, each with two
+provider retries), capped by the active run deadline. Each admitted schedule
+reserves its step before preparation can publish summary or compaction events;
+a later finalizer therefore has a distinct event identity even if summary
+execution consumes the active budget. The planner deadline is checked again
+afterward. RB1's terminal-answer rule and RB2/RB3's single resume and recorded
+clarification pair remain in force.
+
+A successful `context_compacted` record with tier `summary` adopts every started
+summary call, the stored checkpoint and its reselected pins before the planner
+runs. It carries model ID, usage, chunk count, unsummarised bytes, loose references
+and prompt provenance. A rejected or unknown-limit attempt instead records
+`context_compaction_skipped` with reason, kind and keys, and the planner loader
+stores a receipt-only checkpoint at the same cut. A stale result adopts keys but
+leaves the current view intact. Checkpoint `Calls` never grants adoption.
+
+Three non-stale rejections disable summaries for the run; `RunRecord.Summary`
+reconstructs the same state from skipped records. The third rejection also emits
+one `summaries_disabled` notification, keyed with `:disabled` after the ordinary
+`<type>:<run>:<step>` identity so it cannot replace the rejection record. These
+canonical records bypass event interceptors. Both supplied engines expose
+`RegisterSummarizeContextActivity` and `ExecuteSummarizeContextActivity`; custom
+engines must implement them too. Structural templates remain at version 5.
 
 ## Engine conformance
 

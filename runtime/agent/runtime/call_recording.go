@@ -31,10 +31,12 @@ type (
 		view         []*model.Message
 		viewErr      error
 		step         int
+		activity     callrecord.ActivityKind
 		mu           sync.Mutex
 		keys         []runstore.CallKey
 		completed    []runstore.CallKey
 		facts        map[runstore.CallKey]contextmeasure.RequestFacts
+		responses    map[runstore.CallKey]runstore.Hash
 		growth       *RequestGrowth
 		streams      []*callRecordingStream
 		failures     []error
@@ -62,7 +64,7 @@ type (
 // A snapshot error rejects calls before sending. Step is the monotonic planner
 // schedule number, independent of the conversational TurnID and engine Attempt.
 func NewCallRecording(store runstore.Store, scope string, ref index.ViewRef, view []*model.Message, step int) *CallRecording {
-	recording := &CallRecording{store: store, scope: scope, ref: ref, step: step, facts: make(map[runstore.CallKey]contextmeasure.RequestFacts)}
+	recording := &CallRecording{store: store, scope: scope, ref: ref, step: step, activity: callrecord.ActivityPlanner, facts: make(map[runstore.CallKey]contextmeasure.RequestFacts), responses: make(map[runstore.CallKey]runstore.Hash)}
 	snapshot, err := callrecord.SnapshotMessages(view)
 	if err != nil {
 		recording.viewErr = fmt.Errorf("snapshot recorded view: %w", err)
@@ -234,7 +236,7 @@ func (r *CallRecording) begin(ctx context.Context, req *model.Request, registere
 		return nil, err
 	}
 	now := time.Now().UTC()
-	started := callrecord.Started{Key: key, Activity: callrecord.ActivityPlanner, TurnID: info.TurnID, Step: r.step, Request: parts, Started: now, Model: req.Model, ModelID: info.ModelID, Class: req.ModelClass, Prompts: req.PromptRefs}
+	started := callrecord.Started{Key: key, Activity: r.activity, TurnID: info.TurnID, Step: r.step, Request: parts, Started: now, Model: req.Model, ModelID: info.ModelID, Class: req.ModelClass, Prompts: req.PromptRefs}
 	body, err := callrecord.Encode(started)
 	if err != nil {
 		return nil, err
@@ -295,7 +297,7 @@ func (c *recordedCall) complete(ctx context.Context, response *model.Response, u
 	if err := c.recording.store.PutCall(ctx, c.recording.scope, record); err != nil {
 		return fmt.Errorf("write model call completion: %w", err)
 	}
-	c.recording.adoptCompletion(record.Key, facts, source, primary, state == runstore.CallCompleted)
+	c.recording.adoptCompletion(record.Key, facts, source, primary, state == runstore.CallCompleted, completion.Response)
 	return nil
 }
 
@@ -376,9 +378,12 @@ func (r *CallRecording) checkOverflow(ctx context.Context, req *model.Request, r
 }
 
 // adoptCompletion marks overflow only after completion evidence is durable.
-func (r *CallRecording) adoptCompletion(key runstore.CallKey, facts contextmeasure.RequestFacts, source string, primary error, completed bool) {
+func (r *CallRecording) adoptCompletion(key runstore.CallKey, facts contextmeasure.RequestFacts, source string, primary error, completed bool, response *runstore.Hash) {
 	r.mu.Lock()
 	r.facts[key] = facts
+	if response != nil {
+		r.responses[key] = *response
+	}
 	if source != "" && r.marked == nil {
 		ordinal := 0
 		for _, startedKey := range r.keys {

@@ -937,6 +937,10 @@ operation that is specified for text says what it does with them:
 | Recall (4.18) | Returned as the part in a multimodal tool result (K22) when the provider accepts one; else `recall_unsupported_part` with format and size | Same | Paged as text | Returned as the part in a multimodal tool result (K22) when supported |
 | Carry to the next run (4.16) | Full when it fits the cap; else placeholder | Same | Preview | Whole |
 
+An unsupported summary part adds a stored receipt line with `Kind: part`,
+`MessageID`, `Part`, `Format` and `Bytes`. It renders `not summarised: image` or
+`not summarised: document`; the placeholder and line preserve the original identity.
+
 **Non-text parts in the checkpoint.** P3's byte bound covers the
 checkpoint's text. Non-text parts in pins have their own allowance: at most
 `MaxPinnedParts` (2) parts, whose estimated tokens fit a quarter of
@@ -998,8 +1002,11 @@ evicted, and the agent's prompt (4.17). Tool arguments and results are given
 in full: the input is folded in chunks sized to the summariser's window, and a
 result larger than a chunk is split across chunks, not truncated, up to
 `MaxSummarisedResultTokens`. A compaction makes at most `MaxSummaryChunks`
-summariser calls, so its cost and latency are bounded. `MaxSummaryTokens` is
-also capped at a quarter of the summariser's B, so every chunk holds the
+successful folds, so its cost and latency are bounded. Each fold allows two
+transient provider retries as separate recorded calls. Binding K15 decision 7 sets
+`Out = min(MaxSummaryTokens, floor(window/5))`; `Bs = window - Out`. This replaces
+the implicit `Out = min(MaxSummaryTokens, Bs/4)` equation, which has no integer
+solution for some windows. Every chunk holds the
 previous summary, new input and the output, even when the summariser's window
 is smaller than the agent's. Content beyond either
 limit is recorded in the receipt line (`toolu_123: bytes 40,000–1,200,000 not
@@ -1047,9 +1054,19 @@ and any unsummarised ranges, so recall references are exact
 whatever prompt produced the summary. The receipt is rendered within `ReceiptTokens` (4.6);
 its stored size grows with the run, and nothing in a request does.
 
-A rejected or failed summary leaves tier 1 in place and falls back to a
-receipt-only checkpoint. After three rejections in a run, tier 2 stops for
-that run.
+Transient rate-limit, 5xx and timeout errors retry twice inside the activity,
+with a fresh recorded Seq each time. Exhaustion returns `summariser_error`;
+overflow returns `summariser_overflow` without retry. Store and infrastructure
+errors fail the activity rather than returning a rejected checkpoint. Successful
+rejections adopt every started call and fall back to a receipt-only checkpoint
+at the same cut. Three non-stale rejections disable tier 2 for the run; the third
+also emits one `summaries_disabled` record with a distinct `:disabled` key.
+
+Validation rejects text containing the internal lookup tool name. Loose forms
+such as `[Message 57]` or `messages 5–7` are counted as `LooseRefs`; they are not
+citations and do not populate CitedUsers. The ordered size rule uses the old view's
+actual omission, preview and cleared-placeholder sizes and renders the candidate
+checkpoint with reselected pins before any record is stored.
 
 ### 4.13 The call record
 
@@ -1545,8 +1562,16 @@ evicted evidence from its view, and the configuration says so. The runtime
 option for `Recall(false)` ships with the tool (K13), before overflow recovery
 can add it to any agent (K14).
 
+The K15 runtime option is `ContextCompaction.ContextModel *ContextModel`, with
+`ID string`, `Class model.ModelClass`, `AcceptsImages bool` and
+`AcceptsDocuments bool`. `ID` selects a registered client; its adapter still
+selects the provider model. Seal rejects an unregistered ID. `Summary` carries
+`Instructions` and `Prompt` strings. These are owned snapshots in run inputs,
+child inputs and recorded context settings. K16 supplies the DSL shown above;
+K17 owns per-run overrides and fingerprints below.
+
 **Prompts.** The summary prompt is a prompt-registry prompt,
-`<agent>.context.summary`. The DSL sets its baseline; stored overrides scoped
+`<agent>.context.summary`. K15 registers its embedded baseline, replaced by `Summary.Prompt`; K16 adds DSL configuration. Stored overrides scoped
 by session or run labels replace it at run time, so experiments try prompts
 without code changes. Rendering happens in `SummarizeContext`; the checkpoint
 records the `PromptRef`. Template data: `.Previous`, `.Evicted`,

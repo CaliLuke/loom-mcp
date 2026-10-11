@@ -98,6 +98,7 @@ func TestGeneratedFeatureRealTemporalContracts(t *testing.T) {
 		t.Run("main", func(t *testing.T) {
 			recordWorkflowHistory(t, server.Client())
 		})
+		t.Run("summary adoption", func(t *testing.T) { recordSummaryWorkflowHistory(t, server.Client()) })
 		t.Run("budget adoption", func(t *testing.T) {
 			recordBudgetWorkflowHistory(t, server.Client())
 		})

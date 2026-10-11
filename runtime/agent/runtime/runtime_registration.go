@@ -41,6 +41,10 @@ func (r *Runtime) Seal(ctx context.Context) error {
 	}
 	r.mu.Unlock()
 
+	if err := r.validateSummaryModels(); err != nil {
+		return err
+	}
+
 	if sealer, ok := r.Engine.(engine.RegistrationSealer); ok {
 		if err := sealer.SealRegistration(ctx); err != nil {
 			return err
@@ -72,6 +76,9 @@ func (r *Runtime) RegisterAgent(ctx context.Context, reg AgentRegistration) erro
 	}
 	reg = resolved
 	reg.mergedInterceptors = mergeAgentInterceptors(r.interceptors, reg.Interceptors)
+	if err := r.registerSummaryPrompt(reg.ID, r.contextCompaction[reg.ID].Summary); err != nil {
+		return err
+	}
 	if err := r.registerAgentWithEngine(ctx, reg); err != nil {
 		return err
 	}
@@ -297,9 +304,17 @@ func (r *Runtime) registerAgentActivities(ctx context.Context, reg AgentRegistra
 			return err
 		}
 	}
+	return r.registerTranscriptActivities(ctx, reg)
+}
+
+// registerTranscriptActivities installs durable content, summary and recall handlers.
+func (r *Runtime) registerTranscriptActivities(ctx context.Context, reg AgentRegistration) error {
 	if err := r.Engine.RegisterRecordContentActivity(ctx, RecordContentActivityName(reg.ID), engine.ActivityOptions{
 		Queue: reg.Workflow.TaskQueue, StartToCloseTimeout: defaultExecuteToolActivityTimeout, RetryPolicy: engine.RetryPolicy{MaxAttempts: 3},
 	}, r.RecordContentActivity); err != nil {
+		return err
+	}
+	if err := r.Engine.RegisterSummarizeContextActivity(ctx, SummarizeContextActivityName(reg.ID), engine.ActivityOptions{Queue: reg.Workflow.TaskQueue, StartToCloseTimeout: summaryActivityTimeout, RetryPolicy: engine.RetryPolicy{MaxAttempts: 3}}, r.SummarizeContextActivity); err != nil {
 		return err
 	}
 	if err := r.Engine.RegisterRecallActivity(ctx, RecallActivityName(reg.ID), engine.ActivityOptions{Queue: reg.Workflow.TaskQueue, StartToCloseTimeout: defaultExecuteToolActivityTimeout, RetryPolicy: engine.RetryPolicy{MaxAttempts: 3}}, r.RecallActivity); err != nil {
@@ -599,5 +614,19 @@ func (r *Runtime) validateAgentExecution(reg AgentRegistration) error {
 		return ErrEngineNotConfigured
 	}
 
+	return nil
+}
+
+// validateSummaryModels fails before activating workers with an unresolved summariser.
+func (r *Runtime) validateSummaryModels() error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for id, settings := range r.contextCompaction {
+		if settings.ContextModel != nil {
+			if _, ok := r.models[settings.ContextModel.ID]; !ok {
+				return fmt.Errorf("agent %s: context summary model %q is not registered", id, settings.ContextModel.ID)
+			}
+		}
+	}
 	return nil
 }

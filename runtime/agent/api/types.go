@@ -476,6 +476,8 @@ type (
 
 	// ContextCompaction configures opt-in threshold compaction. Zero token settings use budget-derived defaults.
 	ContextCompaction struct {
+		// ContextModel enables summaries when explicitly configured.
+		ContextModel            *ContextModel
 		TriggerAt               contextmeasure.Rate
 		KeepRecentTokens        int
 		ProtectRecentToolTokens int
@@ -483,7 +485,12 @@ type (
 		RecallDiscoveryCalls    int
 		RecallReadCalls         int
 		KeepResultTools         []tools.Ident
+		Summary                 SummarySettings
 	}
+	// SummarySettings configures the summary baseline and additional instructions.
+	SummarySettings = compaction.SummarySettings
+	// ContextModel names the summary client and evidence capabilities.
+	ContextModel = compaction.ContextModel
 	// ModelContext carries the last adopted calibration for one model.
 	ModelContext struct {
 		Model      string              `json:"m"`

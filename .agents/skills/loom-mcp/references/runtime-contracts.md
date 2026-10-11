@@ -1034,8 +1034,8 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   steps, advances its head, Observes adopted facts and preserves the view on retries.
 - Receipt-only records preserve Summary, SummaryRun and CitedUsers and link Prev;
   deterministic JSON v2 Put succeeds before any returned hash is adopted. Receipt
-  lines carry Kind, ToolUseID and Unsummarised (empty until K15); construction stays
-  in receiptLines for K13/K15 integration. Only eligible arguments and assistant
+  lines carry Kind, ToolUseID and inclusive Unsummarised ranges. receiptLines owns
+  base call/assistant construction; K15 AnnotateReceipts adds ranges and part lines. Only eligible arguments and assistant
   prose enter receipts; hidden calls and server-only content stay out. Seeded and
   resumed message ToolUseParts also supply eligible name/ID/bounded arguments;
   result-only user messages are covered by calls and never create empty user rows.
@@ -1129,11 +1129,66 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   ContextRecovery.DisableRecall and per-episode refill rules still apply.
   HistoryPolicy receives the recovered loaded view. Compress planners that build
   unrelated requests fail not_view_bearing at the observed provider overflow.
-- Protocol 12 records overflow recovery, a confirmation-gated tool turn with
+- Protocol 13 records overflow recovery, a confirmation-gated tool turn with
   a clarification question/answer pair, one resume, lookup and finalization in
-  workflow_protocol_v12.json. The separate workflow_protocol_v12_budget.json
+  workflow_protocol_v13.json. The separate workflow_protocol_v13_budget.json
   records terminal adoption across the active budget without a finalizer call;
-  v5-v11 fixtures reject before effects. Structural templates stay version 5.
+  v5-v12 fixtures reject before effects. Structural templates stay version 5.
   Anthropic/Bedrock Claude recognize older input-length/max_tokens overflow text;
   OpenAI recognizes nested response.failed/error.code mid-stream and Anthropic
   handles status-200 SSE error events. Tests cite documented recorded-body shapes.
+
+
+## K15 summary workflow (protocol 13)
+
+- ContextCompaction.ContextModel explicitly selects a registered client, Class and
+  image/document capabilities; nil disables summaries and logs once per run.
+  Seal rejects unknown model IDs. Summary.Instructions and Summary.Prompt are
+  immutable strings. Owned model/configuration snapshots propagate through run
+  inputs and child inputs into recorded ContextSettings.Summary and RunRecord.
+- The pure summarize package reads complete eligible content and previous summary,
+  qualifies citations, frames quoted data and uses the shared checkpoint.LookupLine
+  and recall.NewCitationResolver. Pos 0 is current run; unknown rN fails before K18.
+  Never read Record, Output, injected fields or ServerData for summary evidence.
+- Plan at most eight folds with recorded limits and the uncalibrated table rate,
+  10% margin and Out=min(MaxSummaryTokens,floor(window/5)). Each result caps at
+  half the usable summariser budget. Half-open planner ranges become inclusive
+  result receipt ranges; other text retains separate message/part metadata.
+  Unsupported non-text parts retain placeholders and part receipts.
+- CallInfo wraps standard request/response validation, then the existing recorder,
+  then the raw registered client. Record Activity summarize, planner Step, engine
+  Attempt, fresh Seq, hash-segment messages and nil View. Raw rejected responses
+  remain in durable call records. Only OutputValidationError permits K15 readback;
+  provider errors keep their retry policy even with a recorded partial response.
+- Retry transient rate-limit/5xx/timeout twice, with fresh Seq. Exhaustion returns
+  summariser_error; overflow returns summariser_overflow once. Store/infrastructure
+  failures fail the activity. Put the whole summary and checkpoint before returning
+  its hash. Checkpoint Calls contains successful folds and never adopts anything.
+- Size validation uses checkpoint.SummaryBytes and a read-only candidate overlay
+  with reselected pins. Compare against the old checkpoint and evicted view using
+  shared ResultText, including recovery previews and forced placeholders. Eligible
+  reads are memoized within the attempt.
+- Engine adapters register/execute SummarizeContextActivity. Before threshold
+  eviction, synchronously fold at From=TailFrom and To=cut when enabled. No summary
+  runs during correction/overflow recovery, finalization or after active-budget
+  expiry. Finalizers retain the committed view with tier-1 clearing and receipt-only
+  eviction available. The default summary timeout covers 24 planner-call timeouts,
+  capped by the active deadline. Reserve each admitted schedule's step before
+  preparation can publish summary/compaction events, even if the planner deadline
+  check fails afterward. Finalizers must use a fresh event identity. Preserve RB1
+  terminal completion and RB2/RB3 single-resume/recorded-clarification behavior.
+- Canonical context_compacted tier summary adopts all started keys and the view
+  before planning; rejected/unknown/stale outputs use context_compaction_skipped.
+  Apply only at the exact original cut. Rejections fall back to receipt-only at
+  the same cut; stale leaves the current view unchanged. Existing record events
+  bypass interceptors. Telemetry includes model, usage, chunks, unsummarised bytes,
+  loose_refs and PromptRef. Summary disablement rebuilds from skipped records;
+  the third non-stale rejection adds one summaries_disabled record keyed :disabled
+  after its ordinary rejection identity to avoid event-key deduplication.
+- Agent registration installs the embedded <agent>.context.summary baseline or
+  Summary.Prompt replacement. Resolve scoped overrides once per activity; render
+  Previous/Evicted (quoted), Instructions and integer Budget per fold. Preserve
+  PromptRef on every call and checkpoint. Legacy Compress stays unrecorded.
+- Three real v13 fixtures cover recovery/confirmation/clarification/lookup,
+  terminal adoption across the budget, and summary adoption before resume.
+  v12 and older histories reject before effects. Structural templates stay at 5.

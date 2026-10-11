@@ -53,6 +53,17 @@ func MinCheckpointBytes(b index.RenderBudget) int {
 	return max(minCheckpointBytes, max(compactUsersBytes, b.KeepUserTokens*BytesPerToken)+framing+compactReceiptBytes+compactSummaryBytes())
 }
 
+// SummaryBytes returns the exact post-framing allowance used by Render.
+// It includes K12's discovery floors and rejects the same invalid budgets.
+func SummaryBytes(in Input, b index.RenderBudget) (int, error) {
+	if MaxBytes(b) < MinCheckpointBytes(b) {
+		return 0, ErrCheckpointBudget
+	}
+	framing := len(checkpointHeader(in)) + len(userLabel) + len(summaryLabel) + len(receiptLabel)
+	summary, _, err := sectionBudgets(b, framing, in.Summary != nil)
+	return summary, err
+}
+
 // Render constructs one bounded user-role checkpoint from record-authored inputs.
 // Framing deficits consume receipt then summary bytes above their handle floors.
 // Tiny component budgets borrow capacity for compact handles. K17 validates

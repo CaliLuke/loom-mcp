@@ -68,30 +68,48 @@ func (r *Registry) Render(ctx context.Context, id Ident, scope Scope, data any) 
 		return nil, fmt.Errorf("%w: id is required", ErrPromptNotFound)
 	}
 
-	spec, err := r.lookupSpec(id)
+	spec, err := r.Resolve(ctx, id, scope)
 	if err != nil {
 		return nil, err
 	}
+	return r.RenderResolved(ctx, spec, scope, data)
+}
 
-	templateSource := spec.Template
-	version := spec.Version
+// Resolve snapshots a baseline plus its scoped override once for an activity.
+// The returned owned spec can be reused across sequential folding calls.
+func (r *Registry) Resolve(ctx context.Context, id Ident, scope Scope) (PromptSpec, error) {
+	if err := ctx.Err(); err != nil {
+		return PromptSpec{}, err
+	}
+	spec, err := r.lookupSpec(id)
+	if err != nil {
+		return PromptSpec{}, err
+	}
 	r.mu.RLock()
 	store := r.store
 	r.mu.RUnlock()
 	if store != nil {
-		override, resolveErr := store.Resolve(ctx, id, scope)
-		if resolveErr != nil {
-			return nil, fmt.Errorf("resolve prompt override %q: %w", id, resolveErr)
+		override, err := store.Resolve(ctx, id, scope)
+		if err != nil {
+			return PromptSpec{}, fmt.Errorf("resolve prompt override %q: %w", id, err)
 		}
 		if override != nil {
-			templateSource = override.Template
-			version = override.Version
-			if version == "" {
-				version = VersionFromTemplate(templateSource)
+			spec.Template, spec.Version = override.Template, override.Version
+			if spec.Version == "" {
+				spec.Version = VersionFromTemplate(spec.Template)
 			}
 		}
 	}
+	return spec, nil
+}
 
+// RenderResolved renders an already resolved immutable spec, retaining its
+// version and emitting the same provenance event as Render.
+func (r *Registry) RenderResolved(ctx context.Context, spec PromptSpec, scope Scope, data any) (*PromptContent, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	templateSource, version := spec.Template, spec.Version
 	rendered, err := renderTemplate(spec, templateSource, data)
 	if err != nil {
 		return nil, err
