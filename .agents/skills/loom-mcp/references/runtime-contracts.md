@@ -16,6 +16,32 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   specs have untyped codecs and use `tools.Ident` for Named-only APIs without
   typed descriptors.
 
+## Tool Stubs
+
+- `agenttest` always installs a first runtime BeforeTool interceptor. Activity
+  tools are strict by default; `Stub(h, tool)` keeps real registration, payload
+  preparation, AfterTool and result materialization. Generated executors may be
+  omitted. `Runtime.ToolDispatchMode(name)` exposes the resolved mode; unknown,
+  duplicate, inline and agent-as-tool stub declarations are rejected.
+- Return/Fail/Handle append responses; FIFO becomes first-available matching
+  selection with When. ArgsEqual(tool, want) uses the descriptor payload codec
+  and canonical JSON; captured want-encoding errors surface only at matching.
+  Matchers are never invoked at declaration. Times defaults to one; Always is
+  exempt from unused cleanup. Bounds is checked before Run and at Close for
+  bounded Return declarations. After respects cancellation.
+- StubError records strict/exhausted/unmatched/decode failures. The model sees
+  normal runtime tool errors and the run continues; after completion Run returns
+  populated evidence plus joined per-run StubErrors. Close reports them all.
+  Codec rejection matches real execution and is not a StubError. RunSession
+  retains completed evidence before stopping on a harness error.
+- Passthrough/PassthroughAll allow real execution of unstubbed activity tools;
+  explicit stubs take precedence. RawStub uses rawjson.Message and decodes raw
+  results through the registered codec. Calls/ToolCalls are arrival-ordered
+  snapshots with copied raw bytes and shallow typed values; real passthrough
+  outcomes are read from the trajectory. Parallel identical calls race for FIFO
+  responses. Matchers run under the table lock and cannot call harness/stub
+  methods; Handle callbacks run outside it.
+
 ## Expectations
 
 - `expect` has sealed subjects built with `Calls`, `Trajectory` and `Session`.

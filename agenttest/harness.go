@@ -20,6 +20,7 @@ import (
 	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 	sessioninmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/session/inmem"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 	"github.com/CaliLuke/loom-mcp/v2/trajectory"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -60,6 +61,8 @@ type AnsweredAwait struct {
 // Runs may execute concurrently; Close prevents further starts and reports leaks.
 type Harness struct {
 	rt               *runtime.Runtime
+	tb               testing.TB
+	stubs            stubTable
 	scripts          map[string]*Script
 	timeout          time.Duration
 	eventsUnverified bool
@@ -73,11 +76,12 @@ type Harness struct {
 }
 
 type harnessOptions struct {
-	runtime   []runtime.RuntimeOption
-	scripts   map[string]*Script
-	timeout   time.Duration
-	responder Responder
-	provider  trace.TracerProvider
+	runtime        []runtime.RuntimeOption
+	scripts        map[string]*Script
+	timeout        time.Duration
+	responder      Responder
+	provider       trace.TracerProvider
+	passthroughAll bool
 }
 
 type harnessRun struct {
@@ -112,6 +116,15 @@ func NewHarness(ctx context.Context, register Register, opts ...Option) (*Harnes
 	probe.SessionStore = sessioninmem.New()
 	probe.Hooks = hooks.NewBus()
 	probe.Tracer = configureTracer(&options)
+	h := &Harness{
+		scripts: options.scripts, timeout: options.timeout, responder: options.responder, provider: options.provider,
+		runs: make(map[string]*harnessRun),
+		stubs: stubTable{
+			entries: make(map[tools.Ident]stubEntry), counts: make(map[tools.Ident]int),
+			passthrough: make(map[tools.Ident]bool), passthroughAll: options.passthroughAll,
+		},
+	}
+	probe.Interceptors = append([]runtime.Interceptor{runtime.ToolInterceptorFuncs{BeforeToolFunc: h.beforeStub}}, probe.Interceptors...)
 	rt := runtime.New(func(options *runtime.Options) {
 		*options = probe
 	})
@@ -123,7 +136,9 @@ func NewHarness(ctx context.Context, register Register, opts ...Option) (*Harnes
 			return nil, fmt.Errorf("agenttest: model %q: %w", id, err)
 		}
 	}
-	return &Harness{rt: rt, scripts: options.scripts, timeout: options.timeout, eventsUnverified: rt.HasEventInterceptors(), responder: options.responder, provider: options.provider, runs: make(map[string]*harnessRun)}, nil
+	h.rt = rt
+	h.eventsUnverified = rt.HasEventInterceptors()
+	return h, nil
 }
 
 // New constructs a harness using the test context and reports cleanup leaks to t.
@@ -134,6 +149,7 @@ func New(t testing.TB, register Register, opts ...Option) *Harness {
 		t.Fatal(err)
 		return nil
 	}
+	h.tb = t
 	t.Cleanup(func() {
 		if err := h.Close(); err != nil {
 			t.Error(err)
@@ -209,7 +225,8 @@ func (h *Harness) Script(id string) *Script {
 }
 
 // Run executes one turn in a fresh session. Failed agent outcomes populate
-// RunErr; setup, timeout and record reconstruction failures use the error return.
+// RunErr. Stub dispatch failures return a populated Result and a joined harness
+// error after completion; setup, timeout and reconstruction also use the error return.
 func (h *Harness) Run(ctx context.Context, id agent.Ident, input Input, opts ...RunOption) (*Result, error) {
 	sessionID, err := h.newSession(ctx)
 	if err != nil {
@@ -253,6 +270,7 @@ func (h *Harness) Close() error {
 			diagnostics = append(diagnostics, err)
 		}
 	}
+	diagnostics = append(diagnostics, h.stubDiagnostics(true))
 	return errors.Join(diagnostics...)
 }
 
@@ -309,6 +327,9 @@ func (h *Harness) newSession(ctx context.Context) (string, error) {
 }
 
 func (h *Harness) run(ctx context.Context, id agent.Ident, sessionID string, input Input, opts ...RunOption) (*Result, error) {
+	if err := h.stubDiagnostics(false); err != nil {
+		return nil, err
+	}
 	// Probe with a sentinel so even WithRunID("") is rejected.
 	probe := runtime.RunInput{RunID: "agenttest-reserved"}
 	for _, option := range opts {
@@ -342,7 +363,7 @@ func (h *Harness) run(ctx context.Context, id agent.Ident, sessionID string, inp
 		return nil, fmt.Errorf("agenttest: build %s: %w", runID, err)
 	}
 	tr.TraceID = traceID
-	return &Result{RunID: runID, SessionID: sessionID, TraceID: traceID, Output: run.output, RunErr: run.err, Record: record, Trajectory: tr, Awaits: run.worker.answered()}, nil
+	return &Result{RunID: runID, SessionID: sessionID, TraceID: traceID, Output: run.output, RunErr: run.err, Record: record, Trajectory: tr, Awaits: run.worker.answered()}, h.stubRunErrors(runID)
 }
 
 // waitRun separates agent completion from responder and timeout failures, and

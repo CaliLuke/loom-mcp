@@ -65,6 +65,7 @@ func TestHarnessConfirmation(t *testing.T) {
 					agenttest.Respond(agenttest.RawToolCall("echo.echo", rawjson.Message(`{}`))),
 					agenttest.Respond(agenttest.Text("first confirmation resume")),
 					agenttest.Respond(agenttest.Text("second confirmation resume"))))
+			h.Passthrough(echoTool())
 			result, err := h.Run(t.Context(), "root", nil)
 			require.NoError(t, err)
 			require.NoError(t, result.RunErr)

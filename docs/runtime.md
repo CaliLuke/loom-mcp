@@ -1290,6 +1290,65 @@ v1 JSON); Render prints `Trace: <id>` after `Agent:` when present. The caller ow
 the provider's export configuration and shutdown. No live model is enabled by
 default, and the harness has no Temporal mode.
 
+### Stubbing tools
+
+The harness is strict by default. Register real toolsets through the application's
+normal registration path (including generated `RegisterUsedToolsets`); executors
+may be omitted for stubbed tools. Then declare typed responses before Run:
+
+```go
+stub := agenttest.Stub(h, projected.ProjectedStatusToolTool)
+stub.Return(&projected.ProjectedStatusToolResult{Status: "ready"})
+```
+
+Stubs replace activity execution only. Payload adaptation and validation,
+AfterTool interceptors (including retry-and-reflect), result materialization,
+codec encoding and bounds enforcement still use the runtime's normal path.
+`Runtime.ToolDispatchMode(tool.Ident())` returns the resolved mode and whether the
+tool is registered with a toolset. Inline and agent-as-tool stubbing are a runtime
+follow-up; their declarations are rejected, as are unknown tools and duplicate
+stubs.
+
+`Return(value)`, `Fail(err)` and `Handle(func(context.Context, P) (R, error))`
+append responses. Fail and Handle errors become model-visible tool errors; a
+Handle error discards its result. Each response is used once unless configured
+with positive `Times(n)` or `Always()`. Close reports unused finite responses;
+Always responses are exempt. `After(d)` delays the response and respects
+cancellation. Successful bounded responses need `Bounds(agent.Bounds{...})`;
+a bounded Return without Bounds is rejected before Run and at cleanup, allowing
+the modifier chain to finish first.
+
+`When(matches...)` selects the first available response whose matchers all pass;
+without matchers this is FIFO. `ArgMatch[P]` is `func(P) error`, where nil means a
+match. `ArgsEqual(tool, want)` encodes want once using the descriptor's payload
+codec, then compares each received payload's encoded JSON after canonicalizing
+key order and whitespace. A want-encoding error is returned whenever matching
+runs. `ArgsWhere(description, predicate)` supports custom predicates. Matchers
+are never invoked at declaration. They run under the table lock and must not
+call harness/stub methods; Handle callbacks run outside that lock. Parallel
+identical calls race for FIFO responses, so use matchers to route parallel batches.
+
+An unstubbed tool, exhausted stub (`ErrStubExhausted`), unmatched arguments or
+stub payload decode failure is recorded as a `*StubError` with the tool, per-tool
+call index, run/tool-call IDs and arguments. The runtime shows the model a tool
+error and can continue. After completion, Run returns the populated Result
+alongside a joined harness error containing that run's StubErrors; Close also
+reports every failure. Result codec rejection follows real-executor semantics:
+it is a tool error and does not become a StubError. RunSession retains the
+completed run's evidence before stopping on a harness error.
+
+Use `h.Passthrough(tools...)` or `PassthroughAll()` to execute real activity tools.
+Explicit stubs take precedence, including when exhausted. `stub.Calls()` records
+typed payloads, responses and outcomes; `h.ToolCalls()` records all activity calls
+reaching the interceptor in arrival order. Passthrough recordings contain raw
+arguments and correlation IDs; consult the trajectory for real execution results.
+Response indexes are one-based, or zero when no response ran. Snapshots copy raw
+bytes and slice slots; typed pointer/map/slice values remain shallow copies.
+
+`RawStub(h, toolID)` provides the same response API over `rawjson.Message` for
+tools without descriptors. It decodes successful raw results through the
+registered result codec before AfterTool and normal result materialization.
+
 ### Expectations
 
 Use `expect` to assert tool behavior from recorded runs. Build a trajectory with

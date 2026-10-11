@@ -77,6 +77,22 @@ func (r *Runtime) ToolSpec(name tools.Ident) (tools.ToolSpec, bool) {
 	return cloneToolSpec(spec), true
 }
 
+// ToolDispatchMode returns the resolved dispatch mode for a registered tool.
+// Unknown tools or tools without a registered toolset return DispatchUnset, false.
+func (r *Runtime) ToolDispatchMode(name tools.Ident) (DispatchMode, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	spec, ok := r.toolSpecs[name]
+	if !ok {
+		return DispatchUnset, false
+	}
+	registration, ok := r.toolsets[spec.Toolset]
+	if !ok {
+		return DispatchUnset, false
+	}
+	return registration.DispatchMode, true
+}
+
 // ToolSpecsForAgent returns the ToolSpecs registered by the given agent.
 func (r *Runtime) ToolSpecsForAgent(agentID agent.Ident) []tools.ToolSpec {
 	r.mu.RLock()

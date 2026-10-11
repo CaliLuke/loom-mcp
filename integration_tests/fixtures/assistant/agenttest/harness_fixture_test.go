@@ -31,6 +31,7 @@ func TestHarnessGeneratedFixtureGolden(t *testing.T) {
 		return generated.RegisterAssistantRuntimeAgent(ctx, rt, generated.AssistantRuntimeAgentConfig{Planner: fixturePlanner{}})
 	}
 	h := agenttest.New(t, register, agenttest.ScriptedModel("fixture", agenttest.Respond(agenttest.RawToolCall(projected.ProjectedStatusTool, rawjson.Message(`{}`))), agenttest.Respond(agenttest.Text("ready"))))
+	h.Passthrough(projected.ProjectedStatusToolTool)
 	result, err := h.Run(t.Context(), "assistant.assistant_runtime", agenttest.User("status?"))
 	require.NoError(t, err)
 	require.NoError(t, result.RunErr)

@@ -11,8 +11,9 @@
 // Run accepts User text or arbitrary Input messages and returns the final output,
 // sealed RunRecord, causal Trajectory and answered awaits. An agent failure is a
 // Result.RunErr, not a harness error. Setup errors, unanswered awaits, timeouts
-// and evidence reconstruction failures use the error return. The default run
-// timeout is 30 seconds, including external waits. Cancellation drains the run;
+// and evidence reconstruction failures use the error return. Stub dispatch failures
+// return a populated Result and joined harness error after normal run completion.
+// The default run timeout is 30 seconds, including external waits. Cancellation drains the run;
 // Close joins script diagnostics and any remaining lifecycle leaks.
 //
 // WithResponder supplies first-match AwaitRules for confirmation, clarification,
@@ -31,6 +32,12 @@
 // owns provider shutdown and export configuration.
 //
 // Application-registered models are preserved unless a scripted override uses
-// the same ID. No live model is selected by default. Tool stubs, live-model gating
-// and Temporal execution are outside this harness.
+// the same ID. No live model is selected by default. Live-model gating and
+// Temporal execution are outside this harness.
+//
+// Activity tools are strict by default: declare Stub responses or opt into
+// Passthrough / PassthroughAll. Stubs preserve registration, payload preparation,
+// AfterTool and result materialization. Close reports every dispatch failure and
+// unused finite response. RawStub supports registered tools without descriptors.
+// Inline and agent-as-tool stubbing remain a runtime follow-up.
 package agenttest

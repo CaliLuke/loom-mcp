@@ -46,6 +46,7 @@ type recordingTB struct {
 func TestHarnessActivityRun(t *testing.T) {
 	h := agenttest.New(t, registerHarnessAgent("root", harnessPlanner{id: "model", specs: []tools.ToolSpec{echoSpec()}}),
 		agenttest.ScriptedModel("model", agenttest.Respond(agenttest.RawToolCall("echo.echo", rawjson.Message(`{"value":"hello"}`))), agenttest.Respond(agenttest.Text("done"))))
+	h.Passthrough(echoTool())
 	result, err := h.Run(t.Context(), "root", agenttest.User("hello"), runtime.WithLabels(map[string]string{"test": "yes"}))
 	require.NoError(t, err)
 	assert.NoError(t, result.RunErr)
