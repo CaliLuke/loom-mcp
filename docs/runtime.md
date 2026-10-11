@@ -1246,6 +1246,58 @@ types are the five `await_*` kinds. A step cannot populate multiple members.
 abandoned and incomplete recorded calls are still verified. BeforeEvent makes
 observations unverified, while recorded calls, results and answers remain verified.
 
+### Expectations
+
+Use `expect` to assert tool behavior from recorded runs. Build a trajectory with
+`trajectory.Build`, then construct a subject with `expect.Trajectory(tr)` or
+`expect.Session(runs)`. Calls follow causal order, with child calls immediately
+after their parent. `expect.TopLevel(subject)` excludes descendants from calls,
+events, completion checks and budgets. A Session that lists a child separately
+from a parent that already contains it counts that child twice, including its
+calls, events and budgets.
+
+```go
+subject := expect.Trajectory(tr)
+expect.Require(t, subject,
+    expect.Call(EchoTool, nil, nil),
+    expect.Completed(),
+    expect.MaxModelCalls(3),
+    expect.MaxTokens(1000),
+)
+```
+
+`Call` uses a typed tool descriptor and optional argument and result predicates;
+nil predicates skip decoding. `Decoded` accepts a named tool and an explicit
+argument codec. Codec failures quote the original error. Call expectations bind
+greedily to the first later satisfying call. Wrap them in `Exact` for one-to-one
+matching; `Forbid` checks every call and cannot be nested in `Exact`.
+
+`Failed`, `Bounds` and `Await` inspect recorded structured errors, result bounds
+and planner await items. `Completed` checks every selected run's successful
+terminal status; `AllAttemptsSuccessful` includes earlier failed attempts.
+`AllAttemptsSuccessful` fails with `no call to <tool>` when the tool was never
+called. `Completed` and `Await` require verified observed evidence: unverified
+status fails with `evidence unverified: status`, and an unverified requested await
+fails with `evidence unverified: await_<kind>`. Building with
+`trajectory.Options{EventsUnverified: true}` therefore prevents these checks
+from passing; record-derived calls and budgets remain usable. `Await` decodes
+only events of the requested kind.
+`MaxModelCalls` counts adopted calls, while `MaxTokens` includes all recorded
+attempts and their input, output and cache tokens. `expect.Calls(modelCalls)`
+provides a model-choice subject: execution and run expectations fail with
+`not applicable to a model-call subject`.
+
+For data-driven checks, `expect.ExpectedTools` lists `expect.ExpectedTool` names
+and optional JSON arguments, with `Ordered` and `Exact` flags. Objects match recursively
+as subsets, arrays match exactly, and numbers compare by exact decimal value.
+Empty or invalid call arguments are non-matches, reported in a failed check's
+diagnostic; other calls still contribute to the score.
+Its `Evaluate(subject)` returns a check and a `tool_correctness` score: matched
+calls divided by calls made. With no calls, the score is 1 when nothing was
+expected and 0 otherwise. `expect.Evaluate` returns checks for inspection;
+`expect.Require` reports all failed diagnostics once, in declaration order, and
+fails when given no expectations.
+
 ### Run-log result references and upgrade
 
 Every `ToolResultReceivedEvent` carries `Refs` for the stored eligible result,

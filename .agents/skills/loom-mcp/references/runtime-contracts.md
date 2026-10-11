@@ -16,6 +16,41 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   specs have untyped codecs and use `tools.Ident` for Named-only APIs without
   typed descriptors.
 
+## Expectations
+
+- `expect` has sealed subjects built with `Calls`, `Trajectory` and `Session`.
+  Trajectories include children immediately after their parent tool call;
+  `TopLevel` excludes descendants. Session members remain in caller order.
+  Listing a child separately from a parent that contains it counts the child
+  twice, including calls, events, completion checks and budgets.
+- `Call` and `Failed` use typed tool predicates and greedy ordered subsequence
+  matching; `Decoded` uses an explicit argument codec. Nil `Call` predicates
+  skip decoding. `Exact` matches one-to-one and rejects nested `Forbid` at
+  construction. `Forbid` inspects every selected call. Codec errors are quoted.
+- Model-choice `Calls` subjects cannot supply execution or run evidence:
+  result, error, bounds, await, completion and budget checks fail with
+  `not applicable to a model-call subject`.
+- `Completed` requires verified successful status on every selected run;
+  unverified status fails with `evidence unverified: status`. `Await` preserves
+  the containing step's verification flag, examines only the requested planner
+  kind and fails with `evidence unverified: await_<kind>` before decoding or
+  invoking predicates on unverified evidence. `EventsUnverified` never silently
+  passes these checks; record-derived calls and totals remain usable.
+- `AllAttemptsSuccessful` checks earlier failures as well as later successes,
+  and fails with `no call to <tool>` if the tool was never called. `Bounds`
+  inspects recorded bounds; `Failed` distinguishes a matching successful call
+  with `call to <tool> did not fail`.
+- `MaxModelCalls` counts adopted calls; `MaxTokens` counts all recorded attempts,
+  including input, output and both cache token fields, over selected runs.
+- `ExpectedTools` matches recursive object subsets, exact arrays and exact
+  decimal numbers using v2 JSON decoding without float64 coercion. Malformed
+  actual arguments are non-matches reported in a failed check's diagnostic;
+  valid matches still contribute to `tool_correctness` (matching / made).
+  With no calls the score is 1 if nothing was expected, otherwise 0.
+- Passed checks have no diagnostic; failed checks have a non-empty diagnostic.
+  `Evaluate` gives checks unique names, and `Require` fails once with all failed
+  diagnostics in declaration order. Requiring no expectations fails.
+
 ## Planner Streaming
 
 - `PlannerContext.ModelClient(id)` returns a runtime-decorated client.
