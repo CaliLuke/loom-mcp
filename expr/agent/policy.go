@@ -36,6 +36,8 @@ type (
 		// History configures how the runtime prunes or compresses
 		// conversational history before planner invocations.
 		History *HistoryExpr
+		// Context configures threshold compaction and recall.
+		Context *ContextExpr
 		// Cache configures prompt caching hints for planner/model calls.
 		Cache *CacheExpr
 		// RetryAndReflect configures tool-error reflection into planner retry
@@ -172,6 +174,7 @@ func (r *RunPolicyExpr) Validate() error {
 	r.validateCaps(verr)
 	r.validateMissingFields(verr)
 	r.validateHistory(verr)
+	r.validateContext(verr)
 	r.validateRetryAndReflect(verr)
 	r.validateInterceptors(verr)
 	r.validatePreloadMemory(verr)

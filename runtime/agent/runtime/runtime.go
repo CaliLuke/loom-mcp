@@ -138,6 +138,10 @@ type (
 		contextRecovery   map[agent.Ident]ContextRecovery
 		recallAuthorizer  func(context.Context, RecallAccess) error
 
+		// Resolved registration settings remain separate from original options.
+		agentContextCompaction map[agent.Ident]ContextCompaction
+		agentContextRecovery   map[agent.Ident]ContextRecovery
+
 		// Per-agent tool specs registered during agent registration for introspection.
 		agentToolSpecs map[agent.Ident][]tools.ToolSpec
 
@@ -461,6 +465,11 @@ type (
 		// invocation (PlanStart and PlanResume). It can truncate or compress history
 		// while preserving system prompts and logical turn boundaries.
 		History HistoryPolicy
+
+		// ContextCompaction declares context policy; conflicts with WithContextCompaction.
+		ContextCompaction *ContextCompaction
+		// ContextRecovery declares recovery policy; conflicts with WithContextRecovery.
+		ContextRecovery *ContextRecovery
 
 		// Cache configures automatic prompt cache checkpoint placement.
 		Cache CachePolicy

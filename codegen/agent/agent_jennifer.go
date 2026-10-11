@@ -250,6 +250,10 @@ func emitAgentConfigStruct(stmt *jen.Statement, agent *AgentData) {
 	stmt.Type().Id(agent.ConfigType).StructFunc(func(g *jen.Group) {
 		g.Comment("Planner provides the concrete planner implementation used by the agent.")
 		g.Id("Planner").Id("planner").Dot("Planner")
+		if agent.RunPolicy.Context != nil && agent.RunPolicy.Context.Threshold {
+			g.Comment("ContextModel selects the registered client used for context summaries.")
+			g.Id("ContextModel").Op("*").Id("agentsruntime").Dot("ContextModel")
+		}
 		if agent.RunPolicy.History != nil && agent.RunPolicy.History.Mode == historyModeCompress {
 			g.Comment("HistoryModel provides the model client used for history compression when a")
 			g.Comment("Compress history policy is configured.")
@@ -270,6 +274,11 @@ func emitAgentConfigValidate(stmt *jen.Statement, agent *AgentData) {
 		if agent.Workflow == nil {
 			g.If(jen.Id("c").Dot("Planner").Op("==").Nil()).Block(
 				jen.Return(jen.Qual("errors", "New").Call(jen.Lit("planner is required"))),
+			)
+		}
+		if agent.RunPolicy.Context != nil && agent.RunPolicy.Context.HasSummarize {
+			g.If(jen.Id("c").Dot("ContextModel").Op("==").Nil()).Block(
+				jen.Return(jen.Qual("errors", "New").Call(jen.Lit("context model is required when Summarize is configured"))),
 			)
 		}
 		if agent.RunPolicy.History != nil && agent.RunPolicy.History.Mode == historyModeCompress {

@@ -270,6 +270,8 @@ type (
 		// any). When nil, no history policy is configured and callers retain
 		// full history.
 		History *HistoryData
+		// Context captures optional context compaction and recovery settings.
+		Context *ContextData
 		// Cache captures prompt caching configuration (if any). Zero value
 		// means no cache policy is configured and providers should not emit
 		// cache checkpoints unless explicit CacheCheckpointPart messages are
@@ -651,6 +653,8 @@ type (
 		// Bookkeeping indicates that the tool records control-plane state without
 		// consuming the run-level MaxToolCalls budget.
 		Bookkeeping bool
+		// KeepResultInContext preserves whole results during context clearing.
+		KeepResultInContext bool
 
 		// ResultReminder is an optional system reminder injected into the
 		// conversation after the tool result is returned. It provides backstage

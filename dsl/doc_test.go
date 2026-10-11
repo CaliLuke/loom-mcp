@@ -1,6 +1,8 @@
 package dsl
 
 import (
+	"go/parser"
+	"go/token"
 	"os"
 	"strings"
 	"testing"
@@ -15,6 +17,7 @@ func TestPackageDocIndexMentionsCurrentDSLFunctions(t *testing.T) {
 
 	for _, name := range []string{
 		"ServerData",
+		"Context", "TriggerAt", "KeepRecentTokens", "Summarize", "Recall", "Disable", "Instructions", "Prompt", "KeepResultInContext",
 		"FromSkills",
 		"FromArtifacts",
 		"FromMemory",
@@ -38,5 +41,18 @@ func TestPackageDocIndexMentionsCurrentDSLFunctions(t *testing.T) {
 		if strings.Contains(text, "["+name+"]") {
 			t.Fatalf("package doc index links obsolete [%s]", name)
 		}
+	}
+}
+
+func TestPackageDocAttaches(t *testing.T) {
+	file, err := parser.ParseFile(token.NewFileSet(), "doc.go", nil, parser.ParseComments)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if file.Doc == nil {
+		t.Fatal("package dsl has no attached package documentation")
+	}
+	if !strings.HasPrefix(file.Doc.Text(), "Package dsl ") {
+		t.Fatal("package dsl documentation is missing its package description")
 	}
 }

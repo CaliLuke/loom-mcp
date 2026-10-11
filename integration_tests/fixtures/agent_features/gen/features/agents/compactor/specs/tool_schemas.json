@@ -1,0 +1,42 @@
+{
+  "tools": [
+    {
+      "id": "evidence.clear",
+      "service": "features",
+      "toolset": "features.evidence",
+      "title": "Clear",
+      "description": "Read evidence that may be cleared",
+      "payload": {
+        "name": "ClearPayload",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "result": {
+        "name": "ClearResult",
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "id": "evidence.keep",
+      "service": "features",
+      "toolset": "features.evidence",
+      "title": "Keep",
+      "description": "Keep evidence in context",
+      "payload": {
+        "name": "KeepPayload",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "result": {
+        "name": "KeepResult",
+        "schema": {
+          "type": "string"
+        }
+      }
+    }
+  ]
+}

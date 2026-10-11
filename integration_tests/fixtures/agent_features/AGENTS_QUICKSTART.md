@@ -14,6 +14,16 @@ This guide is your personal co-pilot, generated specifically to help you bring y
 
 Here’s a map of what loom-mcp just built for you based on your `design/*.go` files.
 * **Service `features`:**
+    * **Agent `compactor`** (ID: `features.compactor`):
+        * **Mission:** *Generated context compaction fixture*
+        * **Uses Toolsets:**
+            * `features.evidence`
+        * **Exports Toolsets:***none*
+        * **Run Policy:**
+            * Max Tool Calls: `0`
+            * Max Recovery Turns: `3`
+            * Time Budget: `0s`
+            * Interrupts Allowed: `false`
     * **Agent `coordinator`** (ID: `features.coordinator`):
         * **Mission:** *Generated acceptance agent*
         * **Uses Toolsets:**
@@ -93,6 +103,7 @@ import (
 
     // === Your Generated Agent Packages ===
     // (Goa generated these based on your design)
+    compactor "example.com/agentfeatures/gen/features/agents/compactor"
     coordinator "example.com/agentfeatures/gen/features/agents/coordinator"
     registry_validator "example.com/agentfeatures/gen/features/agents/registry_validator"
     specialist "example.com/agentfeatures/gen/features/agents/specialist"
@@ -130,6 +141,15 @@ func main() {
     // 2. Register Your Agent(s)
     // Let the runtime know about the agents it can manage.
     {
+        cfg := compactor.CompactorAgentConfig{
+            Planner: &StubPlanner{},
+            // We'll add tool configurations here later on.
+        }
+        if err := compactor.RegisterCompactorAgent(context.Background(), rt, cfg); err != nil {
+            panic(err)
+        }
+    }
+    {
         cfg := coordinator.CoordinatorAgentConfig{
             Planner: &StubPlanner{},
             // We'll add tool configurations here later on.
@@ -163,7 +183,7 @@ func main() {
     if _, err := rt.CreateSession(context.Background(), "my-first-session"); err != nil {
         panic(err)
     }
-    client := coordinator.NewClient(rt)
+    client := compactor.NewClient(rt)
     out, err := client.Run(
         context.Background(),
         "my-first-session",
@@ -191,6 +211,33 @@ func main() {
 ## 3. Meet Your Agents 🤖
 
 Here are the detailed cheat sheets for each agent you designed.
+<details>
+<summary><strong>Agent: <code>compactor</code></strong> (ID: <code>features.compactor</code>)</summary>
+
+* **Package:** `example.com/agentfeatures/gen/features/agents/compactor`
+* **Directory:** `gen/features/agents/compactor`
+* **Config Struct:** `CompactorAgentConfig`
+* **Register Function:** `RegisterCompactorAgent(ctx, rt, cfg)`
+* **How to Run:**
+    * **Sessions are first-class:** call `rt.CreateSession(ctx, sessionID)` once before you start any runs under that session ID.
+    * **Synchronous (wait for result):**
+        ```go
+        client := compactor.NewClient(rt)
+        out, err := client.Run(ctx, sessionID, messages)
+        ```
+    * **Asynchronous (get a handle):**
+        ```go
+        client := compactor.NewClient(rt)
+        handle, err := client.Start(ctx, sessionID, messages)
+        ```
+* **Workflow Name:** `features.compactor.workflow` (Queue: `features_compactor_workflow`)
+
+#### Minimal Configuration```go
+cfg := compactor.CompactorAgentConfig{
+    Planner: myPlanner,
+}
+```
+</details>
 <details>
 <summary><strong>Agent: <code>coordinator</code></strong> (ID: <code>features.coordinator</code>)</summary>
 
@@ -491,6 +538,17 @@ cfg := <agentpkg>.<AgentConfig>{
 <summary><strong>Click to see a detailed reference of your agent's toolboxes...</strong></summary>
 
 ## 6. Your Agent's Toolbox: A Reference
+
+### Agent `compactor` Toolsets
+
+* **Tools this agent can USE:**
+* **`features.evidence`**
+* **Tool: `evidence.clear`**
+* *Read evidence that may be cleared*
+* **Tool: `evidence.keep`**
+* *Keep evidence in context*
+* **Tools this agent EXPORTS for others to use:**
+* *This agent does not export any toolsets.*
 
 ### Agent `coordinator` Toolsets
 

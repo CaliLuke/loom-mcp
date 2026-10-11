@@ -62,6 +62,11 @@ func (r *Runtime) RegisterAgent(ctx context.Context, reg AgentRegistration) erro
 	if err := r.ensureRegistrationOpen(); err != nil {
 		return err
 	}
+	resolvedContext, err := r.resolveAgentContext(reg)
+	if err != nil {
+		return err
+	}
+	reg = resolvedContext
 	if err := r.validateAgentRegistration(reg); err != nil {
 		return err
 	}
@@ -76,7 +81,7 @@ func (r *Runtime) RegisterAgent(ctx context.Context, reg AgentRegistration) erro
 	}
 	reg = resolved
 	reg.mergedInterceptors = mergeAgentInterceptors(r.interceptors, reg.Interceptors)
-	if err := r.registerSummaryPrompt(reg.ID, r.contextCompaction[reg.ID].Summary); err != nil {
+	if err := r.registerSummaryPrompt(reg.ID, registrationSummary(reg)); err != nil {
 		return err
 	}
 	if err := r.registerAgentWithEngine(ctx, reg); err != nil {
@@ -156,7 +161,7 @@ func (r *Runtime) validateAgentRegistration(reg AgentRegistration) error {
 	if reg.ID == "" {
 		return fmt.Errorf("%w: missing agent ID", ErrInvalidConfig)
 	}
-	if _, enabled := r.contextCompaction[reg.ID]; enabled && reg.Policy.History != nil {
+	if reg.Policy.ContextCompaction != nil && reg.Policy.History != nil {
 		return fmt.Errorf("%w: context compaction cannot be combined with HistoryPolicy for %q", ErrInvalidConfig, reg.ID)
 	}
 	if err := r.validateRecallRegistration(reg); err != nil {
@@ -344,6 +349,7 @@ func (r *Runtime) storeRegisteredAgent(reg AgentRegistration) error {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.storeAgentContextLocked(reg)
 	reg.Specs = cloneToolSpecs(reg.Specs)
 	r.agents[reg.ID] = reg
 	r.addToolSpecsLocked(reg.Specs)
@@ -403,7 +409,7 @@ func (r *Runtime) storeRegisteredToolset(ts ToolsetRegistration) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for id, reg := range r.agents {
-		if _, enabled := r.contextCompaction[id]; enabled && len(reg.Specs) == 0 {
+		if _, enabled := r.agentContextCompaction[id]; enabled && len(reg.Specs) == 0 {
 			if err := validateRecallNames(ts.Specs); err != nil {
 				return fmt.Errorf("%w: %w", ErrInvalidConfig, err)
 			}
@@ -574,7 +580,7 @@ func validateAgentToolsetRoute(ts ToolsetRegistration) error {
 }
 
 func (r *Runtime) validateRecallRegistration(reg AgentRegistration) error {
-	if _, enabled := r.contextCompaction[reg.ID]; !enabled {
+	if reg.Policy.ContextCompaction == nil {
 		return nil
 	}
 	if err := validateRecallNames(reg.Specs); err != nil {
@@ -621,7 +627,7 @@ func (r *Runtime) validateAgentExecution(reg AgentRegistration) error {
 func (r *Runtime) validateSummaryModels() error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	for id, settings := range r.contextCompaction {
+	for id, settings := range r.agentContextCompaction {
 		if settings.ContextModel != nil {
 			if _, ok := r.models[settings.ContextModel.ID]; !ok {
 				return fmt.Errorf("agent %s: context summary model %q is not registered", id, settings.ContextModel.ID)

@@ -229,6 +229,9 @@ func agentConfigFile(agent *AgentData) *codegen.File {
 			imports = append(imports, &codegen.ImportSpec{Path: ts.PackageImportPath, Name: ts.PackageName})
 		}
 	}
+	if agent.RunPolicy.Context != nil && agent.RunPolicy.Context.Threshold {
+		imports = append(imports, &codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime", Name: "agentsruntime"})
+	}
 	sections := []codegen.Section{
 		codegen.Header(agent.StructName+" config", agent.PackageName, imports),
 		agentConfigSection(agent),
@@ -311,6 +314,9 @@ func agentRegistryFile(agent *AgentData) *codegen.File {
 	}
 	if len(agent.Tools) > 0 {
 		imports = append(imports, &codegen.ImportSpec{Path: agent.ToolSpecsImportPath, Name: agent.ToolSpecsPackage})
+	}
+	if agent.RunPolicy.Context != nil && agent.RunPolicy.Context.TriggerDen != 0 {
+		imports = append(imports, &codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextmeasure"})
 	}
 	usedAliases := make(map[string]struct{})
 	for _, imp := range imports {

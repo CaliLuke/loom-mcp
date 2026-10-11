@@ -629,6 +629,16 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   declarations that require a service `MCP(...)` contract must report that
   missing contract separately from general nesting errors.
 
+- RunPolicy Context configures compaction with TriggerAt, KeepRecentTokens,
+  Summarize, Recall and Disable. Tools support KeepResultInContext. Context conflicts with
+  History and Workflow. Generated enabled Context config has ContextModel;
+  Summarize requires it. DSL and runtime options for the same context setting
+  conflict at registration. Recall(false) belongs to ContextRecovery only.
+  Keep flags join explicit KeepResultTools at registration and are stamped.
+  Disable omits opt-in threshold policy; it does not cancel runtime
+  options. Workflow protocol remains 13. See codegen-contracts.md and
+  user-guides/dsl-reference.md for validation and generated acceptance details.
+
 ## Agent Testing
 
 - Harness construction gates models and seals runtime registration. Register all

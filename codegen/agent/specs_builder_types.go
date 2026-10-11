@@ -91,6 +91,8 @@ type (
 		// Bookkeeping indicates that this tool is exempt from the run-level
 		// MaxToolCalls budget.
 		Bookkeeping bool
+		// KeepResultInContext preserves whole results during context clearing.
+		KeepResultInContext bool
 
 		// ResultReminder is an optional system reminder injected into the
 		// conversation after the tool result is returned.

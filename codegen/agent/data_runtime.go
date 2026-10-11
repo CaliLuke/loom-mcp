@@ -27,6 +27,7 @@ func newRunPolicyData(expr *agentsExpr.RunPolicyExpr) RunPolicyData {
 	if expr == nil {
 		return rp
 	}
+	rp.Context = newContextData(expr.Context)
 	rp.TimeBudget = expr.TimeBudget
 	rp.PlanTimeout = expr.PlanTimeout
 	rp.ToolTimeout = expr.ToolTimeout

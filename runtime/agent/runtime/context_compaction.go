@@ -40,23 +40,32 @@ func cloneCompactionOptions(options map[agent.Ident]ContextCompaction) map[agent
 	}
 	owned := make(map[agent.Ident]ContextCompaction, len(options))
 	for id, config := range options {
-		trigger := config.TriggerAt
-		if id == "" || trigger.Tokens < 0 || trigger.Bytes < 0 || (trigger.Tokens == 0) != (trigger.Bytes == 0) || trigger.Tokens > trigger.Bytes || config.KeepRecentTokens < 0 || config.ProtectRecentToolTokens < 0 || config.MinSavingTokens < 0 || config.RecallDiscoveryCalls < 0 || config.RecallReadCalls < 0 {
-			panic(fmt.Sprintf("runtime: invalid context compaction settings for %q", id))
+		var err error
+		config, err = normalizeCompaction(id, config)
+		if err != nil {
+			panic(err.Error())
 		}
-		if trigger.Tokens == 0 {
-			config.TriggerAt.Tokens, config.TriggerAt.Bytes = 85, 100
-		}
-		if config.RecallDiscoveryCalls == 0 {
-			config.RecallDiscoveryCalls = 20
-		}
-		if config.RecallReadCalls == 0 {
-			config.RecallReadCalls = 20
-		}
-		config = *cloneCompaction(&config)
 		owned[id] = config
 	}
 	return owned
+}
+
+// normalizeCompaction validates and owns settings from either configuration source.
+func normalizeCompaction(id agent.Ident, config ContextCompaction) (ContextCompaction, error) {
+	trigger := config.TriggerAt
+	if id == "" || trigger.Tokens < 0 || trigger.Bytes < 0 || (trigger.Tokens == 0) != (trigger.Bytes == 0) || trigger.Tokens > trigger.Bytes || config.KeepRecentTokens < 0 || config.ProtectRecentToolTokens < 0 || config.MinSavingTokens < 0 || config.RecallDiscoveryCalls < 0 || config.RecallReadCalls < 0 {
+		return ContextCompaction{}, fmt.Errorf("runtime: invalid context compaction settings for %q", id)
+	}
+	if trigger.Tokens == 0 {
+		config.TriggerAt.Tokens, config.TriggerAt.Bytes = 85, 100
+	}
+	if config.RecallDiscoveryCalls == 0 {
+		config.RecallDiscoveryCalls = 20
+	}
+	if config.RecallReadCalls == 0 {
+		config.RecallReadCalls = 20
+	}
+	return *cloneCompaction(&config), nil
 }
 
 func cloneCompaction(settings *ContextCompaction) *ContextCompaction {
@@ -83,10 +92,12 @@ func (r *Runtime) stampContextCompaction(input *RunInput) {
 	if input == nil {
 		return
 	}
-	input.ContextRecovery = r.contextRecovery[input.AgentID]
-	input.RecoveryAgents = cloneRecoveryOptions(r.contextRecovery)
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	input.ContextRecovery = r.agentContextRecovery[input.AgentID]
+	input.RecoveryAgents = cloneRecoveryOptions(r.agentContextRecovery)
 	input.ContextCompaction = nil
-	input.CompactionAgents = cloneCompactionOptions(r.contextCompaction)
+	input.CompactionAgents = cloneCompactionOptions(r.agentContextCompaction)
 	if settings, enabled := input.CompactionAgents[input.AgentID]; enabled {
 		input.ContextCompaction = cloneCompaction(&settings)
 	}

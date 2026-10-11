@@ -222,8 +222,6 @@ func newFromOptions(opts Options) *Runtime {
 		toolSchemas:          make(map[string]map[string]any),
 		models:               make(map[string]model.Client),
 		contextLimits:        opts.ContextLimits,
-		contextCompaction:    opts.ContextCompaction,
-		contextRecovery:      opts.ContextRecovery,
 		recallAuthorizer:     opts.RecallAuthorizer,
 		runHandles:           make(map[string]engine.WorkflowHandle),
 		agentToolSpecs:       make(map[agent.Ident][]tools.ToolSpec),
@@ -235,6 +233,7 @@ func newFromOptions(opts Options) *Runtime {
 		namedInterceptors:    cloneNamedInterceptors(opts.NamedInterceptors),
 		hintOverrides:        opts.HintOverrides,
 	}
+	rt.initContextOptions(opts)
 	rt.PromptRegistry.SetObserver(rt.onPromptRendered)
 	rt.installRuntimeSubscribers(bus)
 	return rt

@@ -221,6 +221,10 @@ func toolSpecsSection(data toolSpecFileData) gocodegen.Section {
 				b.WriteString("\t\tBookkeeping: true,\n")
 			}
 
+			if tool.KeepResultInContext {
+				b.WriteString("\t\tKeepResultInContext: true,\n")
+			}
+
 			if tool.Bounds != nil {
 				b.WriteString("\t\tBounds: &tools.BoundsSpec{\n")
 				if tool.Bounds.Paging != nil {

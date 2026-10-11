@@ -1554,7 +1554,9 @@ RunPolicy(func() {
 ```
 
 Tools opt out of clearing with `KeepResultInContext()`. The summariser is an
-explicit `ContextModel` in the agent config. Without it, compaction runs
+explicit `ContextModel *runtime.ContextModel` in the generated agent config
+when Context is declared and not disabled. Config.Validate requires it when
+Summarize is declared; otherwise it is optional. Without it, compaction runs
 tier 1, receipt-only eviction and recall, and logs once that summaries are
 off. With `Recall(false)`, `recall_context` is never advertised and
 `context_recall_disabled` is emitted once per run: the agent then loses
@@ -1569,6 +1571,17 @@ selects the provider model. Seal rejects an unregistered ID. `Summary` carries
 `Instructions` and `Prompt` strings. These are owned snapshots in run inputs,
 child inputs and recorded context settings. K16 supplies the DSL shown above;
 K17 owns per-run overrides and fingerprints below.
+
+K16 emits `RunPolicy.ContextCompaction` and `RunPolicy.ContextRecovery` on the
+agent registration. The runtime resolves these with the same normalizers as
+the runtime options, rejecting DSL plus option configuration for the same agent
+and setting. `Recall(false)` sets only `ContextRecovery.DisableRecall`.
+`KeepResultInContext()` emits a tool-spec flag; registration unions flagged
+specs with `ContextCompaction.KeepResultTools` and stamps the set. Later toolset
+registration does not change it. `Disable()` omits threshold configuration
+before K21's default transition, and is compatible only with recall settings.
+It does not override an explicit runtime compaction option.
+
 
 **Prompts.** The summary prompt is a prompt-registry prompt,
 `<agent>.context.summary`. K15 registers its embedded baseline, replaced by `Summary.Prompt`; K16 adds DSL configuration. Stored overrides scoped

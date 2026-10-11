@@ -263,4 +263,7 @@
 // through planner.ToolResult.Bounds.
 //
 // For complete documentation and examples, see docs/dsl.md in the repository.
+// Context functions: [Context], [TriggerAt], [KeepRecentTokens], [Summarize],
+// [Instructions], [Prompt], [Recall], [Disable].
+// Tool result retention: [KeepResultInContext].
 package dsl

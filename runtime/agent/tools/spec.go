@@ -56,6 +56,8 @@ type (
 		// consuming the run-level MaxToolCalls budget. Successful bookkeeping results
 		// do not reset recovery turns or independently schedule another planner turn.
 		Bookkeeping bool
+		// KeepResultInContext preserves whole results during context clearing.
+		KeepResultInContext bool
 
 		// IsAgentTool indicates this tool is implemented by an agent (agent-as-tool).
 		// When true, the runtime executes the tool by starting the provider agent as a

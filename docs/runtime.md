@@ -240,6 +240,44 @@ fixtures retain mismatch rejection before effects. Structural templates remain v
 
 ### Opt-in context compaction
 
+The agent DSL can configure the same policy:
+
+```go
+RunPolicy(func() {
+    Context(func() {
+        TriggerAt(0.85)
+        KeepRecentTokens(8000)
+        Summarize(func() {
+            Instructions("Keep every order ID verbatim.")
+        })
+        Recall(false)
+    })
+})
+```
+
+Generation writes `AgentRegistration.Policy.ContextCompaction` and
+`Policy.ContextRecovery`. Registration resolves these through the same
+normalizers as `WithContextCompaction` and `WithContextRecovery`; configuring
+both sources for the same setting and agent fails with both source names.
+`TriggerAt(0.85)` maps to `contextmeasure.Rate{Tokens: 85, Bytes: 100}`.
+`Recall(false)` maps only to `ContextRecovery.DisableRecall`.
+
+Enabled `Context` generates `ContextModel *runtime.ContextModel` in agent
+config and forwards it to compaction. `Summarize` requires this field in
+`Config.Validate`; without `Summarize`, the field is optional. Register the
+selected model before `Seal`. Summary instructions and prompt text become
+`ContextCompaction.Summary`.
+
+`KeepResultInContext()` emits `ToolSpec.KeepResultInContext`. Registration
+unions flagged specs with `ContextCompaction.KeepResultTools`, removes
+duplicates, and stamps an owned, sorted list. Register toolsets before the agent
+when relying on the runtime catalog; later registrations do not alter this set.
+The run input and canonical RunRecord retain the resolved settings.
+
+`Disable()` omits threshold configuration; `Disable(); Recall(false)` emits
+only recovery configuration. It does not cancel a separately supplied runtime
+option.
+
 Configure each agent on the runtime used by its clients:
 
 ```go

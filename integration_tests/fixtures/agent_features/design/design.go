@@ -72,6 +72,29 @@ var MethodToolResult = Type("MethodToolResult", func() {
 })
 
 var _ = Service("features", func() {
+	Agent("compactor", "Generated context compaction fixture", func() {
+		RunPolicy(func() {
+			Context(func() {
+				TriggerAt(0.01)
+				KeepRecentTokens(30)
+				Summarize(func() {
+					Instructions("Keep every order ID verbatim.")
+				})
+			})
+		})
+		Use("evidence", func() {
+			Tool("keep", "Keep evidence in context", func() {
+				Args(String)
+				Return(String)
+				KeepResultInContext()
+			})
+			Tool("clear", "Read evidence that may be cleared", func() {
+				Args(String)
+				Return(String)
+			})
+		})
+	})
+
 	Method("echo_topic", func() {
 		Payload(MethodEchoPayload)
 		Result(MethodEchoResult)

@@ -226,27 +226,28 @@ fails instead of generating an empty toolset.
 
 ### Tool Functions
 
-| Function                                      | Context                                | Purpose                                                                                             |
-| --------------------------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `Tool(name, description?, dsl?)`              | Inside `Toolset` or `Method`           | Declares a callable tool                                                                            |
-| `Args(type)`                                  | Inside `Tool`                          | Defines input parameter schema                                                                      |
-| `Return(type)`                                | Inside `Tool`                          | Defines output result schema                                                                        |
-| `ServerData(kind, type, dsl?)`                | Inside `Tool`                          | Defines server-only data emitted alongside results (never sent to model providers)                  |
-| `ServerDataDefault("on" \| "off")`            | Inside `Tool`                          | Default emission for optional server-data when `server_data` is omitted or `"auto"`                 |
-| `BindTo(method)` or `BindTo(service, method)` | Inside `Tool`                          | Binds tool to a service method                                                                      |
-| `Inject(fields...)`                           | Inside `Tool`                          | Marks fields as server-injected (hidden from LLM)                                                   |
-| `CallHintTemplate(tmpl)`                      | Inside `Tool`                          | Go template for call display hint                                                                   |
-| `ResultHintTemplate(tmpl)`                    | Inside `Tool`                          | Go template for result display hint                                                                 |
-| `BoundedResult(dsl?)`                         | Inside `Tool`                          | Declares a runtime-owned bounded-result contract; optional sub-DSL can declare paging cursor fields |
-| `Cursor(name)`                                | Inside `BoundedResult(func() { ... })` | Declares which payload field carries the paging cursor (optional)                                   |
-| `NextCursor(name)`                            | Inside `BoundedResult(func() { ... })` | Declares the projected result field name for the next-page cursor (optional)                        |
-| `ResultReminder(text)`                        | Inside `Tool`                          | Static system reminder injected after tool result                                                   |
-| `Confirmation(dsl)`                           | Inside `Tool`                          | Declares that tool execution must be explicitly approved out-of-band                                |
-| `Bookkeeping()`                               | Inside `Tool`                          | Excludes successful control-plane calls from the run-level domain-call budget                      |
-| `TerminalRun()`                               | Inside `Tool`                          | Marks a bookkeeping tool that completes the run after successful execution                          |
-| `Idempotent()`                                 | Inside `Tool`                          | Emits transcript-scoped idempotency metadata for planners/orchestrators                              |
-| `Expose(surfaces...)`                         | Inside toolset `Tool`                  | Declares design-time exposure permission; omitted means `AgentRuntime`                              |
-| `MCPPlacement(service, mcpServer)`             | Inside toolset `Tool`                  | Places a method-backed toolset tool into an existing service MCP server when `MCPSurface` is exposed |
+| Function                                      | Context                                | Purpose                                                                                              |
+| --------------------------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `Tool(name, description?, dsl?)`              | Inside `Toolset` or `Method`           | Declares a callable tool                                                                             |
+| `Args(type)`                                  | Inside `Tool`                          | Defines input parameter schema                                                                       |
+| `Return(type)`                                | Inside `Tool`                          | Defines output result schema                                                                         |
+| `ServerData(kind, type, dsl?)`                | Inside `Tool`                          | Defines server-only data emitted alongside results (never sent to model providers)                   |
+| `ServerDataDefault("on" \| "off")`            | Inside `Tool`                          | Default emission for optional server-data when `server_data` is omitted or `"auto"`                  |
+| `BindTo(method)` or `BindTo(service, method)` | Inside `Tool`                          | Binds tool to a service method                                                                       |
+| `Inject(fields...)`                           | Inside `Tool`                          | Marks fields as server-injected (hidden from LLM)                                                    |
+| `CallHintTemplate(tmpl)`                      | Inside `Tool`                          | Go template for call display hint                                                                    |
+| `ResultHintTemplate(tmpl)`                    | Inside `Tool`                          | Go template for result display hint                                                                  |
+| `BoundedResult(dsl?)`                         | Inside `Tool`                          | Declares a runtime-owned bounded-result contract; optional sub-DSL can declare paging cursor fields  |
+| `Cursor(name)`                                | Inside `BoundedResult(func() { ... })` | Declares which payload field carries the paging cursor (optional)                                    |
+| `NextCursor(name)`                            | Inside `BoundedResult(func() { ... })` | Declares the projected result field name for the next-page cursor (optional)                         |
+| `ResultReminder(text)`                        | Inside `Tool`                          | Static system reminder injected after tool result                                                    |
+| `Confirmation(dsl)`                           | Inside `Tool`                          | Declares that tool execution must be explicitly approved out-of-band                                 |
+| `KeepResultInContext()`                       | Inside `Tool`                          | Preserves the whole result during context clearing; cannot be combined with `Bookkeeping()`          |
+| `Bookkeeping()`                               | Inside `Tool`                          | Excludes successful control-plane calls from the run-level domain-call budget                        |
+| `TerminalRun()`                               | Inside `Tool`                          | Marks a bookkeeping tool that completes the run after successful execution                           |
+| `Idempotent()`                                | Inside `Tool`                          | Emits transcript-scoped idempotency metadata for planners/orchestrators                              |
+| `Expose(surfaces...)`                         | Inside toolset `Tool`                  | Declares design-time exposure permission; omitted means `AgentRuntime`                               |
+| `MCPPlacement(service, mcpServer)`            | Inside toolset `Tool`                  | Places a method-backed toolset tool into an existing service MCP server when `MCPSurface` is exposed |
 
 ### Tool JSON values
 
@@ -398,6 +399,56 @@ The built-in runtime does not currently cache or de-duplicate calls from this
 tag. Do not rely on `Idempotent()` for exactly-once execution, cross-run
 deduplication, or side-effect safety. Use it only when a custom execution layer
 implements the corresponding transcript-local policy.
+
+### Context Functions
+
+| Function | Context | Purpose |
+| --- | --- | --- |
+| `Context(dsl)` | Inside `RunPolicy` | Enables threshold compaction for a planner agent |
+| `TriggerAt(t)` | Inside `Context` | Sets an exact fraction, with `0 < t < 1` and at most four decimal places |
+| `KeepRecentTokens(n)` | Inside `Context` | Sets a positive token budget for the recent transcript |
+| `Summarize(dsl)` | Inside `Context` | Configures summaries; requires `ContextModel` in generated agent config |
+| `Instructions(text)` | Inside `Summarize` | Adds non-empty summary instructions |
+| `Prompt(text)` | Inside `Summarize` | Replaces the summary template |
+| `Recall(enabled)` | Inside `Context` | `Recall(false)` disables recall advertising |
+| `Disable()` | Inside `Context` | Omits generated threshold compaction configuration |
+
+```go
+RunPolicy(func() {
+    Context(func() {
+        TriggerAt(0.85)
+        KeepRecentTokens(8000)
+        Summarize(func() {
+            Instructions("Keep every order ID verbatim.")
+        })
+    })
+})
+```
+
+Each declaration may appear only once in its parent. `Context` cannot be
+combined with `History` or a deterministic `Workflow`. An agent with `Context`
+cannot use tools whose names contain `recall_context`.
+
+`Summarize` requires `Instructions`, `Prompt`, or both. Templates receive only
+`.Previous`, `.Evicted`, `.Instructions`, and `.Budget`; they must reference
+`.Evicted` and, when instructions are declared, `.Instructions`. Design
+validation parses and executes the template with the summary prompt's function
+map (no custom functions) and missing keys treated as errors. The runtime
+registers it as `<agent>.context.summary`.
+
+An enabled `Context` adds `ContextModel *runtime.ContextModel` to generated
+agent config. It is required by `Config.Validate` only when `Summarize` is
+declared. Its ID must name a registered model when the runtime is sealed.
+
+Omitted settings preserve runtime defaults. `Disable()` can be combined with
+`Recall(false)`, but not `TriggerAt`, `KeepRecentTokens`, or `Summarize`.
+`Disable()` omits the opt-in threshold configuration; it does not override a
+runtime option.
+
+`KeepResultInContext()` marks the generated tool spec. At agent registration,
+flagged specs join `ContextCompaction.KeepResultTools` in the stamped keep set.
+This prevents clearing that result, not later whole-unit eviction. Toolsets
+registered after the agent do not change its keep set.
 
 ### Policy Functions
 

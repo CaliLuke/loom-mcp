@@ -110,6 +110,28 @@ func Register{{ .StructName }}(ctx context.Context, rt *agentsruntime.Runtime, c
             OnMissingFields: agentsruntime.MissingFieldsResume,
             {{- end }}
 {{- end }}
+{{- with .RunPolicy.Context }}
+{{- if .Threshold }}
+            ContextCompaction: &agentsruntime.ContextCompaction{
+{{- if .TriggerDen }}
+                TriggerAt: contextmeasure.Rate{Tokens: {{ .TriggerNum }}, Bytes: {{ .TriggerDen }}},
+{{- end }}
+{{- if .KeepRecentTokens }}
+                KeepRecentTokens: {{ .KeepRecentTokens }},
+{{- end }}
+                ContextModel: cfg.ContextModel,
+{{- with .Summary }}
+                Summary: agentsruntime.SummarySettings{
+                    Instructions: {{ printf "%q" .Instructions }},
+                    Prompt: {{ printf "%q" .Prompt }},
+                },
+{{- end }}
+            },
+{{- end }}
+{{- if .DisableRecall }}
+            ContextRecovery: &agentsruntime.ContextRecovery{DisableRecall: true},
+{{- end }}
+{{- end }}
 {{- if .RunPolicy.History }}
             History: func() agentsruntime.HistoryPolicy {
             {{- if eq .RunPolicy.History.Mode "keep_recent" }}

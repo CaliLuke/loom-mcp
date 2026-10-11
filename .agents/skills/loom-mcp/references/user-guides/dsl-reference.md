@@ -143,3 +143,27 @@ Expected owners:
 
 Never edit generated output. Use `loom example` only for intentional
 application-owned scaffolding.
+
+## Context compaction
+
+Inside RunPolicy, Context enables threshold compaction and accepts TriggerAt
+(exact decimal fraction, strictly between zero and one, at most four decimals),
+KeepRecentTokens (positive), Summarize, Recall and Disable. Context conflicts with
+History and Workflow. Each declaration is unique in its parent.
+
+Summarize requires non-empty Instructions or Prompt. Prompt is parsed and
+executed during design validation with the runtime summary prompt's empty custom
+function map and only .Previous, .Evicted, .Instructions and .Budget. It must
+reference .Evicted and, if Instructions is declared, .Instructions.
+
+Enabled Context adds ContextModel *runtime.ContextModel to generated config;
+Validate requires it only for Summarize. Register its model ID before Seal.
+Recall(false) sets ContextRecovery.DisableRecall. Disable omits threshold policy;
+it may accompany Recall(false), but not threshold or summary settings, and does
+not cancel runtime options.
+
+KeepResultInContext in Tool emits a spec flag and conflicts with Bookkeeping.
+Flagged specs join explicit ContextCompaction.KeepResultTools at registration;
+the set is owned, sorted and stamped. Later toolsets do not alter the keep set.
+Keep protects clearing, not whole-unit eviction. Context agents cannot use tool
+names containing recall_context.

@@ -82,6 +82,8 @@ type (
 		// not consume the run-level MaxToolCalls budget. Successful bookkeeping
 		// output does not enter future planner input or schedule another planner turn.
 		Bookkeeping bool
+		// KeepResultInContext preserves whole results during context clearing.
+		KeepResultInContext bool
 
 		// ResultReminder is an optional system reminder that is injected into
 		// the conversation after the tool result is returned. It provides
@@ -323,6 +325,7 @@ func (t *ToolExpr) Prepare() {
 func (t *ToolExpr) Validate() error {
 	t.defaultSurfaces()
 	verr := new(eval.ValidationErrors)
+	validateContextTool(t, verr)
 	validateToolSurfaces(t, verr)
 	validateHintTemplates(t, verr)
 	if t.bindMethodName == "" {

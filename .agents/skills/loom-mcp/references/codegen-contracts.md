@@ -330,3 +330,22 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
 - `codegen/`
 - `dsl/`
 - `expr/`
+
+## Context policy generation
+
+- ContextExpr is evaluated into RunPolicyData.Context; TriggerAt preserves the
+  authored decimal fraction (0.85 becomes 85/100). Omitted fields use runtime defaults.
+- Enabled Context generates RunPolicy.ContextCompaction with ContextModel from
+  generated agent config. Summarize emits quoted SummarySettings Instructions
+  and Prompt literals and requires ContextModel in Config.Validate.
+- Disable omits compaction and the config model field. Recall(false) emits only
+  RunPolicy.ContextRecovery.DisableRecall; it never belongs to ContextCompaction.
+- Registration resolves DSL policy and runtime options through shared
+  normalizers and rejects both sources for the same agent and setting.
+- KeepResultInContext flows through ToolData, specs construction and ToolSpec.
+  The runtime unions flagged specs with explicit KeepResultTools at agent
+  registration and stamps an owned sorted set; later toolsets do not alter it.
+- Context generation does not change workflow/activity shapes or protocol 13.
+  Prove enabled, default and disabled branches with generated compilation,
+  config execution and goldens; the generated compactor fixture proves summary
+  model selection, compaction adoption and whole kept-result rendering.
