@@ -109,7 +109,7 @@ resource dispatch, resource policy, skill dispatch, and request logging. Direct
 runtime tests cover these contracts. Official-SDK integration tests cover the
 generated closures and the complete server.
 
-The current bridge compatibility version is `2`. The generator writes this
+The current bridge compatibility version is `3`. The generator writes this
 value as a literal in each generated server. The generated server never reads
 the runtime constant during initialization. A release can include compatible
 runtime corrections without another version increase.
