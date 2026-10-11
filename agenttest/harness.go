@@ -64,6 +64,8 @@ type Harness struct {
 	tb               testing.TB
 	stubs            stubTable
 	scripts          map[string]*Script
+	models           map[string]model.Client
+	capturing        map[string]*captureState
 	timeout          time.Duration
 	eventsUnverified bool
 	responder        Responder
@@ -78,6 +80,7 @@ type Harness struct {
 type harnessOptions struct {
 	runtime        []runtime.RuntimeOption
 	scripts        map[string]*Script
+	live           []string
 	timeout        time.Duration
 	responder      Responder
 	provider       trace.TracerProvider
@@ -97,11 +100,9 @@ const cleanupTimeout = 5 * time.Second
 // NewHarness constructs owned stores, engine and bus, then registers application
 // components followed by scripted overrides. It never enables live clients itself.
 func NewHarness(ctx context.Context, register Register, opts ...Option) (*Harness, error) {
-	options := harnessOptions{scripts: make(map[string]*Script), timeout: 30 * time.Second}
-	for _, option := range opts {
-		if err := option(&options); err != nil {
-			return nil, err
-		}
+	options, err := validatedHarnessOptions(opts)
+	if err != nil {
+		return nil, err
 	}
 	var probe runtime.Options
 	for _, option := range options.runtime {
@@ -118,7 +119,7 @@ func NewHarness(ctx context.Context, register Register, opts ...Option) (*Harnes
 	probe.Tracer = configureTracer(&options)
 	h := &Harness{
 		scripts: options.scripts, timeout: options.timeout, responder: options.responder, provider: options.provider,
-		runs: make(map[string]*harnessRun),
+		runs: make(map[string]*harnessRun), models: make(map[string]model.Client), capturing: make(map[string]*captureState),
 		stubs: stubTable{
 			entries: make(map[tools.Ident]stubEntry), counts: make(map[tools.Ident]int),
 			passthrough: make(map[tools.Ident]bool), passthroughAll: options.passthroughAll,
@@ -131,12 +132,10 @@ func NewHarness(ctx context.Context, register Register, opts ...Option) (*Harnes
 	if err := register(ctx, rt); err != nil {
 		return nil, fmt.Errorf("agenttest: register: %w", err)
 	}
-	for _, id := range sortedScriptIDs(options.scripts) {
-		if err := rt.RegisterModel(id, options.scripts[id].Client()); err != nil {
-			return nil, fmt.Errorf("agenttest: model %q: %w", id, err)
-		}
-	}
 	h.rt = rt
+	if err := h.registerModels(options); err != nil {
+		return nil, err
+	}
 	h.eventsUnverified = rt.HasEventInterceptors()
 	return h, nil
 }
@@ -146,7 +145,11 @@ func New(t testing.TB, register Register, opts ...Option) *Harness {
 	t.Helper()
 	h, err := NewHarness(t.Context(), register, opts...)
 	if err != nil {
-		t.Fatal(err)
+		if errors.Is(err, ErrLiveModelDisabled) {
+			t.Skipf("%v", err)
+		} else {
+			t.Fatal(err)
+		}
 		return nil
 	}
 	h.tb = t
@@ -210,13 +213,10 @@ func (h *Harness) Runtime() *runtime.Runtime {
 	return h.rt
 }
 
-// Model returns a registered client, or nil when the ID is unknown.
+// Model returns the pre-gate registered client for direct Decide calls, or nil
+// when the ID is unknown.
 func (h *Harness) Model(id string) model.Client {
-	client, ok := h.rt.ModelClient(id)
-	if !ok {
-		return nil
-	}
-	return client
+	return h.models[id]
 }
 
 // Script returns a scripted override, or nil when the ID has no script.
@@ -274,6 +274,23 @@ func (h *Harness) Close() error {
 	return errors.Join(diagnostics...)
 }
 
+// validatedHarnessOptions applies declarations and rejects live/script conflicts
+// before application registration can load credentials.
+func validatedHarnessOptions(opts []Option) (harnessOptions, error) {
+	options := harnessOptions{scripts: make(map[string]*Script), timeout: 30 * time.Second}
+	for _, option := range opts {
+		if err := option(&options); err != nil {
+			return options, err
+		}
+	}
+	for _, id := range options.live {
+		if _, ok := options.scripts[id]; ok {
+			return options, fmt.Errorf("agenttest: model %q cannot be both live and scripted", id)
+		}
+	}
+	return options, nil
+}
+
 func validateOwnedOptions(options runtime.Options) error {
 	for _, field := range []struct {
 		name string
@@ -327,6 +344,10 @@ func (h *Harness) newSession(ctx context.Context) (string, error) {
 }
 
 func (h *Harness) run(ctx context.Context, id agent.Ident, sessionID string, input Input, opts ...RunOption) (*Result, error) {
+	return h.runCapture(ctx, id, sessionID, input, nil, opts...)
+}
+
+func (h *Harness) runCapture(ctx context.Context, id agent.Ident, sessionID string, input Input, capture *captureState, opts ...RunOption) (*Result, error) {
 	if err := h.stubDiagnostics(false); err != nil {
 		return nil, err
 	}
@@ -346,10 +367,15 @@ func (h *Harness) run(ctx context.Context, id agent.Ident, sessionID string, inp
 	defer end()
 	runCtx, cancel := context.WithTimeout(ctx, h.timeout)
 	defer cancel()
-	runID, run, err := h.startRun(runCtx, client, sessionID, input, opts)
+	runID, run, err := h.startRun(runCtx, client, sessionID, input, opts, capture)
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		h.mu.Lock()
+		delete(h.capturing, runID)
+		h.mu.Unlock()
+	}()
 	if err := h.waitRun(runCtx, runID, run); err != nil {
 		return nil, err
 	}
@@ -391,7 +417,7 @@ func (h *Harness) waitRun(ctx context.Context, runID string, run *harnessRun) er
 	return nil
 }
 
-func (h *Harness) startRun(ctx context.Context, client runtime.AgentClient, sessionID string, input Input, opts []RunOption) (string, *harnessRun, error) {
+func (h *Harness) startRun(ctx context.Context, client runtime.AgentClient, sessionID string, input Input, opts []RunOption, capture *captureState) (string, *harnessRun, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.closed {
@@ -404,8 +430,12 @@ func (h *Harness) startRun(ctx context.Context, client runtime.AgentClient, sess
 	if err != nil {
 		return "", nil, err
 	}
+	if capture != nil {
+		h.capturing[runID] = capture
+	}
 	handle, err := client.Start(ctx, sessionID, input, options...)
 	if err != nil {
+		delete(h.capturing, runID)
 		return "", nil, errors.Join(fmt.Errorf("agenttest: start %s: %w", runID, err), worker.close(ctx))
 	}
 	run := &harnessRun{handle: handle, done: make(chan struct{}), worker: worker}
@@ -415,4 +445,20 @@ func (h *Harness) startRun(ctx context.Context, client runtime.AgentClient, sess
 		close(run.done)
 	}()
 	return runID, run, nil
+}
+
+// registerModels checks explicit live declarations before scripted overrides and
+// installs the capture layer once, before the first run closes registration.
+func (h *Harness) registerModels(options harnessOptions) error {
+	for _, id := range options.live {
+		if _, ok := h.rt.ModelClient(id); !ok {
+			return fmt.Errorf("agenttest: application registered no client for %q", id)
+		}
+	}
+	for _, id := range sortedScriptIDs(options.scripts) {
+		if err := h.rt.RegisterModel(id, options.scripts[id].Client()); err != nil {
+			return fmt.Errorf("agenttest: model %q: %w", id, err)
+		}
+	}
+	return h.installGates()
 }

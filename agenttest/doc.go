@@ -32,8 +32,23 @@
 // owns provider shutdown and export configuration.
 //
 // Application-registered models are preserved unless a scripted override uses
-// the same ID. No live model is selected by default. Live-model gating and
-// Temporal execution are outside this harness.
+// the same ID. LiveModel(id) requires LOOM_LIVE_MODEL=1 before registration and
+// confirms that the application supplied that client. New skips when disabled;
+// invalid environment values fail. SkipUnlessLive gates standalone Decide tests.
+// This opt-in gates only these explicit helpers, not undeclared application
+// clients. The harness has no Temporal mode.
+//
+// CaptureFirstRequest records the first fully decorated request without calling
+// the underlying model; the planner must propagate its sentinel error. Tools
+// scheduled before the model follow the normal strict stub rules. Model returns
+// the pre-gate client for direct Decide calls. Request transforms return immutable
+// copies and defer errors; SaveRequest/LoadRequest use deterministic, verified
+// version-1 fixtures containing full prompts. Private completion validators are
+// omitted and provider thinking signatures must not be replayed across providers.
+// Decide performs one validated model call without CallInfo, recording or tool
+// execution. Check Decision.Calls with expect.Calls. Repeat runs sequential
+// func(testing.TB) attempts, isolating Fatal, panics and cleanup failures before
+// applying its minimum passing threshold. A skipped attempt skips the parent.
 //
 // Activity tools are strict by default: declare Stub responses or opt into
 // Passthrough / PassthroughAll. Stubs preserve registration, payload preparation,

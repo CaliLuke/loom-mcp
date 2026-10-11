@@ -1290,6 +1290,43 @@ v1 JSON); Render prints `Trace: <id>` after `Agent:` when present. The caller ow
 the provider's export configuration and shutdown. No live model is enabled by
 default, and the harness has no Temporal mode.
 
+### Capturing and deciding
+
+`h.CaptureFirstRequest(ctx, agent, input, opts...)` returns an immutable
+`agenttest.Request` for the first fully decorated model call, with its registered
+`ModelID` and `Source` call key. The gate returns `ErrCaptureSentinel` before the
+underlying client runs. The planner must propagate that error: swallowing or
+retrying it returns `ErrCaptureHandled`, and no model call returns
+`ErrCaptureNoModelCall`. Tools scheduled before the model call follow the normal
+strict stub rules. The capture can run concurrently with ordinary harness runs.
+
+`agenttest.Decide(t, h.Model(id), request)` performs one validated Complete or
+Stream call, returning `Decision` with the request, response, calls and latency.
+It adds no `CallInfo`, writes no run record and executes no tools. Use
+`expect.Require(t, expect.Calls(d.Calls), ...)` to check its calls.
+`DecideContext` returns errors for callers without a test. `Repeat(t, n, minPass,
+func(testing.TB))` runs all attempts sequentially, isolates errors, Fatal, panic
+and cleanup failures, and reports the threshold with parent Errorf. Attempt
+contexts are cancelled before LIFO cleanup; a skip skips the parent and stops.
+
+`WithUserMessage`, `WithSystem`, `WithToolSpecs`, `WithModel` and `WithRunID`
+return new requests with deferred errors surfaced by `Err`, `Request`, Marshal
+or Decide. `SaveRequest` and `LoadRequest` persist deterministic version-1 JSON
+fixtures with a verified request digest. Fixtures contain full prompts; keep
+application fixture files gitignored. Private completion validators are omitted,
+and provider thinking signatures must not be replayed across providers. Tool
+spec transforms replace definitions by name; re-capture planners that decorate
+those definitions.
+
+`LiveModel(id)` opts a named application client in only with
+`LOOM_LIVE_MODEL=1`; it builds no provider and checks that registration supplied
+that client. Disabled opt-in returns `ErrLiveModelDisabled` before registration,
+and `agenttest.New` skips with the model ID. `SkipUnlessLive(t, id)` gates
+standalone decision tests. Unset or `0` disables these helpers, `1` enables them,
+and other values fail. This gating applies only to explicit LiveModel and
+SkipUnlessLive calls; undeclared application clients remain available.
+`Runtime.ModelIDs()` returns a sorted owned snapshot of registered identifiers.
+
 ### Stubbing tools
 
 The harness is strict by default. Register real toolsets through the application's

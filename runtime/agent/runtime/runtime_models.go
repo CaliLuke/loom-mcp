@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -128,6 +129,18 @@ func (r *Runtime) ModelClient(id string) (model.Client, bool) {
 	defer r.mu.RUnlock()
 	m, ok := r.models[id]
 	return m, ok
+}
+
+// ModelIDs returns a sorted owned copy of the registered model identifiers.
+func (r *Runtime) ModelIDs() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	ids := make([]string, 0, len(r.models))
+	for id := range r.models {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	return ids
 }
 
 // NewBedrockModelClient constructs a model.Client backed by AWS Bedrock that

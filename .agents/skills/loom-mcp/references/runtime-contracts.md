@@ -697,6 +697,7 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 
 ## Runtime Observability
 
+- `Runtime.ModelIDs()` returns a sorted owned snapshot under the read lock; agenttest gates every construction-time model for per-root-run capture, while Model exposes the pre-gate client for Decide. LiveModel/SkipUnlessLive require LOOM_LIVE_MODEL=1; undeclared application clients are not blocked.
 - `Runtime.HasEventInterceptors()` detects BeforeEvent middleware across runtime and merged agent registrations, excluding RuntimeInterceptorFuncs with nil BeforeEventFunc; agenttest marks observed trajectory evidence unverified when present.
 - `telemetry.NewTracer(provider)` uses the caller's TracerProvider without global changes; agenttest.WithTracerProvider shares it with root agenttest.run spans, while callers own export and shutdown.
 - `Trajectory.TraceID` is optional `trace_id` in v1 JSON, set by the harness after Build; Render prints Trace after Agent only when present. RunSession history comes only from agent memory policy, with no harness transcript carry-over.
