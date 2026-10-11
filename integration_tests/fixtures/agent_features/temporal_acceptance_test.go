@@ -63,7 +63,15 @@ func TestGeneratedFeatureRealTemporalContracts(t *testing.T) {
 		// The default 20 transfer polls/s adds ~100 ms per activity round trip
 		// after its initial burst. Keep the 2s active-budget proof independent
 		// of that dev-server throttle, including after earlier fixture runs.
-		ExtraArgs: []string{"--dynamic-config-value", "history.transferProcessorMaxPollRPS=1000"},
+		// Subtests start and stop workers on shared queue names. With several
+		// task-queue partitions a task can land on a partition with no live
+		// poller (or a poll left by a closed worker) and stall past the 2s
+		// budgets under load, so use one partition.
+		ExtraArgs: []string{
+			"--dynamic-config-value", "history.transferProcessorMaxPollRPS=1000",
+			"--dynamic-config-value", "matching.numTaskqueueReadPartitions=1",
+			"--dynamic-config-value", "matching.numTaskqueueWritePartitions=1",
+		},
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() {
