@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/CaliLuke/loom-mcp/v2/expect"
@@ -24,6 +25,11 @@ type Item struct {
 	Reference       string                `json:"reference,omitempty"`
 	ExpectedTools   *expect.ExpectedTools `json:"expected_tools,omitempty"`
 	Data            json.RawMessage       `json:"data,omitzero"`
+}
+
+type prefixedProblem struct {
+	prefix string
+	err    error
 }
 
 var idPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
@@ -112,5 +118,15 @@ func prefixProblems(prefix string, err error) []error {
 		}
 		return problems
 	}
-	return []error{fmt.Errorf("%s%w", prefix, err)}
+	return []error{&prefixedProblem{prefix: prefix, err: err}}
+}
+
+// Error locates every diagnostic line while Unwrap preserves the original cause.
+func (e *prefixedProblem) Error() string {
+	return e.prefix + strings.ReplaceAll(e.err.Error(), "\n", "\n"+e.prefix)
+}
+
+// Unwrap retains typed errors and sentinel causes under the diagnostic prefix.
+func (e *prefixedProblem) Unwrap() error {
+	return e.err
 }

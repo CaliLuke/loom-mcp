@@ -144,7 +144,10 @@ trajectory subject and cannot be checked against model calls alone.
 ## Keep a decision as a fixture
 
 `SaveRequest` and `LoadRequest` preserve deterministic version-1 JSON with a
-verified request digest. Save fixtures under the application module and keep
+verified request digest. Loading rejects unknown members in the envelope and
+inside the request, including typed messages, parts and tools. The request must
+match its canonical re-encoding; JSON whitespace and object member order remain
+flexible. Save fixtures under the application module and keep
 them gitignored: they hold full prompts and tool definitions. The test uses a
 temporary directory; subsequent decisions need only a client, not a harness:
 

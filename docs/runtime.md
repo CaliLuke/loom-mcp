@@ -1408,7 +1408,10 @@ Process-state changes retain the parent test's prohibition on parallel tests.
 `WithUserMessage`, `WithSystem`, `WithToolSpecs`, `WithModel` and `WithRunID`
 return new requests with deferred errors surfaced by `Err`, `Request`, Marshal
 or Decide. `SaveRequest` and `LoadRequest` persist deterministic version-1 JSON
-fixtures with a verified request digest. Fixtures contain full prompts; keep
+fixtures with a verified request digest. Loading rejects unknown members in the
+envelope and inside the request, including typed messages, parts and tools. The
+request must match its canonical re-encoding; JSON whitespace and object member
+order do not affect that comparison. Fixtures contain full prompts; keep
 application fixture files gitignored. Private completion validators are omitted,
 and provider thinking signatures must not be replayed across providers. Tool
 spec transforms replace definitions by name; re-capture planners that decorate
@@ -1547,7 +1550,7 @@ Go datasets with `eval.Items(...)`, or read files eagerly with
 Constructors defer errors to `Dataset.Err()` so they work in package variables.
 `eval.Validate(scenarios...)` joins all scenario and item problems before running.
 `Dataset.Items()` returns deep copies; `Hash()` is `sha256:<hex>` of canonical
-version-1 JSONL, independent of the source file's whitespace and member order.
+version-1 JSONL, independent of whitespace inside JSON objects and member order.
 An invalid dataset has an empty hash; an empty dataset reports `ErrEmptyDataset`.
 
 <!-- snippet: eval-scenarios -->
@@ -1577,8 +1580,12 @@ JSONL starts with a mandatory header and has one item object per line:
 
 `DecodeJSONL` rejects unknown and duplicate members, invalid UTF-8, blank lines,
 repeated headers, unsupported versions, non-object lines, multiple values per
-line and lines over 16 MiB. Failures expose `*eval.DecodeError` with source and
-one-based line through `errors.As`. `EncodeJSONL` sorts all object members, uses
+line, CRLF endings, leading/trailing line whitespace and lines over 16 MiB.
+The limit excludes the LF delimiter; exactly 16 MiB is accepted. A final LF is
+optional. Header-only files report `ErrEmptyDataset` at line 2. Failures expose
+`*eval.DecodeError` with source and one-based line through `errors.As`.
+`Validate` prefixes every diagnostic line with its scenario location and
+preserves the underlying error. `EncodeJSONL` sorts all object members, uses
 LF endings and a final newline, and preserves number tokens in `Data` and tool
 `Args`. Items require a unique ID and exactly one non-empty `Input` or non-empty
 `Turns` without empty turns. `ExpectedOutcome` requires `Turns`; `Persona` is

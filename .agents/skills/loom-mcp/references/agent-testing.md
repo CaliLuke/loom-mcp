@@ -105,7 +105,10 @@ a skip without failure skips the parent and stops. Attempt cleanup restores
 Setenv and Chdir (including PWD) and removes TempDir directories before the next
 attempt. Process-state changes still require a non-parallel parent test.
 Save/load full request fixtures only under a gitignored
-application path. Re-capture when planner decoration changes tool definitions.
+application path. Loading rejects unknown envelope and nested request members
+by comparing the full request to its canonical re-encoding before verifying the
+digest. JSON whitespace and object member order remain flexible.
+Re-capture when planner decoration changes tool definitions.
 
 ## Eval runner
 

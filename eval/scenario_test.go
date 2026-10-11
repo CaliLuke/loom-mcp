@@ -120,6 +120,24 @@ func TestScenarioDeferredDecodeError(t *testing.T) {
 	require.ErrorContains(t, err, `scenario "case":`)
 }
 
+func TestScenarioMultilineDecodeError(t *testing.T) {
+	s := validScenario()
+	s.Items = eval.JSONL(fstest.MapFS{"invalid.jsonl": &fstest.MapFile{Data: []byte(header + "\n" + `{"id":"bad/id"}`)}}, "invalid.jsonl")
+	err := eval.Validate(s)
+	var de *eval.DecodeError
+	require.ErrorAs(t, err, &de)
+	assert.Equal(t, "invalid.jsonl", de.Source)
+	assert.Equal(t, 2, de.Line)
+	require.ErrorIs(t, err, s.Items.Err())
+	require.ErrorContains(t, err, "ID must match")
+	require.ErrorContains(t, err, "exactly one of Input or Turns")
+	lines := strings.Split(err.Error(), "\n")
+	require.Len(t, lines, 2)
+	for _, line := range lines {
+		assert.True(t, strings.HasPrefix(line, `scenario "case": `), line)
+	}
+}
+
 func validScenario() eval.Scenario {
 	return eval.Scenario{ID: "case", Agent: "agent", Items: eval.Items(eval.Item{ID: "one", Input: "hi"}), Claims: []eval.Claim{{ID: "correct", Text: "Answers correctly"}}}
 }

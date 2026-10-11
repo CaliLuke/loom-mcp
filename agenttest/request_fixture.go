@@ -1,6 +1,7 @@
 package agenttest
 
 import (
+	"bytes"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
@@ -40,7 +41,8 @@ func MarshalRequest(r Request) ([]byte, error) {
 	return callrecord.Encode(requestFixture{Version: 1, ModelID: r.modelID, Source: r.Source(), Request: data, Digest: digest})
 }
 
-// UnmarshalRequest verifies a version-1 fixture and rejects unknown members.
+// UnmarshalRequest verifies a version-1 fixture and rejects unknown members,
+// including inside the request, by checking its canonical re-encoding.
 // Fixtures contain full prompts and omit private completion validators.
 // Provider thinking signatures must not be replayed across providers.
 func UnmarshalRequest(data []byte) (Request, error) {
@@ -57,6 +59,18 @@ func UnmarshalRequest(data []byte) (Request, error) {
 	}
 	if req == nil {
 		return Request{}, fmt.Errorf("agenttest: fixture request is nil")
+	}
+	// The callrecord decoder can discard unknown typed members, including those
+	// inside message parts. Verify the full canonical request before its digest.
+	canonical, err := callrecord.Encode(req)
+	if err != nil {
+		return Request{}, err
+	}
+	if err := fixture.Request.Format(jsontext.ReorderRawObjects(true)); err != nil {
+		return Request{}, fmt.Errorf("agenttest: format fixture request: %w", err)
+	}
+	if !bytes.Equal(fixture.Request, canonical) {
+		return Request{}, fmt.Errorf("agenttest: fixture request does not match its canonical encoding (unknown or non-canonical members)")
 	}
 	digest, err := callrecord.RequestDigest(req)
 	if err != nil {

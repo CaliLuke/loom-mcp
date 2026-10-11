@@ -749,8 +749,12 @@ func Execute(ctx context.Context, h *agenttest.Harness, s Scenario, item Item) (
   answer is `Attempt.Final()`, from the last session trajectory.
 - Datasets are immutable, with eagerly captured deferred errors. JSONL version 1
   requires `{"format":"loom-mcp.eval.items","version":1}` on line 1 and strict
-  item objects thereafter. Canonical JSONL preserves number tokens; its SHA-256
-  hash is independent of source-file formatting. Empty datasets are invalid.
+  item objects thereafter. Lines use LF only, have no leading/trailing
+  whitespace, and contain at most 16 MiB excluding LF; the final LF is optional.
+  Canonical JSONL preserves number tokens; its SHA-256 hash is independent of
+  whitespace inside objects and member order. Header-only files report
+  ErrEmptyDataset at line 2. Validate prefixes every diagnostic line with its
+  scenario location, preserving DecodeError unwrapping.
 - Scenario and item IDs and tags match `[A-Za-z0-9][A-Za-z0-9._-]{0,127}`.
   Claim IDs match `[a-z0-9_]{1,64}` and must be unique. Claims are declarations
   only; T16/T17 owns judging. At least one user check or claim must remain;

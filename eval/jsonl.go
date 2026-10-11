@@ -33,6 +33,7 @@ func DecodeJSONL(r io.Reader, source string) (Dataset, error) {
 		return d, d.err
 	}
 	scanner := bufio.NewScanner(r)
+	scanner.Split(splitJSONL)
 	scanner.Buffer(make([]byte, 4096), maxLineBytes+2)
 	line := 0
 	seen := make(map[string]bool)
@@ -93,6 +94,17 @@ func (e *DecodeError) Unwrap() error {
 	return e.Err
 }
 
+// splitJSONL removes only LF, leaving CR and other whitespace for validation.
+func splitJSONL(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	if i := bytes.IndexByte(data, '\n'); i >= 0 {
+		return i + 1, data[:i], nil
+	}
+	if atEOF && len(data) > 0 {
+		return len(data), data, nil
+	}
+	return 0, nil, nil
+}
+
 func validateLine(data []byte) error {
 	if len(data) > maxLineBytes {
 		return fmt.Errorf("line exceeds %d bytes", maxLineBytes)
@@ -101,7 +113,10 @@ func validateLine(data []byte) error {
 	if len(trimmed) == 0 {
 		return fmt.Errorf("blank line")
 	}
-	if trimmed[0] != '{' {
+	if len(trimmed) != len(data) {
+		return fmt.Errorf("leading or trailing line whitespace is not allowed; use LF line endings")
+	}
+	if data[0] != '{' {
 		return fmt.Errorf("line must be an object")
 	}
 	return nil

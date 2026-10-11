@@ -630,6 +630,9 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   replacement return `runtime.ErrRegistrationClosed`.
 - RawStub result-decoder failures are dispatch `StubError` values, recorded in
   stub and harness calls and reported by Run and Close.
+- Request fixtures reject unknown envelope and nested request members by
+  comparing the full request to its canonical re-encoding before verifying its
+  digest. JSON whitespace and object member order remain flexible.
 - Repeat counts failure followed by Skip as a failed attempt. Only skips without
   failure skip the parent and stop. Attempt cleanup restores Setenv and Chdir
   (including PWD) and removes TempDir directories before the next attempt.
@@ -640,6 +643,10 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - Use top-level `eval` for immutable Go/JSONL datasets, scenario validation and
   single-attempt Execute over agenttest sessions. Claim declares criteria only;
   eval does not import eval/judge. See references/runtime-contracts.md.
+- Eval JSONL uses LF only, rejects leading/trailing line whitespace and accepts
+  at most 16 MiB per line excluding LF; the final LF is optional. Header-only
+  files report ErrEmptyDataset at line 2. Validate prefixes every diagnostic
+  line while preserving DecodeError and its causes.
 - Plan/Run adds validated variant matrices, fresh harnesses, bounded concurrency,
   verdicts, token limits and partial reports. WithDefaultRunOptions forwards run
   defaults through every harness run path. See references/agent-testing.md for

@@ -68,6 +68,50 @@ func TestRequestFixtureIntegrity(t *testing.T) {
 	assert.Equal(t, data, saved)
 }
 
+func TestRequestFixtureRejectsUnknownRequestMembers(t *testing.T) {
+	r, err := agenttest.NewRequest("registered", &model.Request{
+		Messages: []*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "hi"}}}},
+		Tools:    []*model.ToolDefinition{{Name: "echo.echo", InputSchema: map[string]any{"type": "object"}}},
+	})
+	require.NoError(t, err)
+	data, err := agenttest.MarshalRequest(r)
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name, member string
+	}{
+		{"request", `"request":{`},
+		{"message", `"Messages":[{`},
+		{"part", `"Parts":[{`},
+		{"tool", `"Tools":[{`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Contains(t, string(data), tc.member)
+			mutated := bytes.Replace(data, []byte(tc.member), []byte(tc.member+`"unknown":true,`), 1)
+			_, err := agenttest.UnmarshalRequest(mutated)
+			assert.Error(t, err, "unknown member must be rejected even when the request digest still matches")
+		})
+	}
+}
+
+func TestRequestFixtureAcceptsJSONFormatting(t *testing.T) {
+	r, err := agenttest.NewRequest("registered", &model.Request{Model: "provider"})
+	require.NoError(t, err)
+	data, err := agenttest.MarshalRequest(r)
+	require.NoError(t, err)
+	var envelope map[string]jsontext.Value
+	require.NoError(t, json.Unmarshal(data, &envelope))
+	request := bytes.Replace(envelope["request"], []byte(`"Model":"provider",`), nil, 1)
+	request = append([]byte(`{"Model":"provider",`), request[1:]...)
+	envelope["request"] = request
+	formatted, err := json.Marshal(envelope, jsontext.WithIndent("  "))
+	require.NoError(t, err)
+	decoded, err := agenttest.UnmarshalRequest(formatted)
+	require.NoError(t, err)
+	again, err := agenttest.MarshalRequest(decoded)
+	require.NoError(t, err)
+	assert.Equal(t, data, again)
+}
+
 func TestRequestTransforms(t *testing.T) {
 	original := &model.Request{Messages: []*model.Message{
 		{Role: model.ConversationRoleSystem, Parts: []model.Part{model.TextPart{Text: "first"}}},

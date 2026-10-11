@@ -87,8 +87,12 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - JSONL starts with `{"format":"loom-mcp.eval.items","version":1}`. Decode
   rejects unknown/duplicate members (including raw data/args), invalid UTF-8,
   blank lines, repeated headers, unsupported versions, non-objects, multiple
-  values per line and lines over 16 MiB. DecodeError carries source/line and
-  unwraps the cause. Encode sorts objects, preserves number tokens and ends
+  values per line, CRLF endings, leading/trailing line whitespace and lines over
+  16 MiB excluding LF. Exactly 16 MiB is accepted; a final LF is optional.
+  Header-only files report ErrEmptyDataset at line 2. DecodeError carries
+  source/line and unwraps the cause. Validate prefixes every diagnostic line
+  with its scenario location without losing typed errors or causes.
+  Encode sorts objects, preserves number tokens and ends
   each line with LF.
 - Item requires exactly one Input or Turns with no empty turn. IDs/tags match
   `[A-Za-z0-9][A-Za-z0-9._-]{0,127}`; duplicate IDs/tags are invalid. Persona is
