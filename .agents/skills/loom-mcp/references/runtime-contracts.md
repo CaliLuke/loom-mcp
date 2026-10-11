@@ -606,6 +606,14 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   OnMissingFields policy (finalize, resume, await_clarification and default),
   before policy handling. Valid runs are unchanged; this validation and error
   classification correction does not require a workflow protocol bump.
+- `ProvideToolResults` validates the pending await ID, exact call IDs, tool names,
+  registered specs, result codecs and the shared tool-result contract before
+  content writes or signals. Invalid submissions return a root non-retryable
+  `tool_result_contract` error and leave the run awaiting a corrected submission.
+  Client runtimes must register the worker's tool specs and codecs. Custom engines
+  must implement `engine.ToolAwaitQuerier`; built-in engines expose the read-only
+  `tool_awaits` query. Materialization remains activity-owned. This change adds no
+  workflow commands and requires no protocol bump.
 - Generated validation errors use fixed framework text. Do not preserve raw Goa
   validation messages because they can contain submitted values. Bound generated
   retry hints after all field-contract enrichment and before durable storage.

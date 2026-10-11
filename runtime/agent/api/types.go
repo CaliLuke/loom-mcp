@@ -824,7 +824,9 @@ type (
 		// RunID identifies the run associated with the external tool results.
 		RunID string
 
-		// ID is the await identifier corresponding to the original AwaitExternalTools event.
+		// ID is the await identifier corresponding to the original AwaitExternalTools
+		// or AwaitQuestions event. It is required: ProvideToolResults rejects a set
+		// whose ID does not match the run's pending tool await.
 		ID string
 
 		// Results contains the tool results provided by an external system.

@@ -20,6 +20,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/artifact"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
@@ -173,15 +174,9 @@ func (r *Runtime) decodeProvidedToolResults(ctx context.Context, allowed []plann
 	resultJSONs := make([]rawjson.Message, 0, len(allowed))
 	for _, call := range allowed {
 		item := provided[call.ToolCallID]
-		if item == nil {
-			return nil, nil, fmt.Errorf("await: missing tool result for tool_call_id %q", call.ToolCallID)
-		}
-		if item.Name != call.Name {
-			return nil, nil, fmt.Errorf("await: result tool %q does not match awaited tool %q", item.Name, call.Name)
-		}
-		spec, ok := r.toolSpec(call.Name)
-		if !ok {
-			return nil, nil, fmt.Errorf("await: tool %q is not registered", call.Name)
+		spec, err := r.providedToolSpec(call, item)
+		if err != nil {
+			return nil, nil, err
 		}
 		result, resultJSON, err := r.decodeProvidedToolResult(ctx, spec, call, item)
 		if err != nil {
@@ -196,12 +191,40 @@ func (r *Runtime) decodeProvidedToolResults(ctx context.Context, allowed []plann
 // decodeProvidedToolResult converts one externally supplied raw result into the
 // typed planner result used by the runtime.
 func (r *Runtime) decodeProvidedToolResult(ctx context.Context, spec tools.ToolSpec, call planner.ToolRequest, item *api.ProvidedToolResult) (*planner.ToolResult, rawjson.Message, error) {
+	result, err := decodeProvidedToolResultValue(spec, call, item)
+	if err != nil {
+		return nil, nil, err
+	}
+	resultJSON, err := r.materializeToolResult(ctx, call, result)
+	if err != nil {
+		return nil, nil, err
+	}
+	return result, resultJSON, nil
+}
+
+// providedToolSpec checks the awaited identity before decoding a supplied result.
+func (r *Runtime) providedToolSpec(call planner.ToolRequest, item *api.ProvidedToolResult) (tools.ToolSpec, error) {
 	if item == nil {
-		return nil, nil, toolResultContractErrorf("await: nil tool result")
+		return tools.ToolSpec{}, toolResultContractErrorf("await: missing tool result for tool_call_id %q", call.ToolCallID)
+	}
+	if item.Name != call.Name {
+		return tools.ToolSpec{}, toolResultContractErrorf("await: result tool %q does not match awaited tool %q", item.Name, call.Name)
+	}
+	spec, ok := r.toolSpec(call.Name)
+	if !ok {
+		return tools.ToolSpec{}, toolResultContractErrorf("await: tool %q is not registered", call.Name)
+	}
+	return spec, nil
+}
+
+// decodeProvidedToolResultValue decodes caller input without materialization or writes.
+func decodeProvidedToolResultValue(spec tools.ToolSpec, call planner.ToolRequest, item *api.ProvidedToolResult) (*planner.ToolResult, error) {
+	if item == nil {
+		return nil, toolResultContractErrorf("await: nil tool result")
 	}
 	resultProvided := hasNonNullJSON(item.Result.RawMessage())
 	if item.Error != nil && resultProvided {
-		return nil, nil, toolResultContractErrorf("await: tool result for %s is invalid: error and result are both set", call.Name)
+		return nil, toolResultContractErrorf("await: tool result for %s is invalid: error and result are both set", call.Name)
 	}
 	bounds := cloneProvidedToolBounds(item.Bounds)
 	var decoded any
@@ -209,7 +232,7 @@ func (r *Runtime) decodeProvidedToolResult(ctx context.Context, spec tools.ToolS
 	if resultProvided && item.Error == nil {
 		decoded, err = spec.Result.Codec.FromJSON(item.Result.RawMessage())
 		if err != nil {
-			return nil, nil, fmt.Errorf("await: decode tool result for %s: %w", call.Name, err)
+			return nil, engine.NewNonRetryableApplicationError(fmt.Sprintf("await: decode tool result for %s: %v", call.Name, err), ToolResultContractErrorType, err, nil)
 		}
 	}
 	result := &planner.ToolResult{
@@ -223,11 +246,7 @@ func (r *Runtime) decodeProvidedToolResult(ctx context.Context, spec tools.ToolS
 		ToolCallID: call.ToolCallID,
 		Artifacts:  artifactContentsFromRefs(item.Artifacts),
 	}
-	resultJSON, err := r.materializeToolResult(ctx, call, result)
-	if err != nil {
-		return nil, nil, err
-	}
-	return result, resultJSON, nil
+	return result, nil
 }
 
 // cloneProvidedToolBounds copies provided bounds metadata into an internal

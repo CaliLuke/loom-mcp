@@ -344,13 +344,18 @@ func (r *Runtime) ProvideClarification(ctx context.Context, ans interrupt.Clarif
 	return r.mapAwaitSignalError(ctx, ans.RunID, handle.Signal(ctx, interrupt.SignalProvideClarification, ans))
 }
 
-// ProvideToolResults sends a set of external tool results to a waiting run.
+// ProvideToolResults validates external results against a pending await before
+// storing or signalling. Contract failures return a non-retryable application
+// error of type ToolResultContractErrorType and leave the run awaiting.
 func (r *Runtime) ProvideToolResults(ctx context.Context, rs interrupt.ToolResultsSet) error {
 	if rs == nil {
 		return errors.New("tool results set is required")
 	}
 	if rs.RunID == "" {
 		return errors.New("run id is required")
+	}
+	if err := r.validateProvidedToolResults(ctx, rs); err != nil {
+		return r.mapAwaitSignalError(ctx, rs.RunID, err)
 	}
 	stored, err := r.storeProvidedResults(ctx, rs)
 	if err != nil {

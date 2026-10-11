@@ -2641,6 +2641,27 @@ err := rt.ProvideToolResults(ctx, &api.ToolResultsSet{
 })
 ```
 
+`ProvideToolResults` validates the complete submission before it stores content or
+sends a signal. The await ID must match a pending question or external-tool await.
+The submission must contain exactly one result for each awaited call, with the
+matching tool name. The client runtime must register the tool specs and result
+codecs used by the worker.
+
+The runtime decodes each result with its registered codec and applies the shared
+tool-result contract, including bounds and retry hints. Invalid submissions return
+a non-retryable `*engine.ApplicationError` with type
+`runtime.ToolResultContractErrorType` (`"tool_result_contract"`). The run stays
+awaiting, with no content writes or signals from the rejected submission. The
+caller can correct the submission and send it again.
+
+Custom engines must implement `engine.ToolAwaitQuerier` for this API. The
+`tool_awaits` query returns pending await IDs and call identities from workflow
+state. Both built-in engines support this query. Materializers and artifact writes
+remain in workflow activities. Workflow-side validation remains active for direct
+signals and reports contract errors with the same type.
+
+This validation change adds no workflow commands and requires no protocol bump.
+
 Provided tool results are strict boundary inputs:
 
 - each item must be exactly one of: `Error` or non-null `Result`,

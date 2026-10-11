@@ -36,10 +36,10 @@ func (r *Runtime) waitAwaitQueueItem(ctx context.Context, ctrl *interrupt.Contro
 
 func (r *Runtime) consumeProvidedToolResults(ctx context.Context, input *RunInput, base *workflowPlanInput, st *runLoopState, rs *api.ToolResultsSet, allowed []planner.ToolRequest, expected map[string]struct{}) ([]*planner.ToolResult, error) {
 	if rs == nil {
-		return nil, errors.New("await: nil tool results set")
+		return nil, toolResultContractErrorf("await: nil tool results set")
 	}
 	if len(rs.Results) == 0 {
-		return nil, errors.New("await: no tool results provided")
+		return nil, toolResultContractErrorf("await: no tool results provided")
 	}
 
 	if _, err := indexProvidedToolResults(rs, expected); err != nil {
@@ -186,10 +186,10 @@ func waitForProvidedToolResults(ctx context.Context, ctrl *interrupt.Controller,
 		return nil, err
 	}
 	if rs == nil {
-		return nil, fmt.Errorf("%s: nil tool results set", kind)
+		return nil, toolResultContractErrorf("%s: nil tool results set", kind)
 	}
 	if awaitID != "" && rs.ID != "" && rs.ID != awaitID {
-		return nil, fmt.Errorf("unexpected await ID for %s", strings.TrimPrefix(kind, "await "))
+		return nil, toolResultContractErrorf("unexpected await ID for %s", strings.TrimPrefix(kind, "await "))
 	}
 	return rs, nil
 }
@@ -216,24 +216,24 @@ func indexProvidedToolResults(rs *api.ToolResultsSet, expected map[string]struct
 	providedByID := make(map[string]*api.ProvidedToolResult, len(rs.Results))
 	for _, item := range rs.Results {
 		if item == nil {
-			return nil, errors.New("await: nil tool result")
+			return nil, toolResultContractErrorf("await: nil tool result")
 		}
 		if item.ToolCallID == "" {
-			return nil, fmt.Errorf("await: result for tool %q missing tool_call_id", item.Name)
+			return nil, toolResultContractErrorf("await: result for tool %q missing tool_call_id", item.Name)
 		}
 		if expected != nil {
 			if _, ok := expected[item.ToolCallID]; !ok {
-				return nil, fmt.Errorf("await: unexpected tool result for tool_call_id %q", item.ToolCallID)
+				return nil, toolResultContractErrorf("await: unexpected tool result for tool_call_id %q", item.ToolCallID)
 			}
 		}
 		if _, dup := seen[item.ToolCallID]; dup {
-			return nil, fmt.Errorf("await: duplicate result for tool_call_id %q", item.ToolCallID)
+			return nil, toolResultContractErrorf("await: duplicate result for tool_call_id %q", item.ToolCallID)
 		}
 		seen[item.ToolCallID] = struct{}{}
 		providedByID[item.ToolCallID] = item
 	}
 	if expected != nil && len(seen) != len(expected) {
-		return nil, fmt.Errorf("await: tool result ids did not match awaited tool_use ids (awaited=%d, got=%d)", len(expected), len(seen))
+		return nil, toolResultContractErrorf("await: tool result ids did not match awaited tool_use ids (awaited=%d, got=%d)", len(expected), len(seen))
 	}
 	return providedByID, nil
 }

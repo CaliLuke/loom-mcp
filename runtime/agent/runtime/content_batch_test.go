@@ -35,6 +35,10 @@ func (e *contentBatchEngine) RegisterRecordContentActivity(ctx context.Context, 
 	})
 }
 
+func (e *contentBatchEngine) QueryToolAwaits(ctx context.Context, workflowID string) ([]planner.AwaitExternalTools, error) {
+	return e.Engine.(engine.ToolAwaitQuerier).QueryToolAwaits(ctx, workflowID)
+}
+
 func TestToolResultBatchUsesOneContentActivity(t *testing.T) {
 	for _, inline := range []bool{true, false} {
 		t.Run(fmt.Sprintf("inline=%v", inline), func(t *testing.T) {

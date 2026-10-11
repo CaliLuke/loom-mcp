@@ -92,6 +92,9 @@ func (r *Runtime) handleAwaitQueue(
 	if err := validateAwaitQueueInputs(ctrl, deadlines, confirmations, items); err != nil {
 		return nil, err
 	}
+	if err := setToolAwaitsQuery(wfCtx, items); err != nil {
+		return nil, err
+	}
 	if err := r.publishAwaitPrompts(ctx, input, base, turnID, confirmations, items); err != nil {
 		return nil, err
 	}
@@ -195,9 +198,12 @@ func (r *Runtime) collectAwaitResults(ctx context.Context, wfCtx engine.Workflow
 			extraItems = append(extraItems, pauseItems...)
 		}
 	}
-	for _, it := range items {
+	for i, it := range items {
 		res, err := r.waitForAwaitItem(ctx, wfCtx, ctrl, input, base, st, waitTimeout, deadlines, it)
 		if err != nil {
+			return nil, nil, nil, err
+		}
+		if err := setToolAwaitsQuery(wfCtx, items[i+1:]); err != nil {
 			return nil, nil, nil, err
 		}
 		out, err := r.finishProvidedTerminalResults(ctx, input, base, st, turnID, res)

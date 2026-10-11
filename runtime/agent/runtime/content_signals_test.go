@@ -12,9 +12,11 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	engineinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine/inmem"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	storeinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,6 +31,9 @@ func TestContentSignalsRecordBeforeDelivery(t *testing.T) {
 					store := &contentPathStore{Store: storeinmem.New(), failAt: failAt}
 					eng := engineinmem.New()
 					rt := New(WithEngine(eng), WithRunStore(store))
+					require.NoError(t, rt.RegisterToolset(ToolsetRegistration{Name: "test", Specs: []tools.ToolSpec{newAnyJSONSpec("test.tool", "test")}, Execute: func(context.Context, *planner.ToolRequest) (*ToolExecutionResult, error) {
+						panic("external tool must not execute")
+					}}))
 					ready := make(chan engine.WorkflowContext, 1)
 					inspect := make(chan struct{})
 					received := make(chan any, 1)
@@ -39,6 +44,9 @@ func TestContentSignalsRecordBeforeDelivery(t *testing.T) {
 							}
 							return "root", nil
 						}); err != nil {
+							return nil, err
+						}
+						if err := setToolAwaitsQuery(w, []planner.AwaitItem{planner.AwaitExternalToolsItem(&planner.AwaitExternalTools{ID: "await", Items: []planner.AwaitToolItem{{Name: "test.tool", ToolCallID: "call"}}})}); err != nil {
 							return nil, err
 						}
 						ready <- w
@@ -84,7 +92,7 @@ func TestContentSignalsRecordBeforeDelivery(t *testing.T) {
 						err = rt.ProvideClarification(t.Context(), &api.ClarificationAnswer{RunID: runID, Answer: "answer", AnswerBytes: new(999)})
 					case "tools":
 						want = []byte(`{"ok":true}`)
-						err = rt.ProvideToolResults(t.Context(), &api.ToolResultsSet{RunID: runID, Results: []*api.ProvidedToolResult{{Name: "test.tool", Result: rawjson.Message(want)}}})
+						err = rt.ProvideToolResults(t.Context(), &api.ToolResultsSet{RunID: runID, ID: "await", Results: []*api.ProvidedToolResult{{Name: "test.tool", ToolCallID: "call", Result: rawjson.Message(want)}}})
 					case "typed":
 						want = []byte(`{"approved":true}`)
 						err = rt.ProvideTypedInput(t.Context(), &api.TypedInputAnswer{RunID: runID, Payload: rawjson.Message(want)})

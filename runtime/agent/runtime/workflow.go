@@ -175,6 +175,9 @@ func applyWorkflowCaps(caps policy.CapsState, input *RunInput) policy.CapsState 
 }
 
 func setRootRunIDQuery(wfCtx engine.WorkflowContext, rootRunID string) error {
+	if err := setToolAwaitsQuery(wfCtx, nil); err != nil {
+		return err
+	}
 	return wfCtx.SetQueryHandler(api.QueryRootRunID, func() (string, error) {
 		return rootRunID, nil
 	})
