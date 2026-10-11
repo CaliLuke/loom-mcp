@@ -31,6 +31,9 @@ func TestGuardTokens(t *testing.T) {
 	}{
 		{"below", 10, true, true, 99, nil, 2, false, false, true},
 		{"equal", 4, true, true, 99, nil, 2, false, false, true},
+		{"upper_clamp_before_calibration", 4, false, true, 11, nil, 11, true, true, true},
+		{"upper_clamp_inexact", 4, false, false, 99, nil, 2, true, false, false},
+		{"upper_clamp_error", 4, false, true, 99, errors.New("counter failed"), 2, true, false, false},
 		{"above_exact_before_calibration", 3, false, true, 11, nil, 11, true, true, true},
 		{"above_inexact", 3, true, false, 99, nil, 2, true, false, true},
 		{"missing_usage_inexact", 3, false, false, 99, nil, 2, true, false, false},

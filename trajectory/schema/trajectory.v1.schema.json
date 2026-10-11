@@ -157,6 +157,12 @@
         "view_bearing": {
           "type": "boolean"
         },
+        "view_text_bytes": {
+          "type": "integer"
+        },
+        "view_non_text": {
+          "type": "integer"
+        },
         "count_latency": {
           "$ref": "#/$defs/Duration"
         }

@@ -13,11 +13,18 @@ import (
 // ViewBearing matches canonical role/parts hashes against a view snapshot,
 // excluding Meta and cache points. It does not implement call-record matching.
 func ViewBearing(req *model.Request, view []*model.Message) (bool, error) {
+	matches, err := viewMatches(req, view)
+	return len(matches) > 0, err
+}
+
+// viewMatches returns each matching request occurrence once, regardless of
+// duplicate view entries. Both participation and byte counts use this matching.
+func viewMatches(req *model.Request, view []*model.Message) (map[*model.Message]bool, error) {
 	if req == nil {
-		return false, errors.New("contextmeasure: nil request")
+		return nil, errors.New("contextmeasure: nil request")
 	}
 	if len(view) == 0 || len(req.Messages) == 0 {
-		return false, nil
+		return nil, nil
 	}
 	hashes := make(map[[sha256.Size]byte]struct{}, len(view))
 	for _, message := range view {
@@ -26,23 +33,24 @@ func ViewBearing(req *model.Request, view []*model.Message) (bool, error) {
 		}
 		hash, err := messageHash(message)
 		if err != nil {
-			return false, err
+			return nil, err
 		}
 		hashes[hash] = struct{}{}
 	}
+	matches := make(map[*model.Message]bool)
 	for _, message := range req.Messages {
 		if message == nil {
 			continue
 		}
 		hash, err := messageHash(message)
 		if err != nil {
-			return false, err
+			return nil, err
 		}
 		if _, match := hashes[hash]; match {
-			return true, nil
+			matches[message] = true
 		}
 	}
-	return false, nil
+	return matches, nil
 }
 
 func messageHash(message *model.Message) ([sha256.Size]byte, error) {

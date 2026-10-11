@@ -170,7 +170,11 @@ func TestCallRecordingFactsRegisteredLimits(t *testing.T) {
 			require.Len(t, calls, 1)
 			completion, err := callrecord.DecodeCompletion(calls[0].Completion)
 			require.NoError(t, err)
-			assert.Equal(t, &contextmeasure.RequestFacts{Call: calls[0].Key, Model: "canonical", ContextWindow: tc.window, OutputReserve: tc.reserve, TextBytes: 9, FixedBytes: 6, NonText: tc.image, ViewBearing: !tc.rewritten, Outcome: contextmeasure.OutcomeOK}, completion.Facts)
+			viewText := 3
+			if tc.rewritten {
+				viewText = 0
+			}
+			assert.Equal(t, &contextmeasure.RequestFacts{Call: calls[0].Key, Model: "canonical", ContextWindow: tc.window, OutputReserve: tc.reserve, TextBytes: 9, FixedBytes: 6, NonText: tc.image, ViewBearing: !tc.rewritten, ViewTextBytes: viewText, Outcome: contextmeasure.OutcomeOK}, completion.Facts)
 			assert.Equal(t, 1, provider.lookups)
 			assert.Equal(t, "alias", provider.requestModel)
 			assert.Equal(t, "mutated provider request", req.Model)
@@ -206,6 +210,28 @@ func TestCallRecordingFactsEffectiveInterceptorRequest(t *testing.T) {
 	want.Call, want.Outcome = calls[0].Key, contextmeasure.OutcomeOK
 	assert.Equal(t, &want, completion.Facts)
 	assert.Equal(t, "rewritten", provider.requestModel)
+}
+
+func TestCallRecordingFactsMatchedNonTextView(t *testing.T) {
+	store := &recordingTestStore{Store: inmem.New()}
+	provider := &recordingFactsClient{recordingTestClient: &recordingTestClient{store: store, response: &model.Response{}}, limits: model.ContextLimits{ImageTokens: 700}, resolved: "canonical"}
+	view := []*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{
+		model.TextPart{Text: "abc"}, model.ImagePart{Format: model.ImageFormatPNG, Bytes: []byte{1}},
+	}}}
+	recording := NewCallRecording(store, "root", index.ViewRef{}, view, 0)
+	client := &callRecordingClient{inner: provider, recording: recording}
+	req := &model.Request{Messages: view}
+	_, err := client.Complete(recordingCallContext(1), req)
+	require.NoError(t, err)
+	calls, err := store.ListCalls(t.Context(), "root", "run")
+	require.NoError(t, err)
+	require.Len(t, calls, 1)
+	completion, err := callrecord.DecodeCompletion(calls[0].Completion)
+	require.NoError(t, err)
+	require.NotNil(t, completion.Facts)
+	assert.Equal(t, 3, completion.Facts.ViewTextBytes)
+	assert.Equal(t, 700, completion.Facts.ViewNonText)
+	assert.True(t, completion.Facts.ViewBearing)
 }
 
 func (c *recordingFactsClient) ContextLimits(_ context.Context, req *model.Request) (model.ContextLimits, string, bool) {

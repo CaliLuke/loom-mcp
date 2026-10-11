@@ -10,6 +10,14 @@ import (
 )
 
 type (
+	// ContextSettings snapshots both opt-in thresholds and always-on recovery.
+	ContextSettings struct {
+		Settings
+		Threshold     bool                `json:"threshold,omitzero"`
+		GuardMargin   contextmeasure.Rate `json:"guard_margin,omitzero"`
+		DisableRecall bool                `json:"disable_recall,omitzero"`
+	}
+
 	// Settings holds per-run trigger settings. Zero fields resolve to the design
 	// defaults against the smallest recorded usable model budget.
 	Settings struct {

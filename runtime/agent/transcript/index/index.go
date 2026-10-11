@@ -103,13 +103,15 @@ type (
 	// ViewRef names the committed index and one step's pending entries. All
 	// fields after Pending are reserved and must remain zero during K7.
 	ViewRef struct {
-		IndexHead      runstore.Hash  `json:"index_head,omitzero"`
-		Pending        []MessageEntry `json:"pending,omitzero"`
-		Checkpoint     *runstore.Hash `json:"checkpoint,omitzero"`
-		TailFrom       MessageID      `json:"tail_from,omitzero"`
-		ClearedThrough MessageID      `json:"cleared_through,omitzero"`
-		Pinned         []MessageID    `json:"pinned,omitzero"`
-		Budget         RenderBudget   `json:"budget,omitzero"`
+		IndexHead         runstore.Hash  `json:"index_head,omitzero"`
+		Pending           []MessageEntry `json:"pending,omitzero"`
+		Checkpoint        *runstore.Hash `json:"checkpoint,omitzero"`
+		TailFrom          MessageID      `json:"tail_from,omitzero"`
+		ClearedThrough    MessageID      `json:"cleared_through,omitzero"`
+		PreviewThrough    MessageID      `json:"preview_through,omitzero"`
+		ForceClearThrough MessageID      `json:"force_clear_through,omitzero"`
+		Pinned            []MessageID    `json:"pinned,omitzero"`
+		Budget            RenderBudget   `json:"budget,omitzero"`
 	}
 
 	// IndexSegment contains a nonempty contiguous slice of immutable entries.

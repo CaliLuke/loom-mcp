@@ -132,7 +132,7 @@ func viewSizes(state State, entries []index.MessageEntry, view index.ViewRef) (i
 }
 
 func entrySize(entry index.MessageEntry, view index.ViewRef) (int, int) {
-	if entry.Kind == index.ToolResult && entry.ID <= view.ClearedThrough && !entry.Keep {
+	if entry.Kind == index.ToolResult && (entry.ID <= view.ForceClearThrough || (entry.ID <= view.ClearedThrough && !entry.Keep)) {
 		id := ""
 		if len(entry.ToolUseIDs) > 0 {
 			id = entry.ToolUseIDs[0]
@@ -141,7 +141,14 @@ func entrySize(entry index.MessageEntry, view index.ViewRef) (int, int) {
 		if entry.Result != nil && entry.Result.Error != nil {
 			errorText = entry.Result.Error.Text
 		}
-		return len(checkpoint.ClearedResult(entry.ContentBytes(), id, errorText)), 0
+		return len(checkpoint.ClearedResult(entry.ContentBytes(), id, errorText)) + len(id) + 2, 0
+	}
+	if entry.Kind == index.ToolResult && entry.ID > view.ClearedThrough && entry.ID <= view.PreviewThrough {
+		id := ""
+		if len(entry.ToolUseIDs) > 0 {
+			id = entry.ToolUseIDs[0]
+		}
+		return min(entry.Bytes, view.Budget.PreviewTokens*checkpoint.BytesPerToken*6+len(id)+2), 0
 	}
 	return entry.Bytes, entry.NonText
 }

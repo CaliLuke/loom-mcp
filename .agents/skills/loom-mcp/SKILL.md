@@ -69,6 +69,21 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   recorded-history replay test. Drain running workflows before deploying the
   new version; mismatched and unstamped inputs fail before workflow effects.
 
+- Current workflow protocol is 9. Every agent observes adopted call facts,
+  sends sorted Models and runs the advisory guard, bounded overflow recovery and
+  recall advertising. Threshold compaction stays opt-in. The existing
+  run.ContextRecovery adds GuardMargin (zero=10%) beside DisableRecall; RunInput
+  stamps ContextSettings for every agent. Marked attempts discard all streamed
+  presentations and return ContextOverflow independently of the planner result.
+  context_overflow adopts the full attempt in place of planner_step; RunRecord
+  verifies each recovery from facts. Recover never reads live adapter limits or
+  raises B-derived checkpoint capacity. An unrenderable checkpoint budget wraps
+  the observed provider overflow with its typed byte shortfall, emits
+  context_budget_too_small and spends no retry. Views carry monotone
+  PreviewThrough/ForceClearThrough and shared preview limits, including forced
+  Keep placeholders. The real v9 history covers recovery, lookup and finalization;
+  v5-v8 reject before effects. Structural templates stay version 5.
+
 - Workflow protocol 6 uses immutable `runtime/agent/transcript/index` entries
   and linked segments. Workflows retain entries and IndexHead; planner activity
   inputs carry ViewRef (head plus one step's Pending), never accumulated messages,

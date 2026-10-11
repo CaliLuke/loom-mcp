@@ -30,8 +30,13 @@ func compactionModels(state compaction.State) []api.ModelContext {
 // prepareCompaction decides from adopted evidence before every schedule, including finalize.
 func prepareCompaction(base *workflowPlanInput, input *PlanActivityInput) {
 	base.compactionDecision = compaction.Decision{}
-	input.Models = nil
-	if base.compaction == nil {
+	input.Models = compactionModels(base.compactionState)
+	input.ContextSettings = base.contextSettings
+	if input.ContextSettings.GuardMargin.Bytes == 0 {
+		input.ContextSettings = resolvedContextSettings(base.compaction, base.recovery)
+		base.contextSettings = input.ContextSettings
+	}
+	if base.compaction == nil || input.Overflow != nil {
 		return
 	}
 	state := base.compactionState
@@ -81,14 +86,13 @@ func compactionRecord(wf engine.WorkflowContext, base *workflowPlanInput, input 
 }
 
 func (r *Runtime) adoptCompaction(wf engine.WorkflowContext, base *workflowPlanInput, input PlanActivityInput, out *PlanActivityOutput, view index.ViewRef) error {
-	if base.compaction == nil {
-		return nil
-	}
 	if out.Recovery == nil {
 		if input.Recovery == nil {
 			base.compactionSuppressed = base.compactionDecision.Skipped == compaction.NoProgress
 		}
-		base.compactionState = base.compactionDecision.State
+		if base.compaction != nil && input.Overflow == nil {
+			base.compactionState = base.compactionDecision.State
+		}
 		if base.compactionDecision.Tier == compaction.Clear || base.compactionDecision.Tier == compaction.Evict {
 			base.compactionState.Recall = base.compactionState.Recall.Refilled(pureCompactionSettings(base.compaction))
 			base.recallEpisode++
@@ -103,6 +107,10 @@ func (r *Runtime) adoptCompaction(wf engine.WorkflowContext, base *workflowPlanI
 		return err
 	}
 
+	return r.publishCompactionDiagnostics(wf, base, input)
+}
+
+func (r *Runtime) publishCompactionDiagnostics(wf engine.WorkflowContext, base *workflowPlanInput, input PlanActivityInput) error {
 	flags := base.compactionState.Flags
 	diagnostics := []struct {
 		kind            hooks.EventType
@@ -125,7 +133,7 @@ func (r *Runtime) adoptCompaction(wf engine.WorkflowContext, base *workflowPlanI
 }
 
 func (r *Runtime) publishRecallDisabled(wf engine.WorkflowContext, base *workflowPlanInput, input PlanActivityInput, view index.ViewRef) error {
-	if base.recovery.DisableRecall && (view.Checkpoint != nil || view.ClearedThrough > 0) && !base.recallDisabledPublished {
+	if base.recovery.DisableRecall && (view.Checkpoint != nil || view.ClearedThrough > 0 || view.PreviewThrough > 0 || view.ForceClearThrough > 0) && !base.recallDisabledPublished {
 		event := hooks.NewContextDiagnosticEvent(input.RunID, input.AgentID, input.RunContext.SessionID, hooks.ContextRecallDisabled, wf.Now())
 		if err := r.publishHook(wf.Context(), event, input.RunContext.TurnID); err != nil {
 			return err

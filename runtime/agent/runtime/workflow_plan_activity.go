@@ -16,8 +16,10 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/overflow"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 )
@@ -51,14 +53,20 @@ func validatePlanActivityOutput(out *PlanActivityOutput, input PlanActivityInput
 	if out == nil {
 		return fmt.Errorf("runPlanActivity received nil PlanActivityOutput")
 	}
-	if out.Result == nil && out.Recovery == nil {
+	if out.Result == nil && out.Recovery == nil && out.ContextOverflow == nil {
 		return fmt.Errorf("runPlanActivity received nil PlanResult")
 	}
 	if out.Result != nil && out.Recovery != nil {
 		return fmt.Errorf("runPlanActivity received both PlanResult and Recovery")
 	}
+	if out.ContextOverflow != nil && (out.Result != nil || out.Recovery != nil) {
+		return errors.New("overflow output must not contain a result or model recovery")
+	}
 	if err := model.ValidateTokenUsage(out.Usage); err != nil {
 		return fmt.Errorf("runPlanActivity received invalid Usage: %w", err)
+	}
+	if out.ContextOverflow != nil {
+		return nil
 	}
 	if out.Recovery != nil {
 		if err := validateModelRecovery(out.Recovery, input); err != nil {
@@ -184,7 +192,7 @@ func validatePlannerRecoveryCatalog(result *planner.PlanResult, input PlanActivi
 // recovery and usage aggregation. The caller still reports aggregation errors.
 func followingPlanPublication(usage model.TokenUsage, following []planActivityPublication) planActivityPublication {
 	return func(out *PlanActivityOutput) (hooks.Event, error) {
-		if len(following) == 0 || out.Recovery != nil {
+		if len(following) == 0 || out.Recovery != nil || out.ContextOverflow != nil {
 			return nil, nil
 		}
 		if !planPublicationUsageFits(usage, out.Usage) {
@@ -254,7 +262,7 @@ func (r *Runtime) runPlanActivity(
 	if err := validatePlanActivityOutput(out, input); err != nil {
 		return nil, err
 	}
-	if err := validateCompactionFacts(base, out); err != nil {
+	if err := validateCompactionFacts(out); err != nil {
 		return nil, err
 	}
 	// Workflow input owns policy, cap, and attempt state. Activity output carries
@@ -263,6 +271,9 @@ func (r *Runtime) runPlanActivity(
 	out.AllowedTools = cloneToolIdents(input.AllowedTools)
 	out.PolicyCaps = input.PolicyCaps
 	out.Attempt = input.RunContext.Attempt
+	if out.ContextOverflow != nil {
+		return out, nil
+	}
 	if err := r.commitPlanActivityOutput(wfCtx, base, input, out, following...); err != nil {
 		return nil, err
 	}
@@ -282,6 +293,8 @@ func (r *Runtime) runPlanActivityRecovering(
 	following ...planActivityPublication,
 ) (*PlanActivityOutput, error) {
 	var recoveryUsage model.TokenUsage
+	step := overflow.Step{ProviderLeft: 2, Rejected: make(map[string]int)}
+	rejectedCalls := make(map[string]runstore.CallKey)
 	for {
 		publication := followingPlanPublication(recoveryUsage, following)
 		out, err := r.runPlanActivity(wfCtx, base, activityName, options, input, hardDeadline, publication)
@@ -291,6 +304,12 @@ func (r *Runtime) runPlanActivityRecovering(
 		recoveryUsage, err = checkedAddTokenUsage(recoveryUsage, out.Usage)
 		if err != nil {
 			return nil, fmt.Errorf("aggregate model recovery usage: %w", err)
+		}
+		if out.ContextOverflow != nil {
+			if err := r.recoverOverflow(wfCtx, base, &input, out, &step, rejectedCalls, nextAttempt); err != nil {
+				return nil, err
+			}
+			continue
 		}
 		if out.Recovery == nil {
 			out.Usage = recoveryUsage
@@ -379,15 +398,13 @@ func (r *Runtime) commitPlanActivityOutput(wfCtx engine.WorkflowContext, base *w
 }
 
 // validateCompactionFacts enforces the one-fact-per-adopted-key boundary.
-func validateCompactionFacts(base *workflowPlanInput, out *PlanActivityOutput) error {
-	if base.compaction != nil {
-		if len(out.Facts) != len(out.CallKeys) {
-			return fmt.Errorf("planner facts must parallel CallKeys")
-		}
-		for i, key := range out.CallKeys {
-			if out.Facts[i].Call != key {
-				return fmt.Errorf("planner fact %d does not match adopted CallKey", i)
-			}
+func validateCompactionFacts(out *PlanActivityOutput) error {
+	if len(out.Facts) != len(out.CallKeys) {
+		return fmt.Errorf("planner facts must parallel CallKeys")
+	}
+	for i, key := range out.CallKeys {
+		if out.Facts[i].Call != key {
+			return fmt.Errorf("planner fact %d does not match adopted CallKey", i)
 		}
 	}
 	return nil
@@ -406,6 +423,8 @@ func plannerAdoptionEvent(wfCtx engine.WorkflowContext, base *workflowPlanInput,
 	}
 	event := hooks.NewPlannerStepEvent(input.RunID, input.AgentID, input.RunContext.SessionID, input.Step, view, out.CallKeys, base.protocolVersion, wfCtx.Now())
 	event.RecoverySettings = new(base.recovery)
+	settingsSnapshot := input.ContextSettings
+	event.ContextSettings = &settingsSnapshot
 	event.Recovery, event.Recovering = out.Recovery != nil, input.Recovery != nil
 	if base.compaction != nil {
 		settings := pureCompactionSettings(base.compaction)

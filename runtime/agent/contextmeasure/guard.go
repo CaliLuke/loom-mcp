@@ -22,8 +22,9 @@ type GuardCount struct {
 	Latency                 time.Duration
 }
 
-// GuardTokens counts only requests above the rational trigger threshold, trusts
-// exact counts only, and adds thinking excluded by the provider counter.
+// GuardTokens counts only requests above the rational trigger threshold, using
+// the upper clamp rate (1/2) for count eligibility before calibration. It trusts
+// exact counts only and adds thinking excluded by the provider counter.
 // A zero triggerAt disables counting; the estimate and calibrated GuardOn still
 // apply. triggerAt is a threshold fraction, not an estimation rate default.
 func GuardTokens(ctx context.Context, counter model.TokenCounter, req *model.Request, rate Rate, calibrated bool, budget GuardBudget, triggerAt Rate) GuardCount {
@@ -37,7 +38,11 @@ func GuardTokens(ctx context.Context, counter model.TokenCounter, req *model.Req
 		Tokens:  Estimate(rate, facts.FixedBytes, facts.TextBytes-facts.FixedBytes, facts.NonText),
 		GuardOn: known && calibrated,
 	}
-	if !known || counter == nil || !aboveTrigger(result.Tokens, budget.Tokens, triggerAt) {
+	countEstimate := result.Tokens
+	if !calibrated {
+		countEstimate = Estimate(Rate{1, 2}, facts.FixedBytes, facts.TextBytes-facts.FixedBytes, facts.NonText)
+	}
+	if !known || counter == nil || !aboveTrigger(countEstimate, budget.Tokens, triggerAt) {
 		return result
 	}
 	start := time.Now()

@@ -13,12 +13,15 @@ import (
 // https://repost.aws/knowledge-center/bedrock-validation-exception-errors
 // Claude documents "prompt is too long":
 // https://platform.claude.com/docs/en/build-with-claude/context-windows
+// Older Claude input-plus-output diagnostic: https://github.com/anthropics/claude-code/issues/52
 // The Titan "Too many input tokens" body is captured at:
 // https://www.philschmid.de/amazon-titan-embeddings
 func bedrockContextOverflowMessage(message string) bool {
 	message = strings.ToLower(message)
 	return strings.Contains(message, "input is too long for requested model") ||
 		strings.Contains(message, "prompt is too long") ||
+		strings.HasPrefix(message, "input length and `max_tokens` exceed context limit") ||
+		strings.HasPrefix(message, "input length and max_tokens exceed context limit") ||
 		strings.Contains(message, "too many input tokens")
 }
 

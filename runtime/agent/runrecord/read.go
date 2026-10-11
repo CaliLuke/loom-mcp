@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/callrecord"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/compaction"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextmeasure"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
@@ -27,13 +29,17 @@ type reader struct {
 }
 
 type runReader struct {
-	owner       *reader
-	run         Run
-	adopted     map[runstore.CallKey]bool
-	renderer    index.Renderer
-	rendered    []index.MessageEntry
-	views       map[runstore.Hash][]*model.Message
-	checkpoints map[string]bool
+	owner         *reader
+	run           Run
+	adopted       map[runstore.CallKey]bool
+	renderer      index.Renderer
+	rendered      []index.MessageEntry
+	views         map[runstore.Hash][]*model.Message
+	checkpoints   map[string]bool
+	state         compaction.State
+	overflowCalls map[runstore.CallKey]bool
+	callRecords   []runstore.CallRecord
+	byKey         map[runstore.CallKey]runstore.CallRecord
 }
 
 // Read reconstructs a parent-first run tree from root-scoped content and the
@@ -54,7 +60,16 @@ func (r *reader) readTree(runID string, seen map[string]bool) error {
 		return nil
 	}
 	seen[runID] = true
-	rr := runReader{owner: r, run: Run{RunID: runID}, adopted: make(map[runstore.CallKey]bool), views: make(map[runstore.Hash][]*model.Message), checkpoints: make(map[string]bool)}
+	rr := runReader{owner: r, run: Run{RunID: runID}, adopted: make(map[runstore.CallKey]bool), views: make(map[runstore.Hash][]*model.Message), checkpoints: make(map[string]bool), overflowCalls: make(map[runstore.CallKey]bool)}
+	calls, err := r.store.ListCalls(r.ctx, r.record.RootRunID, runID)
+	if err != nil {
+		return fmt.Errorf("list calls: %w", err)
+	}
+	rr.callRecords = calls
+	rr.byKey = make(map[runstore.CallKey]runstore.CallRecord, len(calls))
+	for _, call := range calls {
+		rr.byKey[call.Key] = call
+	}
 	children, err := rr.readEvents()
 	if err != nil {
 		return err
@@ -128,6 +143,9 @@ func (r *runReader) readEvent(event *runlog.Event) (string, error) {
 		}
 		return link.ChildRunID, nil
 	}
+	if event.Type == hooks.ContextOverflow {
+		return "", r.readOverflow(event)
+	}
 	if event.Type == hooks.PlannerStep {
 		return "", r.readStep(event)
 	}
@@ -138,27 +156,7 @@ func (r *runReader) readEvent(event *runlog.Event) (string, error) {
 	if event.Type == hooks.RunSealed {
 		return "", r.readSeal(event)
 	}
-	if event.Type == hooks.ContextCompacted || event.Type == hooks.ContextCompactionSkipped || event.Type == hooks.ContextOverflow {
-		if event.Type == hooks.ContextCompacted && r.run.CompactionSettings != nil {
-			r.run.Recall = r.run.Recall.Refilled(*r.run.CompactionSettings)
-		}
-		// The common envelope reads canonical compaction keys and retained K8
-		// exports. K12 produces an empty call_keys list.
-		var adoption struct {
-			CallKeys []runstore.CallKey `json:"call_keys,case:ignore"`
-			ViewRef  *index.ViewRef     `json:"view_ref,case:ignore"`
-		}
-		if err := json.Unmarshal(event.Payload, &adoption); err != nil {
-			return "", err
-		}
-		if err := r.adopt(adoption.CallKeys); err != nil {
-			return "", err
-		}
-		if adoption.ViewRef != nil {
-			return "", r.resolveView(*adoption.ViewRef)
-		}
-	}
-	return "", nil
+	return "", r.readCompactionRecord(event)
 }
 
 func (r *runReader) adopt(keys []runstore.CallKey) error {
@@ -245,10 +243,16 @@ func (r *runReader) readStep(event *runlog.Event) error {
 	if err := r.recordRecoverySettings(step.RecoverySettings); err != nil {
 		return err
 	}
+	if err := r.recordContextSettings(step.ContextSettings); err != nil {
+		return err
+	}
 	if !r.run.Sealed {
 		r.run.IndexHead = step.IndexHead
 	}
 	if err := r.adopt(step.CallKeys); err != nil {
+		return err
+	}
+	if err := r.observeStepFacts(step.CallKeys); err != nil {
 		return err
 	}
 	return r.resolveView(step.ViewRef)
@@ -269,7 +273,7 @@ func (r *runReader) recordProtocolVersion(version int) error {
 
 // project reconstructs the exact request view, including bounded checkpoint and cleared results.
 func (r *runReader) project(view index.ViewRef) ([]*model.Message, error) {
-	if view.Checkpoint == nil && view.TailFrom <= 1 && view.ClearedThrough == 0 {
+	if view.Checkpoint == nil && view.TailFrom <= 1 && view.ClearedThrough == 0 && view.PreviewThrough == 0 && view.ForceClearThrough == 0 {
 		return r.render(view.IndexHead)
 	}
 	source := r.owner.source(r.owner.record.RootRunID)
@@ -309,6 +313,9 @@ func (r *runReader) readSeal(event *runlog.Event) error {
 	if err := r.recordRecoverySettings(seal.RecoverySettings); err != nil {
 		return err
 	}
+	if err := r.recordContextSettings(seal.ContextSettings); err != nil {
+		return err
+	}
 	r.run.Sealed = true
 	r.run.IndexHead = seal.IndexHead
 	_, err := r.render(seal.IndexHead)
@@ -337,5 +344,70 @@ func (r *runReader) recordRecoverySettings(settings *run.ContextRecovery) error 
 		return fmt.Errorf("conflicting recorded recovery settings")
 	}
 	r.run.RecoverySettings = settings
+	return nil
+}
+
+func (r *runReader) recordContextSettings(settings *compaction.ContextSettings) error {
+	if settings == nil {
+		return nil
+	}
+	if r.run.ContextSettings == nil {
+		r.run.Recall = compaction.NewRecall(settings.Settings)
+	} else if *r.run.ContextSettings != *settings {
+		return fmt.Errorf("conflicting recorded context settings")
+	}
+	r.run.ContextSettings = settings
+	return nil
+}
+
+func (r *runReader) observeStepFacts(keys []runstore.CallKey) error {
+	var facts []contextmeasure.RequestFacts
+	for _, key := range keys {
+		record, ok := r.byKey[key]
+		if !ok {
+			return fmt.Errorf("runrecord: adopted call %v is missing", key)
+		}
+		if record.State == runstore.CallStarted {
+			continue
+		}
+		completion, err := callrecord.DecodeCompletion(record.Completion)
+		if err != nil {
+			return err
+		}
+		if completion.Facts != nil {
+			facts = append(facts, *completion.Facts)
+		}
+	}
+	r.state = compaction.Observe(r.state, facts)
+	return nil
+}
+
+func (r *runReader) readCompactionRecord(event *runlog.Event) error {
+	if event.Type == hooks.ContextCompacted || event.Type == hooks.ContextCompactionSkipped {
+		if event.Type == hooks.ContextCompacted {
+			settings := compaction.Settings{}
+			if r.run.ContextSettings != nil {
+				settings = r.run.ContextSettings.Settings
+			} else if r.run.CompactionSettings != nil {
+				settings = *r.run.CompactionSettings
+			}
+			r.run.Recall = r.run.Recall.Refilled(settings)
+		}
+		// The common envelope reads canonical compaction keys and retained K8
+		// exports. K12 produces an empty call_keys list.
+		var adoption struct {
+			CallKeys []runstore.CallKey `json:"call_keys,case:ignore"`
+			ViewRef  *index.ViewRef     `json:"view_ref,case:ignore"`
+		}
+		if err := json.Unmarshal(event.Payload, &adoption); err != nil {
+			return err
+		}
+		if err := r.adopt(adoption.CallKeys); err != nil {
+			return err
+		}
+		if adoption.ViewRef != nil {
+			return r.resolveView(*adoption.ViewRef)
+		}
+	}
 	return nil
 }

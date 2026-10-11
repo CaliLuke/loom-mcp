@@ -22,11 +22,11 @@ type recallCharge struct {
 // the loader before the model sees this first shortened view.
 func prepareRecall(base *workflowPlanInput, input *PlanActivityInput) {
 	base.recallCharges = nil
-	shortened := input.View.Checkpoint != nil || input.View.ClearedThrough > 0 || input.View.TailFrom > 1
+	shortened := input.View.Checkpoint != nil || input.View.ClearedThrough > 0 || input.View.TailFrom > 1 || input.View.PreviewThrough > 0 || input.View.ForceClearThrough > 0
 	base.recallAdvertised = base.recallAdvertised || shortened
 	base.recallAvailable = false
 	input.ExtraTools = nil
-	if input.ToolsDisabled || base.compaction == nil || base.recovery.DisableRecall || !base.recallAdvertised || input.Finalize != nil || (input.Recovery != nil && input.Recovery.DisableTools) {
+	if input.ToolsDisabled || base.recovery.DisableRecall || !base.recallAdvertised || input.Finalize != nil || (input.Recovery != nil && input.Recovery.DisableTools) {
 		return
 	}
 	spec := recall.Spec()

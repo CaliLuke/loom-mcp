@@ -25,6 +25,10 @@ var bedrockOverflowBodies = []string{
 	`{"message":"Input is too long for requested model."}`,
 	`{"message":"prompt is too long: 213462 tokens > 200000 maximum"}`,
 	`{"message":"Too many input tokens. Max input tokens: 8192, request input token count: 18422"}`,
+	// Older Claude diagnostic: https://github.com/anthropics/claude-code/issues/52.
+	// ValidationException envelope: https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html.
+	"{\"message\":\"input length and `max_tokens` exceed context limit: 186028 + 20000 > 204698, decrease input length or `max_tokens` and try again\"}",
+	`{"message":"input length and max_tokens exceed context limit: 186028 + 20000 > 204698"}`,
 }
 
 func testContextOverflow(t *testing.T) {

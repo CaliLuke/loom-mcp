@@ -12,6 +12,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/callrecord"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextmeasure"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/overflow"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 )
@@ -24,19 +25,24 @@ type (
 	// CallRecording owns call evidence for one activity attempt. Workflow state
 	// owns run-level adoption and growth event publication.
 	CallRecording struct {
-		store     runstore.Store
-		scope     string
-		ref       index.ViewRef
-		view      []*model.Message
-		viewErr   error
-		step      int
-		mu        sync.Mutex
-		keys      []runstore.CallKey
-		completed []runstore.CallKey
-		facts     map[runstore.CallKey]contextmeasure.RequestFacts
-		growth    *RequestGrowth
-		streams   []*callRecordingStream
-		failures  []error
+		store        runstore.Store
+		scope        string
+		ref          index.ViewRef
+		view         []*model.Message
+		viewErr      error
+		step         int
+		mu           sync.Mutex
+		keys         []runstore.CallKey
+		completed    []runstore.CallKey
+		facts        map[runstore.CallKey]contextmeasure.RequestFacts
+		growth       *RequestGrowth
+		streams      []*callRecordingStream
+		failures     []error
+		overflowStep overflow.Step
+		models       []api.ModelContext
+		guardMargin  contextmeasure.Rate
+		triggerAt    contextmeasure.Rate
+		marked       *contextmeasure.ContextOverflow
 	}
 
 	callRecordingClient struct {
@@ -64,6 +70,26 @@ func NewCallRecording(store runstore.Store, scope string, ref index.ViewRef, vie
 		recording.view = snapshot
 	}
 	return recording
+}
+
+// Overflow returns an owned copy of the attempt's durable rejection.
+func (r *CallRecording) Overflow() *contextmeasure.ContextOverflow {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.marked == nil {
+		return nil
+	}
+	copy := *r.marked
+	return &copy
+}
+
+func (r *CallRecording) configureOverflow(input *PlanActivityInput) {
+	if input.Overflow != nil {
+		r.overflowStep = *input.Overflow
+	}
+	r.models = input.Models
+	r.guardMargin = input.ContextSettings.GuardMargin
+	r.triggerAt = input.ContextSettings.TriggerAt
 }
 
 func (c *callRecordingClient) Complete(ctx context.Context, req *model.Request) (*model.Response, error) {
@@ -194,19 +220,16 @@ func recordedCallError(err error, kind string) *callrecord.CallError {
 
 // begin validates identity and commits the request before the registered client runs.
 func (r *CallRecording) begin(ctx context.Context, req *model.Request, registered model.Client) (*recordedCall, error) {
-	info, ok := model.CallInfoFrom(ctx)
-	if !ok || info.Attempt < 1 || info.Seq < 1 || info.RunID == "" || info.RootRunID == "" || info.RootRunID != r.scope {
-		return nil, fmt.Errorf("record model call: valid CallInfo with positive activity attempt and sequence is required")
-	}
-	if r.viewErr != nil {
-		return nil, r.viewErr
+	info, err := r.recordingCallInfo(ctx)
+	if err != nil {
+		return nil, err
 	}
 	parts, sizes, err := callrecord.BuildRequest(ctx, r.store, r.scope, req, r.ref, r.view)
 	if err != nil {
 		return nil, fmt.Errorf("record model request: %w", err)
 	}
 	key := runstore.CallKey{RunID: info.RunID, Seq: info.Seq, Attempt: info.Attempt}
-	facts, err := r.measureRequest(ctx, req, registered, key, info.ModelID)
+	facts, limits, err := r.measureRequest(ctx, req, registered, key, info.ModelID)
 	if err != nil {
 		return nil, err
 	}
@@ -222,11 +245,16 @@ func (r *CallRecording) begin(ctx context.Context, req *model.Request, registere
 	}
 	r.mu.Lock()
 	r.keys = append(r.keys, key)
+	r.facts[key] = facts
 	if r.growth == nil && sizes.Outside > sizes.Inside {
 		r.growth = &RequestGrowth{Key: key, Inside: sizes.Inside, Outside: sizes.Outside}
 	}
 	r.mu.Unlock()
-	return &recordedCall{recording: r, record: record, started: now, facts: facts}, nil
+	call := &recordedCall{recording: r, record: record, started: now, facts: facts}
+	if err := r.checkOverflow(ctx, req, registered, call, limits); err != nil {
+		return nil, err
+	}
+	return call, nil
 }
 
 func (c *recordedCall) complete(ctx context.Context, response *model.Response, usage model.TokenUsage, primary error, kind string) (writeErr error) {
@@ -238,17 +266,20 @@ func (c *recordedCall) complete(ctx context.Context, response *model.Response, u
 		}
 	}()
 	facts := c.facts.WithResult(usage, primary)
+	source := ""
+	switch {
+	case kind == "context_budget":
+		facts.Outcome, source = contextmeasure.OutcomePreSendRejected, contextmeasure.OverflowGuard
+	case kind == "context_overflow_no_progress":
+		source = contextmeasure.OverflowNoProgress
+	case facts.Outcome == contextmeasure.OutcomeOverflow:
+		source = contextmeasure.OverflowProvider
+	}
 	completion := callrecord.Completion{Usage: usage, Latency: time.Since(c.started), Facts: &facts}
-	if response != nil {
-		data, err := callrecord.Encode(response)
-		if err != nil {
-			return err
-		}
-		hash, err := c.recording.store.Put(ctx, c.recording.scope, data)
-		if err != nil {
-			return fmt.Errorf("store model response: %w", err)
-		}
-		completion.Response = &hash
+	var err error
+	completion.Response, err = c.storeResponse(ctx, response)
+	if err != nil {
+		return err
 	}
 	state := runstore.CallCompleted
 	if primary != nil {
@@ -264,20 +295,13 @@ func (c *recordedCall) complete(ctx context.Context, response *model.Response, u
 	if err := c.recording.store.PutCall(ctx, c.recording.scope, record); err != nil {
 		return fmt.Errorf("write model call completion: %w", err)
 	}
-	c.recording.mu.Lock()
-	c.recording.facts[record.Key] = facts
-	c.recording.mu.Unlock()
-	if state == runstore.CallCompleted {
-		c.recording.mu.Lock()
-		c.recording.completed = append(c.recording.completed, record.Key)
-		c.recording.mu.Unlock()
-	}
+	c.recording.adoptCompletion(record.Key, facts, source, primary, state == runstore.CallCompleted)
 	return nil
 }
 
 // measureRequest snapshots facts before sending, with limits from the registered
 // client rather than the outer planner wrappers that drop optional capabilities.
-func (r *CallRecording) measureRequest(ctx context.Context, req *model.Request, registered model.Client, key runstore.CallKey, modelID string) (contextmeasure.RequestFacts, error) {
+func (r *CallRecording) measureRequest(ctx context.Context, req *model.Request, registered model.Client, key runstore.CallKey, modelID string) (contextmeasure.RequestFacts, model.ContextLimits, error) {
 	var limits model.ContextLimits
 	resolved := req.Model
 	if contextInfo, ok := registered.(model.ContextInfo); ok {
@@ -289,11 +313,11 @@ func (r *CallRecording) measureRequest(ctx context.Context, req *model.Request, 
 	}
 	facts, err := contextmeasure.Measure(req, limits, r.view)
 	if err != nil {
-		return contextmeasure.RequestFacts{}, fmt.Errorf("measure model request: %w", err)
+		return contextmeasure.RequestFacts{}, limits, fmt.Errorf("measure model request: %w", err)
 	}
 	facts.Call = key
 	facts.Model = firstNonEmpty(resolved, req.Model, modelID)
-	return facts, nil
+	return facts, limits, nil
 }
 
 // finishActivity preserves the activity error and rejects outputs after a failed write.
@@ -312,4 +336,100 @@ func (r *CallRecording) finishActivity(ctx context.Context, out **PlanActivityOu
 		(*out).RequestGrowth = r.RequestGrowth()
 		(*out).ProducingCall = r.ProducingCall(events.eventCallKeys())
 	}
+}
+
+// checkOverflow runs only after the started record has been persisted.
+func (r *CallRecording) checkOverflow(ctx context.Context, req *model.Request, registered model.Client, call *recordedCall, limits model.ContextLimits) error {
+	rate, calibrated := contextmeasure.Rate{Tokens: 1, Bytes: 3}, false
+	for _, adopted := range r.models {
+		if adopted.Model == call.facts.Model {
+			rate, calibrated = adopted.Rate, adopted.Calibrated
+			break
+		}
+	}
+	counter, _ := registered.(model.TokenCounter)
+	budget := max(0, call.facts.ContextWindow-call.facts.OutputReserve)
+	trigger := r.triggerAt
+	if trigger.Bytes == 0 {
+		trigger = contextmeasure.Rate{Tokens: 85, Bytes: 100}
+	}
+	count := contextmeasure.GuardTokens(ctx, counter, req, rate, calibrated, contextmeasure.GuardBudget{Tokens: budget, ImageTokens: limits.ImageTokens}, trigger)
+	call.facts.CountLatency = count.Latency
+	margin := r.guardMargin
+	if margin.Bytes == 0 {
+		margin = contextmeasure.Rate{Tokens: 1, Bytes: 10}
+	}
+	var rejection error
+	kind := ""
+	switch overflow.Check(r.overflowStep, call.facts, count, overflow.Limits{Budget: budget, GuardMargin: margin}) {
+	case overflow.Send:
+		return nil
+	case overflow.GuardReject:
+		rejection, kind = ErrContextBudget, "context_budget"
+	case overflow.NoProgress:
+		rejection, kind = ErrContextOverflowNoProgress, "context_overflow_no_progress"
+	}
+	if rejection != nil {
+		return errors.Join(rejection, call.complete(context.WithoutCancel(ctx), nil, model.TokenUsage{}, rejection, kind))
+	}
+	return nil
+}
+
+// adoptCompletion marks overflow only after completion evidence is durable.
+func (r *CallRecording) adoptCompletion(key runstore.CallKey, facts contextmeasure.RequestFacts, source string, primary error, completed bool) {
+	r.mu.Lock()
+	r.facts[key] = facts
+	if source != "" && r.marked == nil {
+		ordinal := 0
+		for _, startedKey := range r.keys {
+			if startedKey == key || r.facts[startedKey].Model == facts.Model {
+				ordinal++
+			}
+			if startedKey == key {
+				break
+			}
+		}
+		r.marked = &contextmeasure.ContextOverflow{Source: source, Failed: facts, Ordinal: ordinal, ViewTextBytes: facts.ViewTextBytes}
+		if provider, ok := model.AsProviderError(primary); ok && source == contextmeasure.OverflowProvider {
+			r.marked.Provider = contextmeasure.CaptureProviderFailure(provider)
+		}
+	}
+	r.mu.Unlock()
+	if completed {
+		r.mu.Lock()
+		r.completed = append(r.completed, key)
+		r.mu.Unlock()
+	}
+}
+
+func (r *CallRecording) recordingCallInfo(ctx context.Context) (model.CallInfo, error) {
+	r.mu.Lock()
+	pending := r.marked != nil
+	r.mu.Unlock()
+	if pending {
+		return model.CallInfo{}, ErrContextOverflowPending
+	}
+	info, ok := model.CallInfoFrom(ctx)
+	if !ok || info.Attempt < 1 || info.Seq < 1 || info.RunID == "" || info.RootRunID == "" || info.RootRunID != r.scope {
+		return model.CallInfo{}, fmt.Errorf("record model call: valid CallInfo with positive activity attempt and sequence is required")
+	}
+	if r.viewErr != nil {
+		return model.CallInfo{}, r.viewErr
+	}
+	return info, nil
+}
+
+func (c *recordedCall) storeResponse(ctx context.Context, response *model.Response) (*runstore.Hash, error) {
+	if response != nil {
+		data, err := callrecord.Encode(response)
+		if err != nil {
+			return nil, err
+		}
+		hash, err := c.recording.store.Put(ctx, c.recording.scope, data)
+		if err != nil {
+			return nil, fmt.Errorf("store model response: %w", err)
+		}
+		return &hash, nil
+	}
+	return nil, nil
 }

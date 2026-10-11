@@ -15,6 +15,7 @@ import (
 	"example.com/agentfeatures/gen/features/agents/specialist/exports/delegated"
 	"example.com/agentfeatures/gen/features/toolsets/workflow"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextmeasure"
 	temporalengine "github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine/temporal"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
@@ -40,7 +41,7 @@ import (
 type historyReplayPlanner struct{}
 
 const (
-	workflowHistoryFile        = "testdata/workflow_protocol_v8.json"
+	workflowHistoryFile        = "testdata/workflow_protocol_v9.json"
 	workflowHistoryIdentity    = "loom-mcp-history-recorder"
 	workflowHistoryStickyQueue = "loom-mcp-history-recorder-sticky"
 )
@@ -56,6 +57,7 @@ func TestGeneratedFeatureWorkflowReplay(t *testing.T) {
 		{name: "protocol 5 rejected before effects", previous: 5},
 		{name: "protocol 6 rejected before effects", previous: 6},
 		{name: "protocol 7 rejected before effects", previous: 7},
+		{name: "protocol 8 rejected before effects", previous: 8},
 		{name: "future", rewrite: true},
 		{name: "missing", rewrite: true, missing: true},
 	} {
@@ -124,7 +126,7 @@ func recordWorkflowHistory(t *testing.T, temporalClient client.Client) {
 	registerHistoryReplayAgent(t, fx)
 	_, err := fx.rt.CreateSession(ctx, "sess-protocol-history")
 	require.NoError(t, err)
-	out, err := coordinator.NewClient(fx.rt).Run(ctx, "sess-protocol-history", []*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "record this request"}}}, {Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: strings.Repeat("earlier answer ", 2000)}}}, {Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "continue"}}}}, agentsruntime.WithRunID("run-protocol-history"))
+	out, err := coordinator.NewClient(fx.rt).Run(ctx, "sess-protocol-history", []*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "record this request"}}}, {Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "earlier answer"}}}, {Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: strings.Repeat("earlier history ", 2000)}}}, {Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "recent answer"}}}, {Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "continue"}}}}, agentsruntime.WithRunID("run-protocol-history"))
 	require.NoError(t, err)
 	assert.Equal(t, "history replay complete", messageText(out.Final))
 	history := &historypb.History{}
@@ -188,7 +190,14 @@ func assertWorkflowHistoryAnonymized(t *testing.T, history *historypb.History) {
 
 func registerHistoryReplayAgent(t *testing.T, fx *featureRuntime) {
 	t.Helper()
-	require.NoError(t, fx.rt.RegisterModel("history", modelClientFunc(func(context.Context, *model.Request) (*model.Response, error) {
+	require.NoError(t, fx.rt.RegisterModel("history", modelClientFunc(func(_ context.Context, req *model.Request) (*model.Response, error) {
+		facts, err := contextmeasure.Measure(req, model.ContextLimits{}, nil)
+		if err != nil {
+			return nil, err
+		}
+		if contextmeasure.Estimate(contextmeasure.Rate{}, 0, facts.TextBytes, facts.NonText) > 6000 {
+			return nil, model.NewProviderError("history", "complete", 400, model.ProviderErrorKindContextOverflow, "context_length_exceeded", "recorded overflow", "", false, nil)
+		}
 		return &model.Response{Content: []model.Message{{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "recorded measurement"}}}}, StopReason: "end_turn"}, nil
 	})))
 	require.NoError(t, coordinator.RegisterUsedToolsets(t.Context(), fx.rt, coordinator.WithWorkflowExecutor(newRecordingWorkflowExecutor())))
@@ -265,7 +274,9 @@ func assertHistoryToolContent(t *testing.T, history *historypb.History, protocol
 						plannerSteps++
 						var step hooks.PlannerStepEvent
 						require.NoError(t, json.Unmarshal(input.Payload, &step))
-						assert.Equal(t, plannerSteps, step.Step)
+						if protocol < 9 {
+							assert.Equal(t, plannerSteps, step.Step)
+						}
 						assert.Equal(t, protocol, step.ProtocolVersion)
 						assert.Equal(t, step.IndexHead, step.ViewRef.IndexHead)
 						assert.Nil(t, step.ViewRef.Pending)
@@ -277,9 +288,12 @@ func assertHistoryToolContent(t *testing.T, history *historypb.History, protocol
 				assert.Equal(t, "run-protocol-history", input.RootRunID)
 				if input.SeedMessages {
 					seedCalls++
-					if protocol >= 8 {
+					switch {
+					case protocol >= 9:
+						require.Len(t, input.Items, 5)
+					case protocol >= 8:
 						require.Len(t, input.Items, 3)
-					} else {
+					default:
 						require.Len(t, input.Items, 1)
 					}
 					var message model.Message
@@ -328,6 +342,9 @@ func assertHistoryToolContent(t *testing.T, history *historypb.History, protocol
 					if name == "features.coordinator.resume" {
 						resumeSchedules++
 						wantStep = 1 + resumeSchedules
+					}
+					if protocol >= 9 {
+						wantStep = counts["features.coordinator.plan"] + counts["features.coordinator.resume"]
 					}
 					assert.Equal(t, wantStep, input.Step)
 				}
@@ -399,9 +416,14 @@ func assertHistoryToolContent(t *testing.T, history *historypb.History, protocol
 					assert.Equal(t, output.CallKeys[0], output.Facts[0].Call)
 					assert.True(t, output.Facts[0].ViewBearing)
 				}
-				if protocol >= 8 {
+				switch {
+				case protocol >= 9 && output.ContextOverflow != nil:
+					assert.Nil(t, output.Result)
+					assert.Empty(t, output.ToolCallRefs)
+					assert.Equal(t, "provider", output.ContextOverflow.Source)
+				case protocol >= 8:
 					require.Len(t, output.ToolCallRefs, 1)
-				} else {
+				default:
 					require.Len(t, output.ToolCallRefs, 2)
 				}
 			case "features.coordinator.resume":
@@ -456,7 +478,7 @@ func historyHookInputs(t *testing.T, data []byte) []*api.HookActivityInput {
 	require.NoError(t, json.Unmarshal(input.Payload, &inputs))
 	require.GreaterOrEqual(t, len(inputs), 2)
 	assert.LessOrEqual(t, len(inputs), 3)
-	assert.Equal(t, hooks.PlannerStep, inputs[0].Type)
+	assert.Contains(t, []hooks.EventType{hooks.PlannerStep, hooks.ContextOverflow}, inputs[0].Type)
 	for _, input := range inputs[1:] {
 		assert.Contains(t, []hooks.EventType{hooks.RunPhaseChanged, hooks.ContextCompacted, hooks.ContextCompactionSkipped}, input.Type)
 	}
@@ -471,7 +493,7 @@ func measureHistoryRequest(ctx context.Context, agent planner.PlannerContext, vi
 		return fmt.Errorf("history model is not registered")
 	}
 	messages := make([]*model.Message, 0, 1+len(view))
-	messages = append(messages, &model.Message{Role: model.ConversationRoleSystem, Parts: []model.Part{model.TextPart{Text: strings.Repeat("fixed overhead ", 3000)}}})
+	messages = append(messages, &model.Message{Role: model.ConversationRoleSystem, Parts: []model.Part{model.TextPart{Text: strings.Repeat("fixed overhead ", 40)}}})
 	messages = append(messages, view...)
 	_, err := client.Complete(ctx, &model.Request{Model: "history", Messages: messages})
 	return err

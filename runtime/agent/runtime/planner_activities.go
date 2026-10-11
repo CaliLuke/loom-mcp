@@ -39,17 +39,8 @@ func (r *Runtime) PlanStartActivity(ctx context.Context, input *PlanActivityInpu
 	}
 	input = loadedPlanActivityInput(input, view)
 	defer returnLoadedView(&out, view)
-	if input.Recovery != nil {
-		copy := *input.Recovery
-		data, err := r.RunStore.Get(ctx, input.RunContext.RootRunID, copy.CorrectionRef)
-		if err != nil {
-			return nil, err
-		}
-		copy.Correction = string(data)
-		if err := validateRecoveryCorrection(copy.Correction); err != nil {
-			return nil, err
-		}
-		input.Recovery = &copy
+	if err := r.restoreRecoveryCorrection(ctx, input); err != nil {
+		return nil, err
 	}
 	events := newPlannerEvents(r, input.AgentID, input.RunID, input.RunContext.SessionID, input.RunContext.TurnID)
 	events.step = input.Step
@@ -57,6 +48,7 @@ func (r *Runtime) PlanStartActivity(ctx context.Context, input *PlanActivityInpu
 	recordedView := input.View
 	recordedView.IndexHead, recordedView.Pending = view.Head, nil
 	callRecording := NewCallRecording(r.RunStore, input.RunContext.RootRunID, recordedView, view.Messages, input.Step)
+	callRecording.configureOverflow(input)
 	defer callRecording.finishActivity(ctx, &out, &activityErr, events)
 	reg, agentCtx, err := r.plannerContext(ctx, input, events, recoveryRecorder, callRecording)
 	if err != nil {
@@ -67,6 +59,9 @@ func (r *Runtime) PlanStartActivity(ctx context.Context, input *PlanActivityInpu
 		return nil, err
 	}
 	result, err := r.planStart(ctx, reg, planInput)
+	if out, handled, err := resolvePlanActivityOverflow(ctx, events, callRecording, recoveryRecorder, input); handled {
+		return out, err
+	}
 	if out, handled, err := r.resolvePlanActivityRecovery(ctx, events, recoveryRecorder, input, err); handled {
 		return out, err
 	}
@@ -94,17 +89,8 @@ func (r *Runtime) PlanResumeActivity(ctx context.Context, input *PlanActivityInp
 	}
 	input = loadedPlanActivityInput(input, view)
 	defer returnLoadedView(&out, view)
-	if input.Recovery != nil {
-		copy := *input.Recovery
-		data, err := r.RunStore.Get(ctx, input.RunContext.RootRunID, copy.CorrectionRef)
-		if err != nil {
-			return nil, err
-		}
-		copy.Correction = string(data)
-		if err := validateRecoveryCorrection(copy.Correction); err != nil {
-			return nil, err
-		}
-		input.Recovery = &copy
+	if err := r.restoreRecoveryCorrection(ctx, input); err != nil {
+		return nil, err
 	}
 	events := newPlannerEvents(r, input.AgentID, input.RunID, input.RunContext.SessionID, input.RunContext.TurnID)
 	events.step = input.Step
@@ -112,6 +98,7 @@ func (r *Runtime) PlanResumeActivity(ctx context.Context, input *PlanActivityInp
 	recordedView := input.View
 	recordedView.IndexHead, recordedView.Pending = view.Head, nil
 	callRecording := NewCallRecording(r.RunStore, input.RunContext.RootRunID, recordedView, view.Messages, input.Step)
+	callRecording.configureOverflow(input)
 	defer callRecording.finishActivity(ctx, &out, &activityErr, events)
 	reg, agentCtx, err := r.plannerContext(ctx, input, events, recoveryRecorder, callRecording)
 	if err != nil {
@@ -122,6 +109,9 @@ func (r *Runtime) PlanResumeActivity(ctx context.Context, input *PlanActivityInp
 		return nil, err
 	}
 	result, err := r.planResume(ctx, reg, planInput)
+	if out, handled, err := resolvePlanActivityOverflow(ctx, events, callRecording, recoveryRecorder, input); handled {
+		return out, err
+	}
 	if out, handled, err := r.resolvePlanActivityRecovery(ctx, events, recoveryRecorder, input, err); handled {
 		return out, err
 	}
@@ -171,6 +161,32 @@ func recoveryPlanActivityOutput(input *PlanActivityInput, recovery *ModelRecover
 		PolicyCaps:       input.PolicyCaps,
 		Attempt:          input.RunContext.Attempt,
 	}
+}
+
+// resolvePlanActivityOverflow discards the entire attempt even when its planner
+// swallowed a model failure or returned a usable result from an earlier call.
+func resolvePlanActivityOverflow(ctx context.Context, events *runtimePlannerEvents, calls *CallRecording, recorder *modelRecoveryRecorder, input *PlanActivityInput) (*PlanActivityOutput, bool, error) {
+	failure := calls.Overflow()
+	if failure == nil {
+		return nil, false, nil
+	}
+	events.discardModelPresentations(ctx)
+	if err := events.hookError(); err != nil {
+		return nil, true, err
+	}
+	usage, err := recorder.activityUsage(events.exportUsage())
+	if err != nil {
+		return nil, true, err
+	}
+	return &PlanActivityOutput{ContextOverflow: failure, IndexHead: input.View.IndexHead, Usage: usage}, true, nil
+}
+
+func nonRetryableProviderError(err error) error {
+	provider, ok := model.AsProviderError(err)
+	if ok && !provider.Retryable() {
+		return engine.NewNonRetryableApplicationError(err.Error(), "provider_error."+string(provider.Kind()), nil, err)
+	}
+	return err
 }
 
 func normalizeTranscriptRawJSON(messages []*model.Message) {
@@ -267,10 +283,10 @@ func (r *Runtime) resolvePlanActivityRecovery(
 		return out, true, err
 	}
 	if recoveryErr != nil {
-		return nil, true, recoveryErr
+		return nil, true, nonRetryableProviderError(recoveryErr)
 	}
 	if planErr != nil {
-		return nil, true, planErr
+		return nil, true, nonRetryableProviderError(planErr)
 	}
 	return nil, false, nil
 }
@@ -484,6 +500,23 @@ func (r *Runtime) preparePlanActivityCalls(ctx context.Context, input *PlanActiv
 		result.ToolCalls = calls
 	} else {
 		r.canonicalizePlanActivityToolCalls(result, input)
+	}
+	return nil
+}
+
+// restoreRecoveryCorrection loads only the explicit output-validation correction.
+func (r *Runtime) restoreRecoveryCorrection(ctx context.Context, input *PlanActivityInput) error {
+	if input.Recovery != nil {
+		copy := *input.Recovery
+		data, err := r.RunStore.Get(ctx, input.RunContext.RootRunID, copy.CorrectionRef)
+		if err != nil {
+			return err
+		}
+		copy.Correction = string(data)
+		if err := validateRecoveryCorrection(copy.Correction); err != nil {
+			return err
+		}
+		input.Recovery = &copy
 	}
 	return nil
 }

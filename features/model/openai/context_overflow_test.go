@@ -37,6 +37,24 @@ func testContextOverflow(t *testing.T) {
 }
 
 func testStreamContextOverflow(t *testing.T) {
+	t.Run("nested failure after partial output", func(t *testing.T) {
+		// Nested response.error shape: https://developers.openai.com/api/reference/resources/responses/streaming-events#response.failed
+		// context_length_exceeded fixture: https://github.com/openai/codex/blob/main/codex-rs/codex-api/src/sse/responses.rs
+		wire := newMockOpenAIStream(
+			`{"type":"response.output_text.delta","sequence_number":2,"item_id":"msg_1","output_index":0,"content_index":0,"delta":"partial"}`,
+			`{"type":"response.failed","sequence_number":3,"response":{"id":"resp_1","object":"response","status":"failed","error":{"code":"context_length_exceeded","message":"Your input exceeds the context window of this model."},"usage":null}}`,
+		)
+		stream, err := openAIOverflowClient(t, &mockResponsesClient{stream: wire}).Stream(t.Context(), openAIOverflowRequest())
+		require.NoError(t, err)
+		defer func() { assert.NoError(t, stream.Close()) }()
+		chunk, err := stream.Recv()
+		require.NoError(t, err)
+		assert.IsType(t, model.TextChunk{}, chunk)
+		chunk, err = stream.Recv()
+		assert.Nil(t, chunk)
+		assert.Equal(t, "responses stream", requireOpenAIOverflow(t, err).Operation())
+		assert.Nil(t, stream.Response())
+	})
 	tests := []struct {
 		name string
 		body string

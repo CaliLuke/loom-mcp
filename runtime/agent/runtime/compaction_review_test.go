@@ -200,7 +200,7 @@ func TestWorkflowCompactionHistoryPolicyConflict(t *testing.T) {
 	assert.Empty(t, page.Events)
 }
 
-func TestCompactionOptOut(t *testing.T) {
+func TestThresholdOptOutObservesFacts(t *testing.T) {
 	rt := New()
 	base := &workflowPlanInput{}
 	wf := &testWorkflowContext{ctx: t.Context(), hookRuntime: rt}
@@ -208,12 +208,12 @@ func TestCompactionOptOut(t *testing.T) {
 	for _, fact := range []contextmeasure.RequestFacts{{Model: "rewritten"}, {Model: "unknown", ViewBearing: true}, {Model: "tiny", ViewBearing: true, ContextWindow: 2000}} {
 		require.NoError(t, rt.adoptCompaction(wf, base, input, &PlanActivityOutput{Facts: []contextmeasure.RequestFacts{fact}}, index.ViewRef{}))
 		prepareCompaction(base, &input)
-		assert.Empty(t, input.Models)
-		assert.Equal(t, compaction.State{}, base.compactionState)
+		assert.False(t, input.ContextSettings.Threshold)
+		assert.Equal(t, index.RenderBudget{}, input.View.Budget)
 	}
 	page, err := rt.RunEventStore.List(t.Context(), "run", "", 10)
 	require.NoError(t, err)
-	assert.Empty(t, page.Events)
+	assert.Len(t, page.Events, 3, "all agents publish context diagnostics")
 	for _, test := range []struct {
 		name    string
 		window  int
@@ -243,8 +243,10 @@ func TestCompactionOptOut(t *testing.T) {
 			for step := 0; step < 3; step++ {
 				_, err := rt.runPlanActivity(wf, base, "plan", engine.ActivityOptions{}, PlanActivityInput{AgentID: "agent", RunID: "run", RunContext: base.RunContext, View: base.view()}, time.Time{})
 				require.NoError(t, err)
-				assert.Equal(t, compaction.State{}, base.compactionState)
-				assert.Nil(t, wf.plannerCalls[step].Input.Models)
+				assert.False(t, wf.plannerCalls[step].Input.ContextSettings.Threshold)
+				if !test.rewrite && step > 0 {
+					assert.Len(t, wf.plannerCalls[step].Input.Models, 1)
+				}
 				assert.Equal(t, index.RenderBudget{}, wf.plannerCalls[step].Input.View.Budget)
 			}
 			page, err := rt.RunEventStore.List(t.Context(), "run", "", 100)
@@ -257,7 +259,16 @@ func TestCompactionOptOut(t *testing.T) {
 			if test.rewrite {
 				want = []hooks.EventType{hooks.AssistantMessage, hooks.PlannerStep, hooks.ContextRequestGrowth, hooks.AssistantMessage, hooks.PlannerStep, hooks.AssistantMessage, hooks.PlannerStep}
 			}
-			assert.Equal(t, want, types, "opt-out preserves pre-K12 events")
+			if test.rewrite {
+				want = append(want[:2], append([]hooks.EventType{hooks.ContextUnmeasured}, want[2:]...)...)
+			} else {
+				kind := hooks.ContextLimitsUnknown
+				if test.window > 0 {
+					kind = hooks.ContextBudgetTooSmall
+				}
+				want = append(want[:2], append([]hooks.EventType{kind}, want[2:]...)...)
+			}
+			assert.Equal(t, want, types, "threshold opt-out still observes facts")
 		})
 	}
 }

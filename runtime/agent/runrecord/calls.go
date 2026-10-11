@@ -13,13 +13,8 @@ import (
 )
 
 func (r *runReader) readCalls() error {
-	owner := r.owner
-	calls, err := owner.store.ListCalls(owner.ctx, owner.record.RootRunID, r.run.RunID)
-	if err != nil {
-		return fmt.Errorf("list calls: %w", err)
-	}
 	found := make(map[runstore.CallKey]bool)
-	for _, record := range calls {
+	for _, record := range r.callRecords {
 		call, err := r.readCall(record)
 		if err != nil {
 			return fmt.Errorf("call %+v: %w", record.Key, err)
@@ -85,6 +80,9 @@ func (r *runReader) readPresentations() error {
 			p := Presentation{ID: id, EventKey: event.EventKey, Class: PresentedUnrecorded}
 			if len(commit.CallKeys) != 0 && commit.CallKeys[i] != nil {
 				p.Call = commit.CallKeys[i]
+				if r.overflowCalls[*p.Call] {
+					return fmt.Errorf("runrecord: presentation committed from overflow attempt: %v", *p.Call)
+				}
 				p.Class = PresentedNotAdopted
 				if r.adopted[*p.Call] {
 					p.Class = PresentationAdopted

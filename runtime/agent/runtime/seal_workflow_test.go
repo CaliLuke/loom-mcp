@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextmeasure"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
@@ -48,7 +49,7 @@ func TestWorkflowTerminalPathsSeal(t *testing.T) {
 			rt.agents["agent"] = AgentRegistration{ID: "agent", Planner: plan, PlanActivityName: "plan", ResumeActivityName: "resume"}
 			wf := &testWorkflowContext{ctx: ctx, runtime: rt, hookRuntime: rt, finishRuntime: rt}
 			if path == "finish" {
-				wf.plannerOutputs = []*api.PlanActivityOutput{{Result: assistantCommitResult(), ProducingCall: &key, CallKeys: []runstore.CallKey{key}}}
+				wf.plannerOutputs = []*api.PlanActivityOutput{{Result: assistantCommitResult(), ProducingCall: &key, CallKeys: []runstore.CallKey{key}, Facts: []contextmeasure.RequestFacts{{Call: key, ViewBearing: true, ContextWindow: 6000}}}}
 			}
 			input := &RunInput{AgentID: "agent", RootRunID: "root", RunID: "run", WorkflowProtocolVersion: api.WorkflowProtocolVersion, Messages: []*model.Message{contentMessage("seed")}}
 			if path == "finalizer" {
@@ -56,7 +57,7 @@ func TestWorkflowTerminalPathsSeal(t *testing.T) {
 				wf.plannerOutputs = []*api.PlanActivityOutput{
 					{Recovery: &api.ModelRecovery{Kind: model.OutputValidationOutputBounds, Correction: "retry", DisableTools: true, Attempt: 1}},
 					{Recovery: &api.ModelRecovery{Kind: model.OutputValidationOutputBounds, Correction: "retry again", DisableTools: true, Attempt: 2}},
-					{Result: assistantCommitResult(), ProducingCall: &key, CallKeys: []runstore.CallKey{key}},
+					{Result: assistantCommitResult(), ProducingCall: &key, CallKeys: []runstore.CallKey{key}, Facts: []contextmeasure.RequestFacts{{Call: key, ViewBearing: true, ContextWindow: 6000}}},
 				}
 			}
 			_, err := rt.ExecuteWorkflow(wf, input)

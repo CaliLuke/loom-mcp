@@ -35,6 +35,7 @@ type workflowPlanInput struct {
 	compactionView          index.ViewRef
 	checkpointBytes         int
 	compaction              *ContextCompaction
+	contextSettings         compaction.ContextSettings
 	compactionState         compaction.State
 	compactionDecision      compaction.Decision
 	compactionFlags         compaction.Flags

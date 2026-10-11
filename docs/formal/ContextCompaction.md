@@ -39,7 +39,7 @@ witness and liveness configurations. The harness checks four things:
 | `RequestRecord.tla` | The call record's lossless message sequence, every request up to five messages | 9.3k | 5 | — | — |
 | `ContinuationCarry.tla` | Carried forms, cap, copy bound, receipt chain and placeholders across three runs | 1.37M | 8 | 2 | — |
 | `RecallDiscovery.tla` | Discoverability, handle confinement, separate allowances, recall exposure, user text | 23.8M | 8 | 1 | `RefillRestoresReads` (+1 fault) |
-| `OverflowGuard.tla` | The advisory guard, per-request progress and step budgets | 1.3k | 4 | 1 | `Terminates` (+1 fault) |
+| `OverflowGuard.tla` | The advisory guard, per-request progress, unavailable recovery and step budgets | 2.3k | 4 | 1 | `Terminates` (+1 fault) |
 | `StepPayload.tla` | The planner-input bound and index segments | 10.4k | 5 | 1 | — |
 
 The full suite takes about three hours with all cores and a 10 GB heap; TLC's disk
@@ -418,7 +418,7 @@ pass with their expected success, witness or fault counterexample.
 
 Every combination of view size, planner (passes the view, rewrites it, sends
 unrelated messages), calibration, exact counting, known limits and estimate
-error is an initial state. A provider overflow may report usage, which
+error and recovery availability is an initial state. A provider overflow may report usage, which
 calibrates the estimate for the rest of the step. The invariants read the
 history of requests sent and the recorded failure, not the variables the
 actions branch on.
@@ -440,8 +440,19 @@ actions branch on.
 | `WitnessGuardThenProvider` | A step with a guard rejection and a provider overflow that still succeeds | its witness |
 | `LivenessUnsafeGuardNeverOff` | The guard neither turns off nor counts its rejections | `Terminates` |
 
-Limits: one model and one call per attempt, so matching by model and ordinal
-is K14's test; sizes are abstract units.
+Limits: one model and one call per attempt; K14 tests matching by model against
+the smallest provider-rejected whole-request size in the step, independent of
+ordinal or calibration. Here strictly shrinking sends make lastProv that
+minimum; sizes are abstract units. Recovery availability abstracts decision 5's
+B-derived checkpoint shortfall: only an observed provider overflow can fail that
+branch, with no recovery budget spent. Baseline and liveness each explore 2,311
+distinct states (864 initial states). All five fault configurations fail their
+expected invariant or temporal property; the witness reaches a guard rejection,
+provider overflow and success. K14's Go tests drive real Check and Recover across
+the core formal flags and calibration branches, scaled together to renderable
+budgets, with zero through two units of outside-view overhead. Separate typed
+shortfall tests cover unavailable recovery and its workflow diagnostic.
+
 
 # StepPayload.tla
 

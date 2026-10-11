@@ -722,6 +722,8 @@ type RequestFacts struct {
     ContextWindow int     // from the adapter's ContextLimits (4.14); 0 if unknown
     OutputReserve int     // MaxTokens, else DefaultMaxTokens, else min(MaxOutputTokens, ContextWindow / 4)
     ViewBearing   bool    // the request contained messages whose hashes are in the view
+    ViewTextBytes int     // request text bytes matching the view; omitzero
+    ViewNonText   int     // request non-text tokens matching the view; omitzero
     InputTokens   int     // input + cache read + cache write, provider-reported; 0 if not reported
     TextBytes     int     // all text the request carried: system, tools, messages
     FixedBytes    int     // system prompt and tool definitions
@@ -801,7 +803,10 @@ The measurement-only `GuardTokens` helper accepts a rational trigger fraction
 and `GuardBudget{Tokens, ImageTokens}` so its fallback estimate honors the
 adapter's image cost. `GuardCount.GuardOn` reports eligibility from a positive
 known budget and an exact count or calibrated rate; the helper never rejects a
-request. Rejection wiring belongs to K14. Without a counter, every token figure
+request. Before calibration, count eligibility uses the upper clamp rate (1/2),
+so an exact-capable counter is consulted even when the default estimate would
+miss the trigger. This affects whether counting runs, not the fallback estimate.
+K14 wires rejection after persisting the started call. Without a counter, every token figure
 in this design is an estimate and the byte bounds are the only hard ones (P3).
 
 The estimate is a heuristic. An overestimate causes an early compaction; an
@@ -1206,13 +1211,18 @@ a provider overflow or a pre-send rejection (4.8). It carries the failed
 request's facts and is not a `ModelRecovery` (F15). The planning loop gains a
 view-recompute step. On overflow the workflow:
 
-1. applies tier 1 with no protected window and no minimum saving;
+1. recomputes the rendering budget from the failed request facts, then applies
+   tier 1 with no protected window and no minimum saving;
 2. if that is not enough, evicts the oldest units after the checkpoint (no
    model call). The new checkpoint keeps the previous summary, if any, and
    adds receipt lines for the evicted units. Recovery first recomputes the
    budget from the failed request's model, so a summary made under a larger
    budget renders as a bounded summary (4.6);
-3. reschedules the planner step with the new `ViewRef`.
+3. if still too large, halves every newest-unit result preview evenly down to
+   256 bytes, then forces placeholders for that unit, including Keep results;
+4. reschedules immediately with the new `ViewRef`. Its PreviewThrough and
+   ForceClearThrough watermarks are monotone. A trailing user unit remains joined
+   to the latest legal assistant cut.
 
 **Enough** is measured on the failed request, not on the framework's view
 alone. When the model's limits are known and the rate is calibrated, the
@@ -1222,23 +1232,20 @@ most half the view bytes of the failed request. Enough counts the whole
 retried request, rendered under the budget the retry will use: when the
 failed request's model has a larger budget than the view was rendered for,
 the checkpoint can render larger on the retry, and eviction continues until
-the whole request meets the target. When no clear or eviction reaches it,
-the step fails with the typed error. The retry is the next request of the
+the whole request meets the target. A conservative target may remain unreachable:
+the guard turns off and the shrunk view goes to the provider. A provider overflow
+on the minimal view fails with the typed error. The retry is the next request of the
 rescheduled planner step: no compaction step (clearing, eviction, applying a
 summary) runs between a recovery and its retry, so nothing undoes "enough".
 If a request the provider
 rejected was not view-bearing, a smaller view cannot reach it, and the step
 fails at once with `ContextOverflowNoProgress`.
 
-**Progress.** The retried request must be smaller than the failed one. The
-failed request is identified by its model and its ordinal among the
-activity's calls to that model. In the retried attempt, the wrapper compares
-the call to the same model with the same ordinal, or, if the planner made
-fewer calls, the largest call to that model. If it made no call to that model,
-the overflow cannot recur and there is nothing to compare. If it is not smaller (the
-planner rewrote the request, so a smaller view did not reach it), recovery
-stops and the step fails with `ContextOverflowNoProgress`, naming the planner
-and both call keys.
+**Progress.** Every retried call to model m must be smaller than the smallest
+whole-request size that model's provider rejected in this logical step (binding
+decision 1). Call ordinal is diagnostic only. The wrapper checks the advisory
+guard first, then progress. A rewritten request no smaller than that baseline
+fails with `ContextOverflowNoProgress`, naming the planner and both call keys.
 
 **Only provider overflows fail a step.** Every failure condition in this
 section (not view-bearing, no progress, a minimal view, the spent budget)
@@ -1246,13 +1253,20 @@ applies to provider overflows. When one of them is met after a guard
 rejection, the guard turns off for the rest of the step and the request goes
 to the provider (4.8); the step fails only if the provider then rejects it.
 The no-progress check is a provider condition too: it compares the request
-about to be sent with the last request the *provider* rejected, and fails the
-step without sending only when the new request is no smaller than that one,
+about to be sent with the smallest request the *provider* rejected for that
+model in this step, and fails the step without sending only when the new
+request is no smaller than that one,
 so the provider has already rejected a request at least as large. A guard
 rejection in between, or a calibration the overflow's usage report enabled,
 does not change that comparison. A step that fails is therefore always
 explained by a provider overflow: of the last request sent, or of a request
 no smaller than the one it would send.
+
+Progress size is the whole-request estimate at the uncalibrated default rate
+(1/3 token per text byte), plus non-text tokens and output reserve. It never
+uses calibrated usage, the current view alone, a guard rejection, or call ordinal
+as its baseline. `overflow.Check` checks the advisory guard first, then this
+per-model baseline; the caller retains each model's smallest rejected size.
 
 For an agent that still uses `HistoryPolicy`, the policy runs on the loaded
 view inside the planner activity, so recovery shrinks the view the policy
@@ -1263,6 +1277,15 @@ Provider overflows have their own budget of two per step, separate from
 facts when the budget is spent, when there is no progress, or when the view is
 already minimal: the checkpoint and the newest unit at its smallest rendering.
 Recovery never depends on a model call.
+
+**Budget shortfall (binding decision 5).** If the recorded B-derived defaults
+produce `checkpoint.MaxBytes < checkpoint.MinCheckpointBytes`, recovery is not
+attempted. Capacity never increases above those defaults, and rendering never
+switches to an alternate projection. The observed provider overflow is wrapped
+in a typed error naming both the provider cause and checkpoint byte shortfall;
+`context_budget_too_small` is emitted and no recovery retry is consumed. A guard
+rejection in this situation only disables the guard and sends the original view.
+
 
 ### 4.16 Sessions
 
@@ -1481,16 +1504,17 @@ Zero token settings select the defaults above. Registration rejects an agent
 with both compaction and `HistoryPolicy`. Workflow start also rejects stamped
 compaction settings against a worker registration with `HistoryPolicy`, so split
 client/worker deployments fail before effects. Observe, sorted Models and the
-three diagnostic hooks run only for compaction-enabled agents in K12; K14 widens
-their enablement. `KeepResultTools` sets immutable result
+three diagnostic hooks run for every agent under protocol 9. `KeepResultTools` sets immutable result
 entry `Keep` bits. `DisableRecall` belongs to `ContextRecovery` (K13), not this
 option.
 
-**K13 runtime lookup settings.** `WithContextRecovery(agentID,
-ContextRecovery{DisableRecall: true})` provides the resolved, stamped lookup
-setting; K14 extends this minimal struct. `ContextCompaction` carries
+**Runtime recovery settings (K13/K14).** `WithContextRecovery(agentID,
+ContextRecovery{GuardMargin: contextmeasure.Rate{Tokens: 1, Bytes: 10},
+DisableRecall: true})` configures the existing recovery struct. Zero GuardMargin
+resolves to 10%. RunInput stamps ContextSettings for every agent, including
+Threshold, GuardMargin and DisableRecall. `ContextCompaction` carries
 `RecallDiscoveryCalls` and `RecallReadCalls` (zero resolves to 20, negatives
-are rejected). Read/list/find dispatch and counters ship under protocol 8.
+are rejected). Protocol 9 extends the K13 lookup contract with overflow outputs and recovery.
 K13 resolves current-run evidence and injected From records; its default
 RunChain resolves no rN labels until K18.
 
@@ -1620,11 +1644,12 @@ happens (7.4).
 ### 4.19 Observability
 
 Hook events, recorded in the run log: `context_compacted` (reason
-`threshold`, `overflow` or `manual`; tier `clear`, `summary` or `evict`;
+`threshold`, `overflow` or `manual`; tier `clear`, `summary`, `evict`, `preview` or `placeholder`;
 units and calls affected; estimated tokens before and after; summariser model
 and usage; checkpoint sequence; fingerprint), `context_compaction_skipped`
-(reason, rejection kind, call key), `context_overflow` (source `provider` or
-`guard`, call key, outcome), `context_recalled`, `context_unmeasured`,
+(reason, rejection kind, call key), `context_overflow` (source `provider`, `guard` or `no_progress`; failed call and
+all adopted call keys, outcome `recovered`, `guard_off` or `failed:<reason>`;
+head, actual view, step, facts, stamped settings and pure recomputation), `context_recalled`, `context_unmeasured`,
 `context_limits_unknown`, `context_budget_too_small`, `context_recall_disabled`,
 `context_request_growth`,
 `recall_budget_exhausted` (which allowance), `continuation_superseded`,
@@ -1642,6 +1667,8 @@ on a `context.compact` span.
 | Three rejected summaries | Tier 2 stops for the run. |
 | Pre-send guard rejects a request | `ContextOverflow`, recovered as an overflow (4.15); if recovery cannot reach its target, the guard lets the next request through. |
 | Provider overflow with no progress, after two recoveries, or with a minimal view | The step fails with a typed error carrying the facts and call keys. |
+| Provider overflow with an unrenderable B-derived checkpoint budget | Typed budget shortfall preserves the provider cause; context_budget_too_small; no retry spent. |
+| Other non-retryable provider errors | Non-retryable engine application error provider_error.<kind>; one activity attempt. |
 | Provider overflow on a request that is not view-bearing | `ContextOverflowNoProgress` at once. |
 | Newest unit does not fit | Its results shrink to previews, then placeholders; if still too large, `ContextBudgetExceeded` naming the unit's first message ID (no tool names or arguments, per the roadmap non-goals). |
 | Activity input over 1 MB | Fails fast with the existing typed error; P2 makes it a bug, not a run-length effect. |

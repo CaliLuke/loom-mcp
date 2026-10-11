@@ -2,6 +2,7 @@ package checkpoint
 
 import (
 	"context"
+	"encoding/json/v2"
 	"fmt"
 	"slices"
 
@@ -12,7 +13,7 @@ import (
 
 // Project reconstructs a committed view without storing or changing evidence.
 func Project(ctx context.Context, source index.Source, entries []index.MessageEntry, view index.ViewRef) ([]*model.Message, error) {
-	if view.Checkpoint == nil && view.TailFrom <= 1 && view.ClearedThrough == 0 {
+	if view.Checkpoint == nil && view.TailFrom <= 1 && view.ClearedThrough == 0 && view.PreviewThrough == 0 && view.ForceClearThrough == 0 {
 		return index.Render(ctx, entries, source)
 	}
 	from := max(index.MessageID(1), view.TailFrom)
@@ -26,7 +27,7 @@ func Project(ctx context.Context, source index.Source, entries []index.MessageEn
 		return nil, err
 	}
 	prefix, tail := entries[:from-1], entries[from-1:]
-	cleared, err := ClearedText(ctx, source, tail, view.ClearedThrough)
+	cleared, err := ResultText(ctx, source, tail, view)
 	if err != nil {
 		return nil, err
 	}
@@ -78,6 +79,44 @@ func ClearedText(ctx context.Context, source index.Source, entries []index.Messa
 		cleared[entry.ID] = ClearedResult(entry.ContentBytes(), entry.ToolUseIDs[0], firstLine(errorText))
 	}
 	return cleared, nil
+}
+
+// ResultText derives recovery projections with forced clearing taking precedence
+// over ordinary clearing and previews. Immutable Keep flags remain unchanged.
+func ResultText(ctx context.Context, source index.Source, entries []index.MessageEntry, view index.ViewRef) (map[index.MessageID]string, error) {
+	result, err := ClearedText(ctx, source, entries, view.ClearedThrough)
+	if err != nil {
+		return nil, err
+	}
+	for _, entry := range entries {
+		if entry.Kind != index.ToolResult {
+			continue
+		}
+		if entry.ID <= view.ForceClearThrough {
+			copy := entry
+			copy.Keep = false
+			forced, err := ClearedText(ctx, source, []index.MessageEntry{copy}, view.ForceClearThrough)
+			if err != nil {
+				return nil, err
+			}
+			result[entry.ID] = forced[entry.ID]
+		} else if entry.ID > view.ClearedThrough && entry.ID <= view.PreviewThrough {
+			content, err := index.ResultContent(ctx, source, entry)
+			if err != nil {
+				return nil, err
+			}
+			text, ok := content.(string)
+			if !ok {
+				data, err := json.Marshal(content, json.Deterministic(true))
+				if err != nil {
+					return nil, err
+				}
+				text = string(data)
+			}
+			result[entry.ID] = HeadTail(text, view.Budget.PreviewTokens*BytesPerToken)
+		}
+	}
+	return result, nil
 }
 
 // prefixHidden retains unmatched hidden calls whose results may lie in the tail.

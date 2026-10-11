@@ -10,9 +10,14 @@
 (* estimate may be off by one either way. A provider overflow may report   *)
 (* usage, which calibrates the estimate for the rest of the step. The      *)
 (* provider is authoritative. Recovery shrinks the view; a retried request *)
-(* must be smaller than the last one the provider rejected. Every          *)
+(* must be smaller than the smallest request that model's provider        *)
+(* rejected in this step (whole input plus reserve, never call ordinal).   *)
+(* This one-model abstraction has strictly shrinking sends, so lastProv    *)
+(* is also that minimum. Every                                            *)
 (* combination of view size, planner, calibration, exactness, known limits *)
-(* and estimate error is an initial state.                                 *)
+(* and estimate error is an initial state. Recovery availability abstracts  *)
+(* a B-derived checkpoint shortfall: provider failure, no retry consumed;   *)
+(* a guard only disables itself.                                           *)
 (*                                                                         *)
 (* The invariants read the history of requests sent (sent) and the        *)
 (* recorded failure, not the variables the actions branch on.              *)
@@ -38,6 +43,7 @@ VARIABLES
     planner,    \* "passes" the view, "rewrites" it, or sends "unrelated" messages
     calibrated, \* a request to this model has reported usage
     exact,      \* the adapter's TokenCounter returns Exact counts
+    recoveryAvailable, \* the B-derived checkpoint can render (decision 5)
     known,      \* the model's limits are known
     err,        \* estimate error when the count is not exact (1 is exact)
     guardRej,   \* guard rejections in this step (budget 1)
@@ -51,7 +57,7 @@ VARIABLES
     failReq     \* the request the step would have sent when it failed
 
 vars == <<view, initView, planner, calibrated, exact, known, err, guardRej,
-          guardOff, provLeft, lastProv, lastRej, sent, status, failKind, failReq>>
+          guardOff, provLeft, lastProv, lastRej, sent, status, failKind, failReq, recoveryAvailable>>
 
 Init ==
     /\ view \in MinView..MaxView
@@ -60,6 +66,7 @@ Init ==
     /\ calibrated \in BOOLEAN
     /\ exact \in BOOLEAN
     /\ known \in BOOLEAN
+    /\ recoveryAvailable \in BOOLEAN
     /\ err \in {0, 1, 2}
     /\ guardRej = 0
     /\ guardOff = FALSE
@@ -77,10 +84,11 @@ Est == IF exact THEN Req ELSE Req + err - 1
 
 GuardOn == known /\ (exact \/ calibrated) /\ ~guardOff /\ (guardRej < 1 \/ Fault = "guard_never_off")
 
-Fixed == <<initView, planner, exact, known, err>>
+Fixed == <<initView, planner, exact, known, err, recoveryAvailable>>
 
 \* The size the no-progress check compares against: the last request the
-\* provider rejected. The broken configurations compare the framework's
+\* provider rejected (also its minimum under RetriesShrink). The broken
+\* configurations compare the framework's
 \* view (which a rewriting planner ignores), or the last rejection of any
 \* kind, so a guard rejection resets the comparison.
 Baseline ==
@@ -103,7 +111,7 @@ GuardReject ==
     /\ guardRej' = IF Fault = "guard_never_off" THEN guardRej ELSE guardRej + 1
     /\ lastRej' = Req
     /\ provLeft' = IF Fault = "guard_spends_overflow_budget" /\ provLeft > 0 THEN provLeft - 1 ELSE provLeft
-    /\ IF ViewBearing /\ view > MinView
+    /\ IF ViewBearing /\ view > MinView /\ recoveryAvailable
           THEN /\ view' = view - 1
                /\ UNCHANGED <<guardOff, status, failKind, failReq>>
        ELSE IF Fault = "guard_fails_step"
@@ -137,7 +145,9 @@ Send ==
                /\ lastProv' = Req
                /\ lastRej' = Req
                /\ calibrated' \in {calibrated, TRUE}
-               /\ IF provLeft = 0
+               /\ IF ~recoveryAvailable
+                     THEN /\ Fail("budget_too_small") /\ UNCHANGED <<view, provLeft>>
+                  ELSE IF provLeft = 0
                      THEN /\ Fail("budget") /\ UNCHANGED <<view, provLeft>>
                   ELSE IF ~ViewBearing
                      THEN /\ Fail("not_view_bearing") /\ UNCHANGED <<view, provLeft>>
@@ -164,7 +174,7 @@ Overflows == {i \in 1..Len(sent) : sent[i].overflow}
 \* provider rejected.
 FailsOnlyOnProvider ==
     status = "failed" =>
-        \/ failKind \in {"budget", "not_view_bearing", "minimal"}
+        \/ failKind \in {"budget", "not_view_bearing", "minimal", "budget_too_small"}
               /\ Len(sent) > 0 /\ sent[Len(sent)].overflow
         \/ failKind = "no_progress"
               /\ \E i \in Overflows : failReq >= sent[i].size

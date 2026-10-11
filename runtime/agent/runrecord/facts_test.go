@@ -33,7 +33,7 @@ func TestRequestFactsReadAndExport(t *testing.T) {
 		if outcome == "" {
 			continue
 		}
-		want[i] = &contextmeasure.RequestFacts{Call: key, Model: "canonical", ContextWindow: 8000, OutputReserve: 200, ViewBearing: true, InputTokens: 123, TextBytes: 369, FixedBytes: 3, NonText: 1500, CountLatency: 45 * time.Nanosecond, Outcome: outcome}
+		want[i] = &contextmeasure.RequestFacts{Call: key, Model: "canonical", ContextWindow: 8000, OutputReserve: 200, ViewBearing: true, ViewTextBytes: 366, ViewNonText: 1500, InputTokens: 123, TextBytes: 369, FixedBytes: 3, NonText: 1500, CountLatency: 45 * time.Nanosecond, Outcome: outcome}
 		if outcome == contextmeasure.OutcomeError {
 			want[i].CountLatency = 0
 		}
@@ -73,7 +73,7 @@ func TestRequestFactsReadAndExport(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &exported))
 	require.Len(t, exported.Runs, 1)
 	require.Len(t, exported.Runs[0].Calls, len(outcomes))
-	assert.JSONEq(t, `{"call":{"RunID":"run","Seq":1,"Attempt":2},"model":"canonical","context_window":8000,"output_reserve":200,"view_bearing":true,"input_tokens":123,"text_bytes":369,"fixed_bytes":3,"non_text":1500,"count_latency":45,"outcome":"ok"}`, string(exported.Runs[0].Calls[0].Completion.Facts))
+	assert.JSONEq(t, `{"call":{"RunID":"run","Seq":1,"Attempt":2},"model":"canonical","context_window":8000,"output_reserve":200,"view_bearing":true,"view_text_bytes":366,"view_non_text":1500,"input_tokens":123,"text_bytes":369,"fixed_bytes":3,"non_text":1500,"count_latency":45,"outcome":"ok"}`, string(exported.Runs[0].Calls[0].Completion.Facts))
 
 	assert.Contains(t, string(exported.Runs[0].Calls[2].Completion.Facts), `"count_latency":0`)
 
@@ -83,6 +83,12 @@ func TestRequestFactsReadAndExport(t *testing.T) {
 	again, err := restored.Export().Marshal()
 	require.NoError(t, err)
 	assert.Equal(t, data, again)
+	legacy := bytes.ReplaceAll(data, []byte(`,"view_text_bytes":366`), nil)
+	legacy = bytes.ReplaceAll(legacy, []byte(`,"view_non_text":1500`), nil)
+	oldRecord, err := runrecord.FromExport(legacy)
+	require.NoError(t, err)
+	assert.Zero(t, oldRecord.Runs[0].Calls[0].Completion.Facts.ViewTextBytes)
+	assert.Zero(t, oldRecord.Runs[0].Calls[0].Completion.Facts.ViewNonText)
 	invalid := bytes.Replace(data, []byte(`"facts":{`), []byte(`"facts":{"unexpected":true,`), 1)
 	require.NotEqual(t, data, invalid)
 	_, err = runrecord.FromExport(invalid)

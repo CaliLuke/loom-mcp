@@ -15,8 +15,9 @@ import (
 )
 
 type tailCacheKey struct {
-	head          runstore.Hash
-	from, cleared index.MessageID
+	head                           runstore.Hash
+	from, cleared, preview, forced index.MessageID
+	previewTokens                  int
 }
 type checkpointCacheKey struct {
 	hash   runstore.Hash
@@ -24,15 +25,10 @@ type checkpointCacheKey struct {
 	pins   string
 }
 
-// clearedText uses the projection shared with RunRecord request reconstruction.
-func clearedText(ctx context.Context, source index.Source, entries []index.MessageEntry, through index.MessageID) (map[index.MessageID]string, error) {
-	return checkpoint.ClearedText(ctx, source, entries, through)
-}
-
 // renderView isolates compacted projections from the full append-only index.
 // Cache misses are deterministic reconstructions; returned messages are owned.
 func (c *runViewCache) renderView(ctx context.Context, store runstore.Store, scope string, source index.Source, view index.ViewRef, purpose viewLoadPurpose) ([]*model.Message, *api.ViewUpdate, error) {
-	compacted := view.TailFrom > 1 || view.ClearedThrough > 0 || view.Checkpoint != nil
+	compacted := view.TailFrom > 1 || view.ClearedThrough > 0 || view.Checkpoint != nil || view.PreviewThrough > 0 || view.ForceClearThrough > 0
 	if !compacted {
 		if err := c.renderer.Append(ctx, c.entries[c.rendered:], source); err != nil {
 			c.renderer = index.Renderer{}
@@ -157,11 +153,11 @@ func (c *runViewCache) checkpointFor(hash runstore.Hash, budget index.RenderBudg
 
 // renderTail resolves only the selected suffix and preceding system entries.
 func (c *runViewCache) renderTail(ctx context.Context, source index.Source, view index.ViewRef, from index.MessageID) error {
-	key := tailCacheKey{head: c.head, from: from, cleared: view.ClearedThrough}
+	key := tailCacheKey{head: c.head, from: from, cleared: view.ClearedThrough, preview: view.PreviewThrough, forced: view.ForceClearThrough, previewTokens: view.Budget.PreviewTokens}
 	if c.tailMessages == nil || key != c.tailKey {
 		prefix := c.entries[:from-1]
 		tail := c.entries[from-1:]
-		cleared, err := clearedText(ctx, source, tail, view.ClearedThrough)
+		cleared, err := checkpoint.ResultText(ctx, source, tail, view)
 		if err != nil {
 			return err
 		}

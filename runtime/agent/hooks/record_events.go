@@ -17,6 +17,8 @@ type (
 	// PlannerStepEvent adopts every started call returned by one planner activity.
 	// ViewRef names the committed view used by that activity before history policy.
 	PlannerStepEvent struct {
+		// ContextSettings is resolved for every agent, including threshold opt-outs.
+		ContextSettings *compaction.ContextSettings `json:"context_settings,omitzero"`
 		// CompactionSettings is the client-stamped configuration, repeated on canonical adoption records.
 		CompactionSettings *compaction.Settings `json:"compaction_settings,omitzero"`
 		// RecoverySettings records resolved lookup settings independently of compaction.
@@ -46,6 +48,7 @@ type (
 
 	// RunSealedEvent names the terminal transcript after pending entries commit.
 	RunSealedEvent struct {
+		ContextSettings *compaction.ContextSettings `json:"context_settings,omitzero"`
 		// CompactionSettings and KeepResultTools are the stamped run configuration.
 		CompactionSettings *compaction.Settings `json:"compaction_settings,omitzero"`
 		// RecoverySettings records resolved lookup settings independently of compaction.
@@ -80,7 +83,7 @@ const (
 	ContextCompacted EventType = "context_compacted"
 	// ContextCompactionSkipped reserves the canonical skipped-compaction record.
 	ContextCompactionSkipped EventType = "context_compaction_skipped"
-	// ContextOverflow reserves the canonical overflow record.
+	// ContextOverflow identifies the canonical overflow adoption record.
 	ContextOverflow EventType = "context_overflow"
 	// ContextRequestGrowth identifies requests dominated by planner-owned history.
 	ContextRequestGrowth EventType = "context_request_growth"
@@ -187,6 +190,14 @@ func decodeRecallEvent(input *ActivityInput) (Event, bool, error) {
 }
 
 func decodeContextEvent(input *ActivityInput) (Event, bool, error) {
+	if input.Type == ContextOverflow {
+		var event ContextOverflowEvent
+		if err := decodeHookPayload(input, &event); err != nil {
+			return nil, false, err
+		}
+		event.baseEvent = baseEvent{runID: input.RunID, agentID: input.AgentID, sessionID: input.SessionID}
+		return &event, true, nil
+	}
 	if input.Type == ContextCompacted || input.Type == ContextCompactionSkipped {
 		var p ContextCompactionEvent
 		if err := decodeHookPayload(input, &p); err != nil {

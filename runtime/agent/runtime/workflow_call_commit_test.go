@@ -10,6 +10,7 @@ import (
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/callrecord"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextmeasure"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
@@ -93,8 +94,8 @@ func TestWorkflowCallCommitSurvivesEventInterception(t *testing.T) {
 			key := runstore.CallKey{RunID: "run", Seq: 1, Attempt: 1}
 			base := &workflowPlanInput{protocolVersion: api.WorkflowProtocolVersion, AgentID: "agent", RunContext: run.Context{RootRunID: "root", RunID: "run"}}
 			wf := &testWorkflowContext{ctx: t.Context(), finishRuntime: rt, hookRuntime: rt, plannerOutputs: []*api.PlanActivityOutput{
-				{Result: &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: "test.lookup", ToolCallID: "call", Payload: rawjson.Message(`{}`)}}}, CallKeys: []runstore.CallKey{key}, ProducingCall: &key, RequestGrowth: &api.RequestGrowth{Key: key, Outside: 99}},
-				{Result: assistantCommitResult(), CallKeys: []runstore.CallKey{key}, ProducingCall: &key, RequestGrowth: &api.RequestGrowth{Key: key, Outside: 100}},
+				{Result: &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: "test.lookup", ToolCallID: "call", Payload: rawjson.Message(`{}`)}}}, CallKeys: []runstore.CallKey{key}, Facts: []contextmeasure.RequestFacts{{Call: key, ViewBearing: true, ContextWindow: 6000}}, ProducingCall: &key, RequestGrowth: &api.RequestGrowth{Key: key, Outside: 99}},
+				{Result: assistantCommitResult(), CallKeys: []runstore.CallKey{key}, Facts: []contextmeasure.RequestFacts{{Call: key, ViewBearing: true, ContextWindow: 6000}}, ProducingCall: &key, RequestGrowth: &api.RequestGrowth{Key: key, Outside: 100}},
 			}}
 			input := PlanActivityInput{AgentID: "agent", RunID: "run", RunContext: base.RunContext}
 			for range 2 {
@@ -104,7 +105,7 @@ func TestWorkflowCallCommitSurvivesEventInterception(t *testing.T) {
 				base.adopt(out)
 				require.NoError(t, base.recordAssistant(out.TranscriptRef, out.Result.ToolCalls))
 			}
-			_, sealErr := rt.SealRecordActivity(t.Context(), &api.SealRecordInput{ProtocolVersion: api.WorkflowProtocolVersion, RootRunID: "root", RunID: "run", IndexHead: base.IndexHead, Pending: base.view().Pending, EventKey: "run_sealed:run", Timestamp: wf.Now()})
+			_, sealErr := rt.SealRecordActivity(t.Context(), &api.SealRecordInput{ProtocolVersion: api.WorkflowProtocolVersion, ContextSettings: base.contextSettings, RootRunID: "root", RunID: "run", IndexHead: base.IndexHead, Pending: base.view().Pending, EventKey: "run_sealed:run", Timestamp: wf.Now()})
 			require.NoError(t, sealErr)
 			assert.Equal(t, 1, wf.plannerCalls[0].Input.Step)
 			assert.Equal(t, 2, wf.plannerCalls[1].Input.Step)

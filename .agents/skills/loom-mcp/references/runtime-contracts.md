@@ -361,8 +361,8 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   measurement. Zero triggerAt disables counting while retaining the estimate
   and calibrated GuardOn; only the estimation rate defaults to 1/3.
   K12 carries durable Completion.Facts parallel to CallKeys and sorted Models
-  across activity boundaries. Only compaction-enabled agents Observe adopted facts or send Models in K12; K14
-  owns rejection wiring.
+  across activity boundaries. Every agent Observes adopted facts and sends Models under protocol 9; only
+  threshold transformations remain opt-in.
 - Planner call recording sits inside model interceptors, capturing the decorated
   request against the committed pre-history-policy view (loaded IndexHead, no
   Pending). Recording is required in planner contexts. Missing CallInfo or
@@ -381,7 +381,8 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   Measure after BuildRequest; preserve facts through unary, stream setup failure,
   Finalize, Close and abandonment. WithResult adds input+cache reads+writes and
   classifies ok/context_overflow/error. Started records have no facts.
-  CountLatency stays zero until later guard counting is wired. Canonical
+  ViewTextBytes/ViewNonText are omitzero matching-view measurements; old records
+  decode as zero. CountLatency records optional pre-send token counting. Canonical
   measurement matching ignores Meta/cache; K8 request rebuilding still uses full
   encodings. RunRecord exposes facts through Completion and preserves them in
   Export/FromExport, retaining strict unknown-member decoding.
@@ -453,8 +454,9 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   Gemini/Vertex map HTTP 400 `INVALID_ARGUMENT` token-overflow messages.
   Recorded-body conformance covers Complete and supported Stream paths.
   Bedrock context stops no longer set `OutputLimited` or enter `OutputBounds`
-  shorter-answer/tools-disabled recovery. Until K14, overflow fails the planner
-  activity. Ollama truncates to `num_ctx`, so no chat overflow is mapped; the
+  shorter-answer/tools-disabled recovery. Overflow returns ContextOverflow for
+  bounded workflow recovery; other !Retryable ProviderErrors become non-retryable
+  engine application errors of type provider_error.<kind>. Ollama truncates to `num_ctx`, so no chat overflow is mapped; the
   gateway has no provider wire contract. Other error classifications stay intact.
 
 - Setup-time and receive-time provider throttling must preserve
@@ -957,7 +959,7 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   a known window exhausted by its output reserve (BudgetTooSmall, not unknown limits).
 - Rendered checkpoint size is reused only for the same hash, tail and budget;
   otherwise estimate uses MaxBytes. planner_step records the adopted measurement.
-  Recovery outputs adopt facts, never ViewUpdate or threshold transitions.
+  Output-validation recovery outputs adopt facts, never ViewUpdate or threshold transitions.
   planner_step records recovery (rejected output), recovering (correction retry)
   and the actual loader-built ViewRef, including Pinned, supplied by activity CallView. Offline
   reconstruction preserves the last successful view/decision state across rejected
@@ -970,7 +972,8 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   resumed message ToolUseParts also supply eligible name/ID/bounded arguments;
   result-only user messages are covered by calls and never create empty user rows.
 - Input cache: record hash. Pins: hash and budget. Checkpoint message: hash, budget,
-  effective pins. Tail: head, TailFrom, ClearedThrough. Hidden-call state crosses the
+  effective pins. Tail: head, TailFrom, ClearedThrough, PreviewThrough, ForceClearThrough and
+  PreviewTokens. Hidden-call state crosses the
   cut. Cache eviction reconstructs byte-identical views. RunRecord shares projection
   rules and verifies each compacted request's canonical digest. Loader pins are
   canonical SelectPins(record users, Budget), not incoming overrides; ViewUpdate
@@ -979,9 +982,8 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - context_compacted/context_compaction_skipped are canonical record events, bypass
   BeforeEvent and use <type>:<run>:<step>, with empty call_keys in K12. Diagnostics
   context_unmeasured/context_limits_unknown/context_budget_too_small are normal
-  hooks, once per run for compaction-enabled agents only. Opt-out agents do not
-  Observe or send Models and retain pre-K12 events. K14 widens enablement.
-  Protocol 7 covers facts, views, entry sizes and settings;
+  hooks, once per run for every agent. Threshold opt-out still Observes facts,
+  sends Models and recovers overflows. Protocol 9 extends facts, views and settings;
   structural templates remain version 5. Drain older workflows before upgrading.
 - K12 recorder growth over 1,000 steps: off 2212.230 bytes/step (max residual
   990.001 bytes), keep_recent 2242.624 (1239.443), compress 2669.240 (3937.941),
@@ -996,9 +998,9 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   compaction.State.Recall charges original call order before timeout grouping;
   committed compaction refills ceil(initial/2), capped at 3*initial. Malformed
   known reads spend reads; list/find and unknown kinds spend discovery.
-- K13 adds minimal ContextRecovery{DisableRecall}, configured through
+- The existing ContextRecovery{GuardMargin, DisableRecall} is configured through
   WithContextRecovery(agentID, settings), stamped into RunInput and RunRecord.
-  K14 extends it. Never put DisableRecall on ContextCompaction.
+  Zero GuardMargin resolves to 1/10. Never put DisableRecall on ContextCompaction.
 - Advertise tools.RecallContext only on shortened views (including pending
   eviction intents), then keep it sticky. Omit it on disabled recovery/tool
   turns and finalization. Unadvertised calls become ToolUnavailable.
@@ -1018,3 +1020,49 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   recall_context. Compaction-enabled application names/provider names must not
   contain the reserved substring. Compact handle floors preserve discovery;
   B=2,900 gives MinCheckpointBytes 790 <= MaxBytes 1,444.
+
+## Overflow recovery (K14, protocol 9)
+
+- CallRecording runs Check after started persistence and measurement. An exact
+  counter can enable the guard before calibration: counting eligibility uses
+  the upper clamp rate 1/2, while fallback size stays at its supplied rate.
+  GuardReject completes context_budget/pre_send_rejected; NoProgress completes
+  context_overflow_no_progress without sending. After any mark, later calls fail
+  ErrContextOverflowPending before recording. The activity returns ContextOverflow
+  regardless of the planner result and discards all presentations of that attempt.
+- overflow.Step owns one guard rejection and two provider recovery retries per
+  logical planner step, separate from RemainingRecoveryTurns. Check compares every
+  call against that model's smallest provider-rejected Size, at default 1/3 plus
+  non-text and reserve; calibration/ordinal cannot alter progress. Guard checks
+  take precedence. The guard is advisory: unavailable or unsatisfied recovery
+  disables it and sends; only an observed provider rejection fails the step.
+- Recover recomputes Budget from failed RequestFacts, clears without threshold
+  protection/saving gates, evicts closed units preserving the previous summary,
+  halves newest previews evenly down to 256 bytes, then forces placeholders,
+  Keep included. A trailing user unit joins the latest legal cut. Checkpoint
+  cost is always MaxBytes for recovery. Known+calibrated target is strictly below
+  B*TriggerAt; otherwise halve recorded view text bytes. No append, threshold
+  decision or summary intervenes before the immediate retry.
+- If B-derived MaxBytes < MinCheckpointBytes, no recovery or budget enlargement
+  is attempted. ContextOverflowError wraps the provider cause and typed checkpoint
+  byte shortfall, emits context_budget_too_small and consumes no retry. Other
+  failures distinguish ErrContextOverflowNoProgress, ErrContextBudgetExceeded
+  and ErrContextOverflowBudget, carry call keys/facts and fail without activity
+  retry. Minimal errors name the retained unit and estimated fixed overhead.
+- context_overflow is a canonical record event, replacing planner_step. It adopts
+  all CallKeys/head/actual view/settings/facts, source provider|guard|no_progress,
+  outcome recovered|guard_off|failed:<reason> and the pure recovery intent. A
+  transformation adds context_compacted{reason:overflow,tier:clear|evict|preview|
+  placeholder}. RunRecord verifies each intent from durable call facts and rejects
+  presentations from overflow attempts. Monotone preview/force watermarks and
+  preview budget qualify projection caches and produce identical cold/warm bytes.
+- RunInput stamps ContextSettings for every agent, including Threshold and
+  GuardMargin. Recall activates on shortened views even without threshold options;
+  ContextRecovery.DisableRecall and per-episode refill rules still apply.
+  HistoryPolicy receives the recovered loaded view. Compress planners that build
+  unrelated requests fail not_view_bearing at the observed provider overflow.
+- Real workflow_protocol_v9.json records overflow recovery, lookup and finalization;
+  v5-v8 fixtures reject before effects. Structural templates stay version 5.
+  Anthropic/Bedrock Claude recognize older input-length/max_tokens overflow text;
+  OpenAI recognizes nested response.failed/error.code mid-stream and Anthropic
+  handles status-200 SSE error events. Tests cite documented recorded-body shapes.

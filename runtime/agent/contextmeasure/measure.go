@@ -18,6 +18,11 @@ func Measure(req *model.Request, limits model.ContextLimits, view []*model.Messa
 		return RequestFacts{}, errors.New("contextmeasure: nil request")
 	}
 	facts := RequestFacts{Model: req.Model, ContextWindow: limits.ContextWindow, OutputReserve: OutputReserve(req, limits)}
+	matches, err := viewMatches(req, view)
+	if err != nil {
+		return RequestFacts{}, err
+	}
+	facts.ViewBearing = len(matches) > 0
 	for _, message := range req.Messages {
 		if message == nil {
 			continue
@@ -29,6 +34,10 @@ func Measure(req *model.Request, limits model.ContextLimits, view []*model.Messa
 			}
 			facts.TextBytes = addSize(facts.TextBytes, text)
 			facts.NonText = addSize(facts.NonText, nontext)
+			if matches[message] {
+				facts.ViewTextBytes = addSize(facts.ViewTextBytes, text)
+				facts.ViewNonText = addSize(facts.ViewNonText, nontext)
+			}
 			if message.Role == model.ConversationRoleSystem {
 				facts.FixedBytes = addSize(facts.FixedBytes, text)
 			}
@@ -46,11 +55,6 @@ func Measure(req *model.Request, limits model.ContextLimits, view []*model.Messa
 		facts.FixedBytes = addSize(facts.FixedBytes, size)
 		facts.TextBytes = addSize(facts.TextBytes, size)
 	}
-	bearing, err := ViewBearing(req, view)
-	if err != nil {
-		return RequestFacts{}, err
-	}
-	facts.ViewBearing = bearing
 	return facts, nil
 }
 

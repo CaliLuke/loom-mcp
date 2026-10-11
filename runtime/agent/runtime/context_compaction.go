@@ -8,6 +8,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/compaction"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextmeasure"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
@@ -68,6 +69,9 @@ func cloneCompaction(settings *ContextCompaction) *ContextCompaction {
 }
 
 func pureCompactionSettings(settings *ContextCompaction) compaction.Settings {
+	if settings == nil {
+		return compaction.Settings{TriggerAt: contextmeasure.Rate{Tokens: 85, Bytes: 100}, RecallDiscoveryCalls: 20, RecallReadCalls: 20}
+	}
 	return compaction.Settings{TriggerAt: settings.TriggerAt, KeepRecentTokens: settings.KeepRecentTokens, ProtectRecentToolTokens: settings.ProtectRecentToolTokens, MinSavingTokens: settings.MinSavingTokens, RecallDiscoveryCalls: settings.RecallDiscoveryCalls, RecallReadCalls: settings.RecallReadCalls}
 }
 
@@ -82,6 +86,7 @@ func (r *Runtime) stampContextCompaction(input *RunInput) {
 	if settings, enabled := input.CompactionAgents[input.AgentID]; enabled {
 		input.ContextCompaction = cloneCompaction(&settings)
 	}
+	input.ContextSettings = resolvedContextSettings(input.ContextCompaction, input.ContextRecovery)
 }
 
 func inheritCompaction(ctx context.Context, input *RunInput) {
@@ -93,6 +98,25 @@ func inheritCompaction(ctx context.Context, input *RunInput) {
 	if config, enabled := settings[input.AgentID]; enabled {
 		input.ContextCompaction = cloneCompaction(&config)
 	}
+	input.ContextSettings = resolvedContextSettings(input.ContextCompaction, input.ContextRecovery)
+}
+
+func resolvedContextSettings(threshold *ContextCompaction, recovery ContextRecovery) compaction.ContextSettings {
+	settings := pureCompactionSettings(threshold)
+	if settings.TriggerAt.Bytes == 0 {
+		settings.TriggerAt = contextmeasure.Rate{Tokens: 85, Bytes: 100}
+	}
+	if settings.RecallDiscoveryCalls == 0 {
+		settings.RecallDiscoveryCalls = 20
+	}
+	if settings.RecallReadCalls == 0 {
+		settings.RecallReadCalls = 20
+	}
+	margin := recovery.GuardMargin
+	if margin.Bytes == 0 {
+		margin = contextmeasure.Rate{Tokens: 1, Bytes: 10}
+	}
+	return compaction.ContextSettings{Settings: settings, Threshold: threshold != nil, GuardMargin: margin, DisableRecall: recovery.DisableRecall}
 }
 
 func keepCompactionResult(settings *ContextCompaction, tool tools.Ident) bool {

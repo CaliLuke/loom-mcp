@@ -183,7 +183,7 @@ Typed consumers can call
 eligible bytes and decode them with the generated result codec. Empty or missing
 hashes fail. Tool activities return references; terminal completion decoding runs in the finish activity.
 
-### Transcript index and planner views (protocol 7)
+### Transcript index and planner views (protocol 9)
 
 The workflow keeps immutable `index.MessageEntry` values and a committed
 `IndexHead`, rather than accumulated messages, tool outputs, typed answers, or a
@@ -227,15 +227,15 @@ content are excluded. The full receipt remains in the immutable record chain.
 Checkpoint messages render under the current `Budget`, including after a model
 switch reduces it. Pins use `SelectPins`, cached by record and budget. Checkpoint
 messages are cached by record hash, budget and effective pins; tail messages by
-committed head, tail start and clear watermark. Cleared results retain the stored
+committed head, tail start, clear/preview/force watermarks and preview budget. Cleared results retain the stored
 result's size, tool-use ID and first error line, while `Keep` results retain their
 existing projection. Hidden-call state crosses the cut. Checkpoint views pass both
 Anthropic and Bedrock view grammars; views without checkpoints retain the existing
 resume-time Bedrock validation. Successful activity outputs may return `ViewUpdate`;
-recovery outputs never adopt it. Protocol 7 covers these view updates, recorded
+output-validation recovery outputs never adopt it. Protocol 7 introduced these view updates, recorded
 request facts and model rates, entry size metadata and stamped run settings.
-The current protocol is 8 (lookup activity and counters). Drain older workflows
-before upgrading; v5, v6 and v7 fixtures retain mismatch
+The current protocol is 9 (overflow recovery). Drain older workflows
+before upgrading; v5–v8 fixtures retain mismatch
 rejection before effects. Structural templates remain version 5.
 
 ### Opt-in context compaction
@@ -257,9 +257,8 @@ child-agent settings for replayable child starts. Worker option changes cannot
 alter an existing run. `KeepResultTools` marks result entries `Keep`; those
 results retain their normal projection when clearing.
 
-For agents with compaction settings, the workflow observes facts only from
-adopted planner outputs. Agents without those settings send no `Models` and
-emit no K12 diagnostics or compaction events. `Facts` parallels
+Every agent observes facts from adopted planner outputs and sends `Models`;
+threshold transformations remain opt-in. `Facts` parallels
 `CallKeys` and contains the recorder's durable `Completion.Facts`; `Models` sends
 a sorted snapshot of the last adopted rate and usable budget for each model.
 Only view-bearing calls update rates and budgets. The first planner step sends
@@ -280,7 +279,7 @@ its output reserve, threshold compaction stays off for the run.
 If compaction remains above the threshold, the no-progress guard suppresses
 another attempt until estimated growth reaches `MinSavingTokens`. Checkpoint
 size uses the last adopted rendered measurement only for the same record, tail
-and budget; otherwise it uses `checkpoint.MaxBytes`. Recovery outputs adopt
+and budget; otherwise it uses `checkpoint.MaxBytes`. Output-validation recovery outputs adopt
 facts but never a `ViewUpdate` or a threshold transition. `planner_step` records
 the calls' actual loader-built view, including its pins, and marks rejected
 outputs with `recovery` and correction retries with `recovering`. Reconstruction
@@ -295,8 +294,8 @@ before/after estimates and checkpoint; skipped records report `no_progress` or
 `below_min_saving`. `no_progress` is recorded once per suppression episode;
 reaching the minimum-growth boundary permits another attempt and episode. Normal hooks `context_unmeasured`, `context_limits_unknown`
 and `context_budget_too_small` each occur at most once per run, keyed by type and
-run for agents with compaction settings. These diagnostics describe adopted
-facts, including rewriting planners; K14 widens diagnostics to other agents.
+run for every agent. These diagnostics describe adopted facts, including
+rewriting planners.
 
 The loader derives canonical pins with `SelectPins(record users, Budget)`,
 recomputing only when the record or budget changes. `ViewUpdate` and `CallView`
@@ -308,6 +307,81 @@ result-only user messages are covered by those receipts and get no user index ro
 Resume references require one measurement per message; clarification answers
 require a present size, with zero measuring an empty answer.
 
+### Context overflow recovery (protocol 9)
+
+Recovery and the pre-send guard run for every agent. Threshold compaction remains
+opt-in. `RunInput.ContextSettings` records threshold, recovery, guard and recall
+settings for the run and child starts. Configure the existing recovery option:
+
+```go
+runtime.WithContextRecovery("service.agent", runtime.ContextRecovery{
+    GuardMargin: contextmeasure.Rate{Tokens: 1, Bytes: 10}, // zero selects 10%
+    DisableRecall: false,
+})
+```
+
+After recording a started call, the wrapper checks its whole request. The guard
+requires known limits and an exact count or calibrated estimate, rejects above
+`B × (1 + GuardMargin)`, and records `ErrContextBudget` without sending. Exact
+count eligibility before calibration uses the upper clamp rate, 1/2. Unknown
+limits or uncalibrated estimates leave the guard off. The guard gets one rejection
+per logical planner step; it never spends the two provider recovery retries or
+fails a step by itself. Failed guard recovery lets the provider decide.
+
+A provider overflow, guard rejection or failed progress check marks the entire
+activity attempt. Further calls return `ErrContextOverflowPending` before recording
+or sending. The activity returns `ContextOverflow` even if its planner swallowed
+the error or returned a result. It discards every presentation from that attempt,
+including earlier successful calls, and returns all started CallKeys and facts.
+Other non-retryable provider errors become non-retryable engine application
+errors of type `provider_error.<kind>`; they execute one activity attempt.
+
+The workflow records `context_overflow` in place of `planner_step`, adopting the
+head, actual call view, settings, facts and every call key. Its sources are
+`provider`, `guard` and `no_progress`; outcomes are `recovered`, `guard_off` or
+`failed:<reason>`. A transformation adds `context_compacted{reason: overflow}`
+with tier `clear`, `evict`, `preview` or `placeholder`. These record events bypass
+`BeforeEvent`. RunRecord recomputes each recovery from durable facts and stamped
+settings, and rejects presentations committed from an overflow attempt.
+
+Pure `compaction.Recover` uses the failed request's recorded window minus reserve,
+never current adapter limits. It clears results without threshold protection or
+minimum savings, evicts closed units while preserving the previous summary, then
+halves all newest-unit previews evenly down to 256 bytes before forcing
+placeholders, including Keep results. `PreviewThrough` and `ForceClearThrough`
+are monotone view watermarks. A trailing user unit stays with the latest legal
+assistant cut so both provider grammars remain valid. Projection caches include
+both watermarks and the preview budget; cold and warm loads produce identical
+bytes. The stored entries and full results remain available to recall.
+
+Recovery estimates the whole retried request: outside-view text and non-text,
+retained entries, and `checkpoint.MaxBytes` under the recomputed budget. With
+known limits and a calibrated rate the target is strictly below `B × TriggerAt`;
+otherwise it halves the failed request's view text bytes. The workflow immediately
+reschedules without a threshold transformation, append or summary between recovery
+and retry. A HistoryPolicy runs on the loaded recovered view; a request unrelated
+to that view cannot be recovered.
+
+Every call to a model in that step must be smaller than the smallest whole-request
+size that model's provider rejected. Progress uses the fixed default rate plus
+non-text and reserve, so calibration and call ordinal cannot change the baseline.
+A failed check names both call keys and the planner. Provider overflows permit
+two recoveries; the third fails. `ContextOverflowError` preserves facts and call
+keys and unwraps distinct `ErrContextOverflowNoProgress`,
+`ErrContextBudgetExceeded` (minimal view), or `ErrContextOverflowBudget` sentinels.
+Minimal-view errors name its first message and estimated fixed overhead.
+
+If recorded B gives `MaxBytes < MinCheckpointBytes`, recovery is unavailable.
+The workflow preserves the provider overflow in a typed error naming the byte
+shortfall, emits `context_budget_too_small`, and consumes no recovery retry.
+It never enlarges the B-derived budget or substitutes a projection. A guard in
+that situation disables itself; only an observed provider overflow fails the step.
+
+Protocol 9 covers overflow activity shapes, settings, watermarks, events and the
+loop. The real recorded v9 history exercises an overflow followed by bounded
+recovery, lookup and finalization; v5–v8 are mismatch-before-effects fixtures.
+Drain older workflows before upgrading. Structural templates remain version 5.
+
 The index types have these fields:
 
 | Type | Fields and meaning |
@@ -317,7 +391,7 @@ The index types have these fields:
 | `StructuralEntry` | `Kind`, `ProtocolVersion`, `Text`, `Reason` |
 | `TextParameter` | Either inline `Text` (at most 16 KiB) or a full-content `Hash` |
 | `IndexSegment` | `Prev`, `First`, `Entries`; only the first segment has no predecessor |
-| `ViewRef` | `IndexHead`, `Pending`, `Checkpoint`, `TailFrom`, `ClearedThrough`, `Pinned`, `Budget` |
+| `ViewRef` | `IndexHead`, `Pending`, `Checkpoint`, `TailFrom`, `ClearedThrough`, `PreviewThrough`, `ForceClearThrough`, `Pinned`, `Budget` |
 | `RenderBudget` | Current user, summary, receipt, framing and preview token budgets |
 | `Origin` | Reserved continuation scope, run, position, ID and carried form |
 
@@ -1227,7 +1301,7 @@ when preserving the evidence.
 | `Step` | `kind`: `model`, `tool`, `await`, `answer` or `event`; `step`: planner schedule number; optional `entry_id`: index entry identity; `verified`: evidence trust; exactly one populated `model`, `tool`, `event` or `answer` member. |
 | `ModelStep` | `key`: `RunID`, `Seq`, `Attempt`; `class`: `adopted`, `abandoned` or `incomplete`; `activity`: `planner` or `summarize`; `step`: recorded planner number; `model`, `model_id`: provider and registration identity; `usage`: token counts; `latency`: duration; optional `error`: `kind`, `message`; optional `facts`: request measurements; `chosen`: tool calls; `system_hash`, `tools_hash`, `request_digest`: full request provenance; `prompts`: prompt refs. |
 | `TokenUsage` | `Model`, `ModelClass`: attribution; `InputTokens`, `OutputTokens`, `TotalTokens`, `CacheReadTokens`, `CacheWriteTokens`: disjoint normalized token counts. |
-| `RequestFacts` | `call`: call key; `model`: resolved identity; `context_window`, `output_reserve`, `input_tokens`, `text_bytes`, `fixed_bytes`, `non_text`: measurements; `view_bearing`: transcript-view inclusion; `count_latency`: counting duration; `outcome`: measurement outcome. |
+| `RequestFacts` | `call`: call key; `model`: resolved identity; `context_window`, `output_reserve`, `input_tokens`, `text_bytes`, `fixed_bytes`, `non_text`: measurements; `view_bearing`: transcript-view inclusion; `view_text_bytes`, `view_non_text`: the matched view's text bytes and non-text parts (optional); `count_latency`: counting duration; `outcome`: measurement outcome. |
 | Chosen tool call / prompt ref | Tool call: `Name`, `ID`, `Payload` (raw JSON). Prompt ref: `ID`, `Version`. |
 | `ToolStep` | `name`, `tool_call_id`, optional `parent_tool_call_id`: call identity; `arguments`: original JSON before injection; `result`: complete JSON or null if absent; optional `bounds`, `error`: stored metadata; `duration`: execution duration; `children`: linked trajectories in canonical link order. |
 | Bounds / structured tool error | Bounds: `Returned`, nullable `Total`, `Truncated`, nullable `NextCursor`, `RefinementHint`. Error: `Message`, optional `kind`, nullable recursive `Cause`. |
@@ -3564,8 +3638,8 @@ stream without a canonical response, even if provisional chunks were delivered.
 
 | Adapter | Overflow signal |
 | --- | --- |
-| Anthropic | HTTP 400 `invalid_request_error` with a message starting `prompt is too long`; `model_context_window_exceeded` in Complete or Stream. [Context-window documentation](https://platform.claude.com/docs/en/build-with-claude/context-windows). |
-| Bedrock | `ValidationException` with `Input is too long for requested model`, `prompt is too long`, or `too many input tokens`, including receive-time stream errors; `model_context_window_exceeded` stops. Sources: [AWS validation guide](https://repost.aws/knowledge-center/bedrock-validation-exception-errors), [Claude context windows](https://platform.claude.com/docs/en/build-with-claude/context-windows), [captured Titan error](https://www.philschmid.de/amazon-titan-embeddings), [AWS stop reasons](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-anthropic-claude-messages-request-response.html). |
+| Anthropic | HTTP 400 `invalid_request_error` with `prompt is too long` or older Claude `input length and max_tokens exceed context limit`; status-200 SSE `error` events with either text; `model_context_window_exceeded` in Complete or Stream. [Context-window documentation](https://platform.claude.com/docs/en/build-with-claude/context-windows). |
+| Bedrock | `ValidationException` with `Input is too long for requested model`, `prompt is too long`, or `too many input tokens`, or older Claude `input length and max_tokens exceed context limit`, including receive-time stream errors; `model_context_window_exceeded` stops. Sources: [AWS validation guide](https://repost.aws/knowledge-center/bedrock-validation-exception-errors), [Claude context windows](https://platform.claude.com/docs/en/build-with-claude/context-windows), [captured Titan error](https://www.philschmid.de/amazon-titan-embeddings), [AWS stop reasons](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-anthropic-claude-messages-request-response.html). |
 | OpenAI | `context_length_exceeded` in SDK errors or streamed `response.failed` / `error` events. Sources: [Responses events](https://developers.openai.com/api/reference/resources/responses/streaming-events), [OpenAI's recorded overflow fixture](https://github.com/openai/codex/blob/main/codex-rs/codex-api/src/sse/responses.rs). |
 | Gemini / Vertex | HTTP 400 `INVALID_ARGUMENT` with `exceeds the maximum number of tokens`, with or without the input count. Sources: [captured SDK error](https://github.com/googleapis/python-genai/issues/2050), [message variant](https://github.com/google-gemini/gemini-cli/issues/22609), [Google API errors](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-reference/api-errors). Streaming remains unsupported. |
 | Codex | The code `context_length_exceeded` in HTTP errors or streamed `response.failed` / `error` events. Detection uses the code only and keeps the fixed redacted message. [Recorded provider fixture](https://github.com/openai/codex/blob/main/codex-rs/codex-api/src/sse/responses.rs). |
@@ -3576,8 +3650,8 @@ Bedrock's context-window stop no longer sets `Response.OutputLimited` or trigger
 `OutputBounds` recovery (the shorter-answer retry with tools disabled).
 Anthropic's `model_context_window_exceeded` stop previously returned a successful
 `Response` with that `StopReason`; it now fails with `context_overflow`.
-`max_tokens` still means output-limited. Until overflow recovery lands in K14,
-`context_overflow` fails the planner activity; K9 adds no recovery.
+`max_tokens` still means output-limited. Context overflows return an activity
+output for bounded workflow recovery.
 Other errors keep their existing behavior: ordinary Bedrock and Codex 400s remain
 `invalid_request`; Anthropic, OpenAI, Gemini, and Ollama retain their existing
 error wrapping rather than gaining new classifications.
@@ -3741,22 +3815,42 @@ as text. `ViewBearing` matches canonical role/parts hashes against the committed
 pre-history-policy view snapshot, excluding `Meta` and cache points. This is
 separate from the full-encoding request match used to reconstruct call evidence.
 
+`ViewTextBytes` and `ViewNonText` measure the request messages matching that
+snapshot, in text bytes and non-text tokens respectively. Each matching request
+occurrence counts once; duplicate snapshot entries do not multiply the counts.
+Both fields use `omitzero`; older records without them decode as zero.
+
 Every terminal call has facts: unary success/failure, stream setup failure,
 `Finalize`, `Close`, and `stream_abandoned`. Only started records have no facts.
 `InputTokens` sums input, cache reads and cache writes; missing usage gives zero.
 Streaming facts use the usage chunks observed by the recorder, including those
 received before closing or abandoning a stream. Outcomes are `ok`, `overflow`
 for provider `context_overflow`, and `error` for other failures.
-`pre_send_rejected` is reserved for later guard wiring. `CountLatency` is optional
-and remains zero here because recording does not invoke token counting.
+`pre_send_rejected` records guard rejection. `CountLatency` records optional
+counting latency; progress rejection records an error outcome.
 
 `runrecord.Read` exposes facts through each call's `Completion`; `Export` and
 `FromExport` preserve them, including nanosecond durations. K10 adds no workflow
 or activity-output fields and does not change the workflow protocol. K12 adds
 `Facts` to `PlanActivityOutput`, sorted `Models` to activity input,
 trigger decisions and `context_unmeasured` / `context_limits_unknown` events;
-K12 applies Observe, Models and diagnostics only to compaction-enabled agents;
-K14 widens their enablement and owns guard rejection.
+K14 applies Observe, Models, guard checks, recovery and diagnostics to every
+agent. Only threshold transformations remain opt-in.
+
+`contextmeasure.GuardTokens` uses the upper clamp rate (1/2) to decide whether
+to ask a token counter before calibration. Its fallback estimate still uses
+the supplied rate; an exact count enables `GuardOn` with known limits.
+
+`runtime/agent/overflow` supplies the pure pre-send decision only. Initialize
+`Step.ProviderLeft` to two and retain the smallest `Size` rejected by each
+provider model in `Step.Rejected`. `Size` estimates all request text at 1/3,
+adds non-text tokens and output reserve, and saturates at `MaxInt`. It never
+changes with calibration. `Check` returns `GuardReject` first when eligible and
+tokens strictly exceed `Limits.Budget × (1 + GuardMargin)`; otherwise it returns
+`NoProgress` if size is at least that model's baseline, or `Send`. The margin is
+rational: pass `contextmeasure.Rate{Tokens: 1, Bytes: 10}` for ten percent; zero
+means zero margin. Check does not mutate state or spend the provider budget.
+The recorder owns rejection persistence; the workflow owns view recovery.
 
 ### Rate Limiting
 
@@ -5023,7 +5117,7 @@ Exhaustion stores an ordinary eligible result with `code`, `allowance`,
 
 `runtime.WithContextRecovery(agentID, runtime.ContextRecovery{DisableRecall: true})`
 turns lookup off and emits `context_recall_disabled` once at the first shortened
-view. K13 introduces this minimal recovery settings struct; K14 extends it.
+view. The same struct also carries GuardMargin, zero resolving to 10%.
 Resolved settings and child-agent settings are stamped into RunInput and the
 canonical RunRecord. ContextCompaction does not own DisableRecall.
 
@@ -5061,10 +5155,9 @@ Each invocation records one keyed context_recalled event with kind, outcome
 (ok/exhausted/rejected/unsupported), code, tool_use_id, bytes, remaining counters
 and step. Exhaustion emits recall_budget_exhausted once per allowance episode,
 reset by refill. RunRecord rebuilds and validates recorded charges and settings.
-Workflow protocol 8 covers these settings, counters, activity and catalog
-envelopes; drain older workflows before upgrading. The recorded v8 fixture
-replays a real compacted lookup; v5–v7 fixtures remain. Structural templates
-remain version 5.
+Workflow protocol 9 adds overflow recovery to these lookup contracts. The recorded
+v9 fixture exercises bounded recovery and lookup; v5–v8 fail before effects.
+Structural templates remain version 5.
 
 FromRecord preserves the canonical tool name in the stored record and marks
 lookup receipt items so rendered lines say context lookup. Runtime-generated

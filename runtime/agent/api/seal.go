@@ -3,6 +3,8 @@ package api
 import (
 	"time"
 
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/compaction"
+
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 )
@@ -10,6 +12,8 @@ import (
 // SealRecordInput fixes the terminal index and event identity before scheduling.
 // Retries must receive the same pending entries, key and workflow timestamp.
 type SealRecordInput struct {
+	// ContextSettings snapshots resolved settings even before a first plan.
+	ContextSettings compaction.ContextSettings
 	// ContextRecovery is the resolved run configuration.
 	ContextRecovery ContextRecovery
 	// ContextCompaction preserves stamped settings even for a run with no adopted planner step.

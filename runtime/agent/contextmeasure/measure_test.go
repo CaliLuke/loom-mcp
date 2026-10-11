@@ -53,7 +53,7 @@ func TestMeasureTextAndFixed(t *testing.T) {
 	require.NoError(t, err)
 	fixed := len("system") + len("tool") + len("desc") + len(`{"type":"object"}`)
 	text := fixed + len("é") + len("cite") + len("doc") + len("abc") + len("ctx") + len("idtool") + len(`{"x":1}`) + len("id") + len(`{"ok":true}`) + len("think") + 3
-	assert.Equal(t, RequestFacts{Model: "m", ContextWindow: 1000, OutputReserve: 200, ViewBearing: true, TextBytes: text, FixedBytes: fixed}, facts)
+	assert.Equal(t, RequestFacts{Model: "m", ContextWindow: 1000, OutputReserve: 200, ViewBearing: true, ViewTextBytes: 6, TextBytes: text, FixedBytes: fixed}, facts)
 }
 
 func TestFactsWithResult(t *testing.T) {

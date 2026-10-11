@@ -28,6 +28,8 @@ type (
 	}
 	// Run holds one run's transcript and evidence in canonical order.
 	Run struct {
+		// ContextSettings holds resolved recovery and threshold settings for every agent.
+		ContextSettings *compaction.ContextSettings `json:"context_settings,omitzero"`
 		// RecoverySettings is the resolved runtime-stamped lookup configuration.
 		RecoverySettings *run.ContextRecovery `json:"recovery_settings,omitzero"`
 		// Recall reconstructs independently charged and refilled allowances.

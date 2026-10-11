@@ -89,7 +89,7 @@ func isSupportedHookEventType(eventType EventType) bool {
 		ContextRecalled, ContextRecallDisabled, RecallBudgetExhausted, ContextUnmeasured, ContextLimitsUnknown, ContextBudgetTooSmall, ContextCompacted, ContextCompactionSkipped:
 		return true
 	case ContextOverflow:
-		return false
+		return true
 	default:
 		return false
 	}

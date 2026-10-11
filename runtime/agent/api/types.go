@@ -10,9 +10,11 @@ import (
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/artifact"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/compaction"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextmeasure"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/overflow"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
@@ -31,6 +33,8 @@ type (
 	// It includes the full conversational context plus caller-provided labels and
 	// metadata.
 	RunInput struct {
+		// ContextSettings snapshots resolved recovery settings for every agent.
+		ContextSettings compaction.ContextSettings `json:"context_settings,omitzero"`
 		// ContextCompaction is runtime-stamped configuration for this run.
 		ContextCompaction *ContextCompaction `json:"context_compaction,omitzero"`
 		// ContextRecovery is the resolved runtime-stamped lookup configuration.
@@ -393,6 +397,9 @@ type (
 
 	// PlanActivityInput carries the planner input for PlanStart and PlanResume activities.
 	PlanActivityInput struct {
+		// Overflow carries the current planner step after an overflow recovery.
+		Overflow        *overflow.Step             `json:"overflow,omitzero"`
+		ContextSettings compaction.ContextSettings `json:"context_settings,omitzero"`
 		// Models is the sorted snapshot of adopted model rates and budgets.
 		Models []ModelContext `json:"models,omitzero"`
 		// ExtraTools contains workflow-owned specs added to the model catalog this turn.
@@ -495,6 +502,8 @@ type (
 	}
 	// PlanActivityOutput wraps the planner result produced by a plan/resume activity.
 	PlanActivityOutput struct {
+		// ContextOverflow replaces a result when any call marks the attempt.
+		ContextOverflow *contextmeasure.ContextOverflow `json:"context_overflow,omitzero"`
 		// Facts parallels CallKeys and comes from durable Completion.Facts.
 		Facts []contextmeasure.RequestFacts `json:"facts,omitzero"`
 		// Result is the planner output describing next tool calls, await requests, or final response.

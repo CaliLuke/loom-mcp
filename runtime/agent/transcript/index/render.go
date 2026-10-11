@@ -157,6 +157,13 @@ func (r *Renderer) appendAssistant(entry MessageEntry) error {
 	return nil
 }
 
+// ResultContent projects a result exactly as Render does, without loading an
+// omitted body. The returned value is suitable for deterministic previewing.
+func ResultContent(ctx context.Context, source Source, entry MessageEntry) (any, error) {
+	r := Renderer{ctx: ctx, source: source}
+	return r.resultContent(entry, nil)
+}
+
 func (r *Renderer) appendResult(entry MessageEntry, inline []byte) error {
 	if entry.Batch == 0 || len(entry.ToolUseIDs) != 1 {
 		return fmt.Errorf("tool result requires a batch and one tool use ID")

@@ -10,13 +10,13 @@ import (
 
 const (
 	// Description contains all model-facing discovery and paging guidance.
-	Description = `Retrieve conversation evidence hidden by checkpoints or cleared results. Choose exactly one: read, list or find.
-IDs come from placeholders, pins, user index lines, receipts and shortened summaries. Tool use IDs address results or original arguments; message IDs address original text; ck- IDs address full summaries. Use run labels or rN:-qualified IDs only when shown.
+	Description = `Retrieve hidden conversation evidence. Choose one: read, list or find.
+Use IDs shown in placeholders, pins, index lines, receipts and summaries. Tool use IDs address results or original arguments; message IDs address original text; ck- IDs address full summaries. Use run labels or rN:-qualified IDs only when shown.
 read: give id, part (result or arguments), and byte offset (start at 0). Follow next_offset until complete. Offsets snap to UTF-8 boundaries. Pages use max(512, ProtectRecentToolTokens) bytes. Images/documents report recall_unsupported_part with format and bytes until supported.
 list: give a collapsed rc- handle, or inclusive from/through message range and optional run. Receipt handles list calls and assistant text; earlier handles list earlier-run records; users handles list original user first lines. Ranges list every model-visible message. Follow cursor with the same selector.
 find: give nonempty literal, case-sensitive UTF-8 text, never regex. Scans eligible hidden content newest first, current run then earlier runs, at most 8 MB and ten matches per call. Matches give id, run, byte offset and a snippet. Read at that offset; follow cursor with the same text to continue.
 Handles/cursors are opaque and re-resolved within the checkpoint chain; they grant no access outside the session. Removed content returns recall_unavailable; unknown IDs/handles recall_not_found; denied access recall_unauthorized; malformed input recall_invalid_input.
-Discovery (list/find) and reads have separate allowances, initially 20 each. Rejected/malformed calls spend their allowance; an unrecognized kind spends discovery. Compaction refills both by half their initial allowance rounded up, capped at three times initial. recall_budget_exhausted gives allowance, other_remaining and refills_at: next compaction. Listings never spend reads. Retrieve only needed evidence.`
+Discovery (list/find) and reads each start with 20 calls. Rejected/malformed calls spend their allowance; an unrecognized kind spends discovery. Compaction refills both by half their initial allowance rounded up, capped at three times initial. recall_budget_exhausted gives allowance, other_remaining and refills_at: next compaction. Listings never spend reads.`
 	inputSchema = `{
   "type": "object",
   "additionalProperties": false,
