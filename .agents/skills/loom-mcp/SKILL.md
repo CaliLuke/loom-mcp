@@ -690,6 +690,17 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   callbacks and return a partial report with the panic stack after workers drain;
   the stop reason is callback_panic unless an earlier stop already took effect.
 
+- Embed eval/evalcli.Main(ctx, args, cfg) in the application command. Keep
+  signal handling in the caller. Persist each attempt before stderr progress,
+  cancel on sticky store errors, and read the final summary from the store.
+  Exit 0 includes quality failures and token stops; 1 is operational failure;
+  2 is usage error. Never enable live models in the CLI. See
+  references/agent-testing.md and references/runtime-contracts.md.
+- Config.NewJudge receives judge.NewDirCache(<store dir>/_calibration); wrap its
+  result with judging.New and persist Report.Judge before Finish. --no-judge
+  skips the factory. ErrLiveModelDisabled prints a notice and runs without a
+  judge, leaving gating claims pending; other factory errors fail before Begin.
+
 ## Eval Judge
 
 - `eval/judging` implements eval.OutcomeJudge and renders answer, last-run

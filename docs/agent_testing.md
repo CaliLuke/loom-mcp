@@ -216,6 +216,83 @@ An unanswered root-run await returns `ErrUnansweredAwait`. Use
 marked truncation. `Completed` and await checks require verified observed
 evidence; BeforeEvent middleware marks that evidence unverified.
 
+## Story (b): improve an agent across repeated requests
+
+Use an application-owned `cmd/evals` command to run, compare and inspect experiments.
+This is the authoritative CLI recipe. The generated assistant’s status request
+stands in for an application task such as a refund request. This configuration
+uses a fresh scripted model and a typed status stub for each attempt:
+
+<!-- snippet: eval-cli-fixture -->
+```go
+func fixtureEvalCLI() evalcli.Config {
+	return evalcli.Config{
+		Harness: eval.NewHarnessFunc(guideRegister, func(h *agenttest.Harness, _ eval.Variant) error {
+			agenttest.Stub(h, projected.ProjectedStatusToolTool).
+				Return(&projected.ProjectedStatusToolResult{Status: "ready"})
+			return nil
+		}, agenttest.ScriptedModel("fixture",
+			agenttest.Respond(agenttest.ToolCall(projected.ProjectedStatusToolTool, &projected.ProjectedStatusToolPayload{})),
+			agenttest.Respond(agenttest.Text("ready")),
+		)),
+		Scenarios: []eval.Scenario{{
+			ID: "status", Agent: "assistant.assistant_runtime",
+			Items: eval.Items(eval.Item{ID: "one", Input: "status?", ExpectedTools: &expect.ExpectedTools{
+				Exact: true, Tools: []expect.ExpectedTool{{Name: projected.ProjectedStatusTool}},
+			}}),
+			Expect: []expect.Expectation{expect.Completed()},
+		}},
+	}
+}
+
+```
+
+In the application’s `main`, call `evalcli.Main` with a cancellation context,
+`os.Args[1:]`, and your configuration. Pass its returned code to `os.Exit`.
+See [Eval CLI](runtime.md#eval-cli) for the signal-handler example and all flags.
+The CLI itself installs no signal handlers.
+
+To judge scenario claims, set `Config.NewJudge func(cache judge.Cache) (*judge.Judge, error)`
+and return a judge configured with the supplied `Cache`. The CLI stores calibration
+at `<store dir>/_calibration`, adapts the judge through `judging.New`, and persists
+judgments and judge provenance. `run --no-judge` skips the factory and leaves gating
+claims pending. A factory error wrapping `agenttest.ErrLiveModelDisabled` prints a
+stderr notice and continues without judging under normal exit rules; other factory
+errors return `1` before any experiment is stored.
+
+```sh
+go run ./cmd/evals run --scenario status --repeat 5 --label baseline
+# Revise the application prompt or model configuration.
+go run ./cmd/evals run --scenario status --repeat 5 --label clearer-policy --compare last
+go run ./cmd/evals show <baseline-experiment>/#1
+```
+
+The [compiled fixture test](../integration_tests/fixtures/assistant/agenttest/evalcli_fixture_test.go)
+calls these three commands through `Main`. The baseline passes three of five
+attempts. The candidate passes all five. The third command reads a failed baseline
+attempt and reconstructs its trajectory from the stored export.
+
+Failed checks do not change the command’s exit code. Read the summary to assess
+quality. Use `--json` for one structured run document. Progress stays on stderr,
+and `--quiet` suppresses it. Cancellation and operational failures return `1`.
+Usage errors return `2`.
+
+```sh
+go run ./cmd/evals run --rerun-failed <experiment> --compare <experiment> --merge-parent
+go run ./cmd/evals compare <experiment> --variants baseline,candidate
+go run ./cmd/evals list --limit 20
+```
+
+Reruns retain all repeats and inherit the parent’s repeat count unless overridden.
+Selection flags cannot accompany `--rerun-failed`. `--out <dir>` overrides the
+store for run, show, compare and list. Otherwise the default is `.loom-evals`
+beside the nearest ancestor `go.mod`.
+
+For live variants, declare `agenttest.LiveModel("model-id")` and set
+`LOOM_LIVE_MODEL=1` in the calling environment. The CLI never sets it.
+A disabled live variant produces a stored stopped experiment and an opt-in hint.
+The examples use no confirmation flows.
+
 ## Limits
 
 - Inline and agent-as-tool tools cannot be stubbed. Test child agents through

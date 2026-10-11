@@ -326,16 +326,25 @@ the rendered system prompt and tool definitions did not change between the two
 experiments. `show` renders one attempt's trajectory with its checks,
 judgments, and trace ID.
 
+The authoritative recipe is [story (b) in the testing guide](../agent_testing.md#story-b-improve-an-agent-across-repeated-requests).
 The command is the application's own `main`:
 
 ```go
 func main() {
-	evalcli.Main(evalcli.Config{
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	code := evalcli.Main(ctx, os.Args[1:], evalcli.Config{
 		Harness:   eval.NewHarnessFunc(register, setup),
 		Scenarios: []eval.Scenario{refundsScenario, ordersScenario},
 	})
+	stop()
+	os.Exit(code)
 }
 ```
+
+Set `Config.NewJudge func(cache judge.Cache) (*judge.Judge, error)` to judge claims,
+passing the supplied cache into `judge.Config.Cache`. The CLI uses
+`<store dir>/_calibration` and wraps the judge with `judging.New`. `run --no-judge`
+skips judging; gating claims then remain pending. See B10 for factory error handling.
 
 ---
 
@@ -941,12 +950,43 @@ After the D5 spike:
 
 ### B10. Command-line helper
 
-`evalcli.Main(config)` in the application's own `main`. Subcommands and flags:
-`run` (`--scenario`, `--tag`, `--item`, `--repeat`, `--concurrency`, `--label`,
-`--rerun-failed`, `--compare <experiment|last>`, `--max-tokens`, `--out`),
-`show`, `compare`, `replay`, `export opik`. `last` is the most recent
-experiment in the store with an overlapping selection. Readable output by
-default, `--json` everywhere.
+`evalcli.Main(ctx, args, config) int` runs in the application's own `main`.
+The caller supplies cancellation and passes the return code to `os.Exit`.
+The CLI installs no signal handlers.
+
+- `run`: `--variant`, `--scenario`, `--tag`, `--item`, `--repeat`,
+  `--concurrency`, `--label`, `--rerun-failed`, `--compare <experiment|last>`,
+  `--merge-parent`, `--max-tokens`, `--quiet`, `--no-judge`.
+- `show <experiment>[/<attempt>]`: `--full`, `--export`.
+- `compare <base> <candidate>`: `--merge-parent`.
+- `compare <experiment> --variants a,b[,c]`: compare each variant to the first.
+- `list`: `--limit n`, default 20, with 0 for all.
+- `help [command]`, `-h`.
+
+`--out` and `--json` apply to every data command. Flags work before or after
+positional arguments. Selectors are repeatable and accept comma-separated IDs.
+Store precedence is `--out`, `Config.StoreDir`, then the module-local default.
+`--compare last` excludes the new experiment and requires an overlapping
+scenario/item pair. Stopped live-disabled baselines remain eligible, with a notice.
+Reruns inherit the parent's repeats unless overridden and reject selection flags.
+`--merge-parent` on run requires both a rerun parent and a comparison.
+
+Progress follows durable writes on stderr. The final stdout summary lists failing
+groups first. JSON run output is one `loom-mcp.eval.run` version-1 document with
+an `experiment` summary and `comparisons` document or null.
+Exit codes are 0 for completion regardless of verdicts, 1 for operational failures,
+and 2 for usage errors. Token stops and nothing-to-rerun return 0.
+Live models require explicit `LOOM_LIVE_MODEL=1`; disabled runs retain evidence.
+
+`Config.NewJudge func(cache judge.Cache) (*judge.Judge, error)` supplies optional
+claim judging. The CLI passes `judge.NewDirCache(<store dir>/_calibration)`, wraps
+the result with `judging.New`, and sets the runner's `eval.OutcomeJudge`. It stores
+`report.Judge` with `Writer.SetJudge` before `Finish`. `--no-judge` skips the factory.
+A factory error wrapping `agenttest.ErrLiveModelDisabled` prints a stderr notice
+and continues without judging, leaving gating claims pending. Normal run exit
+rules apply, including `0` on completion. Other factory errors exit `1` before
+`Begin`, with no stored experiment. This implements T17 D-i in T15, which lands second.
+`replay` belongs to T19 and `export opik` to T18.
 
 ### Plan B proof
 

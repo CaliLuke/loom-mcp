@@ -140,6 +140,35 @@ Re-capture when planner decoration changes tool definitions.
   exports completed session evidence, retained in memory. Key storage by
   AttemptKey; isolated harnesses may repeat run/session IDs.
 
+## Eval CLI
+
+- Use eval/evalcli.Main(ctx, args, Config) in an application-owned cmd/evals.
+  Supply Harness and Scenarios. The caller supplies signal cancellation and
+  passes the exit code to os.Exit. Main installs no signal handlers.
+- Run baseline, run candidate with --compare last, then show a failed attempt.
+  See docs/agent_testing.md story (b) for the compiled three-command fixture.
+  Keep generated imports in the assistant fixture module.
+- --out and --json apply to run/show/compare/list. Selectors accept repeated
+  flags and comma lists. Flags work on either side of positional arguments.
+  Store precedence is --out, Config.StoreDir, then DefaultStoreDir(Config.Dir).
+- --rerun-failed inherits parent repeats unless --repeat overrides them. It
+  rejects selector flags and uses the store's variant/item cross-product.
+  --merge-parent overlays a candidate rerun on its recorded parent for comparison.
+- Attempt progress goes to stderr after persistence. --quiet suppresses it.
+  Stdout contains the stored summary or one version-1 loom-mcp.eval.run document.
+  Exit 0 includes failed/pending/error verdicts, token stops and nothing-to-rerun.
+  Operational errors return 1; usage errors return 2.
+- Live variants require explicit LOOM_LIVE_MODEL=1. Disabled live runs remain
+  stored as stopped/live_model_disabled and return 1 with an opt-in hint.
+  The CLI never sets the variable. Invalid values return 2 before storage.
+
+- Optional Config.NewJudge func(cache judge.Cache) (*judge.Judge, error) receives
+  the selected store's _calibration directory cache. Pass it to judge.Config.Cache.
+  The CLI wraps the judge with judging.New and stores judgments and provenance.
+  --no-judge skips the factory. An error wrapping ErrLiveModelDisabled prints a
+  stderr notice and continues without judging, leaving gating claims pending.
+  Normal exit rules apply; other factory errors return 1 before Begin.
+
 ## Diagnose failures
 
 Inspect Run's harness error before its populated Result. `RunErr` is the agent

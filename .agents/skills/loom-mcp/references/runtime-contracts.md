@@ -291,6 +291,45 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   Calibration and truncation mark groups and claim rows without suppressing status;
   text truncation fractions pool both sides. Keep report examples snippet-synced.
 
+## Eval CLI
+
+- eval/evalcli exposes Config and Main(ctx, args, cfg) int. Config requires
+  Harness and Scenarios except for help. Name defaults to evals. Nil writers
+  use stdout/stderr. The caller owns signal handling and cancellation.
+- Stdlib flags support repeated/comma selectors and flags after positional
+  arguments. --out overrides Config.StoreDir, then DefaultStoreDir(Dir).
+  Empty Dir uses the working directory. Read commands use the same store rules.
+- Run checks LiveModelEnabled before storage, applies RerunSelection when asked,
+  validates Plan, then Begin/Run/Finish. WithOnError cancels the run context.
+  Writer.OnAttempt persists before progress; skip progress when Writer.Err is set.
+  Read back the experiment for Summary/JSON. Store failures print volatile counts.
+- --rerun-failed rejects selectors and inherits parent repeats unless explicitly
+  overridden. Nothing-to-rerun creates no experiment. --compare last excludes
+  the new ID and uses scenario/item overlap. Live-disabled baselines remain
+  eligible with a notice. --merge-parent loads the candidate's recorded parent.
+- Show delegates to Summary or Show and their JSON forms. Resolve handles
+  experiment refs and Find handles attempts. Compare delegates to
+  CompareExperiments or CompareVariants. List defaults to 20 headers, 0 for all,
+  with full IDs and a revision * for modified sources. List JSON is an array.
+- Run JSON is one loom-mcp.eval.run version-1 document containing a SummaryJSON
+  experiment and a comparisons document or null. Progress and notices stay on
+  stderr. No-op reruns use null fields. Storage failures add unsaved_groups.
+- Exit 0 means completion regardless of verdicts, including token stops.
+  Exit 1 covers store/load/compare/run errors, cancellation and disabled live
+  models. Exit 2 covers usage, selection/Plan errors, invalid live env values,
+  unknown/ambiguous refs and a missing default module root.
+- The CLI never enables live models. Disabled variants retain a stopped
+  live_model_disabled experiment and print the LOOM_LIVE_MODEL=1 hint.
+- Config.NewJudge func(cache judge.Cache) (*judge.Judge, error) receives
+  judge.NewDirCache(<store dir>/_calibration) after Plan and before Begin.
+  Wrap its result with judging.New as the runner's eval.OutcomeJudge.
+  --no-judge skips cache/factory creation and judging. An error wrapping
+  agenttest.ErrLiveModelDisabled prints a stderr notice and continues without
+  a judge: gating claims remain pending and normal run exit rules apply.
+  Other factory errors return 1 before Begin, with no stored experiment.
+  Persist Report.Judge with Writer.SetJudge before Finish.
+  Replay, exporter and retention remain outside this CLI layer.
+
 ## Planner Streaming
 
 - `PlannerContext.ModelClient(id)` returns a runtime-decorated client.

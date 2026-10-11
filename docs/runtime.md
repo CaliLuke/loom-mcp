@@ -1902,6 +1902,105 @@ The supplied ID must match the candidate's `Header.Parent`. Candidate groups rep
 whole parent groups by variant/scenario/item; remaining parent groups are added.
 Warnings use candidate header provenance. Input experiments are not modified.
 
+### Eval CLI
+
+Embed `eval/evalcli` in an application-owned `cmd/evals` program. Supply a
+`Harness` factory and `Scenarios` in `evalcli.Config`. Optional fields select
+variants, the program name, the store directory, and output writers.
+`Main(ctx, args, cfg) int` receives `os.Args[1:]`. It installs no signal handlers.
+Put this code in the application’s `main`, with `register` and `scenarios` defined
+by the application:
+
+<!-- snippet: eval-cli-main -->
+```go
+ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+code := evalcli.Main(ctx, os.Args[1:], evalcli.Config{
+	Harness:   eval.NewHarnessFunc(register, nil),
+	Scenarios: scenarios,
+})
+stop()
+os.Exit(code)
+```
+
+The application registers its models and forwards the harness options.
+For live variants, add `agenttest.LiveModel("model-id")` to the variant options.
+The CLI checks `LOOM_LIVE_MODEL` but never enables it. Unset or `0` disables live
+variants, `1` enables them, and other values cause a usage error before storage.
+A disabled live run remains stored with `stopped` / `live_model_disabled` status.
+The diagnostic gives the opt-in command. Scripted variants need no opt-in.
+
+For claim judging, set `Config.NewJudge func(cache judge.Cache) (*judge.Judge, error)`.
+The CLI passes a directory cache at `<store dir>/_calibration`; use that cache in
+`judge.Config.Cache`. It wraps the returned judge with `judging.New`, supplies it
+to the runner, and stores judgments and judge provenance with the experiment.
+`run --no-judge` skips the factory and judging. With no judge, gating claims stay
+pending. If the factory returns an error wrapping `agenttest.ErrLiveModelDisabled`,
+the CLI prints a notice to stderr and runs without a judge. Normal exit rules
+apply, so a completed run returns `0`. Other factory errors return `1` before
+`Begin`, without storing an experiment. See [Eval judging](#eval-judging) for
+model configuration and the data sent to the judge provider.
+
+| Command | Arguments and flags |
+| --- | --- |
+| `run` | `--variant`, `--scenario`, `--tag`, `--item`, `--repeat`, `--concurrency`, `--max-tokens`, `--label`, `--rerun-failed`, `--compare`, `--merge-parent`, `--quiet`, `--no-judge` |
+| `show <experiment>[/<attempt>]` | `--full`, `--export` |
+| `compare <base> <candidate>` | `--merge-parent` |
+| `compare <experiment> --variants a,b[,c]` | First variant is the baseline |
+| `list` | `--limit n` (default 20, `0` means all) |
+| `help [command]` or `-h` | Usage and flags |
+
+`--out <dir>` and `--json` apply to each data command. Flags can precede or follow
+positional arguments. Selectors accept repeated flags and comma-separated IDs.
+Store precedence is `--out`, then `Config.StoreDir`, then
+`eval.DefaultStoreDir(Config.Dir)`. An empty `Dir` uses the current directory.
+The default store requires an ancestor `go.mod`. Full experiment IDs appear in
+output because short UUIDv7 prefixes can be ambiguous.
+
+A run validates its plan before it creates an experiment. Each completed append
+produces one stderr line: `[done/planned] verdict key duration tokens tok`.
+There are no ANSI codes or carriage returns. `--quiet` suppresses these lines.
+The final stdout summary comes from stored records and lists failing groups first.
+The CLI cancels work on a store write error and prints in-memory verdict counts.
+It retains partial evidence after cancellation or live-model rejection.
+
+`--rerun-failed <ref>` selects failed, error and not-run groups, with all repeats.
+It uses the store’s variant/item cross-product selection and records the parent ID.
+Without `--repeat`, the rerun inherits the parent’s repeat count. Selection flags
+cannot accompany `--rerun-failed`. An all-passed parent prints `nothing to rerun`
+and creates no experiment. Pending groups do not enter the rerun selection.
+
+`--compare last` finds the newest non-running experiment with an overlapping
+scenario/item pair. It excludes the new experiment. Without an overlap, the CLI
+prints a notice and completes successfully. A live-disabled baseline remains
+eligible and produces a notice. On a rerun, `--compare <ref> --merge-parent`
+compares the candidate with parent groups supplied for items absent from the rerun.
+The standalone `compare --merge-parent` command uses the candidate’s recorded parent.
+Variant comparisons within one experiment do not accept `--merge-parent`.
+
+`show` uses full IDs, unique prefixes of at least eight characters, or `last`.
+Attempt references accept `#index`, a full key, or `scenario:item:repeat`.
+`--full` removes text trajectory limits. With `--json`, `--export` adds raw exports.
+`list` shows ID, start time, label, parent, status, stop reason, planned attempts,
+tokens and revision. A `*` marks a modified revision.
+
+JSON goes to stdout, and progress and notices stay on stderr. `run --json` emits
+one version-1 `loom-mcp.eval.run` document. Its `experiment` contains the complete
+`SummaryJSON` document. Its `comparisons` contains the comparison document or `null`.
+When nothing needs a rerun, both fields are `null` and stderr carries the notice.
+On a store write error, both fields are `null` and `unsaved_groups` contains
+in-memory counts. `list --json` returns a newest-first array of experiment headers.
+`show` and `compare` use the [stored report formats](#eval-show-and-compare).
+
+Exit codes describe command execution, not quality:
+
+- `0`: completion with any verdicts, a token-limit stop, or nothing to rerun.
+- `1`: storage, load, comparison or run failure, including cancellation and disabled live models.
+- `2`: invalid command, flag, value, selection, reference, environment value or configuration.
+
+The store stays local and self-gitignored. The CLI uploads nothing and stores no
+provider credentials. Application runs still use the clients that the application
+registers. Replay, export integrations and retention are separate work.
+
 ### Eval judge
 
 `eval/judge` evaluates claims against caller-rendered text. Construct a judge
