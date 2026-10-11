@@ -387,6 +387,9 @@ type (
 		// AgentID identifies which agent is being planned.
 		AgentID agent.Ident
 
+		// Step is the one-based planner activity schedule number within the run.
+		Step int `json:"step,omitzero"`
+
 		// RunID identifies the run being planned.
 		RunID string
 
@@ -417,6 +420,17 @@ type (
 		// Recovery carries bounded correction guidance from the rejected activity
 		// this planner invocation replaces. It never contains rejected model output.
 		Recovery *ModelRecovery
+	}
+
+	// RequestGrowth identifies a request whose message bytes outside the view
+	// exceed those inside it. Workflow state controls once-per-run publication.
+	RequestGrowth struct {
+		// Key identifies the started model call.
+		Key runstore.CallKey
+		// Inside counts encoded message bytes matched to the recorded view.
+		Inside int
+		// Outside counts encoded message bytes supplied independently of the view.
+		Outside int
 	}
 
 	// ModelRecovery is the workflow-safe record for one rejected model output.
@@ -453,6 +467,15 @@ type (
 
 		// AwaitCallRefs contains canonical question/external call refs by ToolCallID.
 		AwaitCallRefs map[string]runstore.Hash
+
+		// CallKeys contains every model call started by this activity attempt.
+		CallKeys []runstore.CallKey
+
+		// ProducingCall is the last completed call that emitted planner events.
+		ProducingCall *runstore.CallKey
+
+		// RequestGrowth carries this attempt's first request dominated by outside-view bytes.
+		RequestGrowth *RequestGrowth
 
 		// Usage is the token usage reported by the model provider when available.
 		Usage model.TokenUsage

@@ -16,6 +16,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runrecord"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 	agentsruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
@@ -66,9 +67,9 @@ func TestActivityContentTypedLargeRoundTrip(t *testing.T) {
 	assert.Empty(t, out.Payload)
 	assertStoredRefs(t, store, "root", out.Refs)
 	_, err = agentsruntime.LoadToolResult(t.Context(), store, "child", *spec, out.Refs.Result)
-	assert.ErrorIs(t, err, runstore.ErrNotFound)
+	require.ErrorIs(t, err, runstore.ErrNotFound)
 	_, err = agentsruntime.LoadToolResult(t.Context(), store, "root", *spec, "")
-	assert.ErrorIs(t, err, runstore.ErrNotFound)
+	require.ErrorIs(t, err, runstore.ErrNotFound)
 }
 
 func TestActivityContentGeneratedDispatchAndWorkflow(t *testing.T) {
@@ -134,8 +135,16 @@ func TestActivityContentGeneratedDispatchAndWorkflow(t *testing.T) {
 			require.Len(t, events, 1)
 			event := events[0]
 			if failAt != 0 {
-				assert.Empty(t, event.Refs)
+				// No successful-result or executed-payload refs leak from the failed
+				// write. The materializer's fresh synthesized error sidecar is canonical.
+				assert.Empty(t, event.Refs.Result)
+				assert.Empty(t, event.Refs.Payload)
+				assert.NotEmpty(t, event.Refs.ServerData)
 				assert.NotNil(t, event.Error)
+				record, err := runrecord.Read(t.Context(), store, fx.rt.RunEventStore, "content-root", "content-root")
+				require.NoError(t, err)
+				require.Len(t, record.Runs[0].ServerOnly, 1)
+				assert.JSONEq(t, `{"private":"sidecar-marker"}`, string(record.Runs[0].ServerOnly[0].Content))
 				return
 			}
 			assertStoredRefs(t, store, "content-root", event.Refs)
@@ -181,7 +190,11 @@ func (p contentPlanner) PlanResume(ctx context.Context, input *planner.PlanResum
 	output := input.ToolOutputs[0]
 	if p.fail {
 		assert.Empty(p.t, output.Refs.Result)
-		assert.Empty(p.t, output.Refs.ServerData)
+		assert.Empty(p.t, output.Refs.Payload)
+		assert.NotEmpty(p.t, output.Refs.ServerData)
+		server, err := input.Content.LoadServerData(ctx, output.Refs)
+		require.NoError(p.t, err)
+		assert.JSONEq(p.t, `{"private":"sidecar-marker"}`, string(server))
 		payload, err := input.Content.LoadToolPayload(ctx, output)
 		require.NoError(p.t, err)
 		assert.JSONEq(p.t, `{"topic":"model"}`, string(payload))

@@ -312,6 +312,11 @@ func (r *Runtime) registerAgentActivities(ctx context.Context, reg AgentRegistra
 	}, r.ChildDispatchActivity); err != nil {
 		return err
 	}
+	if err := r.Engine.RegisterSealRecordActivity(ctx, SealRecordActivityName(reg.ID), engine.ActivityOptions{
+		Queue: reg.Workflow.TaskQueue, StartToCloseTimeout: defaultExecuteToolActivityTimeout, RetryPolicy: engine.RetryPolicy{MaxAttempts: 3},
+	}, r.SealRecordActivity); err != nil {
+		return err
+	}
 	return r.Engine.RegisterFinishRunActivity(ctx, FinishRunActivityName(reg.ID), engine.ActivityOptions{
 		Queue:               reg.Workflow.TaskQueue,
 		StartToCloseTimeout: defaultExecuteToolActivityTimeout,

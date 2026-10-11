@@ -6,6 +6,7 @@ import (
 	"io"
 	"testing"
 
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
@@ -267,7 +268,7 @@ func TestPlannerContextModelClientAndConsumeStreamDoNotDuplicateTranscriptOrUsag
 	rt.models["default"] = contractModelClient{streamer: inner}
 	rt.agents["svc.agent"] = AgentRegistration{ID: "svc.agent", Planner: consumeStreamPlanner{}}
 
-	out, err := rt.PlanStartActivity(context.Background(), &PlanActivityInput{
+	out, err := rt.PlanStartActivity(engine.WithActivityAttempt(context.Background(), 1), &PlanActivityInput{
 		AgentID:    "svc.agent",
 		RunID:      "run-consume-stream",
 		RunContext: run.Context{RootRunID: "root", RunID: "run-consume-stream", Attempt: 1},
@@ -357,7 +358,7 @@ func TestRejectedStreamDoesNotPersistPresentationContent(t *testing.T) {
 	rt.models["default"] = client
 	rt.agents["svc.agent"] = AgentRegistration{ID: "svc.agent", Planner: consumeStreamPlanner{}}
 
-	out, err := rt.PlanStartActivity(context.Background(), &PlanActivityInput{
+	out, err := rt.PlanStartActivity(engine.WithActivityAttempt(context.Background(), 1), &PlanActivityInput{
 		AgentID:    "svc.agent",
 		RunID:      "run-rejected-stream",
 		RunContext: run.Context{RootRunID: "root", RunID: "run-rejected-stream", Attempt: 1},
@@ -441,7 +442,7 @@ func TestDirectInternalToolUsesNarrowModelCatalogUnderBroadPolicy(t *testing.T) 
 	rt.models["default"] = client
 	rt.agents["svc.agent"] = AgentRegistration{ID: "svc.agent", Planner: directToolUnavailablePlanner{}}
 
-	out, err := rt.PlanStartActivity(context.Background(), &PlanActivityInput{
+	out, err := rt.PlanStartActivity(engine.WithActivityAttempt(context.Background(), 1), &PlanActivityInput{
 		AgentID:          "svc.agent",
 		RunID:            "run-narrow-catalog",
 		RunContext:       run.Context{RootRunID: "root", RunID: "run-narrow-catalog", Attempt: 1},
@@ -475,7 +476,7 @@ func TestStreamResponseInternalToolUsesNarrowModelCatalogUnderBroadPolicy(t *tes
 	rt.models["default"] = client
 	rt.agents["svc.agent"] = AgentRegistration{ID: "svc.agent", Planner: streamedResponseToolUnavailablePlanner{}}
 
-	out, err := rt.PlanStartActivity(context.Background(), &PlanActivityInput{
+	out, err := rt.PlanStartActivity(engine.WithActivityAttempt(context.Background(), 1), &PlanActivityInput{
 		AgentID:          "svc.agent",
 		RunID:            "run-stream-narrow-catalog",
 		RunContext:       run.Context{RootRunID: "root", RunID: "run-stream-narrow-catalog", Attempt: 1},

@@ -9,6 +9,7 @@ import (
 
 	agent "github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
@@ -149,8 +150,9 @@ func TestModelInterceptorsMutateRequestAndResponseOnce(t *testing.T) {
 	}))
 	rt.models["default"] = interceptableModelClient{calls: &calls}
 
-	ctx := newAgentContext(agentContextOptions{
+	ctx := testAgentContext(agentContextOptions{
 		rootRunID: "root",
+		attempt:   1,
 
 		runtime: rt,
 		agentID: "svc.agent",
@@ -285,8 +287,9 @@ func TestModelInterceptorStreamShortCircuitResponseDoesNotReturnNilStreamer(t *t
 	}))
 	var calls []string
 	rt.models["default"] = interceptableModelClient{calls: &calls}
-	ctx := newAgentContext(agentContextOptions{
+	ctx := testAgentContext(agentContextOptions{
 		rootRunID: "root",
+		attempt:   1,
 
 		runtime: rt,
 		agentID: "svc.agent",
@@ -311,8 +314,9 @@ func TestModelInterceptorStreamAfterErrorClosesOpenedStreamer(t *testing.T) {
 		},
 	}))
 	rt.models["default"] = closeCountingModelClient{stream: opened}
-	ctx := newAgentContext(agentContextOptions{
+	ctx := testAgentContext(agentContextOptions{
 		rootRunID: "root",
+		attempt:   1,
 
 		runtime: rt,
 		agentID: "svc.agent",
@@ -336,8 +340,9 @@ func TestModelInterceptorAfterModelEmptyDecisionCannotClearModelError(t *testing
 		},
 	}))
 	rt.models["default"] = contractModelClient{completeErr: modelErr}
-	ctx := newAgentContext(agentContextOptions{
+	ctx := testAgentContext(agentContextOptions{
 		rootRunID: "root",
+		attempt:   1,
 
 		runtime: rt,
 		agentID: "svc.agent",
@@ -368,8 +373,9 @@ func TestModelInterceptorAfterModelReplacementResponseClearsModelError(t *testin
 		},
 	}))
 	rt.models["default"] = contractModelClient{completeErr: modelErr}
-	ctx := newAgentContext(agentContextOptions{
+	ctx := testAgentContext(agentContextOptions{
 		rootRunID: "root",
+		attempt:   1,
 
 		runtime: rt,
 		agentID: "svc.agent",
@@ -408,7 +414,7 @@ func TestPlanActivityKeepsValidAfterModelRecoveryReplacement(t *testing.T) {
 	rt.models["test-model"] = contractModelClient{completeErr: rejected}
 	rt.agents["svc.agent"] = AgentRegistration{ID: "svc.agent", Planner: finalResponseModelPlanner{}}
 
-	out, err := rt.PlanStartActivity(context.Background(), &PlanActivityInput{
+	out, err := rt.PlanStartActivity(engine.WithActivityAttempt(context.Background(), 1), &PlanActivityInput{
 		AgentID:    "svc.agent",
 		RunID:      "run-after-model-repair",
 		RunContext: run.Context{RootRunID: "root", RunID: "run-after-model-repair"},
@@ -444,7 +450,7 @@ func TestBeforeModelShortCircuitUsesEffectiveToolPolicyForRecovery(t *testing.T)
 		}},
 	}
 
-	out, err := rt.PlanStartActivity(context.Background(), &PlanActivityInput{
+	out, err := rt.PlanStartActivity(engine.WithActivityAttempt(context.Background(), 1), &PlanActivityInput{
 		AgentID:          "svc.agent",
 		RunID:            "run-before-model-policy",
 		RunContext:       run.Context{RootRunID: "root", RunID: "run-before-model-policy"},
@@ -476,7 +482,7 @@ func TestBeforeModelShortCircuitSeesToolFreeFinalAnswerRecovery(t *testing.T) {
 	rt.models["default"] = contractModelClient{}
 	rt.agents["svc.agent"] = AgentRegistration{ID: "svc.agent", Planner: &modelToolPolicyPlanner{}}
 
-	out, err := rt.PlanStartActivity(context.Background(), &PlanActivityInput{
+	out, err := rt.PlanStartActivity(engine.WithActivityAttempt(context.Background(), 1), &PlanActivityInput{
 		AgentID:          "svc.agent",
 		RunID:            "run-before-model-tool-free",
 		RunContext:       run.Context{RootRunID: "root", RunID: "run-before-model-tool-free"},
@@ -523,7 +529,7 @@ func TestBeforeModelReplacementCannotBroadenEffectiveToolPolicy(t *testing.T) {
 			rt.models["default"] = contractModelClient{}
 			rt.agents["svc.agent"] = AgentRegistration{ID: "svc.agent", Planner: &modelToolPolicyPlanner{}}
 
-			out, err := rt.PlanStartActivity(context.Background(), &PlanActivityInput{
+			out, err := rt.PlanStartActivity(engine.WithActivityAttempt(context.Background(), 1), &PlanActivityInput{
 				AgentID:          "svc.agent",
 				RunID:            "run-interceptor-policy",
 				RunContext:       run.Context{RootRunID: "root", RunID: "run-interceptor-policy"},
@@ -550,7 +556,7 @@ func TestPlanActivityKeepsPlannerResultAfterCaughtModelValidation(t *testing.T) 
 	rt.models["test-model"] = contractModelClient{completeErr: rejected}
 	rt.agents["svc.agent"] = AgentRegistration{ID: "svc.agent", Planner: caughtValidationPlanner{}}
 
-	out, err := rt.PlanStartActivity(context.Background(), &PlanActivityInput{
+	out, err := rt.PlanStartActivity(engine.WithActivityAttempt(context.Background(), 1), &PlanActivityInput{
 		AgentID:    "svc.agent",
 		RunID:      "run-caught-validation",
 		RunContext: run.Context{RootRunID: "test-root", RunID: "run-caught-validation"},
@@ -664,8 +670,9 @@ func TestModelInterceptorAfterModelEnforcesNonNilResponseContract(t *testing.T) 
 		},
 	}))
 	rt.models["default"] = contractModelClient{}
-	ctx := newAgentContext(agentContextOptions{
+	ctx := testAgentContext(agentContextOptions{
 		rootRunID: "root",
+		attempt:   1,
 
 		runtime: rt,
 		agentID: "svc.agent",
@@ -688,8 +695,9 @@ func TestModelInterceptorAfterModelStreamCannotClearModelError(t *testing.T) {
 		},
 	}))
 	rt.models["default"] = contractModelClient{streamErr: modelErr}
-	ctx := newAgentContext(agentContextOptions{
+	ctx := testAgentContext(agentContextOptions{
 		rootRunID: "root",
+		attempt:   1,
 
 		runtime: rt,
 		agentID: "svc.agent",
@@ -748,8 +756,9 @@ func TestModelInterceptorAfterModelStreamEnforcesNonNilStreamerContract(t *testi
 		},
 	}))
 	rt.models["default"] = contractModelClient{}
-	ctx := newAgentContext(agentContextOptions{
+	ctx := testAgentContext(agentContextOptions{
 		rootRunID: "root",
+		attempt:   1,
 
 		runtime: rt,
 		agentID: "svc.agent",

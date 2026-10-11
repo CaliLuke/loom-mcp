@@ -47,6 +47,7 @@ type (
 	}
 
 	toolResultReceivedPayload struct {
+		Refs             tools.ResultRefs         `json:"refs"`
 		ToolCallID       string                   `json:"tool_call_id"`
 		ParentToolCallID string                   `json:"parent_tool_call_id,omitempty"`
 		ToolName         tools.Ident              `json:"tool_name"`
@@ -117,6 +118,7 @@ func encodeRunCompletedPayload(e *RunCompletedEvent) (rawjson.Message, error) {
 
 func encodeToolResultPayload(e *ToolResultReceivedEvent) (rawjson.Message, error) {
 	return marshalHookPayload("tool result", toolResultReceivedPayload{
+		Refs:             e.Refs,
 		ToolCallID:       e.ToolCallID,
 		ParentToolCallID: e.ParentToolCallID,
 		ToolName:         e.ToolName,
@@ -151,7 +153,13 @@ func DecodeFromHookInput(input *ActivityInput) (Event, error) {
 	if input == nil {
 		return nil, errors.New("input is required")
 	}
-	evt, handled, err := decodeRunEvent(input)
+	evt, handled, err := decodeRecordEvent(input)
+	if err != nil {
+		return nil, err
+	}
+	if !handled {
+		evt, handled, err = decodeRunEvent(input)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -402,6 +410,7 @@ func decodeToolResultReceivedEvent(input *ActivityInput) (Event, bool, error) {
 	}
 	ev := NewToolResultReceivedEvent(input.RunID, input.AgentID, input.SessionID, p.ToolName, p.ToolCallID, p.ParentToolCallID, p.Result, p.ResultJSON, p.ServerData, p.ResultPreview, p.Bounds, time.Duration(p.Duration), p.Telemetry, p.RetryHint, p.Error)
 	ev.Artifacts = p.Artifacts
+	ev.Refs = p.Refs
 	return ev, true, nil
 }
 
@@ -440,6 +449,7 @@ func decodeAssistantTurnCommittedEvent(input *ActivityInput) (Event, bool, error
 	} else {
 		evt = NewAssistantPresentationCommittedEvent(input.RunID, input.AgentID, input.SessionID, p.PresentationIDs, p.Messages)
 	}
+	evt.CallKeys = p.CallKeys
 	evt.ContentEventsOmitted = p.ContentEventsOmitted
 	return evt, true, nil
 }

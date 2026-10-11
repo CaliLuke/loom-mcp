@@ -43,7 +43,7 @@ func TestRunPlanActivityUsesOptions(t *testing.T) {
 		StartToCloseTimeout: 30 * time.Second,
 		RetryPolicy:         engine.RetryPolicy{MaxAttempts: 3, InitialInterval: time.Second, BackoffCoefficient: 2},
 	}
-	_, err := rt.runPlanActivity(wf, "calc.agent.plan", opts, PlanActivityInput{}, time.Time{})
+	_, err := rt.runPlanActivity(wf, &workflowPlanInput{}, "calc.agent.plan", opts, PlanActivityInput{}, time.Time{})
 	require.NoError(t, err)
 	require.Equal(t, opts.Queue, wf.lastPlannerCall.Options.Queue)
 	require.Equal(t, opts.StartToCloseTimeout, wf.lastPlannerCall.Options.StartToCloseTimeout)
@@ -67,7 +67,7 @@ func TestRunPlanActivityAcceptsTerminalFinalToolResult(t *testing.T) {
 		},
 	}
 
-	out, err := rt.runPlanActivity(wf, "calc.agent.plan", engine.ActivityOptions{}, PlanActivityInput{}, time.Time{})
+	out, err := rt.runPlanActivity(wf, &workflowPlanInput{}, "calc.agent.plan", engine.ActivityOptions{}, PlanActivityInput{}, time.Time{})
 	require.NoError(t, err)
 	require.NotNil(t, out)
 	require.NotNil(t, out.Result)
@@ -86,7 +86,7 @@ func TestRunPlanActivityRejectsNilPlanResultWithoutCriticalPrefix(t *testing.T) 
 		ctx: context.Background(),
 	}
 
-	_, err := rt.runPlanActivity(wf, "calc.agent.plan", engine.ActivityOptions{}, PlanActivityInput{}, time.Time{})
+	_, err := rt.runPlanActivity(wf, &workflowPlanInput{}, "calc.agent.plan", engine.ActivityOptions{}, PlanActivityInput{}, time.Time{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "nil PlanResult")
 	require.NotContains(t, err.Error(), "CRITICAL:")

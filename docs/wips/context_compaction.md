@@ -1549,6 +1549,7 @@ with run length:
 | Temporal history events | One set per step | `ContinueAsNew` (follow-up), which the index segments make possible |
 | The index in workflow memory and replay | About 400 bytes per entry | The same follow-up; at 1,000 steps with batches of 50 calls, about 20 MB |
 | Store size: content, segments, call records | Linear | Retention (D7) |
+| All recorder writes (addressed content + every `PutCall` body, K8) | At 1,000 steps: off 1,999.743 bytes/step (max residual 700.227 bytes); `KeepRecentTurns` 2,032.677 (1,103.159); `Compress` 2,458.549 (3,799.192) | Linear-fit regression: slope 500–4,000 bytes/step; max residual < 16 KiB. Includes repeated writes and recorder-owned content; excludes view/index setup; K12 repeats with real compaction |
 | Building `ToolOutputs` and `TypedInputs` (4.7) | A cold worker walks every segment: work linear in the run *per step*, so quadratic over a run whose steps all land on cold workers | The loader keeps both slices per worker and appends only new entries, so a warm step does work linear in its new entries |
 | Planner memory | `ToolOutputs` holds a hash and a bounded preview per call | Linear in calls. If measurements show it matters, a lazy accessor is a follow-up planner API change |
 | Recall `find` | Scans up to `RecallScanBytes` per call | Bounded per call; the allowance bounds calls (4.18) |

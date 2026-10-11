@@ -33,6 +33,9 @@ func (r *Runtime) finishWithoutToolCalls(
 	if err := r.validateFinishResult(ctx, result); err != nil {
 		return nil, err
 	}
+	if err := base.recordAssistant(st.takeTurnTranscript(), nil); err != nil {
+		return nil, fmt.Errorf("record final assistant: %w", err)
+	}
 	finalMsg := finalPlannerMessage(&PlanActivityOutput{Result: result})
 	if err := r.publishFinishArtifacts(ctx, input, base, turnID, result, finalMsg); err != nil {
 		return nil, err

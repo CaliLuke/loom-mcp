@@ -56,7 +56,7 @@ func TestGeneratedCrossLayerInMemoryContracts(t *testing.T) {
 	t.Run("clarification and external result share one barrier", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 		defer cancel()
-		runGeneratedExternalAwaitScenario(t, ctx, newFeatureRuntime(t))
+		runGeneratedExternalAwaitScenario(t, ctx, newFeatureRuntime(t), time.Second)
 	})
 
 	t.Run("parent cancellation reaches child agent", func(t *testing.T) {
@@ -121,7 +121,7 @@ func runGeneratedChildScenario(t *testing.T, ctx context.Context, fx *featureRun
 	require.Contains(t, eventTypes, hooks.RunCompleted)
 }
 
-func runGeneratedExternalAwaitScenario(t *testing.T, ctx context.Context, fx *featureRuntime) {
+func runGeneratedExternalAwaitScenario(t *testing.T, ctx context.Context, fx *featureRuntime, budget time.Duration) {
 	t.Helper()
 	plan := &externalAwaitPlanner{}
 	registerCoordinatorToolsets(t, ctx, fx.rt, newRecordingWorkflowExecutor())
@@ -134,7 +134,7 @@ func runGeneratedExternalAwaitScenario(t *testing.T, ctx context.Context, fx *fe
 		"sess-external-await",
 		[]*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "await"}}}},
 		agentsruntime.WithRunID("run-external-await"),
-		agentsruntime.WithRunTimeBudget(time.Second),
+		agentsruntime.WithRunTimeBudget(budget),
 	)
 	require.NoError(t, err)
 	if !assert.Eventually(t, func() bool {

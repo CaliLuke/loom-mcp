@@ -66,7 +66,7 @@ func TestRunLoopRecordsAssistantTranscriptOncePerTurn(t *testing.T) {
 			input := &RunInput{RootRunID: "run-1", AgentID: "svc.agent", RunID: "run-1"}
 			base := testWorkflowInput(t, rt, &planner.PlanInput{
 				RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID},
-				Agent:      newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID}),
+				Agent:      testAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID}),
 			})
 			initial := &planner.PlanResult{ToolCalls: tc.toolCalls}
 			turnTranscript := []*model.Message{{

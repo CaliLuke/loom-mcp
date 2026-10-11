@@ -15,6 +15,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/prompt"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/toolerrors"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
@@ -246,6 +247,8 @@ type (
 	// a result or error.
 	ToolResultReceivedEvent struct {
 		baseEvent `json:"-"`
+		// Refs addresses complete eligible results and server-only content in the root run scope.
+		Refs tools.ResultRefs
 		// ToolCallID uniquely identifies the tool invocation that produced this result.
 		ToolCallID string
 		// ParentToolCallID identifies the parent tool call if this tool was invoked by another tool.
@@ -381,6 +384,8 @@ type (
 		// PresentationIDs identifies the provisional presentations accepted by
 		// this atomic commit, in invocation order.
 		PresentationIDs []string `json:"presentation_ids,omitempty"`
+		// CallKeys parallels PresentationIDs; nil marks a presentation without a recorded call.
+		CallKeys []*runstore.CallKey `json:"call_keys,omitempty"`
 		// ContentEventsOmitted reports that separate AssistantMessage and
 		// ThinkingBlock events were intentionally omitted. Derived projections
 		// must reconstruct those views from Message or Messages when this field is true.

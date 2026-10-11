@@ -27,6 +27,7 @@ type agentContextOptions struct {
 	cache      CachePolicy
 	toolPolicy toolPolicyEnvelope
 	recovery   *modelRecoveryRecorder
+	recording  *CallRecording
 }
 
 // simplePlannerContext is a minimal implementation of planner.PlannerContext.
@@ -44,9 +45,13 @@ type simplePlannerContext struct {
 	cache      CachePolicy
 	toolPolicy toolPolicyEnvelope
 	recovery   *modelRecoveryRecorder
+	recording  *CallRecording
 }
 
 func newAgentContext(opts agentContextOptions) planner.PlannerContext {
+	if opts.recording == nil {
+		panic("newAgentContext: recording is required")
+	}
 	return &simplePlannerContext{
 		rt:         opts.runtime,
 		agent:      opts.agentID,
@@ -61,6 +66,7 @@ func newAgentContext(opts agentContextOptions) planner.PlannerContext {
 		cache:      opts.cache,
 		toolPolicy: opts.toolPolicy,
 		recovery:   opts.recovery,
+		recording:  opts.recording,
 	}
 }
 
@@ -78,7 +84,7 @@ func (c *simplePlannerContext) ModelClient(id string) (model.Client, bool) {
 	if !ok || m == nil {
 		return nil, false
 	}
-	cli := m
+	cli := model.Client(&callRecordingClient{inner: m, recording: c.recording})
 	// Model interceptors observe the fully decorated request and their final
 	// response/error is the only outcome eligible for workflow recovery.
 	cli = newModelInterceptedClient(cli, c.rt.interceptorsForAgent(c.agent), c.agent, c.runID, c.sessionID, c.turnID, id, c.recovery, func(req *model.Request) {

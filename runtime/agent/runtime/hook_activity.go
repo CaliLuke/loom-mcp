@@ -24,6 +24,30 @@ const hookActivityName = "runtime.publish_hook"
 // existing hook boundary, preserving per-result publication without a write activity.
 const publishToolContentCommand = "runtime.publish_tool_content"
 
+func isCanonicalPresentationCommit(evt hooks.Event) bool {
+	committed, ok := evt.(*hooks.AssistantTurnCommittedEvent)
+	return ok && committed.ContentEventsOmitted
+}
+
+func normalizeHintPayloadJSON(raw jsontext.Value) jsontext.Value {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return jsontext.Value("{}")
+	}
+	return raw
+}
+
+// appendUniquePromptRef appends ref only when it is not already present.
+// Uniqueness is defined by (prompt_id, version) and ordering is first-seen.
+func appendUniquePromptRef(existing []prompt.PromptRef, ref prompt.PromptRef) []prompt.PromptRef {
+	for _, cur := range existing {
+		if cur.ID == ref.ID && cur.Version == ref.Version {
+			return existing
+		}
+	}
+	return append(existing, ref)
+}
+
 // hookActivity publishes workflow-emitted hook events outside of deterministic
 // workflow execution.
 //
@@ -40,7 +64,8 @@ const publishToolContentCommand = "runtime.publish_tool_content"
 //   - For ordinary events, hook-bus subscriber errors fail the activity unless
 //     the subscriber was registered with SubscriberBestEffort, which logs and
 //     swallows its errors. A canonical presentation commit treats bus delivery
-//     as best-effort after its canonical append succeeds.
+//     as best-effort after its canonical append succeeds. Record events use the
+//     same canonical path and bypass application interception.
 func (r *Runtime) hookActivity(ctx context.Context, input *HookActivityInput) error {
 	stopHeartbeat := startActivityHeartbeat(ctx)
 	defer stopHeartbeat()
@@ -55,11 +80,14 @@ func (r *Runtime) hookActivity(ctx context.Context, input *HookActivityInput) er
 		}
 		return r.publishStoredToolContent(ctx, publication.RunContext.RootRunID, &publication)
 	}
+	if input != nil && input.Type == publishHookBatchCommand {
+		return r.hookBatchActivity(ctx, input)
+	}
 	evt, payload, err := r.decodeHookActivityEvent(ctx, input)
 	if err != nil {
 		return err
 	}
-	if isCanonicalPresentationCommit(evt) {
+	if hooks.IsRecordEvent(evt.Type()) || isCanonicalPresentationCommit(evt) {
 		return r.publishCanonicalPresentationCommit(ctx, input, evt, payload)
 	}
 	return r.publishInterceptableHookEvent(ctx, input, evt, payload)
@@ -103,7 +131,7 @@ func (r *Runtime) publishInterceptableHookEvent(ctx context.Context, input *Hook
 }
 
 // publishCanonicalPresentationCommit persists the runtime-owned presentation
-// boundary without application interception. Once the append succeeds, stream
+// boundary, or a record event, without application interception. Once the append succeeds, stream
 // and bus projections are best-effort and cannot reverse canonical acceptance.
 func (r *Runtime) publishCanonicalPresentationCommit(ctx context.Context, input *HookActivityInput, evt hooks.Event, payload []byte) error {
 	inserted, err := r.appendHookRunEvent(ctx, input, evt, payload)
@@ -112,6 +140,11 @@ func (r *Runtime) publishCanonicalPresentationCommit(ctx context.Context, input 
 	}
 	if inserted {
 		r.recordCanonicalEventTelemetry(ctx, evt)
+	}
+	if evt.Type() == hooks.ChildRunLinked {
+		if err := r.updateHookRunMeta(ctx, input.SessionID, evt); err != nil {
+			r.logWarn(ctx, "canonical child link metadata projection failed", err, "run_id", input.RunID)
+		}
 	}
 	r.publishHookStreamEvent(ctx, input.SessionID, evt)
 	busEvent, err := hooks.DecodeFromHookInput(input)
@@ -124,11 +157,6 @@ func (r *Runtime) publishCanonicalPresentationCommit(ctx context.Context, input 
 		return nil
 	}
 	return nil
-}
-
-func isCanonicalPresentationCommit(evt hooks.Event) bool {
-	committed, ok := evt.(*hooks.AssistantTurnCommittedEvent)
-	return ok && committed.ContentEventsOmitted
 }
 
 func (r *Runtime) decodeHookActivityEvent(ctx context.Context, input *HookActivityInput) (hooks.Event, []byte, error) {
@@ -250,14 +278,6 @@ func (r *Runtime) enrichToolCallScheduledHint(ctx context.Context, evt *hooks.To
 	return false
 }
 
-func normalizeHintPayloadJSON(raw jsontext.Value) jsontext.Value {
-	trimmed := bytes.TrimSpace(raw)
-	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
-		return jsontext.Value("{}")
-	}
-	return raw
-}
-
 func (r *Runtime) updateRunMetaFromHookEvent(ctx context.Context, evt hooks.Event) error {
 	if evt == nil {
 		return errors.New("runtime: hook event is nil")
@@ -353,15 +373,4 @@ func (r *Runtime) updateRunStatus(ctx context.Context, runID string, status sess
 	run.Status = status
 	run.UpdatedAt = time.Now().UTC()
 	return r.SessionStore.UpsertRun(ctx, run)
-}
-
-// appendUniquePromptRef appends ref only when it is not already present.
-// Uniqueness is defined by (prompt_id, version) and ordering is first-seen.
-func appendUniquePromptRef(existing []prompt.PromptRef, ref prompt.PromptRef) []prompt.PromptRef {
-	for _, cur := range existing {
-		if cur.ID == ref.ID && cur.Version == ref.Version {
-			return existing
-		}
-	}
-	return append(existing, ref)
 }

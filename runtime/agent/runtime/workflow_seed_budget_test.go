@@ -36,7 +36,7 @@ func TestRunBudgetStartsAfterSeedContent(t *testing.T) {
 			input.Messages = []*model.Message{contentMessage("seed")}
 			input.Policy = &PolicyOverrides{TimeBudget: budget, FinalizerGrace: time.Second}
 
-			state, err := rt.startWorkflowRun(wf, AgentRegistration{ID: input.AgentID, PlanActivityName: "plan"}, input, workflowRunContext(input), "turn-1")
+			state, err := rt.startWorkflowRun(wf, AgentRegistration{ID: input.AgentID, PlanActivityName: "plan"}, input, &workflowPlanInput{AgentID: input.AgentID, RunContext: workflowRunContext(input)}, "turn-1")
 			require.NoError(t, err)
 			assert.Equal(t, time.Unix(0, 0).Add(2*time.Second), wf.Now())
 			if budget == 0 {
@@ -77,7 +77,8 @@ func TestAwaitBarrierSignalsAroundContentActivityKeepOneResume(t *testing.T) {
 			}
 			wf := &seedBudgetWorkflowContext{testWorkflowContext: base, now: time.Unix(0, 0), seedDelay: 100 * time.Millisecond, hookDelay: 100 * time.Millisecond, planDelay: 200 * time.Millisecond, resumeDelay: 50 * time.Millisecond}
 			input.Messages = []*model.Message{contentMessage("await")}
-			input.Policy = &PolicyOverrides{TimeBudget: time.Second, FinalizerGrace: time.Second}
+			// Resume adoption adds one unbatchable hook to this synthetic timing scenario.
+			input.Policy = &PolicyOverrides{TimeBudget: time.Second + wf.hookDelay, FinalizerGrace: time.Second}
 			answerRef, err := rt.RunStore.Put(t.Context(), input.RootRunID, []byte("use loom"))
 			require.NoError(t, err)
 			resultRef, err := rt.RunStore.Put(t.Context(), input.RootRunID, []byte(`{"ok":true}`))
@@ -92,7 +93,7 @@ func TestAwaitBarrierSignalsAroundContentActivityKeepOneResume(t *testing.T) {
 				base.clarifyCh <- answer
 			}
 			base.toolResultsCh <- &api.ToolResultsSet{ID: "draft", Results: []*api.ProvidedToolResult{{Name: spec.Name, ToolCallID: call.ToolCallID, Refs: tools.ResultRefs{Result: resultRef}}}}
-			out, _, err := rt.executeWorkflowRun(wf, AgentRegistration{ID: input.AgentID, PlanActivityName: "plan", ResumeActivityName: "resume", Specs: []tools.ToolSpec{spec}}, input, workflowRunContext(input), "turn-1", interrupt.NewController(wf))
+			out, _, err := rt.executeWorkflowRun(wf, AgentRegistration{ID: input.AgentID, PlanActivityName: "plan", ResumeActivityName: "resume", Specs: []tools.ToolSpec{spec}}, input, &workflowPlanInput{AgentID: input.AgentID, RunContext: workflowRunContext(input)}, "turn-1", interrupt.NewController(wf))
 			require.NoError(t, err)
 			require.NotNil(t, out)
 			require.Len(t, base.plannerCalls, 2, "one start and one resume, with no budget finalization")

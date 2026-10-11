@@ -104,7 +104,8 @@ test: tools
 # Full payload and cache-growth acceptance; also part of the normal itest gate.
 .PHONY: test-payload-growth
 test-payload-growth:
-	$(GO) test -count=1 -timeout=20m -v ./runtime/agent/runtime -run '^(TestIndexPayloadAcceptance|TestIndexLoaderGrowth|TestPlanActivityInputFixedFields)$$'
+	$(GO) test -count=1 -timeout=20m -v ./runtime/agent/runtime -run '^(TestIndexPayloadAcceptance|TestIndexLoaderGrowth|TestPlanActivityInputFixedFields|TestCallRecordGrowth)$$'
+	$(GO) test -count=1 -timeout=3m -v ./integration_tests/fixtures/agent_features -run '^TestGeneratedFeatureRealTemporalContracts/RunRecord_survives_abandoned_history$$'
 
 # Run on every local make test, even when Go can reuse cached unit results.
 .PHONY: test-codex-live

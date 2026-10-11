@@ -221,8 +221,9 @@ func TestTracedClientCapturesEffectivePolicyAndInterceptorRequest(t *testing.T) 
 		}},
 		StopReason: "tool_use",
 	}}
-	ctx := newAgentContext(agentContextOptions{
+	ctx := testAgentContext(agentContextOptions{
 		rootRunID: "root",
+		attempt:   1,
 
 		runtime: rt,
 		agentID: "svc.agent",

@@ -1071,3 +1071,28 @@ func (t *testWorkflowContext) ExecuteChildDispatchActivity(ctx context.Context, 
 func (r *routeWorkflowContext) ExecuteChildDispatchActivity(ctx context.Context, call engine.ChildDispatchActivityCall) (*api.ChildDispatchOutput, error) {
 	return r.hookRuntime.ChildDispatchActivity(ctx, call.Input)
 }
+
+func (s *stubEngine) RegisterSealRecordActivity(context.Context, string, engine.ActivityOptions, func(context.Context, *api.SealRecordInput) (*api.SealRecordOutput, error)) error {
+	return nil
+}
+
+func (t *testWorkflowContext) ExecuteSealRecordActivity(ctx context.Context, call engine.SealRecordActivityCall) (*api.SealRecordOutput, error) {
+	rt := t.finishRuntime
+	if rt == nil {
+		rt = t.runtime
+	}
+	if rt == nil {
+		rt = t.hookRuntime
+	}
+	if rt == nil {
+		return nil, fmt.Errorf("test seal runtime is required")
+	}
+	return rt.SealRecordActivity(ctx, call.Input)
+}
+
+func (r *routeWorkflowContext) ExecuteSealRecordActivity(ctx context.Context, call engine.SealRecordActivityCall) (*api.SealRecordOutput, error) {
+	if r.hookRuntime == nil {
+		panic("routeWorkflowContext seal runtime is required")
+	}
+	return r.hookRuntime.SealRecordActivity(ctx, call.Input)
+}

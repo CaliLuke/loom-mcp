@@ -41,13 +41,15 @@ type (
 	}
 
 	planActivityInputWire struct {
-		// NOTE: These fields intentionally do not use JSON tags.
+		// NOTE: Existing fields intentionally do not use JSON tags.
 		//
 		// Temporal's default JSON payload converter marshals loom-mcp runtime API types
 		// (e.g. api.PlanActivityInput) using standard JSON defaults, which emit the
 		// Go field names ("AgentID", "RunID", ...). We must decode that payload
 		// verbatim to preserve correctness for existing workflow histories.
-		AgentID    agent.Ident
+		AgentID agent.Ident
+		// Step uses the protocol 6 API spelling; older histories omit it.
+		Step       int `json:"step,omitzero"`
 		RunID      string
 		View       index.ViewRef
 		RunContext run.Context
@@ -233,6 +235,7 @@ func decodePlanActivityInput(p *commonpb.Payload, valuePtr any) error {
 	dst.AgentID = w.AgentID
 	dst.RunID = w.RunID
 	dst.View = w.View
+	dst.Step = w.Step
 	dst.RunContext = w.RunContext
 	dst.Finalize = w.Finalize
 	dst.Recovery = w.Recovery
@@ -285,6 +288,7 @@ func encodePlanActivityInputWire(in *api.PlanActivityInput) (*planActivityInputW
 	}
 	return &planActivityInputWire{
 		AgentID:    in.AgentID,
+		Step:       in.Step,
 		RunID:      in.RunID,
 		View:       in.View,
 		RunContext: in.RunContext,

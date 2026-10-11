@@ -14,6 +14,49 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
+func newToolCallBatch(calls []planner.ToolRequest) *toolCallBatch {
+	return &toolCallBatch{
+		calls:         calls,
+		futures:       make([]futureInfo, 0, len(calls)),
+		childFutures:  make([]agentChildFutureInfo, 0, len(calls)),
+		inlineByID:    make(map[string]*ToolExecutionResult, len(calls)),
+		discoveredIDs: make([]string, 0, len(calls)),
+	}
+}
+
+func buildInlineAgentRunInput(agentID agent.Ident, nestedRunCtx run.Context, messages []*model.Message) RunInput {
+	input := RunInput{
+		AgentID:          agentID,
+		RunID:            nestedRunCtx.RunID,
+		RootRunID:        nestedRunCtx.RootRunID,
+		SessionID:        nestedRunCtx.SessionID,
+		TurnID:           nestedRunCtx.TurnID,
+		ParentToolCallID: nestedRunCtx.ParentToolCallID,
+		ParentRunID:      nestedRunCtx.ParentRunID,
+		ParentAgentID:    nestedRunCtx.ParentAgentID,
+		Tool:             nestedRunCtx.Tool,
+		ToolArgs:         nestedRunCtx.ToolArgs,
+		Labels:           nestedRunCtx.Labels,
+		Messages:         messages,
+	}
+	stampWorkflowProtocol(&input)
+	return input
+}
+
+func startInlineAgentChildWorkflow(
+	wfCtx engine.WorkflowContext,
+	ctx context.Context,
+	route AgentRoute,
+	input *RunInput,
+) (engine.ChildWorkflowHandle, error) {
+	return wfCtx.StartChildWorkflow(ctx, engine.ChildWorkflowRequest{
+		ID:        input.RunID,
+		Workflow:  route.WorkflowName,
+		TaskQueue: route.DefaultTaskQueue,
+		Input:     input,
+	})
+}
+
 // dispatchToolCalls schedules every call in the batch before it dispatches any.
 // A subscriber that rejects a ToolCallScheduled event (for example because it
 // could not record durable evidence for the call) therefore aborts the batch
@@ -43,16 +86,6 @@ func (e *toolBatchExec) dispatchToolCalls(wfCtx engine.WorkflowContext, calls []
 	}
 
 	return b, nil
-}
-
-func newToolCallBatch(calls []planner.ToolRequest) *toolCallBatch {
-	return &toolCallBatch{
-		calls:         calls,
-		futures:       make([]futureInfo, 0, len(calls)),
-		childFutures:  make([]agentChildFutureInfo, 0, len(calls)),
-		inlineByID:    make(map[string]*ToolExecutionResult, len(calls)),
-		discoveredIDs: make([]string, 0, len(calls)),
-	}
 }
 
 func (e *toolBatchExec) prepareToolDispatch(ctx context.Context, b *toolCallBatch, call planner.ToolRequest, i int) (*planner.ToolRequest, error) {
@@ -258,39 +291,6 @@ func (e *toolBatchExec) recordInlineAgentRequestFailure(ctx context.Context, b *
 	b.inlineByID[call.ToolCallID] = Executed(tr)
 	e.recordDiscoveredToolCall(b, call.ToolCallID)
 	return nil
-}
-
-func buildInlineAgentRunInput(agentID agent.Ident, nestedRunCtx run.Context, messages []*model.Message) RunInput {
-	input := RunInput{
-		AgentID:          agentID,
-		RunID:            nestedRunCtx.RunID,
-		RootRunID:        nestedRunCtx.RootRunID,
-		SessionID:        nestedRunCtx.SessionID,
-		TurnID:           nestedRunCtx.TurnID,
-		ParentToolCallID: nestedRunCtx.ParentToolCallID,
-		ParentRunID:      nestedRunCtx.ParentRunID,
-		ParentAgentID:    nestedRunCtx.ParentAgentID,
-		Tool:             nestedRunCtx.Tool,
-		ToolArgs:         nestedRunCtx.ToolArgs,
-		Labels:           nestedRunCtx.Labels,
-		Messages:         messages,
-	}
-	stampWorkflowProtocol(&input)
-	return input
-}
-
-func startInlineAgentChildWorkflow(
-	wfCtx engine.WorkflowContext,
-	ctx context.Context,
-	route AgentRoute,
-	input *RunInput,
-) (engine.ChildWorkflowHandle, error) {
-	return wfCtx.StartChildWorkflow(ctx, engine.ChildWorkflowRequest{
-		ID:        input.RunID,
-		Workflow:  route.WorkflowName,
-		TaskQueue: route.DefaultTaskQueue,
-		Input:     input,
-	})
 }
 
 func (e *toolBatchExec) dispatchActivityToolCall(ctx context.Context, wfCtx engine.WorkflowContext, b *toolCallBatch, call planner.ToolRequest, spec tools.ToolSpec, hasTS bool, ts ToolsetRegistration) error {

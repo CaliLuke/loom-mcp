@@ -46,7 +46,7 @@ func TestRunLoopPauseResumeEmitsEvents_Barriered(t *testing.T) {
 	wfCtx.hasPlanResult = true
 	wfCtx.planResult = &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: &model.Message{Role: "assistant", Parts: []model.Part{model.TextPart{Text: "ok"}}}}}
 	input := &RunInput{RootRunID: "run-1", AgentID: "svc.agent", RunID: "run-1"}
-	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})})
+	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID}, Agent: testAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})})
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: "tool"}}}
 	ctrl := interrupt.NewController(wfCtx)
 	_, err := testRunLoop(t, rt, wfCtx, AgentRegistration{

@@ -15,13 +15,37 @@ import (
 // workflowPlanInput keeps transcript history as references. Loaded planner messages
 // never become workflow state; content holds only the current uncommitted step.
 type workflowPlanInput struct {
-	AgentID    agent.Ident
-	RunContext run.Context
-	Entries    []index.MessageEntry
-	IndexHead  runstore.Hash
-	Committed  int
-	CallRefs   map[string]runstore.Hash
-	content    *workflowContentBatch
+	AgentID                agent.Ident
+	RunContext             run.Context
+	Entries                []index.MessageEntry
+	IndexHead              runstore.Hash
+	Committed              int
+	CallRefs               map[string]runstore.Hash
+	unindexedCalls         []planner.ToolRequest
+	unindexedResults       map[string]*planner.ToolResult
+	content                *workflowContentBatch
+	protocolVersion        int
+	step                   int
+	requestGrowthPublished bool
+	producingCall          *runstore.CallKey
+}
+
+func workflowText(ctx context.Context, text string) (index.TextParameter, error) {
+	if len(text) <= index.MaxInlineTextBytes {
+		return index.TextParameter{Text: text}, nil
+	}
+	refs, err := recordWorkflowContent(ctx, [][]byte{[]byte(text)})
+	if err != nil {
+		return index.TextParameter{}, err
+	}
+	return index.TextParameter{Hash: refs[0]}, nil
+}
+
+func planToolFilter(input *RunInput) api.PlanToolFilter {
+	if input.Policy == nil {
+		return api.PlanToolFilter{}
+	}
+	return api.PlanToolFilter{RestrictToTool: input.Policy.RestrictToTool, AllowedTags: input.Policy.AllowedTags, DeniedTags: input.Policy.DeniedTags}
 }
 
 func (b *workflowPlanInput) appendEntry(entry index.MessageEntry) error {
@@ -45,6 +69,7 @@ func (b *workflowPlanInput) view() index.ViewRef {
 
 func (b *workflowPlanInput) adopt(out *PlanActivityOutput) {
 	b.adoptHead(out.IndexHead)
+	b.producingCall = out.ProducingCall
 	b.CallRefs = make(map[string]runstore.Hash)
 	if out.Result != nil {
 		for i, call := range out.Result.ToolCalls {
@@ -69,7 +94,7 @@ func (b *workflowPlanInput) recordAssistant(ref runstore.Hash, calls []planner.T
 	if ref == "" && len(calls) == 0 {
 		return nil
 	}
-	entry := index.MessageEntry{Kind: index.Assistant, Hash: ref}
+	entry := index.MessageEntry{Kind: index.Assistant, Hash: ref, Call: b.producingCall}
 	for _, call := range calls {
 		hash := b.CallRefs[call.ToolCallID]
 		if hash == "" {
@@ -77,27 +102,15 @@ func (b *workflowPlanInput) recordAssistant(ref runstore.Hash, calls []planner.T
 		}
 		entry.Calls = append(entry.Calls, hash)
 	}
-	return b.appendEntry(entry)
+	if err := b.appendEntry(entry); err != nil {
+		return err
+	}
+	for _, call := range calls {
+		b.noteIndexedCall(call)
+	}
+	return nil
 }
 
 func (b *workflowPlanInput) structural(kind index.StructuralKind, ids []string) error {
 	return b.appendEntry(index.MessageEntry{Kind: index.Structural, ToolUseIDs: ids, Structural: &index.StructuralEntry{Kind: kind, ProtocolVersion: index.TemplateProtocolVersion}})
-}
-
-func workflowText(ctx context.Context, text string) (index.TextParameter, error) {
-	if len(text) <= index.MaxInlineTextBytes {
-		return index.TextParameter{Text: text}, nil
-	}
-	refs, err := recordWorkflowContent(ctx, [][]byte{[]byte(text)})
-	if err != nil {
-		return index.TextParameter{}, err
-	}
-	return index.TextParameter{Hash: refs[0]}, nil
-}
-
-func planToolFilter(input *RunInput) api.PlanToolFilter {
-	if input.Policy == nil {
-		return api.PlanToolFilter{}
-	}
-	return api.PlanToolFilter{RestrictToTool: input.Policy.RestrictToTool, AllowedTags: input.Policy.AllowedTags, DeniedTags: input.Policy.DeniedTags}
 }

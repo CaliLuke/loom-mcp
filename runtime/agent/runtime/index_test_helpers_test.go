@@ -19,6 +19,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testAgentContext supplies the required activity-owned recorder for context fixtures.
+func testAgentContext(opts agentContextOptions) planner.PlannerContext {
+	if opts.recording == nil {
+		opts.recording = NewCallRecording(opts.runtime.RunStore, opts.rootRunID, index.ViewRef{}, nil, 0)
+	}
+	return newAgentContext(opts)
+}
+
 func testSeedView(t *testing.T, rt *Runtime, messages []*model.Message, root string) index.ViewRef {
 	t.Helper()
 	if rt.RunStore == nil {
@@ -41,7 +49,7 @@ func testWorkflowInput(t *testing.T, rt *Runtime, in *planner.PlanInput) *workfl
 		return rt.RunStore.Get(ctx, in.RunContext.RootRunID, hash)
 	}, view.IndexHead)
 	require.NoError(t, err)
-	return &workflowPlanInput{RunContext: in.RunContext, Entries: entries, IndexHead: view.IndexHead, Committed: len(entries), AgentID: "test.agent"}
+	return &workflowPlanInput{protocolVersion: api.WorkflowProtocolVersion, RunContext: in.RunContext, Entries: entries, IndexHead: view.IndexHead, Committed: len(entries), AgentID: "test.agent"}
 }
 
 func testStoredTranscript(t *testing.T, rt *Runtime, out *PlanActivityOutput, root string) []*model.Message {
@@ -139,7 +147,11 @@ func (w *testWorkflowContext) storedPlannerOutput(ctx context.Context, input *Pl
 	}
 	out.IndexHead = view.Head
 	rt.canonicalizePlanActivityToolCalls(out.Result, input)
-	return rt.storePlanActivityOutput(ctx, root, out, nil, canonicalAwaitCalls(out.Result))
+	var transcript []*model.Message
+	if out.Result != nil && out.Result.FinalResponse != nil {
+		transcript = []*model.Message{finalPlannerMessage(out)}
+	}
+	return rt.storePlanActivityOutput(ctx, root, out, transcript, canonicalAwaitCalls(out.Result))
 }
 
 func testOutputView(t *testing.T, rt *Runtime, outputs []*api.ToolCallOutput) index.ViewRef {

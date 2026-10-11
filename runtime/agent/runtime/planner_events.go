@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"uuid"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/stream"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript"
@@ -42,12 +44,14 @@ type runtimePlannerEvents struct {
 	hookErr error
 
 	presentations []pendingModelPresentation
+	eventKeys     []runstore.CallKey
 }
 
 type modelPresentationStatus uint8
 
 type pendingModelPresentation struct {
 	id       string
+	call     *runstore.CallKey
 	messages []*model.Message
 	status   modelPresentationStatus
 }
@@ -61,29 +65,8 @@ const (
 	modelPresentationDiscarded
 )
 
-// newPlannerEvents constructs a planner event sink that publishes to rt.Bus and
-// records a provider transcript.
-//
-// The runtime requires a hook bus. If rt.Bus is nil, this panics to surface an
-// invalid runtime configuration early.
-func newPlannerEvents(rt *Runtime, agentID agent.Ident, runID, sessionID, turnID string) *runtimePlannerEvents {
-	if rt == nil {
-		panic("runtime: planner events runtime is nil")
-	}
-	if rt.Bus == nil {
-		panic("runtime: planner events hook bus is nil")
-	}
-	return &runtimePlannerEvents{
-		rt:        rt,
-		agentID:   agentID,
-		runID:     runID,
-		sessionID: sessionID,
-		turnID:    turnID,
-		led:       transcript.NewLedger(),
-	}
-}
-
 func (e *runtimePlannerEvents) AssistantChunk(ctx context.Context, text string) {
+	e.noteEventCall(ctx)
 	if text == "" {
 		return
 	}
@@ -94,6 +77,7 @@ func (e *runtimePlannerEvents) AssistantChunk(ctx context.Context, text string) 
 }
 
 func (e *runtimePlannerEvents) ToolCallArgsDelta(ctx context.Context, toolCallID string, toolName tools.Ident, delta string) {
+	e.noteEventCall(ctx)
 	if toolCallID == "" || delta == "" {
 		return
 	}
@@ -101,6 +85,7 @@ func (e *runtimePlannerEvents) ToolCallArgsDelta(ctx context.Context, toolCallID
 }
 
 func (e *runtimePlannerEvents) PlannerThought(ctx context.Context, note string, labels map[string]string) {
+	e.noteEventCall(ctx)
 	if note == "" {
 		return
 	}
@@ -108,6 +93,7 @@ func (e *runtimePlannerEvents) PlannerThought(ctx context.Context, note string, 
 }
 
 func (e *runtimePlannerEvents) UsageDelta(ctx context.Context, usage model.TokenUsage) {
+	e.noteEventCall(ctx)
 	e.mu.Lock()
 	if e.usageErr == nil {
 		combined, err := checkedAddTokenUsage(e.usage, usage)
@@ -123,6 +109,7 @@ func (e *runtimePlannerEvents) UsageDelta(ctx context.Context, usage model.Token
 }
 
 func (e *runtimePlannerEvents) PlannerThinkingBlock(ctx context.Context, block model.ThinkingPart) {
+	e.noteEventCall(ctx)
 	e.mu.Lock()
 	e.led.AppendThinking(toTranscriptThinking(block))
 	e.mu.Unlock()
@@ -169,43 +156,14 @@ func (e *runtimePlannerEvents) CommitModelPresentation(_ context.Context, presen
 	return fmt.Errorf("model presentation %q was not started", presentationID)
 }
 
-func (e *runtimePlannerEvents) validatePresentationCommitSize(candidateID string, candidateMessages []*model.Message) error {
-	presentationIDs := make([]string, 0, len(e.presentations))
-	messages := make([]*model.Message, 0, len(candidateMessages))
-	for _, presentation := range e.presentations {
-		if presentation.id == candidateID {
-			presentationIDs = append(presentationIDs, candidateID)
-			messages = append(messages, candidateMessages...)
-			continue
-		}
-		if presentation.status != modelPresentationStaged &&
-			presentation.status != modelPresentationReady &&
-			presentation.status != modelPresentationCommitting {
-			continue
-		}
-		presentationIDs = append(presentationIDs, presentation.id)
-		messages = append(messages, presentation.messages...)
-	}
-	event := hooks.NewAssistantPresentationCommittedEvent(e.runID, e.agentID, e.sessionID, presentationIDs, messages)
-	input, err := hooks.EncodeToHookInput(event, e.turnID)
-	if err != nil {
-		return fmt.Errorf("encode model presentation commit: %w", err)
-	}
-	if len(input.Payload) > maxCanonicalPresentationPayloadBytes {
-		return fmt.Errorf(
-			"model presentation commit exceeds maximum size %d bytes",
-			maxCanonicalPresentationPayloadBytes,
-		)
-	}
-	return nil
-}
-
 // StartModelPresentation begins one best-effort provisional stream lifecycle.
 func (e *runtimePlannerEvents) StartModelPresentation(ctx context.Context) string {
+	e.noteEventCall(ctx)
 	presentationID := uuid.New().String()
 	e.mu.Lock()
 	e.presentations = append(e.presentations, pendingModelPresentation{
 		id:     presentationID,
+		call:   presentationCallKey(ctx),
 		status: modelPresentationStarted,
 	})
 	e.mu.Unlock()
@@ -222,6 +180,7 @@ func (e *runtimePlannerEvents) StartModelPresentation(ctx context.Context) strin
 
 // PublishModelText emits provisional model text without durable hooks.
 func (e *runtimePlannerEvents) PublishModelText(ctx context.Context, presentationID, text string) {
+	e.noteEventCall(ctx)
 	if text == "" {
 		return
 	}
@@ -235,6 +194,7 @@ func (e *runtimePlannerEvents) PublishModelText(ctx context.Context, presentatio
 
 // PublishModelThinking emits provisional model thinking without durable hooks.
 func (e *runtimePlannerEvents) PublishModelThinking(ctx context.Context, presentationID string, block model.ThinkingPart) {
+	e.noteEventCall(ctx)
 	payload := stream.PlannerThoughtPayload{
 		PresentationID: presentationID,
 		Text:           block.Text,
@@ -274,6 +234,112 @@ func (e *runtimePlannerEvents) FinishModelPresentation(ctx context.Context, pres
 	e.mu.Unlock()
 }
 
+// newPlannerEvents constructs a planner event sink that publishes to rt.Bus and
+// records a provider transcript.
+//
+// The runtime requires a hook bus. If rt.Bus is nil, this panics to surface an
+// invalid runtime configuration early.
+func newPlannerEvents(rt *Runtime, agentID agent.Ident, runID, sessionID, turnID string) *runtimePlannerEvents {
+	if rt == nil {
+		panic("runtime: planner events runtime is nil")
+	}
+	if rt.Bus == nil {
+		panic("runtime: planner events hook bus is nil")
+	}
+	return &runtimePlannerEvents{
+		rt:        rt,
+		agentID:   agentID,
+		runID:     runID,
+		sessionID: sessionID,
+		turnID:    turnID,
+		led:       transcript.NewLedger(),
+	}
+}
+
+// presentationCallKey returns an owned key, or nil for a standalone helper stream.
+func presentationCallKey(ctx context.Context) *runstore.CallKey {
+	info, ok := model.CallInfoFrom(ctx)
+	if !ok || info.RunID == "" || info.Seq < 1 || info.Attempt < 1 {
+		return nil
+	}
+	return &runstore.CallKey{RunID: info.RunID, Seq: info.Seq, Attempt: info.Attempt}
+}
+
+// presentationKeys preserves positional correlation, including unrecorded slots.
+// The caller holds the event sink's mutex.
+func presentationKeys(presentations []pendingModelPresentation, ids []string) []*runstore.CallKey {
+	keys := make([]*runstore.CallKey, len(ids))
+	for i, id := range ids {
+		for _, presentation := range presentations {
+			if presentation.id == id && presentation.call != nil {
+				key := *presentation.call
+				keys[i] = &key
+				break
+			}
+		}
+	}
+	return keys
+}
+
+func findUnfinalizedModelPresentation(presentations []pendingModelPresentation) string {
+	for _, presentation := range presentations {
+		switch presentation.status {
+		case modelPresentationStarted, modelPresentationStaged:
+			return presentation.id
+		case modelPresentationReady, modelPresentationCommitting, modelPresentationAccepted, modelPresentationDiscarded:
+			continue
+		default:
+			panic(fmt.Sprintf("runtime: unknown model presentation status %d", presentation.status))
+		}
+	}
+	return ""
+}
+
+func toTranscriptThinking(block model.ThinkingPart) transcript.ThinkingPart {
+	cp := transcript.ThinkingPart{
+		Text:      block.Text,
+		Signature: block.Signature,
+		Index:     block.Index,
+		Final:     block.Final,
+	}
+	if len(block.Redacted) > 0 {
+		cp.Redacted = append([]byte(nil), block.Redacted...)
+	}
+	return cp
+}
+
+func (e *runtimePlannerEvents) validatePresentationCommitSize(candidateID string, candidateMessages []*model.Message) error {
+	presentationIDs := make([]string, 0, len(e.presentations))
+	messages := make([]*model.Message, 0, len(candidateMessages))
+	for _, presentation := range e.presentations {
+		if presentation.id == candidateID {
+			presentationIDs = append(presentationIDs, candidateID)
+			messages = append(messages, candidateMessages...)
+			continue
+		}
+		if presentation.status != modelPresentationStaged &&
+			presentation.status != modelPresentationReady &&
+			presentation.status != modelPresentationCommitting {
+			continue
+		}
+		presentationIDs = append(presentationIDs, presentation.id)
+		messages = append(messages, presentation.messages...)
+	}
+	event := hooks.NewAssistantPresentationCommittedEvent(e.runID, e.agentID, e.sessionID, presentationIDs, messages)
+	event.CallKeys = presentationKeys(e.presentations, presentationIDs)
+	input, err := hooks.EncodeToHookInput(event, e.turnID)
+	if err != nil {
+		return fmt.Errorf("encode model presentation commit: %w", err)
+	}
+	if len(input.Payload) > maxCanonicalPresentationPayloadBytes {
+		return fmt.Errorf(
+			"model presentation commit exceeds maximum size %d bytes",
+			maxCanonicalPresentationPayloadBytes,
+		)
+	}
+	return nil
+}
+
 func (e *runtimePlannerEvents) publishModelPresentationState(ctx context.Context, presentationID string, state stream.ModelPresentationState) {
 	payload := stream.ModelPresentationPayload{PresentationID: presentationID, State: state}
 	e.rt.publishModelPresentation(context.WithoutCancel(ctx), e.sessionID, stream.ModelPresentation{
@@ -293,6 +359,9 @@ func (e *runtimePlannerEvents) commitModelPresentations(ctx context.Context) err
 	}
 
 	committed := hooks.NewAssistantPresentationCommittedEvent(e.runID, e.agentID, e.sessionID, presentationIDs, messages)
+	e.mu.Lock()
+	committed.CallKeys = presentationKeys(e.presentations, presentationIDs)
+	e.mu.Unlock()
 	e.publish(ctx, committed)
 	if err := e.hookError(); err != nil {
 		e.discardModelPresentations(ctx)
@@ -339,20 +408,6 @@ func (e *runtimePlannerEvents) acceptCommittingModelPresentations() {
 		}
 		presentation.status = modelPresentationAccepted
 	}
-}
-
-func findUnfinalizedModelPresentation(presentations []pendingModelPresentation) string {
-	for _, presentation := range presentations {
-		switch presentation.status {
-		case modelPresentationStarted, modelPresentationStaged:
-			return presentation.id
-		case modelPresentationReady, modelPresentationCommitting, modelPresentationAccepted, modelPresentationDiscarded:
-			continue
-		default:
-			panic(fmt.Sprintf("runtime: unknown model presentation status %d", presentation.status))
-		}
-	}
-	return ""
 }
 
 func (e *runtimePlannerEvents) discardModelPresentations(ctx context.Context) {
@@ -425,15 +480,20 @@ func (e *runtimePlannerEvents) publish(ctx context.Context, evt hooks.Event) {
 	}
 }
 
-func toTranscriptThinking(block model.ThinkingPart) transcript.ThinkingPart {
-	cp := transcript.ThinkingPart{
-		Text:      block.Text,
-		Signature: block.Signature,
-		Index:     block.Index,
-		Final:     block.Final,
+func (e *runtimePlannerEvents) noteEventCall(ctx context.Context) {
+	key := presentationCallKey(ctx)
+	if key == nil {
+		return
 	}
-	if len(block.Redacted) > 0 {
-		cp.Redacted = append([]byte(nil), block.Redacted...)
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if !slices.Contains(e.eventKeys, *key) {
+		e.eventKeys = append(e.eventKeys, *key)
 	}
-	return cp
+}
+
+func (e *runtimePlannerEvents) eventCallKeys() []runstore.CallKey {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return slices.Clone(e.eventKeys)
 }

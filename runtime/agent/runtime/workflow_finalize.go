@@ -154,6 +154,9 @@ func (r *Runtime) finalizeWithModelPlan(
 		}
 		return out, executeErr
 	}
+	if err := base.recordAssistant(output.TranscriptRef, nil); err != nil {
+		return nil, fmt.Errorf("record finalizer assistant: %w", err)
+	}
 	toolEvents, err := r.encodeToolEvents(wfCtx.Context(), allToolResults)
 	if err != nil {
 		return nil, err
@@ -182,7 +185,7 @@ func (r *Runtime) runFinalizationPlan(
 	if err != nil {
 		return nil, aggUsage, err
 	}
-	output, err := r.runPlanActivityRecovering(wfCtx, reg.ResumeActivityName, resumeOpts, req, hardDeadline, &caps, &nextAttempt)
+	output, err := r.runPlanActivityRecovering(wfCtx, base, reg.ResumeActivityName, resumeOpts, req, hardDeadline, &caps, &nextAttempt)
 	if err != nil {
 		return nil, aggUsage, fmt.Errorf("%s: %w", reasonText, err)
 	}

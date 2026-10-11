@@ -328,7 +328,7 @@ func (r *Runtime) resumeAfterToolTurn(
 	resumeReq.AllowedTools = cloneToolIdents(policyResult.Envelope.Allowed)
 	resumeReq.PolicyCaps = st.Caps
 	resumeReq.RunContext.Labels = cloneLabels(base.RunContext.Labels)
-	resOutput, err := r.runPlanActivityRecovering(wfCtx, reg.ResumeActivityName, resumeOpts, resumeReq, deadlines.Budget, &st.Caps, &st.NextAttempt)
+	resOutput, err := r.runPlanActivityRecovering(wfCtx, base, reg.ResumeActivityName, resumeOpts, resumeReq, deadlines.Budget, &st.Caps, &st.NextAttempt)
 	if err != nil {
 		return r.handleResumePlanError(wfCtx, reg, input, base, st, resOutput, deadlines, turnID, err)
 	}

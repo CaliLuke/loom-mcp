@@ -32,6 +32,7 @@ type (
 		hookActivities          map[string]hookActivityDef
 		plannerActivities       map[string]plannerActivityDef
 		finishActivities        map[string]finishActivityDef
+		sealActivities          map[string]sealActivityDef
 		contentActivities       map[string]contentActivityDef
 		childDispatchActivities map[string]childDispatchActivityDef
 		toolActivities          map[string]toolActivityDef

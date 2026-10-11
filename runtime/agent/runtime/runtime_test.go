@@ -609,7 +609,7 @@ func TestRecoveryTurnAllowsOneReplacementPlannerActivity(t *testing.T) {
 		planResult:    &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: finalMessage}},
 	}
 	input := &RunInput{RootRunID: "run-1", AgentID: "svc.agent", RunID: "run-1"}
-	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})})
+	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID}, Agent: testAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})})
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: tools.Ident("fail")}}}
 	out, err := testRunLoop(t, rt, wfCtx, AgentRegistration{
 		ID:                  input.AgentID,
@@ -899,7 +899,7 @@ func TestTimeBudgetExceeded(t *testing.T) {
 	}
 	wfCtx := &testWorkflowContext{ctx: context.Background(), asyncResult: ToolOutput{Payload: []byte("null")}}
 	input := &RunInput{AgentID: "svc.agent", RunID: "run-1"}
-	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})})
+	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID}, Agent: testAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})})
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: tools.Ident("tool")}}}
 	_, err := testRunLoop(t, rt, wfCtx, AgentRegistration{
 		ID:                  input.AgentID,
@@ -1092,7 +1092,7 @@ func TestAgentAsToolNestedUpdates(t *testing.T) {
 	// Parent run requests a single agent-tool invocation
 	parentInput := &RunInput{RootRunID: "run-parent", AgentID: "parent.agent", RunID: "run-parent", SessionID: "session-1", TurnID: "turn-1"}
 	seedParentRun(t, rt.SessionStore, parentInput.RunID, parentInput.SessionID)
-	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: parentInput.RunID, RunID: parentInput.RunID, SessionID: parentInput.SessionID, TurnID: parentInput.TurnID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: parentInput.AgentID, runID: parentInput.RunID})})
+	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: parentInput.RunID, RunID: parentInput.RunID, SessionID: parentInput.SessionID, TurnID: parentInput.TurnID}, Agent: testAgentContext(agentContextOptions{runtime: rt, agentID: parentInput.AgentID, runID: parentInput.RunID})})
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: tools.Ident("invoke")}}}
 
 	_, err = testRunLoop(t, rt, wfCtx, parentReg, parentInput, base, initial, nil, policy.CapsState{MaxToolCalls: 3, RemainingToolCalls: 3}, time.Time{}, time.Time{}, 2, parentInput.TurnID, nil)
@@ -1277,7 +1277,7 @@ func TestRuntimePublishesPolicyDecision(t *testing.T) {
 			TurnID:    input.TurnID,
 			Labels:    cloneLabels(input.Labels),
 		},
-		Agent: newAgentContext(agentContextOptions{
+		Agent: testAgentContext(agentContextOptions{
 			runtime: rt,
 			agentID: input.AgentID,
 			runID:   input.RunID,

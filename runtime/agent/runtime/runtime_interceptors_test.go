@@ -212,7 +212,8 @@ func TestExecuteWorkflowAfterRunInterceptorCanClearError(t *testing.T) {
 		ResumeActivityName:  "resume",
 	}
 	wfCtx := &routeWorkflowContext{
-		ctx: context.Background(),
+		ctx:         context.Background(),
+		hookRuntime: rt,
 		plannerRoutes: map[string]func(context.Context, *PlanActivityInput) (*PlanActivityOutput, error){
 			"plan": func(context.Context, *PlanActivityInput) (*PlanActivityOutput, error) {
 				return &PlanActivityOutput{}, planErr
@@ -473,7 +474,8 @@ func TestExecuteWorkflowEmptyAfterRunDecisionPreservesRunError(t *testing.T) {
 		ResumeActivityName:  "resume",
 	}
 	wfCtx := &routeWorkflowContext{
-		ctx: context.Background(),
+		ctx:         context.Background(),
+		hookRuntime: rt,
 		plannerRoutes: map[string]func(context.Context, *PlanActivityInput) (*PlanActivityOutput, error){
 			"plan": func(context.Context, *PlanActivityInput) (*PlanActivityOutput, error) {
 				return &PlanActivityOutput{}, planErr

@@ -356,3 +356,14 @@ func (panicWorkflowContext) ExecuteChildDispatchActivity(context.Context, engine
 func (*cancelOnPlannerWorkflowContext) ExecuteChildDispatchActivity(context.Context, engine.ChildDispatchActivityCall) (*api.ChildDispatchOutput, error) {
 	panic("unexpected record content activity")
 }
+
+func (panicWorkflowContext) ExecuteSealRecordActivity(context.Context, engine.SealRecordActivityCall) (*api.SealRecordOutput, error) {
+	panic("unexpected seal activity")
+}
+
+func (w *cancelOnPlannerWorkflowContext) ExecuteSealRecordActivity(ctx context.Context, call engine.SealRecordActivityCall) (*api.SealRecordOutput, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return &api.SealRecordOutput{IndexHead: call.Input.IndexHead}, nil
+}

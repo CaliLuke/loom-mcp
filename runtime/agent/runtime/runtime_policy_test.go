@@ -10,6 +10,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/features/policy/basic"
 	agent "github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/interrupt"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
@@ -164,7 +165,7 @@ func TestPolicyAllowlistTrimsToolExecution(t *testing.T) {
 		hasPlanResult: true,
 	}
 	input := &RunInput{RootRunID: "run-1", AgentID: "svc.agent", RunID: "run-1"}
-	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})})
+	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID}, Agent: testAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})})
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: tools.Ident("allowed")}, {Name: tools.Ident("blocked")}}}
 	out, err := testRunLoop(t, rt, wfCtx, AgentRegistration{
 		ID:                  input.AgentID,
@@ -411,7 +412,7 @@ func TestDisableToolsPolicyBlocksToolExecution(t *testing.T) {
 		hookRuntime: rt,
 	}
 	input := &RunInput{AgentID: "svc.agent", RunID: "run-1"}
-	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})})
+	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID}, Agent: testAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})})
 	reg := AgentRegistration{
 		ID:                  input.AgentID,
 		Planner:             &stubPlanner{},
@@ -514,7 +515,7 @@ func TestAwaitResumeReappliesToolPolicy(t *testing.T) {
 	}))
 	base := testWorkflowInput(t, rt, &planner.PlanInput{
 		RunContext: run.Context{RootRunID: "root", RunID: input.RunID, SessionID: input.SessionID, TurnID: input.TurnID, Attempt: 1},
-		Agent:      newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID}),
+		Agent:      testAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID}),
 	})
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: askTool}}}
 
@@ -561,7 +562,7 @@ func TestPlanStartActivityFiltersModelVisibleTools(t *testing.T) {
 		RunEventStore: runloginmem.New(),
 	}
 
-	out, err := rt.PlanStartActivity(context.Background(), &PlanActivityInput{
+	out, err := rt.PlanStartActivity(engine.WithActivityAttempt(context.Background(), 1), &PlanActivityInput{
 		AgentID:          "svc.agent",
 		RunID:            "run-1",
 		RunContext:       run.Context{RootRunID: "root", RunID: "run-1"},
@@ -600,7 +601,7 @@ func TestRecoveryDisableToolsProducesToolFreeModelRequest(t *testing.T) {
 		RunEventStore: runloginmem.New(),
 	}
 
-	out, err := rt.PlanStartActivity(context.Background(), &PlanActivityInput{
+	out, err := rt.PlanStartActivity(engine.WithActivityAttempt(context.Background(), 1), &PlanActivityInput{
 		AgentID:          "svc.agent",
 		RunID:            "run-1",
 		RunContext:       run.Context{RootRunID: "root", RunID: "run-1"},
@@ -655,7 +656,7 @@ func TestPlanStartActivityReturnsHistoryPolicyError(t *testing.T) {
 		RunEventStore: runloginmem.New(),
 	}
 
-	_, err := rt.PlanStartActivity(context.Background(), &PlanActivityInput{
+	_, err := rt.PlanStartActivity(engine.WithActivityAttempt(context.Background(), 1), &PlanActivityInput{
 		AgentID:    "svc.agent",
 		RunID:      "run-1",
 		RunContext: run.Context{RootRunID: "test-root", RunID: "run-1"},
@@ -689,7 +690,7 @@ func TestPlanResumeActivityReturnsHistoryPolicyError(t *testing.T) {
 		RunEventStore: runloginmem.New(),
 	}
 
-	_, err := rt.PlanResumeActivity(context.Background(), &PlanActivityInput{
+	_, err := rt.PlanResumeActivity(engine.WithActivityAttempt(context.Background(), 1), &PlanActivityInput{
 		AgentID:    "svc.agent",
 		RunID:      "run-1",
 		RunContext: run.Context{RootRunID: "test-root", RunID: "run-1"},

@@ -344,9 +344,6 @@ func (r *Runtime) publishAuthorizationDecision(ctx context.Context, input *RunIn
 
 func (r *Runtime) handleDeniedConfirmation(ctx context.Context, base *workflowPlanInput, st *runLoopState, turnID string, expectedChildren int, it confirmationAwait) ([]*planner.ToolResult, error) {
 	deniedResult := it.plan.DeniedResult
-	if err := r.publishDeniedConfirmationEvents(ctx, turnID, expectedChildren, it, deniedResult); err != nil {
-		return nil, err
-	}
 	tr := &planner.ToolResult{
 		Name:       it.call.Name,
 		ToolCallID: it.call.ToolCallID,
@@ -355,10 +352,13 @@ func (r *Runtime) handleDeniedConfirmation(ctx context.Context, base *workflowPl
 	if err := r.recordConfirmationToolResult(ctx, base, st, it.call, tr); err != nil {
 		return nil, err
 	}
+	if err := r.publishDeniedConfirmationEvents(ctx, turnID, expectedChildren, it, tr); err != nil {
+		return nil, err
+	}
 	return []*planner.ToolResult{tr}, nil
 }
 
-func (r *Runtime) publishDeniedConfirmationEvents(ctx context.Context, turnID string, expectedChildren int, it confirmationAwait, deniedResult any) error {
+func (r *Runtime) publishDeniedConfirmationEvents(ctx context.Context, turnID string, expectedChildren int, it confirmationAwait, result *planner.ToolResult) error {
 	if err := r.publishHook(ctx, hooks.NewToolCallScheduledEvent(
 		it.call.RunID,
 		it.call.AgentID,
@@ -372,27 +372,29 @@ func (r *Runtime) publishDeniedConfirmationEvents(ctx context.Context, turnID st
 	), turnID); err != nil {
 		return err
 	}
-	resultJSON, err := r.marshalToolValue(ctx, it.call.Name, deniedResult, nil)
+	resultJSON, err := r.marshalToolValue(ctx, it.call.Name, result.Result, nil)
 	if err != nil {
 		return fmt.Errorf("encode %s denied tool result for streaming: %w", it.call.Name, err)
 	}
-	return r.publishHook(ctx, hooks.NewToolResultReceivedEvent(
+	event := hooks.NewToolResultReceivedEvent(
 		it.call.RunID,
 		it.call.AgentID,
 		it.call.SessionID,
 		it.call.Name,
 		it.call.ToolCallID,
 		it.call.ParentToolCallID,
-		deniedResult,
+		result.Result,
 		rawjson.Message(resultJSON),
 		nil,
-		r.formatResultPreview(ctx, it.call.Name, it.call.Payload, deniedResult, nil),
+		result.Preview,
 		nil,
 		0,
 		nil,
 		nil,
 		nil,
-	), turnID)
+	)
+	event.Refs = result.Refs
+	return r.publishHook(ctx, event, turnID)
 }
 
 func (r *Runtime) recordConfirmationToolResult(ctx context.Context, base *workflowPlanInput, st *runLoopState, call planner.ToolRequest, tr *planner.ToolResult) error {

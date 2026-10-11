@@ -255,7 +255,7 @@ func (r *Runtime) publishProvidedToolResult(ctx context.Context, input *RunInput
 		tr.Result,
 		resultJSON,
 		tr.ServerData,
-		r.formatResultPreview(ctx, tr.Name, rawjson.Message(nil), tr.Result, tr.Bounds),
+		tr.Preview,
 		tr.Bounds,
 		0,
 		nil,
@@ -263,5 +263,6 @@ func (r *Runtime) publishProvidedToolResult(ctx context.Context, input *RunInput
 		tr.Error,
 	)
 	ev.Artifacts = artifactRefsFromContents(tr.Artifacts)
+	ev.Refs = tr.Refs
 	return r.publishHook(ctx, ev, turnID)
 }

@@ -13,6 +13,7 @@ import (
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
@@ -224,6 +225,7 @@ func TestRunPlanActivityRecoveringCarriesBoundedRecovery(t *testing.T) {
 
 	output, err := rt.runPlanActivityRecovering(
 		wfCtx,
+		&workflowPlanInput{},
 		"resume",
 		engine.ActivityOptions{},
 		api.PlanActivityInput{
@@ -286,6 +288,7 @@ func TestRunPlanActivityRecoveringReturnsLastRecoveryAtCap(t *testing.T) {
 
 	out, err := rt.runPlanActivityRecovering(
 		wfCtx,
+		&workflowPlanInput{},
 		"plan",
 		engine.ActivityOptions{},
 		api.PlanActivityInput{
@@ -333,20 +336,27 @@ func TestRunPlanActivityRecoveringRejectsUsageOverflow(t *testing.T) {
 		},
 	}
 	rt := New()
+	published := 0
 	caps := policy.CapsState{MaxRecoveryTurns: 1, RemainingRecoveryTurns: 1}
 
 	out, err := rt.runPlanActivityRecovering(
 		wfCtx,
+		&workflowPlanInput{},
 		"plan",
 		engine.ActivityOptions{},
 		api.PlanActivityInput{RunContext: run.Context{RootRunID: "test-root", Attempt: 1}, PolicyCaps: caps},
 		time.Time{},
 		&caps,
 		nil,
+		func(*PlanActivityOutput) (hooks.Event, error) {
+			published++
+			return hooks.NewRunPhaseChangedEvent("run", "agent", "", run.PhaseExecutingTools), nil
+		},
 	)
 	require.Nil(t, out)
 	require.ErrorContains(t, err, "token usage aggregation overflows")
 	require.Len(t, wfCtx.plannerCalls, 2)
+	require.Zero(t, published, "execution phase is not published after usage aggregation fails")
 }
 
 func TestExecuteWorkflowRunFinalizesAfterInitialModelRecoveryCap(t *testing.T) {
@@ -398,7 +408,7 @@ func TestExecuteWorkflowRunFinalizesAfterInitialModelRecoveryCap(t *testing.T) {
 		wfCtx,
 		reg,
 		input,
-		run.Context{RootRunID: "test-root", RunID: input.RunID, Attempt: 1},
+		&workflowPlanInput{AgentID: input.AgentID, RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID, Attempt: 1}},
 		"turn-1",
 		nil,
 	)
@@ -492,6 +502,7 @@ func TestRunPlanActivityRecoveringUsesExactRejectedRequestCatalog(t *testing.T) 
 
 	_, err := rt.runPlanActivityRecovering(
 		wfCtx,
+		&workflowPlanInput{},
 		"resume",
 		engine.ActivityOptions{},
 		api.PlanActivityInput{
@@ -647,7 +658,7 @@ func TestRunPlanActivityNormalizesCompatibilityEchoes(t *testing.T) {
 	}
 	rt := &Runtime{logger: telemetry.NoopLogger{}}
 
-	out, err := rt.runPlanActivity(wfCtx, "plan", engine.ActivityOptions{}, input, time.Time{})
+	out, err := rt.runPlanActivity(wfCtx, &workflowPlanInput{}, "plan", engine.ActivityOptions{}, input, time.Time{})
 	require.NoError(t, err)
 	require.Equal(t, input.ToolPolicyActive, out.ToolPolicyActive)
 	require.Equal(t, input.AllowedTools, out.AllowedTools)
@@ -681,6 +692,7 @@ func TestRunPlanActivityRecoveringRechecksInputBudgetAfterRecovery(t *testing.T)
 
 	out, err := rt.runPlanActivityRecovering(
 		wfCtx,
+		&workflowPlanInput{},
 		"resume",
 		engine.ActivityOptions{},
 		input,
@@ -733,11 +745,12 @@ func TestPlanActivitiesPreserveUsageAcrossModelRecovery(t *testing.T) {
 				RunContext: run.Context{RootRunID: "root", RunID: "run-recovery-usage", Attempt: 1},
 			}
 
-			out, activityErr := test.activity(rt, context.Background(), input)
+			out, activityErr := test.activity(rt, engine.WithActivityAttempt(context.Background(), 1), input)
 			require.NoError(t, activityErr)
 			require.NotNil(t, out.Recovery)
 			require.Equal(t, rejectedUsage, out.Recovery.Usage)
 			require.Equal(t, wantUsage, out.Usage)
+			require.Len(t, out.CallKeys, 2, "accepted and rejected calls both belong to recovery adoption")
 		})
 	}
 }
@@ -776,7 +789,7 @@ func TestPlanActivitiesAccountCaughtUnaryRejections(t *testing.T) {
 					ID:      "svc.agent",
 					Planner: caughtRecoveryUsagePlanner{returnSecondRejection: secondRejected},
 				}
-				out, activityErr := activity.run(rt, context.Background(), &PlanActivityInput{
+				out, activityErr := activity.run(rt, engine.WithActivityAttempt(context.Background(), 1), &PlanActivityInput{
 					AgentID:    "svc.agent",
 					RunID:      "run-caught-rejection",
 					RunContext: run.Context{RootRunID: "root", RunID: "run-caught-rejection", Attempt: 1},
@@ -826,7 +839,7 @@ func TestPlanActivitiesDoNotRecoverHookPersistenceFailure(t *testing.T) {
 				RunContext: run.Context{RootRunID: "test-root", RunID: "run-hook-failure", Attempt: 1},
 			}
 
-			out, activityErr := test.activity(rt, context.Background(), input)
+			out, activityErr := test.activity(rt, engine.WithActivityAttempt(context.Background(), 1), input)
 			require.Nil(t, out)
 			require.ErrorIs(t, activityErr, rejected)
 			require.ErrorIs(t, activityErr, hookErr)
@@ -884,7 +897,7 @@ func TestPlanActivitiesAppendRecoveryAfterHistoryPolicy(t *testing.T) {
 				}),
 			}
 
-			out, activityErr := test.activity(rt, context.Background(), input)
+			out, activityErr := test.activity(rt, engine.WithActivityAttempt(context.Background(), 1), input)
 			require.NoError(t, activityErr)
 			require.NotNil(t, out.Result)
 			messages := test.messages(capture)
@@ -976,54 +989,8 @@ func (p caughtRecoveryUsagePlanner) PlanResume(ctx context.Context, input *plann
 	return p.plan(ctx, input.Agent)
 }
 
-func (p caughtRecoveryUsagePlanner) plan(ctx context.Context, agentContext planner.PlannerContext) (*planner.PlanResult, error) {
-	client, ok := agentContext.ModelClient("default")
-	if !ok {
-		return nil, errors.New("default model is not registered")
-	}
-	if _, err := client.Complete(ctx, &model.Request{Model: "rejected"}); err == nil {
-		return nil, errors.New("expected first model output rejection")
-	}
-	if p.returnSecondRejection {
-		_, err := client.Complete(ctx, &model.Request{Model: "rejected"})
-		return nil, err
-	}
-	response, err := client.Complete(ctx, &model.Request{Model: "successful"})
-	if err != nil {
-		return nil, err
-	}
-	return &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: &response.Content[0]}}, nil
-}
-
 func (p activityRecoveryUsagePlanner) PlanResume(ctx context.Context, input *planner.PlanResumeInput) (*planner.PlanResult, error) {
 	return p.plan(ctx, input.Agent)
-}
-
-func (p activityRecoveryUsagePlanner) plan(ctx context.Context, agentContext planner.PlannerContext) (*planner.PlanResult, error) {
-	client, ok := agentContext.ModelClient("default")
-	if !ok {
-		return nil, errors.New("default model is not registered")
-	}
-	if _, err := client.Complete(ctx, &model.Request{Model: "successful"}); err != nil {
-		return nil, err
-	}
-	if !p.streamReject {
-		_, err := client.Complete(ctx, &model.Request{Model: "rejected"})
-		return nil, err
-	}
-	stream, err := client.Stream(ctx, &model.Request{Model: "rejected", Stream: true})
-	if err != nil {
-		return nil, err
-	}
-	for {
-		_, err = stream.Recv()
-		if errors.Is(err, io.EOF) {
-			return nil, stream.Finalize(nil)
-		}
-		if err != nil {
-			return nil, stream.Finalize(err)
-		}
-	}
 }
 
 func (c *activityRecoveryUsageClient) Complete(_ context.Context, request *model.Request) (*model.Response, error) {
@@ -1067,4 +1034,50 @@ func (p *historyRecoveryCapturePlanner) PlanResume(_ context.Context, input *pla
 		Role:  model.ConversationRoleAssistant,
 		Parts: []model.Part{model.TextPart{Text: "done"}},
 	}}}, nil
+}
+
+func (p caughtRecoveryUsagePlanner) plan(ctx context.Context, agentContext planner.PlannerContext) (*planner.PlanResult, error) {
+	client, ok := agentContext.ModelClient("default")
+	if !ok {
+		return nil, errors.New("default model is not registered")
+	}
+	if _, err := client.Complete(ctx, &model.Request{Model: "rejected"}); err == nil {
+		return nil, errors.New("expected first model output rejection")
+	}
+	if p.returnSecondRejection {
+		_, err := client.Complete(ctx, &model.Request{Model: "rejected"})
+		return nil, err
+	}
+	response, err := client.Complete(ctx, &model.Request{Model: "successful"})
+	if err != nil {
+		return nil, err
+	}
+	return &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: &response.Content[0]}}, nil
+}
+
+func (p activityRecoveryUsagePlanner) plan(ctx context.Context, agentContext planner.PlannerContext) (*planner.PlanResult, error) {
+	client, ok := agentContext.ModelClient("default")
+	if !ok {
+		return nil, errors.New("default model is not registered")
+	}
+	if _, err := client.Complete(ctx, &model.Request{Model: "successful"}); err != nil {
+		return nil, err
+	}
+	if !p.streamReject {
+		_, err := client.Complete(ctx, &model.Request{Model: "rejected"})
+		return nil, err
+	}
+	stream, err := client.Stream(ctx, &model.Request{Model: "rejected", Stream: true})
+	if err != nil {
+		return nil, err
+	}
+	for {
+		_, err = stream.Recv()
+		if errors.Is(err, io.EOF) {
+			return nil, stream.Finalize(nil)
+		}
+		if err != nil {
+			return nil, stream.Finalize(err)
+		}
+	}
 }

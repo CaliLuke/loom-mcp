@@ -438,7 +438,7 @@ func TestToolsetTaskQueueOverrideUsed(t *testing.T) {
 	rt.toolSpecs = map[tools.Ident]tools.ToolSpec{"child": newAnyJSONSpec("child", "svc.export")}
 	wfCtx := &testWorkflowContext{finishRuntime: rt, ctx: context.Background(), asyncResult: ToolOutput{Payload: []byte("null")}, planResult: &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: &model.Message{Role: "assistant", Parts: []model.Part{model.TextPart{Text: "ok"}}}}}, hasPlanResult: true}
 	input := &RunInput{RootRunID: "run-1", AgentID: "svc.agent", RunID: "run-1"}
-	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})})
+	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID}, Agent: testAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})})
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: tools.Ident("child")}}}
 	_, err := testRunLoop(t, rt, wfCtx, AgentRegistration{
 		ID:                  input.AgentID,
@@ -461,7 +461,7 @@ func TestPreserveModelProvidedToolCallID(t *testing.T) {
 	rt.toolSpecs = map[tools.Ident]tools.ToolSpec{"tool": newAnyJSONSpec("tool", "svc.ts")}
 	wfCtx := &testWorkflowContext{finishRuntime: rt, ctx: context.Background(), asyncResult: ToolOutput{Payload: []byte("null")}, planResult: &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: &model.Message{Role: "assistant", Parts: []model.Part{model.TextPart{Text: "ok"}}}}}, hasPlanResult: true}
 	input := &RunInput{RootRunID: "run-1", AgentID: "svc.agent", RunID: "run-1"}
-	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})})
+	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID}, Agent: testAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})})
 	// Planner supplies an explicit ToolCallID from the model
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: tools.Ident("tool"), ToolCallID: "model-123"}}}
 	_, err := testRunLoop(t, rt, wfCtx, AgentRegistration{
@@ -528,7 +528,7 @@ func TestRunLoopPauseResumeEmitsEvents(t *testing.T) {
 		StartedAt: now,
 		UpdatedAt: now,
 	}))
-	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID, SessionID: input.SessionID, TurnID: input.TurnID}, Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})})
+	base := testWorkflowInput(t, rt, &planner.PlanInput{RunContext: run.Context{RootRunID: "test-root", RunID: input.RunID, SessionID: input.SessionID, TurnID: input.TurnID}, Agent: testAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID})})
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: tools.Ident("tool")}}}
 	ctrl := interrupt.NewController(wfCtx)
 	_, err = testRunLoop(t, rt, wfCtx, AgentRegistration{
@@ -733,6 +733,8 @@ func TestConsumeProvidedToolResultsRunsResultMaterializer(t *testing.T) {
 		}
 	}
 	require.NotNil(t, resultEvt, "expected ToolResultReceivedEvent")
+	require.Equal(t, results[0].Refs, resultEvt.Refs)
+	require.Equal(t, results[0].Preview, resultEvt.ResultPreview)
 	require.JSONEq(t, `{"ok":true,"materialized":true}`, string(resultEvt.ResultJSON))
 	require.JSONEq(t, `[{"kind":"example.materialized","data":{"source":"await"}}]`, string(resultEvt.ServerData))
 }
@@ -922,7 +924,7 @@ func TestInlineToolsetEmitsParentToolEvents(t *testing.T) {
 	input := &RunInput{RootRunID: "run-inline", AgentID: "parent.agent", RunID: "run-inline", SessionID: "sess-1", TurnID: "turn-1"}
 	base := testWorkflowInput(t, rt, &planner.PlanInput{
 		RunContext: run.Context{RootRunID: "root", RunID: input.RunID, SessionID: input.SessionID, TurnID: input.TurnID},
-		Agent:      newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID}),
+		Agent:      testAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID}),
 	})
 	initial := &planner.PlanResult{ToolCalls: []planner.ToolRequest{{
 		Name:       tools.Ident("child.get_time_series"),

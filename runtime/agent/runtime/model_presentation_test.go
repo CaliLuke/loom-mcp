@@ -18,6 +18,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	runloginmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog/inmem"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/stream"
 	"github.com/stretchr/testify/require"
 )
@@ -107,7 +108,7 @@ func TestModelPresentationStreamsLiveThenAcceptsCanonicalContent(t *testing.T) {
 	rt.models["default"] = client
 	rt.agents["svc.agent"] = AgentRegistration{ID: "svc.agent", Planner: consumeStreamPlanner{}}
 
-	out, err := rt.PlanStartActivity(context.Background(), &PlanActivityInput{
+	out, err := rt.PlanStartActivity(engine.WithActivityAttempt(context.Background(), 1), &PlanActivityInput{
 		AgentID: "svc.agent",
 		RunID:   "run-presentation",
 		RunContext: run.Context{RootRunID: "root",
@@ -145,9 +146,15 @@ func TestModelPresentationStreamsLiveThenAcceptsCanonicalContent(t *testing.T) {
 	require.Len(t, runlog.events, 1)
 	require.Equal(t, hooks.AssistantTurnCommitted, runlog.events[0].Type)
 	var committed struct {
-		Messages []*model.Message
+		Messages        []*model.Message
+		CallKeys        []*runstore.CallKey `json:"call_keys"`
+		PresentationIDs []string            `json:"presentation_ids"`
 	}
 	require.NoError(t, json.Unmarshal(runlog.events[0].Payload, &committed))
+	require.Len(t, out.CallKeys, 1)
+	require.Equal(t, out.ProducingCall, &out.CallKeys[0])
+	require.Equal(t, []*runstore.CallKey{&out.CallKeys[0]}, committed.CallKeys)
+	require.Equal(t, []string{started.Data.PresentationID}, committed.PresentationIDs)
 	require.Len(t, committed.Messages, 2)
 	require.Equal(t, "hello", committed.Messages[0].Parts[0].(model.TextPart).Text)
 	require.Equal(t, "consider", committed.Messages[1].Parts[0].(model.ThinkingPart).Text)
@@ -199,7 +206,7 @@ func TestModelPresentationCommitsAuthoritativeResponseMessages(t *testing.T) {
 	rt.models["default"] = contractModelClient{streamer: rawStream}
 	rt.agents["svc.agent"] = AgentRegistration{ID: "svc.agent", Planner: consumeStreamPlanner{}}
 
-	out, err := rt.PlanStartActivity(context.Background(), presentationPlanInput("run-authoritative", ""))
+	out, err := rt.PlanStartActivity(engine.WithActivityAttempt(context.Background(), 1), presentationPlanInput("run-authoritative", ""))
 
 	require.NoError(t, err)
 	require.Len(t, testStoredTranscript(t, rt, out, "test-root"), 2)
@@ -225,7 +232,7 @@ func TestModelPresentationCommitsResponseAboveOrdinaryHookLimit(t *testing.T) {
 	rt.models["default"] = newValidatedPresentationClient(t, text)
 	rt.agents["svc.agent"] = AgentRegistration{ID: "svc.agent", Planner: consumeStreamPlanner{}}
 
-	out, err := rt.PlanStartActivity(context.Background(), presentationPlanInput("run-large-presentation", ""))
+	out, err := rt.PlanStartActivity(engine.WithActivityAttempt(context.Background(), 1), presentationPlanInput("run-large-presentation", ""))
 
 	require.NoError(t, err)
 	require.True(t, out.Result.Streamed)
@@ -352,7 +359,7 @@ func TestCanonicalPresentationProjectionsCannotMutateTranscript(t *testing.T) {
 	rt.models["default"] = contractModelClient{streamer: rawStream}
 	rt.agents["svc.agent"] = AgentRegistration{ID: "svc.agent", Planner: consumeStreamPlanner{}}
 
-	out, err := rt.PlanStartActivity(context.Background(), presentationPlanInput("run-owned", "session-owned"))
+	out, err := rt.PlanStartActivity(engine.WithActivityAttempt(context.Background(), 1), presentationPlanInput("run-owned", "session-owned"))
 
 	require.NoError(t, err)
 	require.Len(t, testStoredTranscript(t, rt, out, "test-root"), 1)
@@ -680,7 +687,7 @@ func TestModelPresentationDiscardsWhenPlannerFailsAfterStreamValidation(t *testi
 	rt.models["default"] = newValidatedPresentationClient(t, "not accepted")
 	rt.agents["svc.agent"] = AgentRegistration{ID: "svc.agent", Planner: failAfterConsumedStreamPlanner{err: plannerErr}}
 
-	_, err = rt.PlanStartActivity(context.Background(), presentationPlanInput("run-planner-failure", "session-planner-failure"))
+	_, err = rt.PlanStartActivity(engine.WithActivityAttempt(context.Background(), 1), presentationPlanInput("run-planner-failure", "session-planner-failure"))
 
 	require.ErrorIs(t, err, plannerErr)
 	require.Empty(t, runlogStore.events)
@@ -706,7 +713,7 @@ func TestCanonicalPresentationCommitBypassesEventMutation(t *testing.T) {
 	rt.models["default"] = newValidatedPresentationClient(t, "canonical")
 	rt.agents["svc.agent"] = AgentRegistration{ID: "svc.agent", Planner: consumeStreamPlanner{}}
 
-	out, err := rt.PlanStartActivity(context.Background(), presentationPlanInput("run-interceptor", ""))
+	out, err := rt.PlanStartActivity(engine.WithActivityAttempt(context.Background(), 1), presentationPlanInput("run-interceptor", ""))
 
 	require.NoError(t, err)
 	require.False(t, interceptorCalled)
@@ -735,7 +742,7 @@ func TestCanonicalPresentationIgnoresPostCommitSubscriberFailure(t *testing.T) {
 	rt.models["default"] = newValidatedPresentationClient(t, "accepted")
 	rt.agents["svc.agent"] = AgentRegistration{ID: "svc.agent", Planner: consumeStreamPlanner{}}
 
-	out, err := rt.PlanStartActivity(context.Background(), presentationPlanInput("run-subscriber-failure", "session-subscriber-failure"))
+	out, err := rt.PlanStartActivity(engine.WithActivityAttempt(context.Background(), 1), presentationPlanInput("run-subscriber-failure", "session-subscriber-failure"))
 
 	require.NoError(t, err)
 	require.Len(t, testStoredTranscript(t, rt, out, "test-root"), 1)
@@ -756,7 +763,7 @@ func TestModelPresentationRejectsPlannerThatOmitsFinalize(t *testing.T) {
 	rt.models["default"] = newValidatedPresentationClient(t, "unfinished")
 	rt.agents["svc.agent"] = AgentRegistration{ID: "svc.agent", Planner: omitFinalizePlanner{}}
 
-	_, err = rt.PlanStartActivity(context.Background(), presentationPlanInput("run-no-finalize", "session-no-finalize"))
+	_, err = rt.PlanStartActivity(engine.WithActivityAttempt(context.Background(), 1), presentationPlanInput("run-no-finalize", "session-no-finalize"))
 
 	require.ErrorContains(t, err, "was not finalized")
 	require.Empty(t, runlogStore.events)

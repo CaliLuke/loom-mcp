@@ -9,7 +9,7 @@ func validateEntry(entry MessageEntry) error {
 	if entry.ID == 0 {
 		return fmt.Errorf("index: entry ID must be positive")
 	}
-	if entry.Call != nil || entry.NonText != 0 || entry.Keep || entry.Origin != nil {
+	if entry.NonText != 0 || entry.Keep || entry.Origin != nil {
 		return fmt.Errorf("index: later-ticket fields must be zero")
 	}
 	switch entry.Kind {
@@ -39,7 +39,11 @@ func validateEntry(entry MessageEntry) error {
 }
 
 func validateStructural(s StructuralEntry) error {
-	if s.ProtocolVersion != TemplateProtocolVersion {
+	switch s.ProtocolVersion {
+	case 5:
+		// The known template set is independent of workflow protocol 6. A future
+		// template version needs its own renderer before it can join this set.
+	default:
 		return fmt.Errorf("index: unsupported template protocol %d", s.ProtocolVersion)
 	}
 	switch s.Kind {

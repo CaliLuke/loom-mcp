@@ -56,10 +56,11 @@ type (
 	// Adjacent results with the same nonzero Batch form one user message; Batch
 	// is the first result entry's ID. Record is server-only and never rendered.
 	MessageEntry struct {
-		ID         MessageID              `json:"id"`
-		Kind       EntryKind              `json:"kind"`
-		Hash       runstore.Hash          `json:"hash,omitzero"`
-		Calls      []runstore.Hash        `json:"calls,omitzero"`
+		ID    MessageID       `json:"id"`
+		Kind  EntryKind       `json:"kind"`
+		Hash  runstore.Hash   `json:"hash,omitzero"`
+		Calls []runstore.Hash `json:"calls,omitzero"`
+		// Call identifies the completed model invocation that produced this assistant entry.
 		Call       *runstore.CallKey      `json:"call,omitzero"`
 		Structural *StructuralEntry       `json:"structural,omitzero"`
 		Role       model.ConversationRole `json:"role,omitzero"`

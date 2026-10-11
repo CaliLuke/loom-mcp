@@ -183,7 +183,7 @@ Typed consumers can call
 eligible bytes and decode them with the generated result codec. Empty or missing
 hashes fail. Tool activities return references; terminal completion decoding runs in the finish activity.
 
-### Transcript index and planner views (protocol 5)
+### Transcript index and planner views (protocol 6)
 
 The workflow keeps immutable `index.MessageEntry` values and a committed
 `IndexHead`, rather than accumulated messages, tool outputs, typed answers, or a
@@ -339,8 +339,8 @@ and one 10 KiB typed answer per step. Warm store work depends only on the new
 entries; cold reconstruction, planner projections and workflow index memory
 remain linear in run length. The in-memory engine has no durable Temporal history
 to measure. Workflow event history also grows; `ContinueAsNew` remains follow-up
-work. Terminal sealing, trailing terminal pending entries and new planner/run
-hooks belong to K8; `FinishRunInput.ToolEvents` still contains one ref per call.
+work. K8 seals trailing terminal entries and records planner adoption;
+`FinishRunInput.ToolEvents` still contains one ref per call.
 
 **Breaking change: run tool events.** `api.RunOutput` (also aliased as
 `runtime.RunOutput`) replaces `ToolEvents []*api.ToolEvent` with
@@ -853,6 +853,140 @@ Custom engines attach their one-based attempt with `engine.WithActivityAttempt`.
 `CallInfo` or allocate a sequence. This also applies to clients obtained outside
 the planner path. `model.WithCallInfo` can attach metadata explicitly. Call
 identity alone does not record model requests or responses.
+
+### Model-call records
+
+Planner model calls are recorded in `Runtime.RunStore`, inside model
+interceptors, after request decoration. The runtime writes `started` before
+sending, stores any returned response, then writes `completed` or `failed`.
+Missing `CallInfo` or an engine attempt below 1 rejects the call before sending.
+`Runtime.ModelClient` calls and interceptor short-circuits bypass recording.
+
+`runtime/agent/callrecord` owns the deterministic JSON v2 bodies. Requests use
+ordered, zero-based half-open spans of the committed view captured before
+history policy, plus hashes for other messages. Matching includes `Meta` and
+cache checkpoints. Reconstruction loads the recorded `ViewRef` and verifies
+all exported request fields against the recorded request. Messages whose
+ordinary JSON round trip changes numeric precision use hashes; hashed messages
+and tool schemas retain exact numeric tokens. The private completion validator
+is excluded.
+
+Stream usage is the sum of usage chunks. `Finalize` or `Close` writes completion
+synchronously; activity exit marks streams still open as `stream_abandoned`.
+Storage failures propagate, and a failed terminal write can leave `started`
+evidence. There are no background writes.
+
+`runtime.CallRecording` exposes started keys and the first `RequestGrowth`
+warning when message bytes outside the view exceed those inside it. Planner
+activity output carries `CallKeys`, `ProducingCall`, and `RequestGrowth`. The
+workflow emits `context_request_growth` once per run and commits every validated
+output, including recovery, through `planner_step:<run>:<step>`. All started
+keys in that output are adopted; `ProducingCall` only correlates assistant
+content with the last completed call that emitted planner events.
+
+`TurnID` remains the conversational turn. `Step` starts at 1 and increments for
+every scheduled planner activity, including recovery and finalization. Assistant
+index entries, including the final response, carry the producing call key.
+Presentation commits carry `CallKeys` parallel to `PresentationIDs`; a nil key
+identifies a standalone helper presentation without a recorded invocation.
+Planner record events and `child_run_linked` bypass event interceptors, append to the canonical run
+log, then publish best-effort projections. Initial successful adoption shares
+one hook activity with the execution-phase event, with `planner_step` first.
+Pure workflow loop-state preparation completes before that batch publishes.
+Recovery and resume adoption use a separate activity before returning to the
+loop; their later publications can be skipped by validation or finalization.
+
+### Terminal transcript sealing
+
+`ExecuteWorkflow` owns one live planning state through terminal cleanup. On
+success, failure, cancellation and finalization it schedules `<agent>.seal` on
+a detached workflow context before `run_completed`. `SealRecord` validates and
+stores the remaining index segments, including the final assistant entry, then
+appends typed `run_sealed{IndexHead, ProtocolVersion}` directly to the canonical run log. It skips
+interceptors and projections. A seal failure fails the run.
+
+The workflow fixes `EventKey = run_sealed:<run>` and the timestamp before
+scheduling; retries store identical content and append one event, including
+a lost acknowledgement after append. The logical identity is deterministic;
+run-log `ID` remains the store-owned pagination cursor. A run terminated outside
+workflow code has no seal: its readable head is the latest `planner_step` head.
+The workflow protocol is 6; structural templates remain 5.
+
+**Breaking engine adapter change:** custom `engine.Engine` implementations must
+add `RegisterSealRecordActivity`, and their `engine.WorkflowContext` must add
+`ExecuteSealRecordActivity`. The typed input is `api.SealRecordInput`; the output
+returns the committed `IndexHead`.
+
+### RunRecord and export
+
+`runrecord.Read(ctx, runStore, runLog, rootRunID, runID)` reconstructs a run and
+its `child_run_linked` descendants using only the stores. Each run uses its seal
+head, or its latest planner-step head with `Sealed=false`, and one incremental
+index renderer. Structural entries use their own template protocol (currently
+5). `planner_step` and `run_sealed` carry `ProtocolVersion`, copied from the
+workflow input checked by `validateWorkflowInput`. The reader uses those stamps
+and rejects disagreement. Without either record event, the protocol is unknown
+(zero), even if calls record a positive `Step`.
+
+Every listed model call includes its exact rebuilt request, activity and step.
+Canonical record-event keys decide adoption for all calls of an attempt,
+including auxiliary calls; a terminal unadopted call is abandoned and an open
+call is incomplete. Presentation commits are reported separately as adopted,
+presented-not-adopted or presented-unrecorded. The record also contains full
+eligible results, typed and clarification answers, and a separate `ServerOnly`
+field. `index.CheckpointRecord` includes summary call keys and all checkpoint
+metadata; the reader resolves recorded checkpoint references. K8 produces no
+checkpoints or compaction projection.
+
+`record.Export().Marshal()` produces deterministic version-1 JSON with rendered
+transcripts, rebuilt requests, events and addressed content, including server-only
+bytes. `runrecord.FromExport(data)` restores the identical record without a store
+or historical renderer. Opaque log payloads retain their exact bytes; numeric
+request metadata above 2^53 retains its exact value.
+
+The 1,000-step recorder-write growth and real Temporal reconstruction proofs skip
+`-short` and run through `make test-payload-growth` (also invoked by `make itest`).
+The compaction-on measurements use `KeepRecentTurns` and `Compress` as stand-ins;
+K12 must repeat this proof with real compaction. Counting every recorder `Put`
+and every `PutCall` body write, including repeated writes, fitted slopes were
+1,999.743 bytes/step with policies off, 2,032.677 with `KeepRecentTurns`, and
+2,458.549 with `Compress`. Maximum residuals were 700.227, 1,103.159 and
+3,799.192 bytes respectively over 1,000 steps. Index/view setup writes are
+excluded; all recorder-owned addressed content and call bodies are included.
+The complete request is only a canonical verification digest: it is never
+stored as addressed content or copied into export `Content`. Rebuild and import
+verify the reconstructed request against that digest.
+
+### Run-log result references and upgrade
+
+Every `ToolResultReceivedEvent` carries `Refs` for the stored eligible result,
+server sidecar and executed payload. Small results retain their existing inline
+`Result`, `ResultJSON` and `ServerData`. Above the 1,000,000-byte encoded hook
+limit, all three bodies are omitted; refs and the original preview remain.
+Without a configured preview, the bounded fallback says the result was omitted
+from hooks because the payload exceeded limits.
+`publishStoredToolContent` skips loading a result already known to exceed the
+limit and stops loading sidecars once the result envelope cannot fit. The store
+has no sidecar size probe, so a sidecar is checked after loading. `RunRecord`
+resolves results from canonical index entries and their stored output refs, with
+call records preserving model-visible evidence. Observer `tool_result_received`
+refs never participate in reconstruction. Completed results from a batch that
+later aborts are retained as refs and indexed on detached terminal cleanup before
+sealing. Inline error sidecars are stored even when no eligible result body exists.
+Normal result ordering and rendered messages remain unchanged.
+
+K8 has these breaking changes and execution costs:
+
+- Custom engines must implement both seal methods described above.
+- Workflow protocol 6 requires draining older workflows before upgrading workers;
+  the unchanged v5 history proves mismatch rejection before effects.
+- The `hook_payload_too_large` truncation marker is removed. Consumers must use
+  refs to retrieve omitted bytes and previews for display.
+- Each resumed or recovery planner step adds one hook activity round trip for
+  `planner_step`: approximately 97 ms median on the Temporal dev server (20 runs).
+  The real-Temporal await test retains its approved 2s budget. Initial planning
+  stays at two activities, batching adoption with its existing phase hook;
+  resumed planning increases from one to two, and sealing adds one activity per run.
 
 ---
 
@@ -3138,9 +3272,12 @@ external `Client`, also supply `ClientOptions` with that client's converter
 external client whose converter configuration was not supplied.
 
 The generated fixture keeps a completed history under
-`integration_tests/fixtures/agent_features/testdata/workflow_protocol_v5.json`.
+`integration_tests/fixtures/agent_features/testdata/workflow_protocol_v6.json`.
 The scrubbed recording includes a tool call, rejected child-dispatch validation,
-seed/result content batches and terminal finish activity. Run
+seed/result content batches, planner-step commits and terminal finish activity.
+The unchanged protocol 5 fixture verifies rejection before workflow effects;
+protocol versions must match, so workers running protocol 6 cannot replay it
+as a successful run. Run
 `go test -C integration_tests/fixtures/agent_features ./... -run '^TestGeneratedFeatureWorkflowReplay$'`
 for offline replay. To re-record it against the pinned Temporal development
 server, run

@@ -11,6 +11,34 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 )
 
+func truncateResultPreview(text string) string {
+	const limit = 1024
+	if len(text) <= limit {
+		return text
+	}
+	text = text[:limit]
+	for !utf8.ValidString(text) {
+		text = text[:len(text)-1]
+	}
+	return text
+}
+
+func structuralIndexEntry(kind index.StructuralKind, ids []string, text ...index.TextParameter) index.MessageEntry {
+	return index.MessageEntry{Kind: index.Structural, ToolUseIDs: ids, Structural: &index.StructuralEntry{Kind: kind, ProtocolVersion: index.TemplateProtocolVersion, Text: text}}
+}
+
+func adoptResultEntries(base *workflowPlanInput, entries []index.MessageEntry, results []*planner.ToolResult) error {
+	for _, entry := range entries {
+		if err := base.appendEntry(entry); err != nil {
+			return err
+		}
+	}
+	for _, result := range results {
+		result.Result, result.ServerData = nil, nil
+	}
+	return nil
+}
+
 // appendIndexResults records a dispatch-ordered batch. Metadata is itself
 // content-addressed, so a workflow entry never grows with a result or retry hint.
 func (r *Runtime) appendIndexResults(ctx context.Context, base *workflowPlanInput, calls []planner.ToolRequest, results []*planner.ToolResult, denial bool) error {
@@ -29,6 +57,7 @@ func (r *Runtime) appendIndexResults(ctx context.Context, base *workflowPlanInpu
 	if err := adoptResultEntries(base, entries, results); err != nil {
 		return err
 	}
+	base.consumeIndexedResults(results)
 	base.content = nil
 	return nil
 }
@@ -103,18 +132,6 @@ func (r *Runtime) resultIndexEntry(ctx context.Context, base *workflowPlanInput,
 	return entry, err
 }
 
-func truncateResultPreview(text string) string {
-	const limit = 1024
-	if len(text) <= limit {
-		return text
-	}
-	text = text[:limit]
-	for !utf8.ValidString(text) {
-		text = text[:len(text)-1]
-	}
-	return text
-}
-
 func (r *Runtime) hiddenBookkeepingIDs(calls []planner.ToolRequest, byID map[string]*planner.ToolResult) []string {
 	var hidden []string
 	for _, call := range calls {
@@ -164,20 +181,4 @@ func (r *Runtime) storeIndexToolOutput(ctx context.Context, base *workflowPlanIn
 		return "", err
 	}
 	return refs[0], nil
-}
-
-func structuralIndexEntry(kind index.StructuralKind, ids []string, text ...index.TextParameter) index.MessageEntry {
-	return index.MessageEntry{Kind: index.Structural, ToolUseIDs: ids, Structural: &index.StructuralEntry{Kind: kind, ProtocolVersion: index.TemplateProtocolVersion, Text: text}}
-}
-
-func adoptResultEntries(base *workflowPlanInput, entries []index.MessageEntry, results []*planner.ToolResult) error {
-	for _, entry := range entries {
-		if err := base.appendEntry(entry); err != nil {
-			return err
-		}
-	}
-	for _, result := range results {
-		result.Result, result.ServerData = nil, nil
-	}
-	return nil
 }

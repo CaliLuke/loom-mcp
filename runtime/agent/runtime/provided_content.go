@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
@@ -52,30 +53,42 @@ func (r *Runtime) recordProvidedContent(ctx context.Context, input *api.RecordCo
 
 func (r *Runtime) publishStoredToolContent(ctx context.Context, root string, p *api.PublishToolContent) error {
 	event := p.Result
-	data, err := r.RunStore.Get(ctx, root, event.Refs.Result)
+	result := &planner.ToolResult{Name: event.Name, ToolCallID: event.ToolCallID, Bounds: event.Bounds, Error: event.Error, RetryHint: event.RetryHint, Telemetry: event.Telemetry, Artifacts: artifactContentsFromRefs(event.Artifacts), Preview: event.Preview, Refs: event.Refs}
+	exec := &toolBatchExec{r: r, agentID: p.AgentID, runID: p.RunContext.RunID, sessionID: p.RunContext.SessionID, turnID: p.RunContext.TurnID, runCtx: &p.RunContext}
+	duration := time.Duration(p.Duration)
+	var data []byte
+	if event.Refs.Result != "" && event.ResultBytes <= maxHookPayloadBytes {
+		var err error
+		data, err = r.RunStore.Get(ctx, root, event.Refs.Result)
+		if err != nil {
+			return err
+		}
+		if len(data) > maxHookPayloadBytes {
+			data = nil
+		} else if hasNonNullJSON(data) && event.Error == nil {
+			result.Result, err = r.unmarshalToolValue(ctx, event.Name, data, false)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	// The result's typed and canonical representations both count toward the
+	// hook bound. Once either the known size or encoded input exceeds it, do
+	// not load further content solely for this observer publication.
+	in, err := hooks.EncodeToHookInput(exec.toolResultEvent(ctx, p.Call, result, rawjson.Message(data), duration), exec.turnID)
 	if err != nil {
 		return err
 	}
-	var value any
-	if hasNonNullJSON(data) && event.Error == nil {
-		value, err = r.unmarshalToolValue(ctx, event.Name, data, false)
+	if event.ResultBytes > maxHookPayloadBytes || event.Refs.Result != "" && len(data) == 0 || len(in.Payload) > maxHookPayloadBytes {
+		result.Result, data = nil, nil
+		result.Preview = omittedResultPreview(result.Preview)
+	} else if event.Refs.ServerData != "" {
+		result.ServerData, err = r.RunStore.Get(ctx, root, event.Refs.ServerData)
 		if err != nil {
 			return err
 		}
 	}
-	var serverData []byte
-	if event.Refs.ServerData != "" {
-		serverData, err = r.RunStore.Get(ctx, root, event.Refs.ServerData)
-		if err != nil {
-			return err
-		}
-	}
-	result := &planner.ToolResult{Name: event.Name, ToolCallID: event.ToolCallID, Result: value, ServerData: serverData, Bounds: event.Bounds, Error: event.Error, RetryHint: event.RetryHint, Telemetry: event.Telemetry, Artifacts: artifactContentsFromRefs(event.Artifacts), Preview: event.Preview, Refs: event.Refs}
-	exec := &toolBatchExec{r: r, agentID: p.AgentID, runID: p.RunContext.RunID, sessionID: p.RunContext.SessionID, turnID: p.RunContext.TurnID, runCtx: &p.RunContext}
-	if err := exec.publishToolResultEvent(ctx, p.Call, result, rawjson.Message(data), time.Duration(p.Duration)); err != nil {
-		return err
-	}
-	return nil
+	return exec.publishToolResultEvent(ctx, p.Call, result, rawjson.Message(data), duration)
 }
 
 // loadProvidedContent validates and materializes reference-only signal results.

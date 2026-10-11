@@ -110,7 +110,7 @@ func TestMissingFieldsClarificationAwaitResumesWhenProvided(t *testing.T) {
 			SessionID: input.SessionID,
 			TurnID:    "turn-1",
 		},
-		Agent: newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID}),
+		Agent: testAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID}),
 	})
 	results := []*planner.ToolResult{{
 		Name:       tools.Ident("tool"),

@@ -13,11 +13,14 @@ import (
 	"example.com/agentfeatures/gen/features/toolsets/workflow"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	temporalengine "github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine/temporal"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	agentsruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -33,28 +36,33 @@ import (
 type historyReplayPlanner struct{}
 
 const (
-	workflowHistoryFile        = "testdata/workflow_protocol_v5.json"
+	workflowHistoryFile        = "testdata/workflow_protocol_v6.json"
 	workflowHistoryIdentity    = "loom-mcp-history-recorder"
 	workflowHistoryStickyQueue = "loom-mcp-history-recorder-sticky"
 )
 
 func TestGeneratedFeatureWorkflowReplay(t *testing.T) {
 	for _, test := range []struct {
-		name    string
-		rewrite bool
-		missing bool
+		name     string
+		rewrite  bool
+		missing  bool
+		previous bool
 	}{
 		{name: "current"},
+		{name: "protocol 5 rejected before effects", previous: true},
 		{name: "future", rewrite: true},
 		{name: "missing", rewrite: true, missing: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			data, err := os.ReadFile(workflowHistoryFile)
+			historyFile := workflowHistoryFile
+			if test.previous {
+				historyFile = "testdata/workflow_protocol_v5.json"
+			}
+			data, err := os.ReadFile(historyFile)
 			require.NoError(t, err)
 			history, err := client.HistoryFromJSON(bytes.NewReader(data), client.HistoryJSONOptions{})
 			require.NoError(t, err)
 			assertWorkflowHistoryAnonymized(t, history)
-			assertHistoryToolContent(t, history)
 			started := history.Events[0].GetWorkflowExecutionStartedEventAttributes()
 			require.NotNil(t, started)
 			require.Len(t, started.Input.Payloads, 1)
@@ -63,7 +71,12 @@ func TestGeneratedFeatureWorkflowReplay(t *testing.T) {
 			require.NoError(t, json.Unmarshal(payload.Data, &input))
 			var recordedVersion int
 			require.NoError(t, json.Unmarshal(input["WorkflowProtocolVersion"], &recordedVersion))
-			assert.Equal(t, api.WorkflowProtocolVersion, recordedVersion, "re-record history after a workflow protocol bump")
+			assertHistoryToolContent(t, history, recordedVersion)
+			if test.previous {
+				assert.Equal(t, 5, recordedVersion)
+			} else {
+				assert.Equal(t, api.WorkflowProtocolVersion, recordedVersion, "re-record history after a workflow protocol bump")
+			}
 			if test.rewrite {
 				if test.missing {
 					delete(input, "WorkflowProtocolVersion")
@@ -86,7 +99,7 @@ func TestGeneratedFeatureWorkflowReplay(t *testing.T) {
 			fx := newFeatureRuntime(t, agentsruntime.WithEngine(eng))
 			registerHistoryReplayAgent(t, fx)
 			err = eng.ReplayWorkflowHistory(silentTemporalLogger{}, history)
-			if test.rewrite {
+			if test.rewrite || test.previous {
 				assert.ErrorContains(t, err, "workflow protocol mismatch")
 			} else {
 				assert.NoError(t, err)
@@ -121,8 +134,8 @@ func recordWorkflowHistory(t *testing.T, temporalClient client.Client) {
 	require.NoError(t, eng.ReplayWorkflowHistory(silentTemporalLogger{}, history))
 	data, err := (protojson.MarshalOptions{Indent: "  "}).Marshal(history)
 	require.NoError(t, err)
-	require.NoError(t, os.MkdirAll("testdata", 0o755))
-	require.NoError(t, os.WriteFile(workflowHistoryFile, append(data, '\n'), 0o644))
+	require.NoError(t, os.MkdirAll("testdata", 0o750))
+	require.NoError(t, os.WriteFile(workflowHistoryFile, append(data, '\n'), 0o600))
 }
 
 // scrubWorkflowHistory removes recording-machine identities and sticky queue
@@ -198,12 +211,15 @@ func (historyReplayPlanner) PlanResume(context.Context, *planner.PlanResumeInput
 }
 
 // assertHistoryToolContent checks protocol 5 references and typed activity boundaries.
-func assertHistoryToolContent(t *testing.T, history *historypb.History) {
+func assertHistoryToolContent(t *testing.T, history *historypb.History, protocol int) {
 	t.Helper()
 	schedules := make(map[int64]string)
 	counts := make(map[string]int)
 	seedCalls, resultBatches, toolCompletions, childValidations := 0, 0, 0, 0
 	var childHead string
+	plannerSteps := 0
+	var finalTranscript runstore.Hash
+	var sealInput *api.SealRecordInput
 	for _, event := range history.Events {
 		if scheduled := event.GetActivityTaskScheduledEventAttributes(); scheduled != nil {
 			name := scheduled.ActivityType.Name
@@ -211,6 +227,18 @@ func assertHistoryToolContent(t *testing.T, history *historypb.History) {
 			counts[name]++
 			data := scheduled.Input.Payloads[0].Data
 			switch name {
+			case "runtime.publish_hook":
+				for _, input := range historyHookInputs(t, data) {
+					if input.Type == hooks.PlannerStep {
+						plannerSteps++
+						var step hooks.PlannerStepEvent
+						require.NoError(t, json.Unmarshal(input.Payload, &step))
+						assert.Equal(t, plannerSteps, step.Step)
+						assert.Equal(t, protocol, step.ProtocolVersion)
+						assert.Equal(t, step.IndexHead, step.ViewRef.IndexHead)
+						assert.Nil(t, step.ViewRef.Pending)
+					}
+				}
 			case agentsruntime.RecordContentActivityName(coordinator.AgentID):
 				var input api.RecordContentInput
 				require.NoError(t, json.Unmarshal(data, &input))
@@ -247,6 +275,13 @@ func assertHistoryToolContent(t *testing.T, history *historypb.History) {
 				for _, removed := range []string{"Messages", "ToolOutputs", "TypedInputs"} {
 					assert.NotContains(t, fields, removed)
 				}
+				if protocol == 6 {
+					wantStep := 1
+					if name == "features.coordinator.resume" {
+						wantStep = 2
+					}
+					assert.Equal(t, wantStep, input.Step)
+				}
 				if name == "features.coordinator.plan" {
 					assert.Empty(t, input.View.Pending)
 				} else {
@@ -256,6 +291,18 @@ func assertHistoryToolContent(t *testing.T, history *historypb.History) {
 						assert.NotEqual(t, "assistant", string(entry.Kind), "committed assistant entries are no longer pending")
 					}
 				}
+			case agentsruntime.SealRecordActivityName(coordinator.AgentID):
+				var input api.SealRecordInput
+				require.NoError(t, json.Unmarshal(data, &input))
+				sealInput = &input
+				assert.Equal(t, "run-protocol-history", input.RootRunID)
+				assert.Equal(t, "run-protocol-history", input.RunID)
+				assert.Equal(t, "run_sealed:run-protocol-history", input.EventKey)
+				assert.Equal(t, protocol, input.ProtocolVersion)
+				assert.False(t, input.Timestamp.IsZero())
+				require.Len(t, input.Pending, 1)
+				assert.Equal(t, index.Assistant, input.Pending[0].Kind)
+				assert.Equal(t, finalTranscript, input.Pending[0].Hash)
 			case agentsruntime.FinishRunActivityName(coordinator.AgentID):
 				var input api.FinishRunInput
 				require.NoError(t, json.Unmarshal(data, &input))
@@ -295,6 +342,10 @@ func assertHistoryToolContent(t *testing.T, history *historypb.History) {
 				var output api.PlanActivityOutput
 				require.NoError(t, json.Unmarshal(data, &output))
 				assert.NotEmpty(t, output.IndexHead)
+				if protocol == 6 {
+					assert.NotEmpty(t, output.TranscriptRef)
+					finalTranscript = output.TranscriptRef
+				}
 			}
 		}
 		if completed := event.GetWorkflowExecutionCompletedEventAttributes(); completed != nil {
@@ -306,9 +357,30 @@ func assertHistoryToolContent(t *testing.T, history *historypb.History) {
 		}
 		assert.Nil(t, event.GetStartChildWorkflowExecutionInitiatedEventAttributes(), "rejected validation must not start a child")
 	}
+	if protocol == 6 {
+		require.NotNil(t, sealInput)
+		assert.Equal(t, 1, counts[agentsruntime.SealRecordActivityName(coordinator.AgentID)])
+		assert.Equal(t, 2, plannerSteps)
+	}
 	assert.Equal(t, 1, counts[agentsruntime.FinishRunActivityName(coordinator.AgentID)])
 	assert.Equal(t, 1, seedCalls)
 	assert.Equal(t, 1, resultBatches)
 	assert.Equal(t, 1, toolCompletions)
 	assert.Equal(t, 1, childValidations)
+}
+
+// historyHookInputs expands the ordered batch without treating its command as an event.
+func historyHookInputs(t *testing.T, data []byte) []*api.HookActivityInput {
+	t.Helper()
+	var input api.HookActivityInput
+	require.NoError(t, json.Unmarshal(data, &input))
+	if input.Type != "runtime.publish_hook_batch" {
+		return []*api.HookActivityInput{&input}
+	}
+	var inputs []*api.HookActivityInput
+	require.NoError(t, json.Unmarshal(input.Payload, &inputs))
+	require.Len(t, inputs, 2)
+	assert.Equal(t, hooks.PlannerStep, inputs[0].Type)
+	assert.Equal(t, hooks.RunPhaseChanged, inputs[1].Type)
+	return inputs
 }

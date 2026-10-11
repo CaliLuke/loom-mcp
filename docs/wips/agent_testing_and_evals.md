@@ -164,8 +164,11 @@ Verified against the code at the date above.
   must be captured at the client.
 - **Run log limits**: the default store is in-memory. Application `BeforeEvent`
   interceptors can drop or rewrite events before they are appended.
-  `tool_result_received` events over 1 MB are compacted: the result is replaced
-  by `{"truncated":true,"reason":"hook_payload_too_large"}`. `prompt_rendered` is skipped (and only logged) when
+  `tool_result_received` events over 1 MB omit inline result and server bodies,
+  retaining stored refs and a bounded preview (a fallback when no template exists).
+  RunRecord resolves full results from canonical index refs, independently of
+  these observer events. Record events, including child links, skip interception.
+  `prompt_rendered` is skipped (and only logged) when
   the hook context is missing. `tool_call_args_delta` is never stored.
 - **Interceptors**: `BeforeTool` can return a result without running the
   executor, but only for tools run by `ExecuteToolActivity`. Inline tools and

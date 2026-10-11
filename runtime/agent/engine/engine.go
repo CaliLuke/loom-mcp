@@ -121,6 +121,9 @@ type (
 		// accepts *api.ToolInput and returns *api.ToolOutput.
 		RegisterExecuteToolActivity(ctx context.Context, name string, opts ActivityOptions, fn func(context.Context, *api.ToolInput) (*api.ToolOutput, error)) error
 
+		// RegisterSealRecordActivity registers terminal transcript sealing.
+		RegisterSealRecordActivity(ctx context.Context, name string, opts ActivityOptions, fn func(context.Context, *api.SealRecordInput) (*api.SealRecordOutput, error)) error
+
 		// RegisterFinishRunActivity registers terminal event storage and typed-result finishing.
 		RegisterFinishRunActivity(ctx context.Context, name string, opts ActivityOptions, fn func(context.Context, *api.FinishRunInput) (*api.FinishRunOutput, error)) error
 
@@ -252,6 +255,9 @@ type (
 		// and blocks until it completes. Planner activities are executed outside the
 		// deterministic workflow thread and may perform I/O.
 		ExecutePlannerActivity(ctx context.Context, call PlannerActivityCall) (*api.PlanActivityOutput, error)
+
+		// ExecuteSealRecordActivity stores pending index entries and the terminal seal.
+		ExecuteSealRecordActivity(ctx context.Context, call SealRecordActivityCall) (*api.SealRecordOutput, error)
 
 		// ExecuteFinishRunActivity stores terminal events outside workflow execution.
 		ExecuteFinishRunActivity(ctx context.Context, call FinishRunActivityCall) (*api.FinishRunOutput, error)

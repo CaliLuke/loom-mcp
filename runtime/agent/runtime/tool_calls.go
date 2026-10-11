@@ -104,6 +104,86 @@ func collectToolCallIDs(calls []planner.ToolRequest) []string {
 	return ids
 }
 
+func parentToolCallID(call planner.ToolRequest, runCtx *run.Context) string {
+	if call.ParentToolCallID != "" {
+		return call.ParentToolCallID
+	}
+	if runCtx != nil {
+		return runCtx.ParentToolCallID
+	}
+	return ""
+}
+
+func inspectCollectedExecutionFailure(err error) collectedExecutionFailure {
+	failure := collectedExecutionFailure{err: err}
+	root := true
+	inspection := cancellation.Inspect(err, func(candidate error, errorText string) bool {
+		if root {
+			failure.text = errorText
+			root = false
+		}
+		//nolint:errorlint // Inspect supplies each exact graph node to the matcher.
+		if serviceErr, ok := candidate.(*loom.ServiceError); ok && serviceErr.Name == "service_unavailable" {
+			failure.serviceUnavailable = true
+		}
+		return false
+	})
+	if !inspection.Valid {
+		failure.err = cancellation.ErrInvalidErrorGraph
+		failure.text = cancellation.ErrInvalidErrorGraph.Error()
+		failure.serviceUnavailable = false
+		return failure
+	}
+	failure.containsCancellation = inspection.ContainsCancellation
+	return failure
+}
+
+func retryHintFromExecutionFailure(tool tools.Ident, failure collectedExecutionFailure) *planner.RetryHint {
+	if failure.serviceUnavailable {
+		return &planner.RetryHint{
+			Reason: planner.RetryReasonToolUnavailable,
+			Tool:   tool,
+			Message: "Tool execution failed because the provider is temporarily unavailable. " +
+				"Retry the same tool call with the same payload.",
+		}
+	}
+	return nil
+}
+
+func computeToolActivityOptions(wfCtx engine.WorkflowContext, base engine.ActivityOptions, finishBy time.Time) engine.ActivityOptions {
+	callOpts := base
+	startToClose, scheduleToStart := clampActivityTimeouts(wfCtx, base, finishBy)
+	callOpts.StartToCloseTimeout = startToClose
+	callOpts.ScheduleToStartTimeout = scheduleToStart
+	return callOpts
+}
+
+func clampActivityTimeouts(wfCtx engine.WorkflowContext, base engine.ActivityOptions, finishBy time.Time) (time.Duration, time.Duration) {
+	startToClose := base.StartToCloseTimeout
+	scheduleToStart := base.ScheduleToStartTimeout
+	if finishBy.IsZero() {
+		return startToClose, scheduleToStart
+	}
+	if rem := finishBy.Sub(wfCtx.Now()); rem > 0 {
+		startToClose = minNonZeroDuration(startToClose, rem)
+		scheduleToStart = minNonZeroDuration(scheduleToStart, rem)
+	}
+	return startToClose, scheduleToStart
+}
+
+func minNonZeroDuration(current, candidate time.Duration) time.Duration {
+	if current == 0 || current > candidate {
+		return candidate
+	}
+	return current
+}
+
+func mergeToolResultMaps(dst map[string]*ToolExecutionResult, src map[string]*ToolExecutionResult) {
+	for id, tr := range src {
+		dst[id] = tr
+	}
+}
+
 func (e *toolBatchExec) normalizeToolCall(call planner.ToolRequest, i int) planner.ToolRequest {
 	call = e.applyDefaultToolCallContext(call)
 	call = e.assignToolCallID(call, i)
@@ -150,52 +230,6 @@ func (e *toolBatchExec) inheritParentToolCallID(call planner.ToolRequest) planne
 		call.ParentToolCallID = e.runCtx.ParentToolCallID
 	}
 	return call
-}
-
-func parentToolCallID(call planner.ToolRequest, runCtx *run.Context) string {
-	if call.ParentToolCallID != "" {
-		return call.ParentToolCallID
-	}
-	if runCtx != nil {
-		return runCtx.ParentToolCallID
-	}
-	return ""
-}
-
-func inspectCollectedExecutionFailure(err error) collectedExecutionFailure {
-	failure := collectedExecutionFailure{err: err}
-	root := true
-	inspection := cancellation.Inspect(err, func(candidate error, errorText string) bool {
-		if root {
-			failure.text = errorText
-			root = false
-		}
-		//nolint:errorlint // Inspect supplies each exact graph node to the matcher.
-		if serviceErr, ok := candidate.(*loom.ServiceError); ok && serviceErr.Name == "service_unavailable" {
-			failure.serviceUnavailable = true
-		}
-		return false
-	})
-	if !inspection.Valid {
-		failure.err = cancellation.ErrInvalidErrorGraph
-		failure.text = cancellation.ErrInvalidErrorGraph.Error()
-		failure.serviceUnavailable = false
-		return failure
-	}
-	failure.containsCancellation = inspection.ContainsCancellation
-	return failure
-}
-
-func retryHintFromExecutionFailure(tool tools.Ident, failure collectedExecutionFailure) *planner.RetryHint {
-	if failure.serviceUnavailable {
-		return &planner.RetryHint{
-			Reason: planner.RetryReasonToolUnavailable,
-			Tool:   tool,
-			Message: "Tool execution failed because the provider is temporarily unavailable. " +
-				"Retry the same tool call with the same payload.",
-		}
-	}
-	return nil
 }
 
 // synthesizeToolError creates a ToolResult from an execution error and publishes
@@ -254,6 +288,15 @@ func (r *Runtime) enforceToolResultContracts(spec tools.ToolSpec, call planner.T
 }
 
 func (e *toolBatchExec) publishToolResultReceived(ctx context.Context, call planner.ToolRequest, tr *planner.ToolResult, resultJSON rawjson.Message, duration time.Duration) error {
+	if e.base != nil {
+		// Errors can carry server-only content even without an eligible result.
+		if tr.Refs.Result == "" && (tr.Error == nil || len(tr.ServerData) > 0 && tr.Refs.ServerData == "") {
+			if err := e.r.recordWorkflowToolResult(ctx, tr, resultJSON); err != nil {
+				return err
+			}
+		}
+		e.base.stageUnindexedResult(tr)
+	}
 	if wf := engine.WorkflowContextFromContext(ctx); wf != nil && tr.Refs.Result != "" && len(resultJSON) == 0 {
 		events, err := e.r.encodeToolEvents(ctx, []*planner.ToolResult{tr})
 		if err != nil {
@@ -270,6 +313,11 @@ func (e *toolBatchExec) publishToolResultReceived(ctx context.Context, call plan
 }
 
 func (e *toolBatchExec) publishToolResultEvent(ctx context.Context, call planner.ToolRequest, tr *planner.ToolResult, resultJSON rawjson.Message, duration time.Duration) error {
+	return e.r.publishHook(ctx, e.toolResultEvent(ctx, call, tr, resultJSON, duration), e.turnID)
+}
+
+// toolResultEvent retains the preview computed before reference-only transport.
+func (e *toolBatchExec) toolResultEvent(ctx context.Context, call planner.ToolRequest, tr *planner.ToolResult, resultJSON rawjson.Message, duration time.Duration) *hooks.ToolResultReceivedEvent {
 	parentID := parentToolCallID(call, e.runCtx)
 	if tr.Refs.Result == "" {
 		tr.Preview = e.r.formatResultPreview(ctx, call.Name, call.Payload, tr.Result, tr.Bounds)
@@ -284,7 +332,7 @@ func (e *toolBatchExec) publishToolResultEvent(ctx context.Context, call planner
 		tr.Result,
 		resultJSON,
 		tr.ServerData,
-		e.r.formatResultPreview(ctx, call.Name, call.Payload, tr.Result, tr.Bounds),
+		tr.Preview,
 		tr.Bounds,
 		duration,
 		tr.Telemetry,
@@ -292,40 +340,13 @@ func (e *toolBatchExec) publishToolResultEvent(ctx context.Context, call planner
 		tr.Error,
 	)
 	ev.Artifacts = artifactRefsFromContents(tr.Artifacts)
-	return e.r.publishHook(ctx, ev, e.turnID)
+	ev.Refs = tr.Refs
+	return ev
 }
 
 func (e *toolBatchExec) publishToolCallScheduled(ctx context.Context, call planner.ToolRequest, queue string) error {
 	ev := hooks.NewToolCallScheduledEvent(e.runID, e.agentID, e.sessionID, call.Name, call.ToolCallID, call.Payload, queue, call.ParentToolCallID, e.expectedChildren)
 	return e.r.publishHook(ctx, ev, e.turnID)
-}
-
-func computeToolActivityOptions(wfCtx engine.WorkflowContext, base engine.ActivityOptions, finishBy time.Time) engine.ActivityOptions {
-	callOpts := base
-	startToClose, scheduleToStart := clampActivityTimeouts(wfCtx, base, finishBy)
-	callOpts.StartToCloseTimeout = startToClose
-	callOpts.ScheduleToStartTimeout = scheduleToStart
-	return callOpts
-}
-
-func clampActivityTimeouts(wfCtx engine.WorkflowContext, base engine.ActivityOptions, finishBy time.Time) (time.Duration, time.Duration) {
-	startToClose := base.StartToCloseTimeout
-	scheduleToStart := base.ScheduleToStartTimeout
-	if finishBy.IsZero() {
-		return startToClose, scheduleToStart
-	}
-	if rem := finishBy.Sub(wfCtx.Now()); rem > 0 {
-		startToClose = minNonZeroDuration(startToClose, rem)
-		scheduleToStart = minNonZeroDuration(scheduleToStart, rem)
-	}
-	return startToClose, scheduleToStart
-}
-
-func minNonZeroDuration(current, candidate time.Duration) time.Duration {
-	if current == 0 || current > candidate {
-		return candidate
-	}
-	return current
 }
 
 // executeToolCalls schedules tool execution (inline, activity, and agent-as-tool child workflows)
@@ -468,10 +489,4 @@ func (e *toolBatchExec) newFinalizeTimer(ctx context.Context, wfCtx engine.Workf
 		return nil, err
 	}
 	return t, nil
-}
-
-func mergeToolResultMaps(dst map[string]*ToolExecutionResult, src map[string]*ToolExecutionResult) {
-	for id, tr := range src {
-		dst[id] = tr
-	}
 }

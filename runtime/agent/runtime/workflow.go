@@ -32,12 +32,13 @@ type workflowLoopStart struct {
 }
 
 type workflowStartState struct {
-	planInput   *workflowPlanInput
-	firstOutput *PlanActivityOutput
-	timing      runTiming
-	deadlines   runDeadlines
-	caps        policy.CapsState
-	nextAttempt int
+	planInput     *workflowPlanInput
+	firstOutput   *PlanActivityOutput
+	timing        runTiming
+	deadlines     runDeadlines
+	caps          policy.CapsState
+	nextAttempt   int
+	parentTracker *childTracker
 }
 
 const (
@@ -71,6 +72,7 @@ func (r *Runtime) ExecuteWorkflow(wfCtx engine.WorkflowContext, input *RunInput)
 	if err != nil {
 		return nil, err
 	}
+	protocolVersion := input.WorkflowProtocolVersion
 	input, err = r.prepareEffectiveRunInput(wfCtx.Context(), reg, input, runCtx)
 	if err != nil {
 		return nil, err
@@ -80,19 +82,136 @@ func (r *Runtime) ExecuteWorkflow(wfCtx engine.WorkflowContext, input *RunInput)
 	}
 	runCtx = workflowRunContext(input)
 	defer r.cleanupWorkflowRun(input.RunID)
-
-	if err := r.publishInitialWorkflowEvents(wfCtx.Context(), input, runCtx, turnID); err != nil {
-		return nil, err
-	}
+	planInput := &workflowPlanInput{AgentID: input.AgentID, RunContext: runCtx, protocolVersion: protocolVersion}
 	finalStatus := runStatusSuccess
 	var finalErr error
-	defer r.finishWorkflowExecution(wfCtx, input, runCtx, turnID, &out, &retErr, &finalStatus, &finalErr)
+	defer r.finishWorkflowExecution(wfCtx, input, planInput, runCtx, turnID, &out, &retErr, &finalStatus, &finalErr)
+	if err := r.publishInitialWorkflowEvents(wfCtx.Context(), input, runCtx, turnID); err != nil {
+		finalStatus, finalErr = workflowStatusForError(err), err
+		return nil, err
+	}
 
 	var status string
-	out, status, err = r.executeWorkflowRun(wfCtx, reg, input, runCtx, turnID, ctrl)
+	out, status, err = r.executeWorkflowRun(wfCtx, reg, input, planInput, turnID, ctrl)
 	finalStatus = status
 	finalErr = err
 	return out, err
+}
+
+func validateWorkflowInput(input *RunInput) error {
+	if input == nil {
+		return fmt.Errorf("%w: run input is required", ErrInvalidConfig)
+	}
+	if input.WorkflowProtocolVersion != api.WorkflowProtocolVersion {
+		return &api.WorkflowProtocolMismatchError{Want: api.WorkflowProtocolVersion, Got: input.WorkflowProtocolVersion}
+	}
+	if input.AgentID == "" {
+		return errors.New("agent id is required")
+	}
+	if input.RootRunID == "" {
+		return errors.New("root run id is required")
+	}
+	if input.Policy != nil && input.Policy.MaxRecoveryTurns < 0 {
+		return fmt.Errorf("%w: MaxRecoveryTurns must not be negative", ErrInvalidConfig)
+	}
+	return nil
+}
+
+func workflowRunContext(input *RunInput) run.Context {
+	labels := cloneLabels(input.Labels)
+	delete(labels, FinalizationReasonLabel)
+	return run.Context{
+		RunID:            input.RunID,
+		RootRunID:        input.RootRunID,
+		SessionID:        input.SessionID,
+		TurnID:           input.TurnID,
+		ParentToolCallID: input.ParentToolCallID,
+		ParentRunID:      input.ParentRunID,
+		ParentAgentID:    input.ParentAgentID,
+		Tool:             input.Tool,
+		ToolArgs:         input.ToolArgs,
+		Attempt:          1,
+		Labels:           labels,
+	}
+}
+
+// planningDeadlines starts the active budget after caller history is stored,
+// preserving the pre-index boundary between run setup and planning work.
+func planningDeadlines(now time.Time, timing runTiming) runDeadlines {
+	deadlines := runDeadlines{FinalizerGrace: timing.FinalizerGrace}
+	if timing.TimeBudget > 0 {
+		deadlines.Budget = now.Add(timing.TimeBudget)
+		deadlines.Hard = deadlines.Budget.Add(timing.FinalizerGrace)
+	}
+	return deadlines
+}
+
+func workflowStatusForError(err error) string {
+	if err == nil {
+		return runStatusSuccess
+	}
+	return terminalRunStatusForError(err)
+}
+
+func applyWorkflowCaps(caps policy.CapsState, input *RunInput) policy.CapsState {
+	if input.Policy == nil {
+		return caps
+	}
+	if input.Policy.MaxToolCalls > 0 {
+		caps.MaxToolCalls = input.Policy.MaxToolCalls
+		caps.RemainingToolCalls = input.Policy.MaxToolCalls
+	}
+	if input.Policy.MaxRecoveryTurns > 0 {
+		caps.MaxRecoveryTurns = input.Policy.MaxRecoveryTurns
+		caps.RemainingRecoveryTurns = input.Policy.MaxRecoveryTurns
+	}
+	return caps
+}
+
+func setRootRunIDQuery(wfCtx engine.WorkflowContext, rootRunID string) error {
+	return wfCtx.SetQueryHandler(api.QueryRootRunID, func() (string, error) {
+		return rootRunID, nil
+	})
+}
+
+func resolveRunLoopActivityOptions(reg AgentRegistration, input *RunInput) (engine.ActivityOptions, engine.ActivityOptions) {
+	resumeOpts := reg.ResumeActivityOptions
+	if input.Policy != nil && input.Policy.PlanTimeout > 0 {
+		resumeOpts.StartToCloseTimeout = input.Policy.PlanTimeout
+	}
+	toolOpts := reg.ExecuteToolActivityOptions
+	if input.Policy != nil && input.Policy.ToolTimeout > 0 {
+		toolOpts.StartToCloseTimeout = input.Policy.ToolTimeout
+	}
+	if toolOpts.StartToCloseTimeout == 0 {
+		toolOpts.StartToCloseTimeout = defaultExecuteToolActivityTimeout
+	}
+	return resumeOpts, toolOpts
+}
+
+// timeoutUntil returns the remaining duration until deadline, relative to now.
+// The ok result is false when deadline is non-zero and has already elapsed.
+func timeoutUntil(deadline, now time.Time) (time.Duration, bool) {
+	if deadline.IsZero() {
+		return 0, true
+	}
+	rem := deadline.Sub(now)
+	if rem <= 0 {
+		return 0, false
+	}
+	return rem, true
+}
+
+// seedWorkflowPlan keeps caller history out of the first planner Pending slice.
+func seedWorkflowPlan(wfCtx engine.WorkflowContext, input *RunInput, planInput *workflowPlanInput, startReq *PlanActivityInput) error {
+	seed, err := seedWorkflowIndex(wfCtx, input)
+	if err != nil {
+		return err
+	}
+	planInput.Entries, planInput.IndexHead = seed.Entries, seed.IndexHead
+	planInput.Committed = len(seed.Entries)
+	startReq.View = planInput.view()
+	return nil
 }
 
 func (r *Runtime) prepareEffectiveRunInput(ctx context.Context, reg AgentRegistration, input *RunInput, runCtx run.Context) (*RunInput, error) {
@@ -116,6 +235,7 @@ func (r *Runtime) cleanupWorkflowRun(runID string) {
 func (r *Runtime) finishWorkflowExecution(
 	wfCtx engine.WorkflowContext,
 	input *RunInput,
+	planInput *workflowPlanInput,
 	runCtx run.Context,
 	turnID string,
 	out **RunOutput,
@@ -132,6 +252,11 @@ func (r *Runtime) finishWorkflowExecution(
 		*finalStatus = terminalRunStatusForError(*finalErr)
 	} else if *finalStatus != runStatusSuccess {
 		*finalStatus = runStatusSuccess
+	}
+	if err := r.sealWorkflowRecord(wfCtx, input, planInput); err != nil {
+		*finalErr = errors.Join(*finalErr, err)
+		*retErr = *finalErr
+		*finalStatus = runStatusFailed
 	}
 	r.publishWorkflowCompletion(wfCtx, input, turnID, finalStatus, finalErr)
 }
@@ -151,46 +276,9 @@ func (r *Runtime) setupWorkflowExecution(
 	return reg, interrupt.NewController(wfCtx), workflowRunContext(input), input.TurnID, nil
 }
 
-func validateWorkflowInput(input *RunInput) error {
-	if input == nil {
-		return fmt.Errorf("%w: run input is required", ErrInvalidConfig)
-	}
-	if input.WorkflowProtocolVersion != api.WorkflowProtocolVersion {
-		return &api.WorkflowProtocolMismatchError{Want: api.WorkflowProtocolVersion, Got: input.WorkflowProtocolVersion}
-	}
-	if input.AgentID == "" {
-		return errors.New("agent id is required")
-	}
-	if input.RootRunID == "" {
-		return errors.New("root run id is required")
-	}
-	if input.Policy != nil && input.Policy.MaxRecoveryTurns < 0 {
-		return fmt.Errorf("%w: MaxRecoveryTurns must not be negative", ErrInvalidConfig)
-	}
-	return nil
-}
-
 func (r *Runtime) logWorkflowStart(wfCtx engine.WorkflowContext, input *RunInput) {
 	if r.logger != nil {
 		r.logger.Info(wfCtx.Context(), "ExecuteWorkflow called", "agent_id", input.AgentID, "run_id", input.RunID)
-	}
-}
-
-func workflowRunContext(input *RunInput) run.Context {
-	labels := cloneLabels(input.Labels)
-	delete(labels, FinalizationReasonLabel)
-	return run.Context{
-		RunID:            input.RunID,
-		RootRunID:        input.RootRunID,
-		SessionID:        input.SessionID,
-		TurnID:           input.TurnID,
-		ParentToolCallID: input.ParentToolCallID,
-		ParentRunID:      input.ParentRunID,
-		ParentAgentID:    input.ParentAgentID,
-		Tool:             input.Tool,
-		ToolArgs:         input.ToolArgs,
-		Attempt:          1,
-		Labels:           labels,
 	}
 }
 
@@ -221,55 +309,25 @@ func (r *Runtime) publishWorkflowCompletion(
 	}
 }
 
-func (r *Runtime) prepareWorkflowPlanning(
-	reg AgentRegistration,
-	input *RunInput,
-	runCtx run.Context,
-) (*workflowPlanInput, PlanActivityInput, runTiming) {
-	planInput := &workflowPlanInput{AgentID: input.AgentID, RunContext: runCtx}
-	timing := resolveRunTiming(reg, input)
-	return planInput, PlanActivityInput{
-		AgentID:    input.AgentID,
-		RunID:      input.RunID,
-		RunContext: runCtx,
-		CallFilter: planToolFilter(input),
-	}, timing
-}
-
-// planningDeadlines starts the active budget after caller history is stored,
-// preserving the pre-index boundary between run setup and planning work.
-func planningDeadlines(now time.Time, timing runTiming) runDeadlines {
-	deadlines := runDeadlines{FinalizerGrace: timing.FinalizerGrace}
-	if timing.TimeBudget > 0 {
-		deadlines.Budget = now.Add(timing.TimeBudget)
-		deadlines.Hard = deadlines.Budget.Add(timing.FinalizerGrace)
-	}
-	return deadlines
+func (r *Runtime) prepareWorkflowPlanning(reg AgentRegistration, input *RunInput, base *workflowPlanInput) (PlanActivityInput, runTiming) {
+	return PlanActivityInput{
+		AgentID: input.AgentID, RunID: input.RunID, RunContext: base.RunContext, CallFilter: planToolFilter(input),
+	}, resolveRunTiming(reg, input)
 }
 
 func (r *Runtime) executeWorkflowRun(
 	wfCtx engine.WorkflowContext,
 	reg AgentRegistration,
 	input *RunInput,
-	runCtx run.Context,
+	planInput *workflowPlanInput,
 	turnID string,
 	ctrl *interrupt.Controller,
 ) (*RunOutput, string, error) {
-	state, err := r.startWorkflowRun(wfCtx, reg, input, runCtx, turnID)
+	state, err := r.startWorkflowRun(wfCtx, reg, input, planInput, turnID)
 	if err != nil {
 		return r.handleWorkflowStartError(wfCtx, reg, input, state, turnID, err)
 	}
-	return r.continueWorkflowRun(
-		wfCtx,
-		reg,
-		input,
-		state.planInput,
-		state.firstOutput,
-		state.timing,
-		state.deadlines,
-		turnID,
-		ctrl,
-	)
+	return r.continueWorkflowRun(wfCtx, reg, input, state, turnID, ctrl)
 }
 
 func (r *Runtime) handleWorkflowStartError(
@@ -315,25 +373,9 @@ func (r *Runtime) handleWorkflowStartError(
 	return out, runStatusSuccess, nil
 }
 
-func (r *Runtime) continueWorkflowRun(
-	wfCtx engine.WorkflowContext,
-	reg AgentRegistration,
-	input *RunInput,
-	planInput *workflowPlanInput,
-	firstOutput *PlanActivityOutput,
-	timing runTiming,
-	deadlines runDeadlines,
-	turnID string,
-	ctrl *interrupt.Controller,
-) (*RunOutput, string, error) {
-	caps, nextAttempt, parentTracker, err := r.prepareWorkflowLoopState(wfCtx.Context(), reg, input, planInput, firstOutput.Result, firstOutput)
-	if err != nil {
-		return nil, runStatusFailed, err
-	}
+func (r *Runtime) continueWorkflowRun(wfCtx engine.WorkflowContext, reg AgentRegistration, input *RunInput, state workflowStartState, turnID string, ctrl *interrupt.Controller) (*RunOutput, string, error) {
+	planInput, firstOutput := state.planInput, state.firstOutput
 	r.logger.Info(wfCtx.Context(), "Starting runLoop", "tool_calls", len(firstOutput.Result.ToolCalls))
-	if err := r.publishExecutionPhase(wfCtx.Context(), input, turnID); err != nil {
-		return nil, terminalRunStatusForError(err), err
-	}
 	out, err := r.runLoop(
 		wfCtx,
 		reg,
@@ -342,14 +384,14 @@ func (r *Runtime) continueWorkflowRun(
 		firstOutput.Result,
 		firstOutput.TranscriptRef,
 		firstOutput.Usage,
-		caps,
-		deadlines.Budget,
-		deadlines.Hard,
-		nextAttempt,
+		state.caps,
+		state.deadlines.Budget,
+		state.deadlines.Hard,
+		state.nextAttempt,
 		turnID,
-		parentTracker,
+		state.parentTracker,
 		ctrl,
-		timing.FinalizerGrace,
+		state.timing.FinalizerGrace,
 		workflowLoopStart{toolPolicy: toolPolicyEnvelope{
 			Active:  firstOutput.ToolPolicyActive,
 			Allowed: cloneToolIdents(firstOutput.AllowedTools),
@@ -365,10 +407,10 @@ func (r *Runtime) startWorkflowRun(
 	wfCtx engine.WorkflowContext,
 	reg AgentRegistration,
 	input *RunInput,
-	runCtx run.Context,
+	planInput *workflowPlanInput,
 	turnID string,
 ) (workflowStartState, error) {
-	planInput, startReq, timing := r.prepareWorkflowPlanning(reg, input, runCtx)
+	startReq, timing := r.prepareWorkflowPlanning(reg, input, planInput)
 	state := workflowStartState{
 		planInput:   planInput,
 		timing:      timing,
@@ -395,24 +437,9 @@ func (r *Runtime) startWorkflowRun(
 	if err := r.publishPlanningPhase(wfCtx.Context(), input, turnID); err != nil {
 		return state, err
 	}
-	state.firstOutput, err = r.runInitialPlan(
-		wfCtx,
-		reg,
-		startReq,
-		planOpts,
-		state.deadlines.Budget,
-		&state.caps,
-		&state.nextAttempt,
-	)
+	state.firstOutput, err = r.runInitialPlan(wfCtx, &state, reg, input, startReq, planOpts)
 	state.adoptInitialPlan(planInput)
 	return state, err
-}
-
-func workflowStatusForError(err error) string {
-	if err == nil {
-		return runStatusSuccess
-	}
-	return terminalRunStatusForError(err)
 }
 
 func (r *Runtime) resolveAndLogWorkflowTiming(
@@ -462,16 +489,17 @@ func (r *Runtime) validateFirstPlanOutput(ctx context.Context, output *PlanActiv
 	return nil
 }
 
-func (r *Runtime) runInitialPlan(
-	wfCtx engine.WorkflowContext,
-	reg AgentRegistration,
-	startReq PlanActivityInput,
-	planOpts engine.ActivityOptions,
-	hardDeadline time.Time,
-	caps *policy.CapsState,
-	nextAttempt *int,
-) (*PlanActivityOutput, error) {
-	firstOutput, err := r.runPlanActivityRecovering(wfCtx, reg.PlanActivityName, planOpts, startReq, hardDeadline, caps, nextAttempt)
+func (r *Runtime) runInitialPlan(wfCtx engine.WorkflowContext, state *workflowStartState, reg AgentRegistration, input *RunInput, startReq PlanActivityInput, planOpts engine.ActivityOptions) (*PlanActivityOutput, error) {
+	firstOutput, err := r.runPlanActivityRecovering(wfCtx, state.planInput, reg.PlanActivityName, planOpts, startReq, state.deadlines.Budget, &state.caps, &state.nextAttempt, func(output *PlanActivityOutput) (hooks.Event, error) {
+		// Preparation is pure workflow-side computation. Complete it before the
+		// adoption/phase batch so a preparation failure never announces execution.
+		caps, next, parent, err := r.prepareWorkflowLoopState(wfCtx.Context(), reg, input, state.planInput, output.Result, output)
+		if err != nil {
+			return nil, err
+		}
+		state.caps, state.nextAttempt, state.parentTracker = caps, next, parent
+		return hooks.NewRunPhaseChangedEvent(startReq.RunID, startReq.AgentID, startReq.RunContext.SessionID, run.PhaseExecutingTools), nil
+	})
 	if err != nil {
 		r.logger.Error(wfCtx.Context(), "Plan activity failed", "error", err)
 		return firstOutput, err
@@ -480,25 +508,6 @@ func (r *Runtime) runInitialPlan(
 		return nil, err
 	}
 	return firstOutput, nil
-}
-
-func applyWorkflowCaps(caps policy.CapsState, input *RunInput) policy.CapsState {
-	if input.Policy == nil {
-		return caps
-	}
-	if input.Policy.MaxToolCalls > 0 {
-		caps.MaxToolCalls = input.Policy.MaxToolCalls
-		caps.RemainingToolCalls = input.Policy.MaxToolCalls
-	}
-	if input.Policy.MaxRecoveryTurns > 0 {
-		caps.MaxRecoveryTurns = input.Policy.MaxRecoveryTurns
-		caps.RemainingRecoveryTurns = input.Policy.MaxRecoveryTurns
-	}
-	return caps
-}
-
-func (r *Runtime) publishExecutionPhase(ctx context.Context, input *RunInput, turnID string) error {
-	return r.publishHook(ctx, hooks.NewRunPhaseChangedEvent(input.RunID, input.AgentID, input.SessionID, run.PhaseExecutingTools), turnID)
 }
 
 func (r *Runtime) prepareWorkflowLoopState(
@@ -605,52 +614,6 @@ func (r *Runtime) ensureWorkflowLogger() {
 
 func (r *Runtime) logRunLoopStart(ctx context.Context, initialResult *planner.PlanResult) {
 	r.logger.Info(ctx, "runLoop starting iteration", "tool_calls", len(initialResult.ToolCalls), "final_response", initialResult.FinalResponse != nil, "final_tool_result", initialResult.FinalToolResult != nil, "await", initialResult.Await != nil)
-}
-
-func setRootRunIDQuery(wfCtx engine.WorkflowContext, rootRunID string) error {
-	return wfCtx.SetQueryHandler(api.QueryRootRunID, func() (string, error) {
-		return rootRunID, nil
-	})
-}
-
-func resolveRunLoopActivityOptions(reg AgentRegistration, input *RunInput) (engine.ActivityOptions, engine.ActivityOptions) {
-	resumeOpts := reg.ResumeActivityOptions
-	if input.Policy != nil && input.Policy.PlanTimeout > 0 {
-		resumeOpts.StartToCloseTimeout = input.Policy.PlanTimeout
-	}
-	toolOpts := reg.ExecuteToolActivityOptions
-	if input.Policy != nil && input.Policy.ToolTimeout > 0 {
-		toolOpts.StartToCloseTimeout = input.Policy.ToolTimeout
-	}
-	if toolOpts.StartToCloseTimeout == 0 {
-		toolOpts.StartToCloseTimeout = defaultExecuteToolActivityTimeout
-	}
-	return resumeOpts, toolOpts
-}
-
-// timeoutUntil returns the remaining duration until deadline, relative to now.
-// The ok result is false when deadline is non-zero and has already elapsed.
-func timeoutUntil(deadline, now time.Time) (time.Duration, bool) {
-	if deadline.IsZero() {
-		return 0, true
-	}
-	rem := deadline.Sub(now)
-	if rem <= 0 {
-		return 0, false
-	}
-	return rem, true
-}
-
-// seedWorkflowPlan keeps caller history out of the first planner Pending slice.
-func seedWorkflowPlan(wfCtx engine.WorkflowContext, input *RunInput, planInput *workflowPlanInput, startReq *PlanActivityInput) error {
-	seed, err := seedWorkflowIndex(wfCtx, input)
-	if err != nil {
-		return err
-	}
-	planInput.Entries, planInput.IndexHead = seed.Entries, seed.IndexHead
-	planInput.Committed = len(seed.Entries)
-	startReq.View = planInput.view()
-	return nil
 }
 
 // adoptInitialPlan records the flushed head even when planner recovery advanced

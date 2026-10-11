@@ -69,7 +69,7 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   recorded-history replay test. Drain running workflows before deploying the
   new version; mismatched and unstamped inputs fail before workflow effects.
 
-- Workflow protocol 5 uses immutable `runtime/agent/transcript/index` entries
+- Workflow protocol 6 uses immutable `runtime/agent/transcript/index` entries
   and linked segments. Workflows retain entries and IndexHead; planner activity
   inputs carry ViewRef (head plus one step's Pending), never accumulated messages,
   ToolOutputs, TypedInputs or the old ledger. Seeded caller history is committed
@@ -110,8 +110,26 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   growth. Omitted result bodies are read only on explicit ContentLoader requests.
   Large per-run ToolArgs, Labels and tool catalogs can exceed P2's 4 KiB fixed
   allowance; this K7 exception is documented and regression-tested.
-  K8 owns terminal sealing, trailing pending entries, new planner/run hooks and
-  the remaining per-call FinishRunInput.ToolEvents history growth.
+  K8 records planner calls and planner_step adoption, and seals trailing index
+  entries through the agent SealRecord activity before run completion. Custom
+  engines implement RegisterSealRecordActivity and ExecuteSealRecordActivity.
+  K8 uses protocol 6; drain older workflows before upgrading. Structural templates
+  remain version 5. Resume/recovery adoption adds one activity round trip per step
+  (~97 ms median on the Temporal dev server); the approved real-Temporal budget is 2s.
+  planner_step and run_sealed carry ProtocolVersion from the validated workflow
+  input. RunRecord reads those stamps, rejects disagreement and reports 0 if no
+  record event exists; it never infers a version from calls or event kinds.
+  K8 RunRecord reads store/log evidence and exports self-contained version-1
+  JSON, including server-only bytes. Tool-result hooks always carry refs; bodies
+  above the 1,000,000-byte hook limit are omitted without a truncation marker,
+  preserving configured previews or the bounded omission fallback. RunRecord
+  resolves full content from canonical index/output refs, never observer event refs.
+  Child links are record events and skip BeforeEvent. Complete requests are
+  verification digests only, never addressed content; growth counts every recorder
+  Put and PutCall write. Pure loop preparation precedes the initial adoption/phase
+  batch. Completed partial-batch results are indexed before terminal sealing.
+  FinishRunInput
+  retains bounded per-call metadata and grows with the result count.
 
 - Codex `ReasoningEffort` is a native provider/runtime factory option. Empty
   preserves provider defaults. Applications validate model-specific supported

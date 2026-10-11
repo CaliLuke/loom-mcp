@@ -209,12 +209,38 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   `Runtime.RunStore.NextSeq(ctx, RootRunID, RunID)`. Values start at 1 per run
   within its root scope and are never reused across parallel calls or retries;
   allocation order is not completion order. Allocation failure fails unsent.
-  Workers must share the store. No call records are written by this wrapper.
+  Workers must share the store. The identity wrapper itself does not write records;
+  the innermost planner client recorder does.
 - `Attempt` comes from `engine.ActivityAttemptFromContext`, not run resume
   metadata: Temporal reports its current attempt and in-memory execution uses
   1. Custom adapters set `engine.WithActivityAttempt`; absence reads as zero.
 - `Runtime.ModelClient(id)` bypasses planner decoration and neither attaches
   `CallInfo` nor allocates a sequence.
+- Planner call recording sits inside model interceptors, capturing the decorated
+  request against the committed pre-history-policy view (loaded IndexHead, no
+  Pending). Recording is required in planner contexts. Missing CallInfo or
+  Attempt < 1 fails unsent. Direct Runtime.ModelClient calls and interceptor
+  short-circuits are not recorded. Started precedes send; response Put precedes
+  completion. The callrecord package owns deterministic JSON v2 bodies and exact
+  request verification, including Meta/cache points and precision-preserving
+  hash fallback for messages whose ordinary JSON round trip is unstable.
+- Stream recording sums usage chunks and writes synchronously in Finalize or
+  Close. Every activity exit marks open streams stream_abandoned. Terminal store
+  failures propagate and can leave started evidence.
+- Protocol 6 planner activity output carries all started CallKeys, the first
+  RequestGrowth, and ProducingCall (last completed call that emitted planner
+  events). All output keys are adopted independently of ProducingCall. Step is
+  one-based and monotonic for every planner schedule, recovery/finalize included;
+  TurnID remains the conversational turn. Successful initial adoption shares its
+  hook activity with the execution-phase event, with the record first; recovery
+  and resume adoption retain a separate activity (~97 ms median per resumed step
+  over 20 Temporal dev-server runs); the approved real-Temporal budget is 2s. Initial
+  planning keeps two activities, resumed planning increases from one to two, and
+  sealing adds one per run. Each validated output commits a
+  planner_step with committed ViewRef and deterministic planner_step:<run>:<step>
+  key. Assistant entries, including terminal responses, carry the producing key.
+  The workflow publishes context_request_growth once per run. Presentation
+  commits carry positional CallKeys, nil for standalone unrecorded helper streams.
 - Provider packages under `features/model/*` implement raw `model.Provider`.
   Runtime helpers construct the provider and wrap it with `model.NewClient`.
   Direct callers must do the same before registration.
@@ -396,14 +422,19 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - `BeforeModel` may return a response to short-circuit non-streaming
   completions. Streaming calls do not synthesize a `model.Streamer` from that
   response; returning one from `BeforeModel` on `Stream` fails the call.
-- Event interceptors run in `runtime.publish_hook` before `appendHookRunEvent`,
+- Record events (planner_step, run_sealed, child_run_linked and reserved
+  context_compacted, context_compaction_skipped, context_overflow) and canonical
+  presentation commits bypass event interceptors. Hook publication appends first,
+  then publishes best-effort projections. SealRecord appends directly without
+  projections.
+- Ordinary event interceptors run in `runtime.publish_hook` before `appendHookRunEvent`,
   stream publication, and hook-bus publication. Dropped events must be absent
   from all three surfaces.
 - Interceptor errors short-circuit the active path.
 
 ## Transcript Views And Child Validation
 
-- Protocol 5 planner activity inputs carry only ViewRef for history: IndexHead
+- Protocol 6 planner activity inputs carry only ViewRef for history: IndexHead
   plus one step's Pending. Caller seed history is committed before the first
   planner invocation and never sent in Pending. Entries are immutable; a later
   HideBookkeeping entry changes rendering without changing earlier hashes.
@@ -431,13 +462,76 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   engines must implement the typed register/execute child-dispatch methods.
 - The run-loop ledger and ledger_messages query are removed. Content signals
   contain refs only. Over-1-MB planner envelopes return PlanActivityInputBudgetError
-  with Bytes, Limit and RunID, matching errors.As. Replay fixture is protocol 5.
+  with Bytes, Limit and RunID, matching errors.As. Replay fixture is protocol 6; the unchanged protocol 5
+  fixture verifies protocol mismatch rejection before effects. Structural templates
+  remain version 5.
 - `make test-payload-growth` runs full non-short payload/growth acceptance. Fixed per-run
   ToolArgs, Labels and tool catalogs remain inline; K7 accepts the measured
   fixed-part overruns documented in runtime.md. `make itest` invokes the target;
   `make test` covers typed P2 and 1,000-step growth. Omitted result bodies load
-  only on explicit ContentLoader requests. K8 still owns terminal sealing, trailing
-  pending entries, planner/run hooks and FinishRunInput.ToolEvents growth.
+  on explicit ContentLoader requests or bounded small-result hook publication.
+  FinishRunInput.ToolEvents retains bounded per-call metadata and grows with count.
+
+- ExecuteWorkflow allocates the single live workflowPlanInput before initial hooks
+  and threads it through planning, recovery, tool turns, finalization and terminal
+  cleanup. Every validated adoption advances its head before further planning.
+  Before run_completed, a detached context executes <agent>.seal with RootRunID,
+  RunID, ProtocolVersion, IndexHead, Pending, fixed run_sealed:<run> EventKey and workflow Timestamp.
+  SealRecord validates lineage and stores pending segments, then directly appends
+  typed run_sealed{IndexHead, ProtocolVersion}. It skips interception/projections and fails closed.
+  Retried input writes identical segments and one event, even after a lost append
+  acknowledgement. EventKey is deterministic; ID remains the store-owned cursor.
+  Custom engines add RegisterSealRecordActivity and ExecuteSealRecordActivity
+  (breaking). External termination has no seal; latest planner_step is its readable
+  head. Unreleased K8 retains protocol 6; the history fixture includes seal commands.
+
+- runrecord.Read(ctx, runStore, runLog, rootRunID, runID) walks child_run_linked
+  descendants without workflow/history access. It uses the seal or latest step
+  head and one incremental renderer per run. planner_step/run_sealed carry explicit
+  ProtocolVersion from the workflow RunInput checked by validateWorkflowInput.
+  The live plan state retains that validated value across recovery/finalization;
+  SealRecordInput forwards it to the seal activity. RunRecord rejects conflicting
+  stamps and reports version 0 without a record event, even with positive-Step calls.
+  It never infers a version from event kinds or started records. Export preserves
+  the recorded value. Record-event CallKeys adopt every
+  call of an attempt; MessageEntry.Call identifies only the producing call.
+  Final unadopted calls are abandoned; started calls are incomplete. Each includes
+  its exact rebuilt request, Activity and Step. Presentations are adopted,
+  presented-not-adopted or presented-unrecorded. Full results, typed/clarification
+  answers and separate server-only content remain available beyond previews.
+  Recorded checkpoint refs resolve index.CheckpointRecord including Calls; K8
+  produces no checkpoint or compaction projection. Entry template versions stay
+  independent of workflow protocol 6.
+- record.Export().Marshal() writes deterministic version-1 JSON with rendered
+  transcripts, original call/log bytes and addressed content, server-only bytes
+  included. runrecord.FromExport restores identical evidence without a store or
+  historical renderer. Exact request numeric tokens above 2^53 are preserved.
+  New 1000-step recorder-write growth and real Temporal P1 tests skip -short and are
+  wired into test-payload-growth with explicit timeouts. KeepRecentTurns/Compress
+  are compaction stand-ins; K12 must rerun growth with real compaction.
+
+- ToolResultReceivedEvent always carries Refs for the full eligible result and
+  server-only sidecar/executed payload. Small bodies remain inline unchanged.
+  Above the 1,000,000-byte encoded hook bound, compaction removes Result,
+  ResultJSON and ServerData together, preserving refs and the original preview.
+  The hook_payload_too_large marker is removed (breaking for marker consumers).
+  publishStoredToolContent skips known oversized result loads and stops sidecar
+  loading once the current envelope cannot fit; sidecar size is known only after Get.
+  A missing preview uses the bounded omission text when bodies exceed the limit.
+  RunRecord resolves results only from canonical index/output refs and call evidence,
+  never tool_result_received refs. Completed partial-batch results are retained as
+  refs and indexed before terminal sealing; inline error sidecars are stored even
+  without an eligible body. Export includes every resolved server-only byte.
+- K8 growth counts every recorder Put and PutCall body write, including repeated
+  writes and addressed content, excluding index/view setup. Over 1000 steps,
+  fitted slopes off 1999.743, KeepRecentTurns 2032.677, Compress 2458.549 bytes/step;
+  max residuals 700.227, 1103.159, 3799.192 bytes. The complete request is a canonical
+  verification digest only and is never stored or copied into export Content;
+  rebuild and import recompute it. ChildRunLinked is a canonical record event;
+  BeforeEvent cannot hide the run tree. Pure loop-state preparation precedes the
+  initial planner_step/execution-phase batch without another activity.
+  test-payload-growth sets 20m for runtime growth and 3m for real Temporal P1;
+  make itest invokes both. K12 reruns with real compaction.
 
 ## Workflow Composition
 

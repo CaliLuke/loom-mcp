@@ -31,6 +31,7 @@ import (
 	agentsruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
 	sessioninmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/session/inmem"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -59,11 +60,27 @@ func TestGeneratedFeatureRealTemporalContracts(t *testing.T) {
 			Logger:        silentTemporalLogger{},
 		},
 		LogLevel: "error",
+		// The default 20 transfer polls/s adds ~100 ms per activity round trip
+		// after its initial burst. Keep the 2s active-budget proof independent
+		// of that dev-server throttle, including after earlier fixture runs.
+		ExtraArgs: []string{"--dynamic-config-value", "history.transferProcessorMaxPollRPS=1000"},
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		server.Client().Close()
 		require.NoError(t, server.Stop())
+	})
+
+	t.Run("transfer dispatch avoids poll throttle", func(t *testing.T) {
+		testTemporalTransferDispatchLatency(t, server.Client())
+	})
+
+	t.Run("RunRecord survives abandoned history", func(t *testing.T) {
+		testTemporalRunRecordWithoutHistory(t, server.Client())
+	})
+
+	t.Run("measure planner step latency", func(t *testing.T) {
+		measurePlannerStepLatency(t, server.Client())
 	})
 
 	t.Run("record workflow history", func(t *testing.T) {
@@ -79,6 +96,11 @@ func TestGeneratedFeatureRealTemporalContracts(t *testing.T) {
 		eng := newTemporalAcceptanceEngine(t, server.Client())
 		fx := newFeatureRuntime(t, agentsruntime.WithEngine(eng))
 		exec := newRecordingWorkflowExecutor()
+		t.Cleanup(func() {
+			if t.Failed() {
+				logTemporalAwaitFailure(t, server.Client(), fx, "run-temporal-core")
+			}
+		})
 		runGeneratedFeatureAwaitScenario(
 			t,
 			ctx,
@@ -148,6 +170,10 @@ func TestGeneratedFeatureRealTemporalContracts(t *testing.T) {
 		)
 	})
 
+	t.Run("external termination leaves readable planner head", func(t *testing.T) {
+		testTemporalExternalTerminationLeavesReadableHead(t, server.Client())
+	})
+
 	t.Run("typed input races workflow timeout without stranding state", func(t *testing.T) {
 		testTemporalSignalTimeoutRace(t, server.Client())
 	})
@@ -163,7 +189,9 @@ func TestGeneratedFeatureRealTemporalContracts(t *testing.T) {
 		ctx, cancel := temporalScenarioContext(t)
 		defer cancel()
 		eng := newTemporalAcceptanceEngine(t, server.Client())
-		runGeneratedExternalAwaitScenario(t, ctx, newFeatureRuntime(t, agentsruntime.WithEngine(eng)))
+		// Resumed steps publish planner_step in their own activity (accepted cost),
+		// so this scenario's active budget is 2s; 1s was measured to finalize twice.
+		runGeneratedExternalAwaitScenario(t, ctx, newFeatureRuntime(t, agentsruntime.WithEngine(eng)), 2*time.Second)
 	})
 
 	t.Run("parent cancellation reaches child agent", func(t *testing.T) {
@@ -237,7 +265,6 @@ func TestGeneratedFeatureRealTemporalContracts(t *testing.T) {
 		require.NotEmpty(t, calls[0].ToolCallID)
 		require.Equal(t, string(planner.TerminationReasonToolCap), calls[0].Labels[agentsruntime.FinalizationReasonLabel])
 	})
-
 }
 
 func TestFileEffectLedger(t *testing.T) {
@@ -373,11 +400,21 @@ func testTemporalWorkerReplacement(
 			return
 		}
 		t.Logf("replacement workflow: status=%s pending activities=%v", description.WorkflowExecutionInfo.Status, description.PendingActivities)
+		logTemporalAwaitFailure(t, temporalClient, first, "run-temporal-restart")
 	}()
-	// Observe readiness within the scenario deadline. Mongo-backed hook
-	// activities can legitimately outlast a short polling window.
-	require.Eventually(t, func() bool {
-		return first.recorder.count(hooks.AwaitTypedInput) > 0
+	// A published prompt precedes the activity acknowledgement and the workflow
+	// task that enters the await. Close only at that durable, idle boundary;
+	// stopping an active workflow task can strand queries until its timeout.
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		if !assert.Positive(collect, first.recorder.count(hooks.AwaitTypedInput)) || !assert.Positive(collect, first.recorder.count(hooks.RunPaused)) {
+			return
+		}
+		description, err := temporalClient.DescribeWorkflowExecution(ctx, "run-temporal-restart", "")
+		if !assert.NoError(collect, err) {
+			return
+		}
+		assert.Empty(collect, description.PendingActivities)
+		assert.Nil(collect, description.PendingWorkflowTask)
 	}, time.Until(deadline), 20*time.Millisecond)
 	firstPage, err := firstRunEvents.List(ctx, "run-temporal-restart", "", 100)
 	require.NoError(t, err)
@@ -512,6 +549,8 @@ func testTemporalSignalTimeoutRace(t *testing.T, temporalClient client.Client) {
 		case engine.RunStatusTimedOut:
 			require.Error(t, waitErr)
 			timedOut++
+		case engine.RunStatusPending, engine.RunStatusRunning, engine.RunStatusFailed, engine.RunStatusCanceled, engine.RunStatusPaused:
+			require.Failf(t, "unexpected terminal status", "run %s ended as %s (signal error: %v, wait error: %v)", runID, status, signalErr, waitErr)
 		default:
 			require.Failf(t, "unexpected terminal status", "run %s ended as %s (signal error: %v, wait error: %v)", runID, status, signalErr, waitErr)
 		}
@@ -530,6 +569,8 @@ func testTemporalSignalTimeoutRace(t *testing.T, temporalClient client.Client) {
 		case run.StatusFailed:
 			require.Equal(t, engine.RunStatusTimedOut, status)
 			require.Equal(t, session.RunStatusFailed, runMeta.Status)
+		case run.StatusPending, run.StatusRunning, run.StatusCanceled, run.StatusPaused:
+			require.Failf(t, "stranded canonical run status", "run %s remained %s after engine terminal status %s", runID, snapshot.Status, status)
 		default:
 			require.Failf(t, "stranded canonical run status", "run %s remained %s after engine terminal status %s", runID, snapshot.Status, status)
 		}

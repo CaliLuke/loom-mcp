@@ -21,42 +21,11 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
+type planActivityPublication func(*PlanActivityOutput) (hooks.Event, error)
+
 const maxRecoveryToolCatalogEntries = model.MaxToolDefinitionsPerRequest
 
 var errRecoveryTurnCapExceeded = errors.New("recovery turn cap exceeded")
-
-// runPlanActivity schedules a plan/resume activity with the configured options.
-func (r *Runtime) runPlanActivity(
-	wfCtx engine.WorkflowContext,
-	activityName string,
-	options engine.ActivityOptions,
-	input PlanActivityInput,
-	hardDeadline time.Time,
-) (*PlanActivityOutput, error) {
-	if activityName == "" {
-		return nil, errors.New("plan activity not registered")
-	}
-	callOpts := capPlanActivityOptions(wfCtx, options, hardDeadline)
-	out, err := wfCtx.ExecutePlannerActivity(wfCtx.Context(), engine.PlannerActivityCall{
-		Name:    activityName,
-		Input:   &input,
-		Options: callOpts,
-	})
-	if err != nil {
-		return nil, err
-	}
-	if err := validatePlanActivityOutput(out, input); err != nil {
-		return nil, err
-	}
-	// Workflow input owns policy, cap, and attempt state. Activity output carries
-	// compatibility echoes only; normalize them before any workflow consumes them.
-	out.ToolPolicyActive = input.ToolPolicyActive
-	out.AllowedTools = cloneToolIdents(input.AllowedTools)
-	out.PolicyCaps = input.PolicyCaps
-	out.Attempt = input.RunContext.Attempt
-	r.logPlanActivityResult(wfCtx.Context(), out)
-	return out, nil
-}
 
 func capPlanActivityOptions(wfCtx engine.WorkflowContext, options engine.ActivityOptions, hardDeadline time.Time) engine.ActivityOptions {
 	callOpts := options
@@ -210,18 +179,106 @@ func validatePlannerRecoveryCatalog(result *planner.PlanResult, input PlanActivi
 	return nil
 }
 
+// followingPlanPublication preserves the execution-phase boundary after successful
+// recovery and usage aggregation. The caller still reports aggregation errors.
+func followingPlanPublication(usage model.TokenUsage, following []planActivityPublication) planActivityPublication {
+	return func(out *PlanActivityOutput) (hooks.Event, error) {
+		if len(following) == 0 || out.Recovery != nil {
+			return nil, nil
+		}
+		if !planPublicationUsageFits(usage, out.Usage) {
+			return nil, nil
+		}
+		return following[0](out)
+	}
+}
+
+// planPublicationUsageFits gates the execution phase; the caller reports the
+// aggregation error after recording adoption, preserving the commit boundary.
+func planPublicationUsageFits(current, next model.TokenUsage) bool {
+	_, err := checkedAddTokenUsage(current, next)
+	return err == nil
+}
+
+// advanceRecoveryPlanInput carries the committed head and exact recovery catalog
+// into the replacement schedule without changing the workflow's held call refs.
+func advanceRecoveryPlanInput(input *PlanActivityInput, out *PlanActivityOutput, caps policy.CapsState, nextAttempt *int) {
+	input.View.IndexHead = out.IndexHead
+	input.View.Pending = nil
+	input.Recovery = out.Recovery
+	input.PolicyCaps = caps
+	input.RunContext.Attempt++
+	if nextAttempt != nil {
+		*nextAttempt = input.RunContext.Attempt + 1
+	}
+	if out.Recovery.ToolCatalog != nil {
+		input.ToolPolicyActive = true
+		input.AllowedTools = cloneToolIdents(out.Recovery.ToolCatalog)
+	}
+	if out.Recovery.DisableTools {
+		input.ToolPolicyActive = true
+		input.AllowedTools = nil
+	}
+}
+
+// runPlanActivity schedules a plan/resume activity with the configured options.
+func (r *Runtime) runPlanActivity(
+	wfCtx engine.WorkflowContext,
+	base *workflowPlanInput,
+	activityName string,
+	options engine.ActivityOptions,
+	input PlanActivityInput,
+	hardDeadline time.Time,
+	following ...planActivityPublication,
+) (*PlanActivityOutput, error) {
+	if activityName == "" {
+		return nil, errors.New("plan activity not registered")
+	}
+	input.Step = base.step + 1
+	if err := enforcePlanActivityInputBudget(input); err != nil {
+		return nil, err
+	}
+	base.step = input.Step
+	callOpts := capPlanActivityOptions(wfCtx, options, hardDeadline)
+	out, err := wfCtx.ExecutePlannerActivity(wfCtx.Context(), engine.PlannerActivityCall{
+		Name:    activityName,
+		Input:   &input,
+		Options: callOpts,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := validatePlanActivityOutput(out, input); err != nil {
+		return nil, err
+	}
+	// Workflow input owns policy, cap, and attempt state. Activity output carries
+	// compatibility echoes only; normalize them before any workflow consumes them.
+	out.ToolPolicyActive = input.ToolPolicyActive
+	out.AllowedTools = cloneToolIdents(input.AllowedTools)
+	out.PolicyCaps = input.PolicyCaps
+	out.Attempt = input.RunContext.Attempt
+	if err := r.commitPlanActivityOutput(wfCtx, base, input, out, following...); err != nil {
+		return nil, err
+	}
+	r.logPlanActivityResult(wfCtx.Context(), out)
+	return out, nil
+}
+
 func (r *Runtime) runPlanActivityRecovering(
 	wfCtx engine.WorkflowContext,
+	base *workflowPlanInput,
 	activityName string,
 	options engine.ActivityOptions,
 	input PlanActivityInput,
 	hardDeadline time.Time,
 	caps *policy.CapsState,
 	nextAttempt *int,
+	following ...planActivityPublication,
 ) (*PlanActivityOutput, error) {
 	var recoveryUsage model.TokenUsage
 	for {
-		out, err := r.runPlanActivity(wfCtx, activityName, options, input, hardDeadline)
+		publication := followingPlanPublication(recoveryUsage, following)
+		out, err := r.runPlanActivity(wfCtx, base, activityName, options, input, hardDeadline, publication)
 		if err != nil {
 			return nil, err
 		}
@@ -237,22 +294,7 @@ func (r *Runtime) runPlanActivityRecovering(
 			out.Usage = recoveryUsage
 			return out, errRecoveryTurnCapExceeded
 		}
-		input.View.IndexHead = out.IndexHead
-		input.View.Pending = nil
-		input.Recovery = out.Recovery
-		input.PolicyCaps = *caps
-		input.RunContext.Attempt++
-		if nextAttempt != nil {
-			*nextAttempt = input.RunContext.Attempt + 1
-		}
-		if out.Recovery.ToolCatalog != nil {
-			input.ToolPolicyActive = true
-			input.AllowedTools = cloneToolIdents(out.Recovery.ToolCatalog)
-		}
-		if out.Recovery.DisableTools {
-			input.ToolPolicyActive = true
-			input.AllowedTools = nil
-		}
+		advanceRecoveryPlanInput(&input, out, *caps, nextAttempt)
 		if err := enforcePlanActivityInputBudget(input); err != nil {
 			return nil, err
 		}
@@ -296,6 +338,41 @@ func (r *Runtime) publishPlannerNotes(ctx context.Context, base *workflowPlanInp
 		), turnID); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// commitPlanActivityOutput records adoption before the loop consumes an output.
+func (r *Runtime) commitPlanActivityOutput(wfCtx engine.WorkflowContext, base *workflowPlanInput, input PlanActivityInput, out *PlanActivityOutput, following ...planActivityPublication) error {
+	view := input.View
+	view.IndexHead, view.Pending = out.IndexHead, nil
+	event := hooks.NewPlannerStepEvent(input.RunID, input.AgentID, input.RunContext.SessionID, input.Step, view, out.CallKeys, base.protocolVersion, wfCtx.Now())
+	var next hooks.Event
+	var err error
+	if len(following) > 0 {
+		next, err = following[0](out)
+		if err != nil {
+			return fmt.Errorf("prepare planner publication: %w", err)
+		}
+	}
+	if next != nil {
+		err = r.publishWorkflowHookBatch(wfCtx, input.RunContext.TurnID, event, next)
+	} else {
+		err = r.publishHook(wfCtx.Context(), event, input.RunContext.TurnID)
+	}
+	if err != nil {
+		return fmt.Errorf("commit planner step: %w", err)
+	}
+	base.adoptHead(out.IndexHead)
+	if out.RequestGrowth != nil && !base.requestGrowthPublished {
+		growth := out.RequestGrowth
+		event := hooks.NewContextRequestGrowthEvent(input.RunID, input.AgentID, input.RunContext.SessionID, growth.Key, growth.Inside, growth.Outside)
+		event.SetTimestampMS(wfCtx.Now().UnixMilli())
+		event.SetEventKey("context_request_growth:" + input.RunID)
+		if err := r.publishHook(wfCtx.Context(), event, input.RunContext.TurnID); err != nil {
+			return fmt.Errorf("publish request growth: %w", err)
+		}
+		base.requestGrowthPublished = true
 	}
 	return nil
 }

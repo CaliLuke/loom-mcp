@@ -82,8 +82,13 @@ func isSupportedHookEventType(eventType EventType) bool {
 		HardProtectionTriggered,
 		RunPhaseChanged,
 		ChildRunLinked,
-		PromptRendered:
+		PromptRendered,
+		PlannerStep,
+		RunSealed,
+		ContextRequestGrowth:
 		return true
+	case ContextCompacted, ContextCompactionSkipped, ContextOverflow:
+		return false
 	default:
 		return false
 	}

@@ -613,7 +613,7 @@ func TestInitialPlannerUsesActiveBudgetDeadline(t *testing.T) {
 		wfCtx,
 		AgentRegistration{ID: input.AgentID, PlanActivityName: "plan"},
 		input,
-		workflowRunContext(input),
+		&workflowPlanInput{AgentID: input.AgentID, RunContext: workflowRunContext(input)},
 		"turn-1",
 	)
 

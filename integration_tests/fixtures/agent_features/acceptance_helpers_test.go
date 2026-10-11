@@ -181,6 +181,8 @@ func (e *recordingWorkflowExecutor) Execute(ctx context.Context, meta *agentsrun
 	case workflow.Finalize:
 		result = &workflow.FinalizeResult{OK: true, Approved: &approved}
 
+	case tools.ToolUnavailable:
+		return nil, errors.New("unexpected workflow tool: " + string(call.Name))
 	default:
 		return nil, errors.New("unexpected workflow tool: " + string(call.Name))
 	}
@@ -298,14 +300,22 @@ type auditInterceptor struct {
 	beforeEvent int
 }
 
-func (a *auditInterceptor) BeforeRun(ctx context.Context, input *agentsruntime.BeforeRunInput) (*agentsruntime.BeforeRunDecision, error) {
+// Keep the dynamically selected interceptor contracts visible to static checks.
+var (
+	_ agentsruntime.RunInterceptor   = (*auditInterceptor)(nil)
+	_ agentsruntime.ToolInterceptor  = (*auditInterceptor)(nil)
+	_ agentsruntime.ModelInterceptor = (*auditInterceptor)(nil)
+	_ agentsruntime.EventInterceptor = (*auditInterceptor)(nil)
+)
+
+func (a *auditInterceptor) BeforeRun(_ context.Context, _ *agentsruntime.BeforeRunInput) (*agentsruntime.BeforeRunDecision, error) {
 	a.mu.Lock()
 	a.beforeRun++
 	a.mu.Unlock()
 	return nil, nil
 }
 
-func (a *auditInterceptor) BeforeTool(ctx context.Context, input *agentsruntime.BeforeToolInput) (*agentsruntime.BeforeToolDecision, error) {
+func (a *auditInterceptor) BeforeTool(_ context.Context, _ *agentsruntime.BeforeToolInput) (*agentsruntime.BeforeToolDecision, error) {
 	a.mu.Lock()
 	a.beforeTool++
 	if a.order != nil && a.label != "" {
@@ -315,14 +325,14 @@ func (a *auditInterceptor) BeforeTool(ctx context.Context, input *agentsruntime.
 	return nil, nil
 }
 
-func (a *auditInterceptor) BeforeModel(ctx context.Context, input *agentsruntime.BeforeModelInput) (*agentsruntime.BeforeModelDecision, error) {
+func (a *auditInterceptor) BeforeModel(_ context.Context, _ *agentsruntime.BeforeModelInput) (*agentsruntime.BeforeModelDecision, error) {
 	a.mu.Lock()
 	a.beforeModel++
 	a.mu.Unlock()
 	return nil, nil
 }
 
-func (a *auditInterceptor) BeforeEvent(ctx context.Context, input *agentsruntime.BeforeEventInput) (*agentsruntime.BeforeEventDecision, error) {
+func (a *auditInterceptor) BeforeEvent(_ context.Context, _ *agentsruntime.BeforeEventInput) (*agentsruntime.BeforeEventDecision, error) {
 	a.mu.Lock()
 	a.beforeEvent++
 	a.mu.Unlock()
@@ -442,7 +452,8 @@ func newFeatureRuntime(t *testing.T, opts ...agentsruntime.RuntimeOption) *featu
 	artifacts := artifact.NewMemoryStore()
 	streams := &streamRecorder{}
 	audit := &auditInterceptor{}
-	base := []agentsruntime.RuntimeOption{
+	base := make([]agentsruntime.RuntimeOption, 0, 10+len(opts))
+	base = append(base,
 		agentsruntime.WithEngine(engineinmem.New()),
 		agentsruntime.WithSessionStore(sessioninmem.New()),
 		agentsruntime.WithRunEventStore(runloginmem.New()),
@@ -461,7 +472,7 @@ func newFeatureRuntime(t *testing.T, opts ...agentsruntime.RuntimeOption) *featu
 		agentsruntime.WithNamedInterceptors(map[string]agentsruntime.Interceptor{
 			"audit": audit,
 		}),
-	}
+	)
 	base = append(base, opts...)
 	return &featureRuntime{
 		rt:        agentsruntime.New(base...),

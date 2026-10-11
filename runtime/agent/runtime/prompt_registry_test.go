@@ -87,7 +87,7 @@ func TestPlannerContextRenderPromptUsesRunScope(t *testing.T) {
 		},
 	}, "override {{ .Name }}", nil))
 
-	agentCtx := newAgentContext(agentContextOptions{
+	agentCtx := testAgentContext(agentContextOptions{
 		runtime:   rt,
 		agentID:   "example.agent",
 		runID:     "run_1",

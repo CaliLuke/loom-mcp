@@ -278,7 +278,7 @@ func TestRunLoopBudgetedToolPauseRecordsResultBeforeUserAnswer(t *testing.T) {
 	}))
 	base := testWorkflowInput(t, rt, &planner.PlanInput{
 		RunContext: run.Context{RootRunID: "root", RunID: input.RunID, SessionID: input.SessionID, TurnID: input.TurnID, Attempt: 1},
-		Agent:      newAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID}),
+		Agent:      testAgentContext(agentContextOptions{runtime: rt, agentID: input.AgentID, runID: input.RunID}),
 	})
 	initial := &planner.PlanResult{
 		ToolCalls: []planner.ToolRequest{{Name: tools.Ident("inline.ts.ask")}},
