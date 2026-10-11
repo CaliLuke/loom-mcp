@@ -1,0 +1,94 @@
+Run: run
+Session: session
+Agent: agent
+Status: success
+Step 1
+  Model: 1/1 abandoned
+    Activity: planner
+    Model: provider
+    Model ID: registered
+    Usage: {"CacheReadTokens":4,"CacheWriteTokens":5,"InputTokens":2,"Model":"resolved","ModelClass":"","OutputTokens":3,"TotalTokens":14}
+    Latency: 12ms
+    Error kind: provider_failure
+    Error: attempt failed
+    System hash: sha256:4f53cda18c2b
+    Tools hash: sha256:4f53cda18c2b
+    Request digest: sha256:eb0397e5d329
+  Model: 2/2 adopted
+    Activity: planner
+    Model: provider
+    Model ID: registered
+    Usage: {"CacheReadTokens":4,"CacheWriteTokens":5,"InputTokens":2,"Model":"resolved","ModelClass":"","OutputTokens":3,"TotalTokens":14}
+    Latency: 12ms
+    Chosen call: agent.child ID: a
+      Arguments: {"a":1,"z":9007199254740993}
+    Chosen call: agent.child ID: b
+      Arguments: {"a":1,"z":9007199254740993}
+    System hash: sha256:4f53cda18c2b
+    Tools hash: sha256:4f53cda18c2b
+    Request digest: sha256:eb0397e5d329
+  Model: 3/3 incomplete
+    Activity: planner
+    Model: provider
+    Model ID: registered
+    Usage: {"CacheReadTokens":0,"CacheWriteTokens":0,"InputTokens":0,"Model":"","ModelClass":"","OutputTokens":0,"TotalTokens":0}
+    Latency: 0s
+    System hash: sha256:4f53cda18c2b
+    Tools hash: sha256:4f53cda18c2b
+    Request digest: sha256:eb0397e5d329
+  Tool: agent.child
+    Call ID: a
+    Parent call ID: parent
+    Arguments: {"a":1,"z":9007199254740993}
+    Result: {"answer":1}
+    Duration: 25ms
+    Run: child-a
+    Session: session
+    Agent:
+    Status:  (unverified)
+    Totals:
+      Model calls: 0 (adopted: 0)
+      Model calls by class: {}
+      Tokens by model: {}
+      Tool calls: 0 (failed: 0, repeated: 0)
+      Wall time: 0s
+  Tool: agent.child
+    Call ID: b
+    Arguments: {"a":1,"z":9007199254740993}
+    Result: {"answer":2}
+    Error: {"Cause":null,"Message":"failed"}
+    Duration: 0s
+    Run: child-b
+    Session: session
+    Agent:
+    Status:  (unverified)
+    Totals:
+      Model calls: 0 (adopted: 0)
+      Model calls by class: {}
+      Tokens by model: {}
+      Tool calls: 0 (failed: 0, repeated: 0)
+      Wall time: 0s
+Step 2
+  Model: 4/1 adopted
+    Activity: planner
+    Model: provider
+    Model ID: registered
+    Usage: {"CacheReadTokens":4,"CacheWriteTokens":5,"InputTokens":2,"Model":"resolved","ModelClass":"","OutputTokens":3,"TotalTokens":14}
+    Latency: 12ms
+    System hash: sha256:4f53cda18c2b
+    Tools hash: sha256:4f53cda18c2b
+    Request digest: sha256:eb0397e5d329
+  Event: planner_note
+    Timestamp: 1970-01-01T00:00:05Z
+    Payload: {"Labels":null,"Note":"note"}
+  Event: run_completed
+    Timestamp: 1970-01-01T00:00:07Z
+    Payload: {"http_status":0,"phase":"completed","retryable":false,"status":"success"}
+Final answer:
+  final
+Totals:
+  Model calls: 4 (adopted: 2)
+  Model calls by class: {"abandoned":1,"adopted":2,"incomplete":1}
+  Tokens by model: {"provider":{"CacheReadTokens":0,"CacheWriteTokens":0,"InputTokens":0,"Model":"provider","ModelClass":"","OutputTokens":0,"TotalTokens":0},"resolved":{"CacheReadTokens":12,"CacheWriteTokens":15,"InputTokens":6,"Model":"resolved","ModelClass":"","OutputTokens":9,"TotalTokens":42}}
+  Tool calls: 2 (failed: 1, repeated: 1)
+  Wall time: 5s

@@ -1,0 +1,1230 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Loom trajectory document v1",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "const": "loom.trajectory.v1"
+    },
+    "trajectory": {
+      "$ref": "#/$defs/Trajectory"
+    },
+    "session": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Trajectory"
+      }
+    }
+  },
+  "required": [
+    "schema"
+  ],
+  "additionalProperties": false,
+  "oneOf": [
+    {
+      "required": [
+        "trajectory"
+      ],
+      "not": {
+        "required": [
+          "session"
+        ]
+      }
+    },
+    {
+      "required": [
+        "session"
+      ],
+      "not": {
+        "required": [
+          "trajectory"
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "Hash": {
+      "type": "string",
+      "pattern": "^(|sha256:[0-9a-f]{64})$",
+      "description": "Full addressed-content hash, or empty when absent."
+    },
+    "Duration": {
+      "type": "integer",
+      "description": "Duration in nanoseconds."
+    },
+    "CallKey": {
+      "type": "object",
+      "properties": {
+        "RunID": {
+          "type": "string"
+        },
+        "Seq": {
+          "type": "integer"
+        },
+        "Attempt": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "RunID",
+        "Seq",
+        "Attempt"
+      ],
+      "additionalProperties": false
+    },
+    "TokenUsage": {
+      "type": "object",
+      "properties": {
+        "Model": {
+          "type": "string"
+        },
+        "ModelClass": {
+          "type": "string"
+        },
+        "InputTokens": {
+          "type": "integer"
+        },
+        "OutputTokens": {
+          "type": "integer"
+        },
+        "TotalTokens": {
+          "type": "integer"
+        },
+        "CacheReadTokens": {
+          "type": "integer"
+        },
+        "CacheWriteTokens": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "Model",
+        "ModelClass",
+        "InputTokens",
+        "OutputTokens",
+        "TotalTokens",
+        "CacheReadTokens",
+        "CacheWriteTokens"
+      ],
+      "additionalProperties": false
+    },
+    "CallError": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "RequestFacts": {
+      "type": "object",
+      "properties": {
+        "call": {
+          "$ref": "#/$defs/CallKey"
+        },
+        "model": {
+          "type": "string"
+        },
+        "outcome": {
+          "type": "string"
+        },
+        "context_window": {
+          "type": "integer"
+        },
+        "output_reserve": {
+          "type": "integer"
+        },
+        "input_tokens": {
+          "type": "integer"
+        },
+        "text_bytes": {
+          "type": "integer"
+        },
+        "fixed_bytes": {
+          "type": "integer"
+        },
+        "non_text": {
+          "type": "integer"
+        },
+        "view_bearing": {
+          "type": "boolean"
+        },
+        "count_latency": {
+          "$ref": "#/$defs/Duration"
+        }
+      },
+      "required": [
+        "call",
+        "model",
+        "outcome",
+        "context_window",
+        "output_reserve",
+        "input_tokens",
+        "text_bytes",
+        "fixed_bytes",
+        "non_text",
+        "view_bearing",
+        "count_latency"
+      ],
+      "additionalProperties": false
+    },
+    "ToolCall": {
+      "type": "object",
+      "properties": {
+        "Name": {
+          "type": "string"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "Payload": {}
+      },
+      "required": [
+        "Name",
+        "ID",
+        "Payload"
+      ],
+      "additionalProperties": false
+    },
+    "PromptRef": {
+      "type": "object",
+      "properties": {
+        "ID": {
+          "type": "string"
+        },
+        "Version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ID",
+        "Version"
+      ],
+      "additionalProperties": false
+    },
+    "ModelStep": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/CallKey"
+        },
+        "class": {
+          "type": "string",
+          "enum": [
+            "adopted",
+            "abandoned",
+            "incomplete"
+          ]
+        },
+        "activity": {
+          "type": "string",
+          "enum": [
+            "planner",
+            "summarize"
+          ]
+        },
+        "step": {
+          "type": "integer"
+        },
+        "model": {
+          "type": "string"
+        },
+        "model_id": {
+          "type": "string"
+        },
+        "usage": {
+          "$ref": "#/$defs/TokenUsage"
+        },
+        "latency": {
+          "$ref": "#/$defs/Duration"
+        },
+        "error": {
+          "$ref": "#/$defs/CallError"
+        },
+        "facts": {
+          "$ref": "#/$defs/RequestFacts"
+        },
+        "chosen": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ToolCall"
+          }
+        },
+        "system_hash": {
+          "$ref": "#/$defs/Hash"
+        },
+        "tools_hash": {
+          "$ref": "#/$defs/Hash"
+        },
+        "request_digest": {
+          "$ref": "#/$defs/Hash"
+        },
+        "prompts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PromptRef"
+          }
+        }
+      },
+      "required": [
+        "key",
+        "class",
+        "activity",
+        "step",
+        "model",
+        "model_id",
+        "usage",
+        "latency",
+        "chosen",
+        "system_hash",
+        "tools_hash",
+        "request_digest",
+        "prompts"
+      ],
+      "additionalProperties": false
+    },
+    "Bounds": {
+      "type": "object",
+      "properties": {
+        "Returned": {
+          "type": "integer"
+        },
+        "Total": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "Truncated": {
+          "type": "boolean"
+        },
+        "NextCursor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "RefinementHint": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Returned",
+        "Total",
+        "Truncated",
+        "NextCursor",
+        "RefinementHint"
+      ],
+      "additionalProperties": false
+    },
+    "ToolError": {
+      "type": "object",
+      "properties": {
+        "Message": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "Cause": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ToolError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "Message",
+        "Cause"
+      ],
+      "additionalProperties": false
+    },
+    "ToolStep": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "tool_call_id": {
+          "type": "string"
+        },
+        "parent_tool_call_id": {
+          "type": "string"
+        },
+        "arguments": {},
+        "result": {},
+        "bounds": {
+          "$ref": "#/$defs/Bounds"
+        },
+        "error": {
+          "$ref": "#/$defs/ToolError"
+        },
+        "duration": {
+          "$ref": "#/$defs/Duration"
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Trajectory"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "tool_call_id",
+        "arguments",
+        "result",
+        "duration",
+        "children"
+      ],
+      "additionalProperties": false
+    },
+    "ObservedEvent": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "event_key": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {}
+      },
+      "required": [
+        "type",
+        "event_key",
+        "timestamp",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "AnswerStep": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "clarification",
+            "typed_input"
+          ]
+        },
+        "input_id": {
+          "type": "string"
+        },
+        "content": {}
+      },
+      "required": [
+        "kind",
+        "content"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "clarification"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "content": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "Step": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "model",
+            "tool",
+            "await",
+            "answer",
+            "event"
+          ]
+        },
+        "step": {
+          "type": "integer"
+        },
+        "entry_id": {
+          "type": "integer"
+        },
+        "verified": {
+          "type": "boolean"
+        },
+        "model": {
+          "$ref": "#/$defs/ModelStep"
+        },
+        "tool": {
+          "$ref": "#/$defs/ToolStep"
+        },
+        "event": {
+          "$ref": "#/$defs/ObservedEvent"
+        },
+        "answer": {
+          "$ref": "#/$defs/AnswerStep"
+        }
+      },
+      "required": [
+        "kind",
+        "step",
+        "verified"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "properties": {
+            "kind": {
+              "const": "model"
+            }
+          },
+          "required": [
+            "model"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "tool"
+                ]
+              },
+              {
+                "required": [
+                  "event"
+                ]
+              },
+              {
+                "required": [
+                  "answer"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "tool"
+            }
+          },
+          "required": [
+            "tool"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "model"
+                ]
+              },
+              {
+                "required": [
+                  "event"
+                ]
+              },
+              {
+                "required": [
+                  "answer"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "await"
+            },
+            "event": {
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "await_clarification",
+                    "await_questions",
+                    "await_typed_input",
+                    "await_confirmation",
+                    "await_external_tools"
+                  ]
+                }
+              }
+            }
+          },
+          "required": [
+            "event"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "model"
+                ]
+              },
+              {
+                "required": [
+                  "tool"
+                ]
+              },
+              {
+                "required": [
+                  "answer"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "event"
+            }
+          },
+          "required": [
+            "event"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "model"
+                ]
+              },
+              {
+                "required": [
+                  "tool"
+                ]
+              },
+              {
+                "required": [
+                  "answer"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "answer"
+            }
+          },
+          "required": [
+            "answer"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "model"
+                ]
+              },
+              {
+                "required": [
+                  "tool"
+                ]
+              },
+              {
+                "required": [
+                  "event"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "answer"
+            },
+            "event": {
+              "properties": {
+                "type": {
+                  "const": "tool_authorization"
+                }
+              }
+            }
+          },
+          "required": [
+            "event"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "model"
+                ]
+              },
+              {
+                "required": [
+                  "tool"
+                ]
+              },
+              {
+                "required": [
+                  "answer"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "Totals": {
+      "type": "object",
+      "properties": {
+        "tokens_by_model": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/TokenUsage"
+          }
+        },
+        "model_calls_by_class": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "model_calls": {
+          "type": "integer"
+        },
+        "adopted_model_calls": {
+          "type": "integer"
+        },
+        "tool_calls": {
+          "type": "integer"
+        },
+        "failed_tool_calls": {
+          "type": "integer"
+        },
+        "repeated_tool_calls": {
+          "type": "integer"
+        },
+        "wall_time": {
+          "$ref": "#/$defs/Duration"
+        }
+      },
+      "required": [
+        "tokens_by_model",
+        "model_calls_by_class",
+        "model_calls",
+        "adopted_model_calls",
+        "tool_calls",
+        "failed_tool_calls",
+        "repeated_tool_calls",
+        "wall_time"
+      ],
+      "additionalProperties": false
+    },
+    "Trajectory": {
+      "type": "object",
+      "properties": {
+        "run_id": {
+          "type": "string"
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "agent_id": {
+          "type": "string"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Step"
+          }
+        },
+        "final": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Message"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "type": "string"
+        },
+        "status_verified": {
+          "type": "boolean"
+        },
+        "totals": {
+          "$ref": "#/$defs/Totals"
+        }
+      },
+      "required": [
+        "run_id",
+        "session_id",
+        "agent_id",
+        "steps",
+        "final",
+        "status",
+        "status_verified",
+        "totals"
+      ],
+      "additionalProperties": false
+    },
+    "Message": {
+      "type": "object",
+      "properties": {
+        "Role": {
+          "type": "string"
+        },
+        "Parts": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Part"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "Meta": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": {}
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "Role",
+        "Parts",
+        "Meta"
+      ],
+      "additionalProperties": false
+    },
+    "TextPart": {
+      "type": "object",
+      "properties": {
+        "Kind": {
+          "const": "text"
+        },
+        "Text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Kind",
+        "Text"
+      ],
+      "additionalProperties": false
+    },
+    "ThinkingPart": {
+      "type": "object",
+      "properties": {
+        "Kind": {
+          "const": "thinking"
+        },
+        "Text": {
+          "type": "string"
+        },
+        "Signature": {
+          "type": "string"
+        },
+        "Redacted": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "Index": {
+          "type": "integer"
+        },
+        "Final": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "Kind",
+        "Text",
+        "Signature",
+        "Redacted",
+        "Index",
+        "Final"
+      ],
+      "additionalProperties": false
+    },
+    "ImagePart": {
+      "type": "object",
+      "properties": {
+        "Kind": {
+          "const": "image"
+        },
+        "Format": {
+          "type": "string"
+        },
+        "Bytes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "Kind",
+        "Format",
+        "Bytes"
+      ],
+      "additionalProperties": false
+    },
+    "DocumentPart": {
+      "type": "object",
+      "properties": {
+        "Kind": {
+          "const": "document"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "Format": {
+          "type": "string"
+        },
+        "Text": {
+          "type": "string"
+        },
+        "URI": {
+          "type": "string"
+        },
+        "Context": {
+          "type": "string"
+        },
+        "Bytes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "Chunks": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "Cite": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "Kind",
+        "Name",
+        "Format",
+        "Text",
+        "URI",
+        "Context",
+        "Bytes",
+        "Chunks",
+        "Cite"
+      ],
+      "additionalProperties": false
+    },
+    "CitationsPart": {
+      "type": "object",
+      "properties": {
+        "Kind": {
+          "const": "citations"
+        },
+        "Text": {
+          "type": "string"
+        },
+        "Citations": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Citation"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "Kind",
+        "Text",
+        "Citations"
+      ],
+      "additionalProperties": false
+    },
+    "ToolUsePart": {
+      "type": "object",
+      "properties": {
+        "Kind": {
+          "const": "tool_use"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "Input": {}
+      },
+      "required": [
+        "Kind",
+        "ID",
+        "Name",
+        "Input"
+      ],
+      "additionalProperties": false
+    },
+    "ToolResultPart": {
+      "type": "object",
+      "properties": {
+        "Kind": {
+          "const": "tool_result"
+        },
+        "ToolUseID": {
+          "type": "string"
+        },
+        "Content": {},
+        "IsError": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "Kind",
+        "ToolUseID",
+        "Content",
+        "IsError"
+      ],
+      "additionalProperties": false
+    },
+    "CacheCheckpointPart": {
+      "type": "object",
+      "properties": {
+        "Kind": {
+          "const": "cache_checkpoint"
+        }
+      },
+      "required": [
+        "Kind"
+      ],
+      "additionalProperties": false
+    },
+    "Part": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/TextPart"
+        },
+        {
+          "$ref": "#/$defs/ThinkingPart"
+        },
+        {
+          "$ref": "#/$defs/ImagePart"
+        },
+        {
+          "$ref": "#/$defs/DocumentPart"
+        },
+        {
+          "$ref": "#/$defs/CitationsPart"
+        },
+        {
+          "$ref": "#/$defs/ToolUsePart"
+        },
+        {
+          "$ref": "#/$defs/ToolResultPart"
+        },
+        {
+          "$ref": "#/$defs/CacheCheckpointPart"
+        }
+      ]
+    },
+    "Citation": {
+      "type": "object",
+      "properties": {
+        "Title": {
+          "type": "string"
+        },
+        "Source": {
+          "type": "string"
+        },
+        "Location": {
+          "$ref": "#/$defs/CitationLocation"
+        },
+        "SourceContent": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "Title",
+        "Source",
+        "Location",
+        "SourceContent"
+      ],
+      "additionalProperties": false
+    },
+    "CitationLocation": {
+      "type": "object",
+      "properties": {
+        "DocumentChar": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DocumentCharLocation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "DocumentChunk": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DocumentChunkLocation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "DocumentPage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DocumentPageLocation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "DocumentChar",
+        "DocumentChunk",
+        "DocumentPage"
+      ],
+      "additionalProperties": false
+    },
+    "DocumentCharLocation": {
+      "type": "object",
+      "properties": {
+        "DocumentIndex": {
+          "type": "integer"
+        },
+        "Start": {
+          "type": "integer"
+        },
+        "End": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "DocumentIndex",
+        "Start",
+        "End"
+      ],
+      "additionalProperties": false
+    },
+    "DocumentChunkLocation": {
+      "type": "object",
+      "properties": {
+        "DocumentIndex": {
+          "type": "integer"
+        },
+        "Start": {
+          "type": "integer"
+        },
+        "End": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "DocumentIndex",
+        "Start",
+        "End"
+      ],
+      "additionalProperties": false
+    },
+    "DocumentPageLocation": {
+      "type": "object",
+      "properties": {
+        "DocumentIndex": {
+          "type": "integer"
+        },
+        "Start": {
+          "type": "integer"
+        },
+        "End": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "DocumentIndex",
+        "Start",
+        "End"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

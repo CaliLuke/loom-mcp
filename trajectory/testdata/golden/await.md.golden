@@ -1,0 +1,101 @@
+- Run: await-run
+- Session: session
+- Agent: agent
+- Status: success (unverified)
+- Step 1
+  - Await: await_clarification (observed, unverified)
+    - Timestamp: 1970-01-01T00:00:01Z
+    - Payload:
+
+      ```json
+      {"ID":"clarify","MissingFields":["city"],"Question":"Which café?\nChoose one."}
+      ```
+    - ID: clarify
+    - Question:
+
+      ```
+      Which café?
+      Choose one.
+      ```
+- Step 2
+  - Await: await_questions (observed, unverified)
+    - Timestamp: 1970-01-01T00:00:02Z
+    - Payload:
+
+      ```json
+      {"ID":"questions","Questions":[{"ID":"color","Options":[{"ID":"blue","Label":"Blue"}],"Prompt":"Which color?"}],"Title":"Preferences"}
+      ```
+    - ID: questions
+    - Title: Preferences
+    - Question color: Which color?
+- Step 3
+  - Await: await_typed_input (observed, unverified)
+    - Timestamp: 1970-01-01T00:00:03Z
+    - Payload:
+
+      ```json
+      {"ID":"typed","Schema":{"type":"object"},"Title":"Enter details"}
+      ```
+    - ID: typed
+    - Title: Enter details
+- Step 4
+  - Await: await_confirmation (observed, unverified)
+    - Timestamp: 1970-01-01T00:00:04Z
+    - Payload:
+
+      ```json
+      {"ID":"confirm","Prompt":"Proceed?\nThis writes data.","Title":"Confirm action","ToolCallID":"write"}
+      ```
+    - ID: confirm
+    - Title: Confirm action
+    - Prompt:
+
+      ```
+      Proceed?
+      This writes data.
+      ```
+- Step 5
+  - Await: await_external_tools (observed, unverified)
+    - Timestamp: 1970-01-01T00:00:05Z
+    - Payload:
+
+      ```json
+      {"ID":"external","Items":[{"Payload":{"id":9007199254740993},"ToolCallID":"fetch","ToolName":"external.fetch"}]}
+      ```
+    - ID: external
+- Step 6
+  - Answer: clarification
+    - Input ID:
+    - Content:
+
+      ```json
+      "The café in Paris"
+      ```
+  - Answer: typed_input
+    - Input ID: typed
+    - Content:
+
+      ```json
+      {"a":1.2300,"z":9007199254740993}
+      ```
+  - Answer: tool_authorization (observed, unverified)
+    - Timestamp: 1970-01-01T00:00:07Z
+    - Payload:
+
+      ```json
+      {"Approved":true,"ID":"confirm"}
+      ```
+- Totals:
+  - Model calls: 0 (adopted: 0)
+  - Model calls by class:
+
+    ```json
+    {}
+    ```
+  - Tokens by model:
+
+    ```json
+    {}
+    ```
+  - Tool calls: 0 (failed: 0, repeated: 0)
+  - Wall time: 0s

@@ -1041,8 +1041,107 @@ totals, so dropping them leaves totals unchanged. Each child has its own totals.
 
 `trajectory.Session` is a caller-ordered list of trajectories. Both trajectory
 and session `Marshal` methods produce deterministic JSON with nanosecond
-durations and sorted object keys. Rendering and the documented JSON schema are
-separate surfaces.
+durations and sorted object keys.
+
+#### Rendering trajectories
+
+`Trajectory.Render` and `Session.Render` return text or Markdown without reading
+stores or changing the evidence. A session retains its caller-supplied run order.
+The zero `Format` renders text; use `FormatMarkdown` for nested lists and fenced
+JSON. Children appear below their owning tool, with two additional spaces in
+text. Steps remain in slice order, grouped by planner step number. Each run ends
+with its own totals, whose map keys are sorted.
+
+```go
+text := tr.Render(trajectory.RenderOptions{
+    Format: trajectory.FormatText,
+    Limits: trajectory.DefaultLimits(),
+})
+markdown := trajectory.Session{tr}.Render(trajectory.RenderOptions{
+    Format: trajectory.FormatMarkdown,
+    Limits: trajectory.DefaultLimits(),
+})
+```
+
+`Limits` has independent `MaxValueBytes`, `MaxSteps` and `MaxDepth` fields.
+`DefaultLimits()` returns 4096 bytes per value, 200 steps per run and child depth
+4. Each zero field means unlimited; defaults apply only when explicitly supplied.
+The root has depth zero. Value limits count the compact JSON or quoted text bytes
+(including quotes), or the readable text bytes for prompts and final text parts.
+Cuts move back to a UTF-8 boundary. Every omission is visible:
+
+- `…[truncated: 2048 of 5242880 bytes]` reports retained and original value bytes.
+- `[37 more steps omitted]` counts omitted slice elements in that run.
+- `[child run child-5 omitted: depth limit 4]` identifies an omitted child.
+
+There is no total rendering budget. Render limits never truncate JSON documents.
+JSON values are compact and key-sorted, preserving exact numeric tokens; non-JSON
+bytes render as quoted text. Markdown fences exceed the longest backtick run
+inside their value. Multiline or backtick-containing readable text also uses
+fenced blocks to preserve Markdown list structure. Observations include their
+UTC RFC3339Nano timestamps and generic JSON payloads. Thinking text and await prompts also appear as readable
+text. Unverified status carries `(unverified)`; every unverified step carries
+`(observed, unverified)`. Verified values have no such marker. Final text parts
+are readable text; other final parts render as `[<kind> part]`. Rendered durations
+use `time.Duration.String()`, hashes render as `sha256:<first 12 hex digits>`, and
+lines have no trailing whitespace. Rendering has no clock or locale dependency.
+Render methods intentionally fail fast: nil trajectories, nil elements in
+`Session` or `Children`, and unsupported final message `Part` types panic.
+
+#### Versioned trajectory JSON
+
+`EncodeDocument(tr)` and `EncodeSessionDocument(session)` use `callrecord.Encode`
+to wrap the existing `Marshal` representation in `Document`. The envelope has
+`schema: "loom.trajectory.v1"` and exactly one of `trajectory` or `session`.
+A nil trajectory or nil session is rejected; a non-nil empty session encodes as
+`[]`. There is no document decoder. `Schema()` returns an owned copy of the
+embedded JSON Schema 2020-12 at
+[`trajectory/schema/trajectory.v1.schema.json`](../trajectory/schema/trajectory.v1.schema.json).
+`SchemaVersion` is the envelope version, independent of run-record and workflow
+protocol versions. An added optional field stays v1; removal, rename, type changes
+or changes in meaning require v2.
+
+```go
+data, err := trajectory.EncodeDocument(tr)
+if err != nil {
+    return err
+}
+```
+
+The field reference below uses the exact JSON spelling. Trajectory-owned names
+are snake case; embedded runtime types retain their existing uppercase names.
+All durations in documents are integer **nanoseconds**, including `latency`,
+`duration`, `wall_time` and `count_latency`. Hashes are full `sha256:<64 hex>`
+content hashes, or empty when absent; only human-readable rendering shortens them.
+Raw JSON fields retain number tokens above 2^53, decimals such as `1.2300`, and
+exponents such as `1e+09`. Consumers must avoid decoding these through float64
+when preserving the evidence.
+
+| Object | Fields and meaning |
+| --- | --- |
+| `Document` | `schema`: version identifier; `trajectory`: one run; `session`: array in caller order. Exactly one member is present. |
+| `Trajectory` | `run_id`, `session_id`, `agent_id`: identities; `steps`: causal slice; `final`: model message or null; `status`: observed terminal status; `status_verified`: observer trust; `totals`: run-local recorded counts. |
+| `Step` | `kind`: `model`, `tool`, `await`, `answer` or `event`; `step`: planner schedule number; optional `entry_id`: index entry identity; `verified`: evidence trust; exactly one populated `model`, `tool`, `event` or `answer` member. |
+| `ModelStep` | `key`: `RunID`, `Seq`, `Attempt`; `class`: `adopted`, `abandoned` or `incomplete`; `activity`: `planner` or `summarize`; `step`: recorded planner number; `model`, `model_id`: provider and registration identity; `usage`: token counts; `latency`: duration; optional `error`: `kind`, `message`; optional `facts`: request measurements; `chosen`: tool calls; `system_hash`, `tools_hash`, `request_digest`: full request provenance; `prompts`: prompt refs. |
+| `TokenUsage` | `Model`, `ModelClass`: attribution; `InputTokens`, `OutputTokens`, `TotalTokens`, `CacheReadTokens`, `CacheWriteTokens`: disjoint normalized token counts. |
+| `RequestFacts` | `call`: call key; `model`: resolved identity; `context_window`, `output_reserve`, `input_tokens`, `text_bytes`, `fixed_bytes`, `non_text`: measurements; `view_bearing`: transcript-view inclusion; `count_latency`: counting duration; `outcome`: measurement outcome. |
+| Chosen tool call / prompt ref | Tool call: `Name`, `ID`, `Payload` (raw JSON). Prompt ref: `ID`, `Version`. |
+| `ToolStep` | `name`, `tool_call_id`, optional `parent_tool_call_id`: call identity; `arguments`: original JSON before injection; `result`: complete JSON or null if absent; optional `bounds`, `error`: stored metadata; `duration`: execution duration; `children`: linked trajectories in canonical link order. |
+| Bounds / structured tool error | Bounds: `Returned`, nullable `Total`, `Truncated`, nullable `NextCursor`, `RefinementHint`. Error: `Message`, optional `kind`, nullable recursive `Cause`. |
+| `ObservedEvent` | `type`: event kind; `event_key`: durable identity; `timestamp`: RFC3339 timestamp; `payload`: complete generic JSON. Trust lives on its containing step. |
+| `AnswerStep` | `kind`: `clarification` or `typed_input`; optional `input_id`: await correlation; `content`: readable JSON string for clarification text, or any exact JSON value for typed input. Never base64. |
+| `Totals` | `tokens_by_model`, `model_calls_by_class`: sorted maps; `model_calls`, `adopted_model_calls`, `tool_calls`, `failed_tool_calls`, `repeated_tool_calls`: run-local counts; `wall_time`: record-event interval. Children are excluded. |
+| Final message | `Role`, `Parts`, `Meta`: existing model wire representation, including nullable parts and metadata. Each part has a `Kind` discriminator. |
+| Final part variants | `text`: `Text`; `thinking`: `Text`, `Signature`, `Redacted`, `Index`, `Final`; `image`: `Format`, `Bytes`; `document`: `Name`, `Format`, `Bytes`, `Text`, `Chunks`, `URI`, `Context`, `Cite`; `citations`: `Text`, `Citations`; `tool_use`: `ID`, `Name`, `Input`; `tool_result`: `ToolUseID`, `Content`, `IsError`; `cache_checkpoint`: no other fields. Binary model-part bytes use the existing base64 wire encoding. |
+| Citation / location | Citation: `Title`, `Source`, `Location`, `SourceContent`. Location has nullable `DocumentChar`, `DocumentChunk`, `DocumentPage`, each with `DocumentIndex`, `Start`, `End`. |
+
+`model` steps populate `Model`; `tool` steps populate `Tool`; `await` and `event`
+steps populate `Event`. `answer` steps populate either `Answer` for stored
+clarification/typed input or `Event` for observed tool authorization. Await event
+types are the five `await_*` kinds. A step cannot populate multiple members.
+`Verified` describes the evidence boundary, not whether a model or tool succeeded:
+abandoned and incomplete recorded calls are still verified. BeforeEvent makes
+observations unverified, while recorded calls, results and answers remain verified.
 
 ### Run-log result references and upgrade
 
