@@ -15,6 +15,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runrecord"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/checkpoint"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -181,10 +182,20 @@ func TestEventsPaginateAndKeepLatestHead(t *testing.T) {
 func TestReadOrphanCallViewAndCheckpoint(t *testing.T) {
 	f := newRecordFixture()
 	canonical := f.segment(t, "", []index.MessageEntry{{ID: 1, Kind: index.Message, Hash: f.put(t, textMessage("canonical"))}})
-	orphan := f.segment(t, "", []index.MessageEntry{{ID: 1, Kind: index.Message, Hash: f.put(t, textMessage("orphan view"))}})
-	checkpoint := f.put(t, index.CheckpointRecord{SummaryRun: "run"})
-	view := index.ViewRef{IndexHead: orphan, Checkpoint: &checkpoint}
-	messages := []*model.Message{textMessage("orphan view")}
+	assistant := &model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "orphan answer"}}}
+	orphan := f.segment(t, "", []index.MessageEntry{
+		{ID: 1, Kind: index.Message, Role: model.ConversationRoleUser, Hash: f.put(t, textMessage("orphan prefix"))},
+		{ID: 2, Kind: index.Message, Role: model.ConversationRoleAssistant, Hash: f.put(t, assistant)},
+		{ID: 3, Kind: index.Message, Role: model.ConversationRoleUser, Hash: f.put(t, textMessage("orphan tail"))},
+		{ID: 4, Kind: index.Message, Role: model.ConversationRoleAssistant, Hash: f.put(t, assistant)},
+	})
+	source := func(ctx context.Context, h runstore.Hash) ([]byte, error) { return f.store.Get(ctx, "root", h) }
+	entries, err := index.Walk(t.Context(), source, orphan)
+	require.NoError(t, err)
+	hash := f.put(t, index.CheckpointRecord{SummaryRun: "run", Through: 3, Chain: entries[2].Chain, Receipt: []index.ReceiptLine{{Kind: "assistant", From: 2, Through: 2, Text: "orphan answer"}}})
+	view := index.ViewRef{IndexHead: orphan, Checkpoint: &hash, TailFrom: 4, Budget: index.RenderBudget{KeepUserTokens: 100, MaxSummaryTokens: 100, ReceiptTokens: 100, FramingTokens: 200}}
+	messages, err := checkpoint.Project(t.Context(), source, entries, view)
+	require.NoError(t, err)
 	parts, _, err := callrecord.BuildRequest(t.Context(), f.store, "root", &model.Request{Messages: messages}, view, messages)
 	require.NoError(t, err)
 	key := runstore.CallKey{RunID: "run", Seq: 1, Attempt: 1}
@@ -197,7 +208,7 @@ func TestReadOrphanCallViewAndCheckpoint(t *testing.T) {
 	assert.Equal(t, []*model.Message{textMessage("canonical")}, record.Runs[0].Transcript)
 	assert.Equal(t, messages, record.Runs[0].Calls[0].Request.Messages)
 	require.Len(t, record.Runs[0].Checkpoints, 1)
-	assert.Equal(t, checkpoint, record.Runs[0].Checkpoints[0].Hash)
+	assert.Equal(t, hash, record.Runs[0].Checkpoints[0].Hash)
 }
 
 func TestCheckpointCycleFails(t *testing.T) {

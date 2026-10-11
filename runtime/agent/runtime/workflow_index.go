@@ -6,6 +6,9 @@ import (
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/compaction"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextmeasure"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
@@ -28,6 +31,14 @@ type workflowPlanInput struct {
 	step                   int
 	requestGrowthPublished bool
 	producingCall          *runstore.CallKey
+	transcriptSize         contextmeasure.MessageSize
+	compactionView         index.ViewRef
+	checkpointBytes        int
+	compaction             *ContextCompaction
+	compactionState        compaction.State
+	compactionDecision     compaction.Decision
+	compactionFlags        compaction.Flags
+	compactionSuppressed   bool
 }
 
 func workflowText(ctx context.Context, text string) (index.TextParameter, error) {
@@ -49,6 +60,9 @@ func planToolFilter(input *RunInput) api.PlanToolFilter {
 }
 
 func (b *workflowPlanInput) appendEntry(entry index.MessageEntry) error {
+	if err := b.measureStructuralEntry(&entry, b.content); err != nil {
+		return err
+	}
 	entry.ID = index.MessageID(len(b.Entries) + 1)
 	var prev runstore.Hash
 	if len(b.Entries) > 0 {
@@ -64,12 +78,17 @@ func (b *workflowPlanInput) appendEntry(entry index.MessageEntry) error {
 }
 
 func (b *workflowPlanInput) view() index.ViewRef {
-	return index.ViewRef{IndexHead: b.IndexHead, Pending: append([]index.MessageEntry(nil), b.Entries[b.Committed:]...)}
+	view := b.compactionView
+	view.IndexHead = b.IndexHead
+	view.Pending = append([]index.MessageEntry(nil), b.Entries[b.Committed:]...)
+	view.Pinned = append([]index.MessageID(nil), view.Pinned...)
+	return view
 }
 
 func (b *workflowPlanInput) adopt(out *PlanActivityOutput) {
 	b.adoptHead(out.IndexHead)
 	b.producingCall = out.ProducingCall
+	b.transcriptSize = out.TranscriptSize
 	b.CallRefs = make(map[string]runstore.Hash)
 	if out.Result != nil {
 		for i, call := range out.Result.ToolCalls {
@@ -94,14 +113,26 @@ func (b *workflowPlanInput) recordAssistant(ref runstore.Hash, calls []planner.T
 	if ref == "" && len(calls) == 0 {
 		return nil
 	}
-	entry := index.MessageEntry{Kind: index.Assistant, Hash: ref, Call: b.producingCall}
+	entry := index.MessageEntry{Kind: index.Assistant, Hash: ref, Call: b.producingCall, Role: model.ConversationRoleAssistant}
+	if ref != "" {
+		entry.Bytes, entry.NonText = b.transcriptSize.Bytes, b.transcriptSize.NonText
+	}
+	var parts []model.Part
 	for _, call := range calls {
 		hash := b.CallRefs[call.ToolCallID]
 		if hash == "" {
 			return fmt.Errorf("missing stored call %s", call.ToolCallID)
 		}
 		entry.Calls = append(entry.Calls, hash)
+		entry.ToolUseIDs = append(entry.ToolUseIDs, call.ToolCallID)
+		parts = append(parts, model.ToolUsePart{ID: call.ToolCallID, Name: string(call.Name), Input: call.Payload})
 	}
+	size, err := contextmeasure.MeasureMessages([]*model.Message{{Role: model.ConversationRoleAssistant, Parts: parts}})
+	if err != nil {
+		return err
+	}
+	entry.Bytes += size.Bytes
+	entry.NonText += size.NonText
 	if err := b.appendEntry(entry); err != nil {
 		return err
 	}

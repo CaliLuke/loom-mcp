@@ -73,6 +73,9 @@ func (r *Runtime) ExecuteWorkflow(wfCtx engine.WorkflowContext, input *RunInput)
 		return nil, err
 	}
 	protocolVersion := input.WorkflowProtocolVersion
+	settings := cloneCompaction(input.ContextCompaction)
+	agentSettings := cloneCompactionOptions(input.CompactionAgents)
+	wfCtx = compactionWorkflowContext{WorkflowContext: wfCtx, settings: agentSettings}
 	input, err = r.prepareEffectiveRunInput(wfCtx.Context(), reg, input, runCtx)
 	if err != nil {
 		return nil, err
@@ -82,7 +85,7 @@ func (r *Runtime) ExecuteWorkflow(wfCtx engine.WorkflowContext, input *RunInput)
 	}
 	runCtx = workflowRunContext(input)
 	defer r.cleanupWorkflowRun(input.RunID)
-	planInput := &workflowPlanInput{AgentID: input.AgentID, RunContext: runCtx, protocolVersion: protocolVersion}
+	planInput := &workflowPlanInput{AgentID: input.AgentID, RunContext: runCtx, protocolVersion: protocolVersion, compaction: settings}
 	finalStatus := runStatusSuccess
 	var finalErr error
 	defer r.finishWorkflowExecution(wfCtx, input, planInput, runCtx, turnID, &out, &retErr, &finalStatus, &finalErr)
@@ -271,6 +274,9 @@ func (r *Runtime) setupWorkflowExecution(
 	reg, ok := r.agentByID(input.AgentID)
 	if !ok {
 		return AgentRegistration{}, nil, run.Context{}, "", fmt.Errorf("agent %q is not registered", input.AgentID)
+	}
+	if input.ContextCompaction != nil && reg.Policy.History != nil {
+		return AgentRegistration{}, nil, run.Context{}, "", fmt.Errorf("%w: context compaction cannot be combined with HistoryPolicy", ErrInvalidConfig)
 	}
 	r.logger.Info(wfCtx.Context(), "Agent found, executing plan activity", "agent_id", input.AgentID)
 	return reg, interrupt.NewController(wfCtx), workflowRunContext(input), input.TurnID, nil

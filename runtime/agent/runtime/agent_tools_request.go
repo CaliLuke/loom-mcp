@@ -52,7 +52,7 @@ func (r *Runtime) executeValidatedAgentChild(ctx context.Context, wfCtx engine.W
 	if err := r.admitAgentChild(wfCtx, *call, nestedRunCtx, cfg.AgentID); err != nil {
 		return nil, err
 	}
-	outPtr, err := r.executeReservedAgentChild(wfCtx, cfg.Route, messages, nestedRunCtx)
+	outPtr, err := r.executeReservedAgentChild(wfCtx, cfg.Route, messages, nestedRunCtx, ctx)
 	if err != nil {
 		return nil, fmt.Errorf("execute agent: %w", err)
 	}

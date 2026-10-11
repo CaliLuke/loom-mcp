@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextmeasure"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	engineinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine/inmem"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
@@ -77,10 +78,10 @@ func TestContentSignalsRecordBeforeDelivery(t *testing.T) {
 						msg := contentMessage("resume")
 						want, err = json.Marshal(msg)
 						require.NoError(t, err)
-						err = rt.ResumeRun(t.Context(), &api.ResumeRequest{RunID: runID, Messages: []*model.Message{msg}})
+						err = rt.ResumeRun(t.Context(), &api.ResumeRequest{RunID: runID, Messages: []*model.Message{msg}, MessageSizes: []contextmeasure.MessageSize{{Bytes: 999, NonText: 999, Role: model.ConversationRoleSystem}}})
 					case "clarification":
 						want = []byte("answer")
-						err = rt.ProvideClarification(t.Context(), &api.ClarificationAnswer{RunID: runID, Answer: "answer"})
+						err = rt.ProvideClarification(t.Context(), &api.ClarificationAnswer{RunID: runID, Answer: "answer", AnswerBytes: new(999)})
 					case "tools":
 						want = []byte(`{"ok":true}`)
 						err = rt.ProvideToolResults(t.Context(), &api.ToolResultsSet{RunID: runID, Results: []*api.ProvidedToolResult{{Name: "test.tool", Result: rawjson.Message(want)}}})
@@ -112,9 +113,11 @@ func TestContentSignalsRecordBeforeDelivery(t *testing.T) {
 					switch v := value.(type) {
 					case *api.ResumeRequest:
 						assert.Empty(t, v.Messages)
+						assert.Equal(t, []contextmeasure.MessageSize{{Bytes: 6, Role: model.ConversationRoleUser}}, v.MessageSizes)
 						assert.Equal(t, []runstore.Hash{writes[0].hash}, v.MessageRefs)
 					case *api.ClarificationAnswer:
 						assert.Empty(t, v.Answer)
+						assert.Equal(t, new(6), v.AnswerBytes)
 						assert.Equal(t, writes[0].hash, v.AnswerRef)
 					case *api.ToolResultsSet:
 						assert.Empty(t, v.Results[0].Result)

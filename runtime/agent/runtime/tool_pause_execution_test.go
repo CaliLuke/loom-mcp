@@ -257,7 +257,7 @@ func TestRunLoopBudgetedToolPauseRecordsResultBeforeUserAnswer(t *testing.T) {
 	}
 	wfCtx.ensureSignals()
 	ctrl := interrupt.NewController(wfCtx)
-	wfCtx.clarifyCh <- &api.ClarificationAnswer{ID: "clar-1", AnswerRef: testPutBytes(t, rt, "run-1", []byte("Compressor 1"))}
+	wfCtx.clarifyCh <- &api.ClarificationAnswer{ID: "clar-1", AnswerRef: testPutBytes(t, rt, "run-1", []byte("Compressor 1")), AnswerBytes: new(len("Compressor 1"))}
 
 	input := &RunInput{RootRunID: "run-1",
 		AgentID:   agent.Ident("svc.agent"),

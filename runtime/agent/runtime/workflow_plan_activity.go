@@ -19,6 +19,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 )
 
 type planActivityPublication func(*PlanActivityOutput) (hooks.Event, error)
@@ -235,6 +236,7 @@ func (r *Runtime) runPlanActivity(
 		return nil, errors.New("plan activity not registered")
 	}
 	input.Step = base.step + 1
+	prepareCompaction(base, &input)
 	if err := enforcePlanActivityInputBudget(input); err != nil {
 		return nil, err
 	}
@@ -249,6 +251,9 @@ func (r *Runtime) runPlanActivity(
 		return nil, err
 	}
 	if err := validatePlanActivityOutput(out, input); err != nil {
+		return nil, err
+	}
+	if err := validateCompactionFacts(base, out); err != nil {
 		return nil, err
 	}
 	// Workflow input owns policy, cap, and attempt state. Activity output carries
@@ -295,6 +300,7 @@ func (r *Runtime) runPlanActivityRecovering(
 			return out, errRecoveryTurnCapExceeded
 		}
 		advanceRecoveryPlanInput(&input, out, *caps, nextAttempt)
+		input.View = base.view()
 		if err := enforcePlanActivityInputBudget(input); err != nil {
 			return nil, err
 		}
@@ -344,26 +350,20 @@ func (r *Runtime) publishPlannerNotes(ctx context.Context, base *workflowPlanInp
 
 // commitPlanActivityOutput records adoption before the loop consumes an output.
 func (r *Runtime) commitPlanActivityOutput(wfCtx engine.WorkflowContext, base *workflowPlanInput, input PlanActivityInput, out *PlanActivityOutput, following ...planActivityPublication) error {
-	view := input.View
-	view.IndexHead, view.Pending = out.IndexHead, nil
-	event := hooks.NewPlannerStepEvent(input.RunID, input.AgentID, input.RunContext.SessionID, input.Step, view, out.CallKeys, base.protocolVersion, wfCtx.Now())
-	var next hooks.Event
-	var err error
-	if len(following) > 0 {
-		next, err = following[0](out)
-		if err != nil {
-			return fmt.Errorf("prepare planner publication: %w", err)
-		}
-	}
-	if next != nil {
-		err = r.publishWorkflowHookBatch(wfCtx, input.RunContext.TurnID, event, next)
-	} else {
-		err = r.publishHook(wfCtx.Context(), event, input.RunContext.TurnID)
-	}
-	if err != nil {
-		return fmt.Errorf("commit planner step: %w", err)
+	view, event := plannerAdoptionEvent(wfCtx, base, input, out)
+	if err := r.publishPlanAdoption(wfCtx, base, input, out, view, event, following); err != nil {
+		return err
 	}
 	base.adoptHead(out.IndexHead)
+	if out.Recovery == nil {
+		base.compactionView = view
+		if out.View != nil {
+			base.checkpointBytes = out.View.CheckpointBytes
+		}
+	}
+	if err := r.adoptCompaction(wfCtx, base, input, out, view); err != nil {
+		return err
+	}
 	if out.RequestGrowth != nil && !base.requestGrowthPublished {
 		growth := out.RequestGrowth
 		event := hooks.NewContextRequestGrowthEvent(input.RunID, input.AgentID, input.RunContext.SessionID, growth.Key, growth.Inside, growth.Outside)
@@ -373,6 +373,72 @@ func (r *Runtime) commitPlanActivityOutput(wfCtx engine.WorkflowContext, base *w
 			return fmt.Errorf("publish request growth: %w", err)
 		}
 		base.requestGrowthPublished = true
+	}
+	return nil
+}
+
+// validateCompactionFacts enforces the one-fact-per-adopted-key boundary.
+func validateCompactionFacts(base *workflowPlanInput, out *PlanActivityOutput) error {
+	if base.compaction != nil {
+		if len(out.Facts) != len(out.CallKeys) {
+			return fmt.Errorf("planner facts must parallel CallKeys")
+		}
+		for i, key := range out.CallKeys {
+			if out.Facts[i].Call != key {
+				return fmt.Errorf("planner fact %d does not match adopted CallKey", i)
+			}
+		}
+	}
+	return nil
+}
+
+// plannerAdoptionEvent qualifies the loader measurement and stamped settings by the committed view.
+func plannerAdoptionEvent(wfCtx engine.WorkflowContext, base *workflowPlanInput, input PlanActivityInput, out *PlanActivityOutput) (index.ViewRef, *hooks.PlannerStepEvent) {
+	view := input.View
+	if out.CallView != nil {
+		view = *out.CallView
+	}
+	view.IndexHead, view.Pending = out.IndexHead, nil
+	if out.Recovery == nil && out.View != nil {
+		view.Checkpoint = new(out.View.Checkpoint)
+		view.Pinned = append([]index.MessageID(nil), out.View.Pinned...)
+	}
+	event := hooks.NewPlannerStepEvent(input.RunID, input.AgentID, input.RunContext.SessionID, input.Step, view, out.CallKeys, base.protocolVersion, wfCtx.Now())
+	event.Recovery, event.Recovering = out.Recovery != nil, input.Recovery != nil
+	if base.compaction != nil {
+		settings := pureCompactionSettings(base.compaction)
+		event.CompactionSettings = &settings
+		event.KeepResultTools = cloneToolIdents(base.compaction.KeepResultTools)
+	}
+	if out.Recovery == nil && out.View != nil {
+		event.CheckpointBytes = out.View.CheckpointBytes
+	}
+	return view, event
+}
+
+func (r *Runtime) publishPlanAdoption(wfCtx engine.WorkflowContext, base *workflowPlanInput, input PlanActivityInput, out *PlanActivityOutput, view index.ViewRef, event *hooks.PlannerStepEvent, following []planActivityPublication) error {
+	var next hooks.Event
+	var err error
+	if len(following) > 0 {
+		next, err = following[0](out)
+		if err != nil {
+			return fmt.Errorf("prepare planner publication: %w", err)
+		}
+	}
+	publications := []hooks.Event{event}
+	if compacted := compactionRecord(wfCtx, base, input, out, view); compacted != nil {
+		publications = append(publications, compacted)
+	}
+	if next != nil {
+		publications = append(publications, next)
+	}
+	if len(publications) > 1 {
+		err = r.publishWorkflowHookBatch(wfCtx, input.RunContext.TurnID, publications...)
+	} else {
+		err = r.publishHook(wfCtx.Context(), event, input.RunContext.TurnID)
+	}
+	if err != nil {
+		return fmt.Errorf("commit planner step: %w", err)
 	}
 	return nil
 }

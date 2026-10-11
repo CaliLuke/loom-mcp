@@ -8,25 +8,39 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/checkpoint"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 )
 
 type runViewCache struct {
-	mu       sync.Mutex
-	recency  *list.Element // Protected by Runtime.viewMu, independent of active loads.
-	segments map[runstore.Hash]index.IndexSegment
-	head     runstore.Hash
-	chain    runstore.Hash
-	count    index.MessageID
-	renderer index.Renderer
-	outputs  []*planner.ToolOutput
-	typed    []planner.TypedInputOutput
+	mu                sync.Mutex
+	recency           *list.Element // Protected by Runtime.viewMu, independent of active loads.
+	segments          map[runstore.Hash]index.IndexSegment
+	head              runstore.Hash
+	chain             runstore.Hash
+	count             index.MessageID
+	renderer          index.Renderer
+	outputs           []*planner.ToolOutput
+	typed             []planner.TypedInputOutput
+	entries           []index.MessageEntry
+	rendered          int
+	tailKey           tailCacheKey
+	tailMessages      []*model.Message
+	systemMessages    []*model.Message
+	checkpointKey     checkpointCacheKey
+	checkpointMessage *model.Message
+	checkpointInput   checkpoint.Input
+	checkpointHash    runstore.Hash
+	pinBudget         index.RenderBudget
+	selectedPins      []index.MessageID
 }
 
 type loadedView struct {
+	View     *api.ViewUpdate
 	Head     runstore.Hash
 	Messages []*model.Message
 	Outputs  []*planner.ToolOutput
@@ -55,14 +69,14 @@ func (r *Runtime) loadView(ctx context.Context, root, runID string, view index.V
 		cache.reset()
 		return nil, err
 	}
-	messages, err := cache.renderer.Messages()
+	messages, update, err := cache.renderView(ctx, r.RunStore, root, source, view)
 	if err != nil {
 		return nil, err
 	}
 	// Reference projections are immutable, shared worker-cache views. Full
 	// slice expressions prevent append from overwriting a later cached entry.
 	// Deriving these slices does no work proportional to earlier steps.
-	return &loadedView{Head: head, Messages: messages, Outputs: cache.outputs[:len(cache.outputs):len(cache.outputs)], Typed: cache.typed[:len(cache.typed):len(cache.typed)]}, nil
+	return &loadedView{View: update, Head: head, Messages: messages, Outputs: cache.outputs[:len(cache.outputs):len(cache.outputs)], Typed: cache.typed[:len(cache.typed):len(cache.typed)]}, nil
 }
 
 // viewCache acquires a run's cache and updates bounded LRU membership under viewMu.
@@ -178,13 +192,24 @@ func (c *runViewCache) appendEntries(ctx context.Context, source index.Source, e
 		}
 		c.count, c.chain = entry.ID, chain
 	}
-	return c.renderer.Append(ctx, entries, source)
+	c.entries = append(c.entries, entries...)
+	return nil
 }
 
 func (c *runViewCache) reset() {
 	c.head, c.chain, c.count = "", "", 0
 	c.renderer = index.Renderer{}
 	c.outputs, c.typed = nil, nil
+	c.entries = nil
+	c.rendered = 0
+	c.tailMessages, c.systemMessages = nil, nil
+	c.tailKey = tailCacheKey{}
+	c.checkpointKey = checkpointCacheKey{}
+	c.checkpointMessage = nil
+	c.checkpointHash = ""
+	c.checkpointInput = checkpoint.Input{}
+	c.pinBudget = index.RenderBudget{}
+	c.selectedPins = nil
 }
 
 // commitPending validates lineage before publishing any newly stored head.

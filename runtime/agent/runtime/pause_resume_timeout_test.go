@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextmeasure"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/interrupt"
@@ -128,7 +129,8 @@ func TestMissingFieldsClarificationAwaitResumesWhenProvided(t *testing.T) {
 		},
 	}}
 	baseCtx.clarifyCh <- &api.ClarificationAnswer{
-		AnswerRef: testPutBytes(t, rt, base.RunContext.RootRunID, []byte("field=value")),
+		AnswerRef:   testPutBytes(t, rt, base.RunContext.RootRunID, []byte("field=value")),
+		AnswerBytes: new(len("field=value")),
 	}
 
 	nextAttempt := 2
@@ -176,10 +178,11 @@ func TestHandleInterruptsAppliesResumeMessages(t *testing.T) {
 		Parts: []model.Part{model.TextPart{Text: "continue please"}},
 	}
 	baseCtx.resumeCh <- &api.ResumeRequest{
-		RunID:       "run-1",
-		Notes:       "resumed_by_operator",
-		RequestedBy: "operator",
-		MessageRefs: []runstore.Hash{testPutJSON(t, rt, "test-root", resumeMsg)},
+		RunID:        "run-1",
+		Notes:        "resumed_by_operator",
+		RequestedBy:  "operator",
+		MessageRefs:  []runstore.Hash{testPutJSON(t, rt, "test-root", resumeMsg)},
+		MessageSizes: []contextmeasure.MessageSize{{Bytes: len("continue please"), Role: model.ConversationRoleUser}},
 	}
 
 	ctrl := interrupt.NewController(baseCtx)

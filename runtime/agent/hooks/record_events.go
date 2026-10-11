@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/compaction"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 )
 
@@ -14,6 +16,18 @@ type (
 	// PlannerStepEvent adopts every started call returned by one planner activity.
 	// ViewRef names the committed view used by that activity before history policy.
 	PlannerStepEvent struct {
+		// CompactionSettings is the client-stamped configuration, repeated on canonical adoption records.
+		CompactionSettings *compaction.Settings `json:"compaction_settings,omitzero"`
+		// KeepResultTools preserves the run configuration independently of worker options.
+		KeepResultTools []tools.Ident `json:"keep_result_tools,omitzero"`
+		// CheckpointBytes is the adopted rendered size, qualified by ViewRef.
+		CheckpointBytes int `json:"checkpoint_bytes,omitzero"`
+		// Recovery marks an output rejected by the model-recovery path. Its view
+		// names the calls' evidence and is not adopted as the next stable view.
+		Recovery bool `json:"recovery,omitzero"`
+		// Recovering marks an activity scheduled with correction guidance, which
+		// preserves the stable view instead of applying threshold transformations.
+		Recovering bool `json:"recovering,omitzero"`
 		baseEvent
 		// ProtocolVersion is the workflow input version validated before execution.
 		ProtocolVersion int
@@ -29,6 +43,9 @@ type (
 
 	// RunSealedEvent names the terminal transcript after pending entries commit.
 	RunSealedEvent struct {
+		// CompactionSettings and KeepResultTools are the stamped run configuration.
+		CompactionSettings *compaction.Settings `json:"compaction_settings,omitzero"`
+		KeepResultTools    []tools.Ident        `json:"keep_result_tools,omitzero"`
 		baseEvent
 		// ProtocolVersion is the workflow input version validated before execution.
 		ProtocolVersion int
@@ -108,6 +125,18 @@ func (e *ContextRequestGrowthEvent) Type() EventType {
 }
 
 func decodeRecordEvent(input *ActivityInput) (Event, bool, error) {
+	if input.Type == ContextCompacted || input.Type == ContextCompactionSkipped {
+		var p ContextCompactionEvent
+		if err := decodeHookPayload(input, &p); err != nil {
+			return nil, false, err
+		}
+		p.baseEvent = baseEvent{runID: input.RunID, agentID: input.AgentID, sessionID: input.SessionID}
+		p.kind = input.Type
+		return &p, true, nil
+	}
+	if input.Type == ContextUnmeasured || input.Type == ContextLimitsUnknown || input.Type == ContextBudgetTooSmall {
+		return &ContextDiagnosticEvent{baseEvent: baseEvent{runID: input.RunID, agentID: input.AgentID, sessionID: input.SessionID}, kind: input.Type}, true, nil
+	}
 	if input.Type == PlannerStep {
 		var p PlannerStepEvent
 		if err := decodeHookPayload(input, &p); err != nil {

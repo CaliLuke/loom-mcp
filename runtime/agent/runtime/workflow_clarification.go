@@ -116,7 +116,7 @@ func (r *Runtime) awaitMissingFieldClarification(
 	if ans.ID != "" && ans.ID != awaitID {
 		return nil, fmt.Errorf("unexpected await ID for clarification")
 	}
-	if err := appendClarificationAnswer(base, ans.AnswerRef); err != nil {
+	if err := appendClarificationAnswer(base, ans.AnswerRef, ans.AnswerBytes); err != nil {
 		return nil, err
 	}
 	if err := r.publishClarificationResumed(ctx, input, base, turnID, ans); err != nil {
@@ -176,8 +176,11 @@ func (r *Runtime) publishClarificationError(
 	), turnID)
 }
 
-func appendClarificationAnswer(base *workflowPlanInput, ref runstore.Hash) error {
-	return base.appendEntry(index.MessageEntry{Kind: index.Clarification, Hash: ref})
+func appendClarificationAnswer(base *workflowPlanInput, ref runstore.Hash, bytes *int) error {
+	if bytes == nil || *bytes < 0 {
+		return fmt.Errorf("clarification measurement is required and must be non-negative")
+	}
+	return base.appendEntry(index.MessageEntry{Kind: index.Clarification, Hash: ref, Bytes: *bytes, Role: model.ConversationRoleUser})
 }
 
 func (r *Runtime) publishClarificationResumed(

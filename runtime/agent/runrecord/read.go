@@ -4,11 +4,15 @@ import (
 	"context"
 	"encoding/json/v2"
 	"fmt"
+	"slices"
 
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/compaction"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/checkpoint"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 )
 
@@ -126,24 +130,14 @@ func (r *runReader) readEvent(event *runlog.Event) (string, error) {
 		return "", r.readStep(event)
 	}
 	if event.Type == hooks.RunSealed {
-		var seal hooks.RunSealedEvent
-		if err := json.Unmarshal(event.Payload, &seal); err != nil {
-			return "", err
-		}
-		if err := r.recordProtocolVersion(seal.ProtocolVersion); err != nil {
-			return "", err
-		}
-		r.run.Sealed = true
-		r.run.IndexHead = seal.IndexHead
-		_, err := r.render(seal.IndexHead)
-		return "", err
+		return "", r.readSeal(event)
 	}
 	if event.Type == hooks.ContextCompacted || event.Type == hooks.ContextCompactionSkipped || event.Type == hooks.ContextOverflow {
-		// Reserved record events have no K8 producer. The common adoption envelope
-		// lets a fake summarize activity exercise all returned chunk keys.
+		// The common envelope reads canonical compaction keys and retained K8
+		// exports. K12 produces an empty call_keys list.
 		var adoption struct {
-			CallKeys []runstore.CallKey
-			ViewRef  *index.ViewRef
+			CallKeys []runstore.CallKey `json:"call_keys,case:ignore"`
+			ViewRef  *index.ViewRef     `json:"view_ref,case:ignore"`
 		}
 		if err := json.Unmarshal(event.Payload, &adoption); err != nil {
 			return "", err
@@ -236,6 +230,9 @@ func (r *runReader) readStep(event *runlog.Event) error {
 	if err := r.recordProtocolVersion(step.ProtocolVersion); err != nil {
 		return err
 	}
+	if err := r.recordCompactionSettings(step.CompactionSettings, step.KeepResultTools); err != nil {
+		return err
+	}
 	if !r.run.Sealed {
 		r.run.IndexHead = step.IndexHead
 	}
@@ -256,4 +253,46 @@ func (r *runReader) recordProtocolVersion(version int) error {
 	}
 	r.run.WorkflowProtocolVersion = version
 	return nil
+}
+
+// project reconstructs the exact request view, including bounded checkpoint and cleared results.
+func (r *runReader) project(view index.ViewRef) ([]*model.Message, error) {
+	if view.Checkpoint == nil && view.TailFrom <= 1 && view.ClearedThrough == 0 {
+		return r.render(view.IndexHead)
+	}
+	source := r.owner.source(r.owner.record.RootRunID)
+	entries, err := index.Walk(r.owner.ctx, source, view.IndexHead)
+	if err != nil {
+		return nil, err
+	}
+	return checkpoint.Project(r.owner.ctx, source, entries, view)
+}
+
+func (r *runReader) recordCompactionSettings(settings *compaction.Settings, keep []tools.Ident) error {
+	if settings == nil {
+		return nil
+	}
+	if r.run.CompactionSettings != nil && (*r.run.CompactionSettings != *settings || !slices.Equal(r.run.KeepResultTools, keep)) {
+		return fmt.Errorf("conflicting recorded compaction settings")
+	}
+	r.run.CompactionSettings = settings
+	r.run.KeepResultTools = slices.Clone(keep)
+	return nil
+}
+
+func (r *runReader) readSeal(event *runlog.Event) error {
+	var seal hooks.RunSealedEvent
+	if err := json.Unmarshal(event.Payload, &seal); err != nil {
+		return err
+	}
+	if err := r.recordProtocolVersion(seal.ProtocolVersion); err != nil {
+		return err
+	}
+	if err := r.recordCompactionSettings(seal.CompactionSettings, seal.KeepResultTools); err != nil {
+		return err
+	}
+	r.run.Sealed = true
+	r.run.IndexHead = seal.IndexHead
+	_, err := r.render(seal.IndexHead)
+	return err
 }

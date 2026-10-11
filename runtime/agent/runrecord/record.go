@@ -3,9 +3,11 @@ package runrecord
 
 import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/callrecord"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/compaction"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 )
 
@@ -25,6 +27,10 @@ type (
 	}
 	// Run holds one run's transcript and evidence in canonical order.
 	Run struct {
+		// CompactionSettings contains client-stamped threshold settings from adoption records.
+		CompactionSettings *compaction.Settings `json:"compaction_settings,omitzero"`
+		// KeepResultTools contains the recorded result retention list.
+		KeepResultTools []tools.Ident `json:"keep_result_tools,omitzero"`
 		// RunID identifies this run.
 		RunID string `json:"run_id"`
 		// WorkflowProtocolVersion is the record-event stamp, or zero when no stamp exists.

@@ -9,7 +9,7 @@ func validateEntry(entry MessageEntry) error {
 	if entry.ID == 0 {
 		return fmt.Errorf("index: entry ID must be positive")
 	}
-	if entry.NonText != 0 || entry.Keep || entry.Origin != nil {
+	if entry.Origin != nil {
 		return fmt.Errorf("index: later-ticket fields must be zero")
 	}
 	switch entry.Kind {

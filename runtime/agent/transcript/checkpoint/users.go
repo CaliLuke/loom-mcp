@@ -112,11 +112,32 @@ func renderUsers(in userInput) userSection {
 
 // orderedUsers copies before sorting: rendering never changes input order.
 func orderedUsers(users []UserMessage, currentPos int) []UserMessage {
-	ordered := slices.Clone(users)
+	ordered := make([]UserMessage, 0, len(users))
+	for _, user := range users {
+		if !onlyToolResults(user.Message) {
+			ordered = append(ordered, user)
+		}
+	}
 	slices.SortStableFunc(ordered, func(a, b UserMessage) int {
 		return Compare(Key(a.ID, a.Origin, currentPos), Key(b.ID, b.Origin, currentPos))
 	})
 	return ordered
+}
+
+// onlyToolResults excludes result-only messages from the user index: the call's
+// receipt covers their content. Mixed messages retain their user-owned parts.
+func onlyToolResults(message *model.Message) bool {
+	if message == nil || len(message.Parts) == 0 {
+		return false
+	}
+	for _, part := range message.Parts {
+		switch partValue(part).(type) {
+		case model.ToolResultPart:
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // pinnedRows rechecks the first stored pin, then newest pins until one cannot fit.
@@ -154,7 +175,7 @@ func pinnedRows(in userInput, ordered []UserMessage) ([]userRow, map[OrderKey]bo
 	return rows, selected
 }
 
-// pinRow measures actual text rather than MessageEntry.Bytes (encoded JSON).
+// pinRow measures rendered text and labels rather than the entry measurement.
 func pinRow(user UserMessage, first bool, remaining int, budget index.RenderBudget, currentPos int, allowance partAllowance) (userRow, partAllowance, bool) {
 	label := Label(user.ID, user.Origin, currentPos)
 	prefix := "[" + label + "] "

@@ -23,7 +23,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type payloadMeasurement struct{ bytes, fixed, bound, entries, calls int }
+type payloadMeasurement struct {
+	bytes, fixed, bound, entries, calls, models, pins int
+	budget                                            bool
+}
 type payloadRecordingEngine struct {
 	engine.Engine
 	measurements []payloadMeasurement
@@ -59,7 +62,7 @@ func (e *payloadRecordingEngine) RegisterPlannerActivity(ctx context.Context, na
 		for _, entry := range in.View.Pending {
 			calls += len(entry.Calls)
 		}
-		e.measurements = append(e.measurements, payloadMeasurement{bytes: len(data), fixed: len(fixedData), bound: 4096 + 400*len(in.View.Pending) + 100*calls, entries: len(in.View.Pending), calls: calls})
+		e.measurements = append(e.measurements, payloadMeasurement{bytes: len(data), fixed: len(fixedData), bound: 4096 + 400*len(in.View.Pending) + 100*calls + 40*len(in.Models), entries: len(in.View.Pending), calls: calls, models: len(in.Models), pins: len(in.View.Pinned), budget: in.View.Budget.KeepUserTokens > 0})
 		m := e.measurements[len(e.measurements)-1]
 		if m.bytes > m.bound {
 			return nil, fmt.Errorf("P2 input %d exceeds bound: bytes=%d bound=%d fixed=%d entries=%d calls=%d", len(e.measurements), m.bytes, m.bound, m.fixed, m.entries, m.calls)
@@ -72,6 +75,48 @@ func (e *payloadRecordingEngine) RegisterPlannerActivity(ctx context.Context, na
 // store. make test-payload-growth (also invoked by make itest) runs the full
 // 5 GiB tool workload. The typed workload also runs with -short under race.
 func TestIndexPayloadAcceptance(t *testing.T) {
+	t.Run("compaction_on", func(t *testing.T) {
+		eng := &payloadRecordingEngine{Engine: engineinmem.New()}
+		rt := New(WithEngine(eng), WithContextCompaction("content.agent", ContextCompaction{KeepRecentTokens: 30, MinSavingTokens: 20}))
+		provider := &recordingFactsClient{recordingTestClient: &recordingTestClient{store: &recordingTestStore{Store: rt.RunStore}, response: &model.Response{Content: []model.Message{{Role: "assistant", Parts: []model.Part{model.TextPart{Text: "answer"}}}}, StopReason: "end_turn"}}, limits: model.ContextLimits{ContextWindow: 6000}, resolved: "measured"}
+		require.NoError(t, rt.RegisterModel("fake", provider))
+		spec := newAnyJSONSpec("test.small", "test")
+		require.NoError(t, rt.RegisterToolset(ToolsetRegistration{Name: "test", Specs: []tools.ToolSpec{spec}, Execute: func(_ context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
+			return Executed(&planner.ToolResult{Name: call.Name, ToolCallID: call.ToolCallID, Result: "result"}), nil
+		}}))
+		step := 0
+		plan := func(ctx context.Context, agent planner.PlannerContext, messages []*model.Message) (*planner.PlanResult, error) {
+			client, ok := agent.ModelClient("fake")
+			require.True(t, ok)
+			_, err := client.Complete(ctx, &model.Request{Model: "fake", Messages: messages})
+			if err != nil {
+				return nil, err
+			}
+			step++
+			if step == 4 {
+				return oracleFinal(), nil
+			}
+			return &planner.PlanResult{ToolCalls: []planner.ToolRequest{{Name: spec.Name, ToolCallID: fmt.Sprintf("call-%d", step), Payload: rawjson.Message(`{}`)}}}, nil
+		}
+		registerContentAgent(t, rt, &stubPlanner{start: func(ctx context.Context, in *planner.PlanInput) (*planner.PlanResult, error) {
+			return plan(ctx, in.Agent, in.Messages)
+		}, resume: func(ctx context.Context, in *planner.PlanResumeInput) (*planner.PlanResult, error) {
+			return plan(ctx, in.Agent, in.Messages)
+		}})
+		var seed []*model.Message
+		for i := 0; i < 30; i++ {
+			seed = append(seed, contentMessage(strings.Repeat("seed ", 200)), &model.Message{Role: "assistant", Parts: []model.Part{model.TextPart{Text: "answer"}}})
+		}
+		seed = append(seed, contentMessage("start"))
+		_, err := rt.MustClient("content.agent").Run(t.Context(), "session", seed, WithRunID("root"))
+		require.NoError(t, err)
+		assertPayloadMeasurements(t, eng, 4)
+		populated := false
+		for _, measurement := range eng.measurements {
+			populated = populated || (measurement.models > 0 && measurement.pins > 0 && measurement.budget)
+		}
+		assert.True(t, populated, "P2 covers Models, Pinned and Budget together")
+	})
 	t.Run("1000_steps_50_parallel_100KB_results", func(t *testing.T) {
 		if testing.Short() {
 			t.Skip("full payload acceptance: make test-payload-growth (included in make itest)")

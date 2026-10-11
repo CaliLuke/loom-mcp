@@ -222,6 +222,7 @@ func newFromOptions(opts Options) *Runtime {
 		toolSchemas:          make(map[string]map[string]any),
 		models:               make(map[string]model.Client),
 		contextLimits:        opts.ContextLimits,
+		contextCompaction:    opts.ContextCompaction,
 		runHandles:           make(map[string]engine.WorkflowHandle),
 		agentToolSpecs:       make(map[agent.Ident][]tools.ToolSpec),
 		endedStreamSessions:  make(map[string]struct{}),
@@ -241,6 +242,7 @@ func newFromOptions(opts Options) *Runtime {
 // before construction, preserving validation order and panic behavior.
 func resolveRuntimeOptions(opts Options) Options {
 	opts.ContextLimits = cloneContextLimits(opts.ContextLimits)
+	opts.ContextCompaction = cloneCompactionOptions(opts.ContextCompaction)
 	if opts.ViewCacheRuns < 0 {
 		panic("runtime: view cache runs must be greater than zero")
 	}

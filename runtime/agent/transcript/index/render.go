@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"fmt"
+	"maps"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
@@ -19,6 +20,7 @@ type Renderer struct {
 	batch    MessageID
 	parts    []model.Part
 	hidden   map[string]bool
+	cleared  map[MessageID]string
 }
 
 // Render resolves entries in order without mutating them or their content.
@@ -26,6 +28,16 @@ type Renderer struct {
 // validation and recovery corrections remain the planner activity's concern.
 func Render(ctx context.Context, entries []MessageEntry, source Source) ([]*model.Message, error) {
 	r := Renderer{ctx: ctx, source: source, hidden: make(map[string]bool)}
+	if err := r.Append(ctx, entries, source); err != nil {
+		return nil, err
+	}
+	return r.Messages()
+}
+
+// RenderTail renders a selected suffix with hidden calls inherited from its
+// prefix and precomputed cleared-result text. Neither map is mutated.
+func RenderTail(ctx context.Context, entries []MessageEntry, source Source, hidden map[string]bool, cleared map[MessageID]string) ([]*model.Message, error) {
+	r := Renderer{hidden: maps.Clone(hidden), cleared: cleared}
 	if err := r.Append(ctx, entries, source); err != nil {
 		return nil, err
 	}
@@ -155,19 +167,33 @@ func (r *Renderer) appendResult(entry MessageEntry, inline []byte) error {
 		delete(r.hidden, id)
 		return nil
 	}
+	if text, ok := r.cleared[entry.ID]; ok {
+		r.parts = append(r.parts, model.ToolResultPart{ToolUseID: id, Content: text, IsError: entry.Result != nil && entry.Result.Error != nil})
+		return nil
+	}
+	content, err := r.resultContent(entry, inline)
+	if err != nil {
+		return err
+	}
+	r.parts = append(r.parts, model.ToolResultPart{ToolUseID: id, Content: content, IsError: entry.Result != nil && entry.Result.Error != nil})
+	return nil
+}
+
+// resultContent applies the immutable projection without loading omitted bodies.
+func (r *Renderer) resultContent(entry MessageEntry, inline []byte) (any, error) {
 	projection := ResultProjection{}
 	if entry.Result != nil {
 		projection = *entry.Result
 	}
 	preview, err := r.text(projection.Preview)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var errorText string
 	if projection.Error != nil {
 		errorText, err = r.text(*projection.Error)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 	var content any
@@ -178,16 +204,15 @@ func (r *Renderer) appendResult(entry MessageEntry, inline []byte) error {
 		if entry.Hash != "" {
 			data, err = r.source(r.ctx, entry.Hash)
 			if err != nil {
-				return err
+				return nil, err
 			}
 		}
 		content, err = transcript.ProjectToolResultContent(rawjson.Message(data), projection.Bounds, preview, errorText)
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
-	r.parts = append(r.parts, model.ToolResultPart{ToolUseID: id, Content: content, IsError: projection.Error != nil})
-	return nil
+	return content, nil
 }
 
 func (r *Renderer) flushResults() {

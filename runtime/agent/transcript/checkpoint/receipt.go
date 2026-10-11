@@ -10,7 +10,7 @@ import (
 
 type (
 	// ByteRange is an inclusive unsummarised byte range in the original result.
-	ByteRange struct{ From, Through int }
+	ByteRange = index.ByteRange
 	// ReceiptItem supplies a tool call and/or assistant text from the record chain.
 	ReceiptItem struct {
 		ToolUseID, Tool, Args string
@@ -36,6 +36,8 @@ type (
 )
 
 const (
+	// ReceiptArgsBytes bounds the eligible call argument preview stored by K12.
+	ReceiptArgsBytes = 160
 	// MaxReceiptLineBytes caps one rendered receipt line including its newline.
 	MaxReceiptLineBytes    = 512
 	receiptRangeLabelBytes = 64

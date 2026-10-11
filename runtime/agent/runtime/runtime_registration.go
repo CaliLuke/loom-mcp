@@ -149,6 +149,9 @@ func (r *Runtime) validateAgentRegistration(reg AgentRegistration) error {
 	if reg.ID == "" {
 		return fmt.Errorf("%w: missing agent ID", ErrInvalidConfig)
 	}
+	if _, enabled := r.contextCompaction[reg.ID]; enabled && reg.Policy.History != nil {
+		return fmt.Errorf("%w: context compaction cannot be combined with HistoryPolicy for %q", ErrInvalidConfig, reg.ID)
+	}
 	if reg.Planner == nil {
 		return fmt.Errorf("%w: missing planner", ErrInvalidConfig)
 	}

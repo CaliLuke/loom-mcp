@@ -3,9 +3,12 @@ package agentfeatures_test
 import (
 	"bytes"
 	"context"
+	jsonopts "encoding/json"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"example.com/agentfeatures/gen/features/agents/coordinator"
@@ -36,7 +39,7 @@ import (
 type historyReplayPlanner struct{}
 
 const (
-	workflowHistoryFile        = "testdata/workflow_protocol_v6.json"
+	workflowHistoryFile        = "testdata/workflow_protocol_v7.json"
 	workflowHistoryIdentity    = "loom-mcp-history-recorder"
 	workflowHistoryStickyQueue = "loom-mcp-history-recorder-sticky"
 )
@@ -46,17 +49,18 @@ func TestGeneratedFeatureWorkflowReplay(t *testing.T) {
 		name     string
 		rewrite  bool
 		missing  bool
-		previous bool
+		previous int
 	}{
 		{name: "current"},
-		{name: "protocol 5 rejected before effects", previous: true},
+		{name: "protocol 5 rejected before effects", previous: 5},
+		{name: "protocol 6 rejected before effects", previous: 6},
 		{name: "future", rewrite: true},
 		{name: "missing", rewrite: true, missing: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			historyFile := workflowHistoryFile
-			if test.previous {
-				historyFile = "testdata/workflow_protocol_v5.json"
+			if test.previous != 0 {
+				historyFile = fmt.Sprintf("testdata/workflow_protocol_v%d.json", test.previous)
 			}
 			data, err := os.ReadFile(historyFile)
 			require.NoError(t, err)
@@ -72,8 +76,8 @@ func TestGeneratedFeatureWorkflowReplay(t *testing.T) {
 			var recordedVersion int
 			require.NoError(t, json.Unmarshal(input["WorkflowProtocolVersion"], &recordedVersion))
 			assertHistoryToolContent(t, history, recordedVersion)
-			if test.previous {
-				assert.Equal(t, 5, recordedVersion)
+			if test.previous != 0 {
+				assert.Equal(t, test.previous, recordedVersion)
 			} else {
 				assert.Equal(t, api.WorkflowProtocolVersion, recordedVersion, "re-record history after a workflow protocol bump")
 			}
@@ -99,7 +103,7 @@ func TestGeneratedFeatureWorkflowReplay(t *testing.T) {
 			fx := newFeatureRuntime(t, agentsruntime.WithEngine(eng))
 			registerHistoryReplayAgent(t, fx)
 			err = eng.ReplayWorkflowHistory(silentTemporalLogger{}, history)
-			if test.rewrite || test.previous {
+			if test.rewrite || test.previous != 0 {
 				assert.ErrorContains(t, err, "workflow protocol mismatch")
 			} else {
 				assert.NoError(t, err)
@@ -114,7 +118,7 @@ func recordWorkflowHistory(t *testing.T, temporalClient client.Client) {
 	ctx, cancel := temporalScenarioContext(t)
 	defer cancel()
 	eng := newTemporalAcceptanceEngine(t, temporalClient)
-	fx := newFeatureRuntime(t, agentsruntime.WithEngine(eng))
+	fx := newFeatureRuntime(t, agentsruntime.WithEngine(eng), agentsruntime.WithContextCompaction(coordinator.AgentID, agentsruntime.ContextCompaction{}), agentsruntime.WithContextLimits(map[string]model.ContextLimits{"history": {ContextWindow: 6000}}))
 	registerHistoryReplayAgent(t, fx)
 	_, err := fx.rt.CreateSession(ctx, "sess-protocol-history")
 	require.NoError(t, err)
@@ -182,6 +186,9 @@ func assertWorkflowHistoryAnonymized(t *testing.T, history *historypb.History) {
 
 func registerHistoryReplayAgent(t *testing.T, fx *featureRuntime) {
 	t.Helper()
+	require.NoError(t, fx.rt.RegisterModel("history", modelClientFunc(func(context.Context, *model.Request) (*model.Response, error) {
+		return &model.Response{Content: []model.Message{{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "recorded measurement"}}}}, StopReason: "end_turn"}, nil
+	})))
 	require.NoError(t, coordinator.RegisterUsedToolsets(t.Context(), fx.rt, coordinator.WithWorkflowExecutor(newRecordingWorkflowExecutor())))
 	reg, err := coordinator.NewCoordinatorDelegatedAgentToolsetRegistration(fx.rt, "", func(cfg *agentsruntime.AgentToolConfig) {
 		cfg.PreChildValidator = func(ctx context.Context, in *agentsruntime.AgentToolValidationInput) *agentsruntime.AgentToolValidationError {
@@ -197,13 +204,19 @@ func registerHistoryReplayAgent(t *testing.T, fx *featureRuntime) {
 	require.NoError(t, coordinator.RegisterCoordinatorAgent(t.Context(), fx.rt, coordinator.CoordinatorAgentConfig{Planner: historyReplayPlanner{}}))
 }
 
-func (historyReplayPlanner) PlanStart(context.Context, *planner.PlanInput) (*planner.PlanResult, error) {
+func (historyReplayPlanner) PlanStart(ctx context.Context, input *planner.PlanInput) (*planner.PlanResult, error) {
+	if err := measureHistoryRequest(ctx, input.Agent, input.Messages); err != nil {
+		return nil, err
+	}
 	return &planner.PlanResult{ToolCalls: []planner.ToolRequest{{
 		Name: workflow.Draft, ToolCallID: "history-draft", Payload: rawjson.Message(`{"topic":"history replay"}`),
 	}, {Name: delegated.Summarize, ToolCallID: "history-child", Payload: rawjson.Message(`{"topic":"history replay"}`)}}}, nil
 }
 
-func (historyReplayPlanner) PlanResume(context.Context, *planner.PlanResumeInput) (*planner.PlanResult, error) {
+func (historyReplayPlanner) PlanResume(ctx context.Context, input *planner.PlanResumeInput) (*planner.PlanResult, error) {
+	if err := measureHistoryRequest(ctx, input.Agent, input.Messages); err != nil {
+		return nil, err
+	}
 	return &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: &model.Message{
 		Role:  model.ConversationRoleAssistant,
 		Parts: []model.Part{model.TextPart{Text: "history replay complete"}},
@@ -275,7 +288,7 @@ func assertHistoryToolContent(t *testing.T, history *historypb.History, protocol
 				for _, removed := range []string{"Messages", "ToolOutputs", "TypedInputs"} {
 					assert.NotContains(t, fields, removed)
 				}
-				if protocol == 6 {
+				if protocol >= 6 {
 					wantStep := 1
 					if name == "features.coordinator.resume" {
 						wantStep = 2
@@ -285,6 +298,11 @@ func assertHistoryToolContent(t *testing.T, history *historypb.History, protocol
 				if name == "features.coordinator.plan" {
 					assert.Empty(t, input.View.Pending)
 				} else {
+					if protocol >= 7 {
+						require.Len(t, input.Models, 1)
+						assert.Equal(t, "history", input.Models[0].Model)
+						assert.Equal(t, 6000, input.Models[0].Budget)
+					}
 					assert.NotEmpty(t, input.View.Pending)
 					assert.Equal(t, childHead, string(input.View.IndexHead), "resume adopts the head committed by child validation")
 					for _, entry := range input.View.Pending {
@@ -321,30 +339,40 @@ func assertHistoryToolContent(t *testing.T, history *historypb.History, protocol
 			case "features.coordinator.executetool":
 				toolCompletions++
 				var output api.ToolOutput
-				require.NoError(t, json.Unmarshal(data, &output))
+				require.NoError(t, json.Unmarshal(data, &output, jsonopts.FormatDurationAsNano(true)))
 				assert.NotEmpty(t, output.Refs.Result)
 				assert.NotEmpty(t, output.Refs.Payload)
 				assert.Empty(t, output.Payload)
 			case agentsruntime.ChildDispatchActivityName(coordinator.AgentID):
 				childValidations++
 				var output api.ChildDispatchOutput
-				require.NoError(t, json.Unmarshal(data, &output))
+				require.NoError(t, json.Unmarshal(data, &output, jsonopts.FormatDurationAsNano(true)))
 				require.NotNil(t, output.RetryHint)
 				assert.Equal(t, "topic requires evidence", output.Error)
 				assert.NotEmpty(t, output.IndexHead)
 				childHead = string(output.IndexHead)
 			case "features.coordinator.plan":
 				var output api.PlanActivityOutput
-				require.NoError(t, json.Unmarshal(data, &output))
+				require.NoError(t, json.Unmarshal(data, &output, jsonopts.FormatDurationAsNano(true)))
 				assert.NotEmpty(t, output.IndexHead)
+				if protocol >= 7 {
+					require.Len(t, output.Facts, 1)
+					assert.Equal(t, output.CallKeys[0], output.Facts[0].Call)
+					assert.True(t, output.Facts[0].ViewBearing)
+				}
 				require.Len(t, output.ToolCallRefs, 2)
 			case "features.coordinator.resume":
 				var output api.PlanActivityOutput
-				require.NoError(t, json.Unmarshal(data, &output))
+				require.NoError(t, json.Unmarshal(data, &output, jsonopts.FormatDurationAsNano(true)))
 				assert.NotEmpty(t, output.IndexHead)
-				if protocol == 6 {
+				if protocol >= 6 {
 					assert.NotEmpty(t, output.TranscriptRef)
 					finalTranscript = output.TranscriptRef
+					if protocol >= 7 {
+						require.NotNil(t, output.View)
+						require.Len(t, output.Facts, 1)
+						assert.Equal(t, output.CallKeys[0], output.Facts[0].Call)
+					}
 				}
 			}
 		}
@@ -357,7 +385,7 @@ func assertHistoryToolContent(t *testing.T, history *historypb.History, protocol
 		}
 		assert.Nil(t, event.GetStartChildWorkflowExecutionInitiatedEventAttributes(), "rejected validation must not start a child")
 	}
-	if protocol == 6 {
+	if protocol >= 6 {
 		require.NotNil(t, sealInput)
 		assert.Equal(t, 1, counts[agentsruntime.SealRecordActivityName(coordinator.AgentID)])
 		assert.Equal(t, 2, plannerSteps)
@@ -379,8 +407,25 @@ func historyHookInputs(t *testing.T, data []byte) []*api.HookActivityInput {
 	}
 	var inputs []*api.HookActivityInput
 	require.NoError(t, json.Unmarshal(input.Payload, &inputs))
-	require.Len(t, inputs, 2)
+	require.GreaterOrEqual(t, len(inputs), 2)
+	assert.LessOrEqual(t, len(inputs), 3)
 	assert.Equal(t, hooks.PlannerStep, inputs[0].Type)
-	assert.Equal(t, hooks.RunPhaseChanged, inputs[1].Type)
+	for _, input := range inputs[1:] {
+		assert.Contains(t, []hooks.EventType{hooks.RunPhaseChanged, hooks.ContextCompacted}, input.Type)
+	}
 	return inputs
+}
+
+// measureHistoryRequest exercises recorded facts and a fixed-overhead threshold
+// compaction without depending on worker model configuration during replay.
+func measureHistoryRequest(ctx context.Context, agent planner.PlannerContext, view []*model.Message) error {
+	client, ok := agent.ModelClient("history")
+	if !ok {
+		return fmt.Errorf("history model is not registered")
+	}
+	messages := make([]*model.Message, 0, 1+len(view))
+	messages = append(messages, &model.Message{Role: model.ConversationRoleSystem, Parts: []model.Part{model.TextPart{Text: strings.Repeat("fixed overhead ", 3000)}}})
+	messages = append(messages, view...)
+	_, err := client.Complete(ctx, &model.Request{Model: "history", Messages: messages})
+	return err
 }

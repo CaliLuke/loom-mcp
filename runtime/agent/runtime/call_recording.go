@@ -33,6 +33,7 @@ type (
 		mu        sync.Mutex
 		keys      []runstore.CallKey
 		completed []runstore.CallKey
+		facts     map[runstore.CallKey]contextmeasure.RequestFacts
 		growth    *RequestGrowth
 		streams   []*callRecordingStream
 		failures  []error
@@ -55,7 +56,7 @@ type (
 // A snapshot error rejects calls before sending. Step is the monotonic planner
 // schedule number, independent of the conversational TurnID and engine Attempt.
 func NewCallRecording(store runstore.Store, scope string, ref index.ViewRef, view []*model.Message, step int) *CallRecording {
-	recording := &CallRecording{store: store, scope: scope, ref: ref, step: step}
+	recording := &CallRecording{store: store, scope: scope, ref: ref, step: step, facts: make(map[runstore.CallKey]contextmeasure.RequestFacts)}
 	snapshot, err := callrecord.SnapshotMessages(view)
 	if err != nil {
 		recording.viewErr = fmt.Errorf("snapshot recorded view: %w", err)
@@ -119,6 +120,17 @@ func (r *CallRecording) Keys() []runstore.CallKey {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return slices.Clone(r.keys)
+}
+
+// Facts returns durable completions in the same start order as Keys. Finish must succeed before adoption.
+func (r *CallRecording) Facts() []contextmeasure.RequestFacts {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	facts := make([]contextmeasure.RequestFacts, 0, len(r.keys))
+	for _, key := range r.keys {
+		facts = append(facts, r.facts[key])
+	}
+	return facts
 }
 
 // RequestGrowth returns an owned copy of the first growth warning, or nil.
@@ -252,6 +264,9 @@ func (c *recordedCall) complete(ctx context.Context, response *model.Response, u
 	if err := c.recording.store.PutCall(ctx, c.recording.scope, record); err != nil {
 		return fmt.Errorf("write model call completion: %w", err)
 	}
+	c.recording.mu.Lock()
+	c.recording.facts[record.Key] = facts
+	c.recording.mu.Unlock()
 	if state == runstore.CallCompleted {
 		c.recording.mu.Lock()
 		c.recording.completed = append(c.recording.completed, record.Key)
@@ -289,7 +304,11 @@ func (r *CallRecording) finishActivity(ctx context.Context, out **PlanActivityOu
 		return
 	}
 	if *out != nil {
+		ref := r.ref
+		ref.Pinned = slices.Clone(ref.Pinned)
+		(*out).CallView = &ref
 		(*out).CallKeys = r.Keys()
+		(*out).Facts = r.Facts()
 		(*out).RequestGrowth = r.RequestGrowth()
 		(*out).ProducingCall = r.ProducingCall(events.eventCallKeys())
 	}

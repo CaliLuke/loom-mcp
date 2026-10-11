@@ -41,6 +41,8 @@ type (
 	}
 
 	planActivityInputWire struct {
+		// Models uses the protocol 7 API spelling and preserves sorted calibrations.
+		Models []api.ModelContext `json:"models,omitzero"`
 		// NOTE: Existing fields intentionally do not use JSON tags.
 		//
 		// Temporal's default JSON payload converter marshals loom-mcp runtime API types
@@ -233,6 +235,7 @@ func decodePlanActivityInput(p *commonpb.Payload, valuePtr any) error {
 	}
 
 	dst.AgentID = w.AgentID
+	dst.Models = w.Models
 	dst.RunID = w.RunID
 	dst.View = w.View
 	dst.Step = w.Step
@@ -288,6 +291,7 @@ func encodePlanActivityInputWire(in *api.PlanActivityInput) (*planActivityInputW
 	}
 	return &planActivityInputWire{
 		AgentID:    in.AgentID,
+		Models:     in.Models,
 		Step:       in.Step,
 		RunID:      in.RunID,
 		View:       in.View,

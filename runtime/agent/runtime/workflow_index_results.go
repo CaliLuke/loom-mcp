@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"unicode/utf8"
 
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 )
 
@@ -93,6 +95,11 @@ func (r *Runtime) buildIndexResultEntries(ctx context.Context, base *workflowPla
 	if len(reminders) > 0 {
 		entries = append(entries, structuralIndexEntry(index.Reminders, nil, reminders...))
 	}
+	for i := range entries {
+		if err := base.measureStructuralEntry(&entries[i], contentBatchFromContext(ctx)); err != nil {
+			return nil, err
+		}
+	}
 	return entries, nil
 }
 
@@ -107,17 +114,11 @@ func (r *Runtime) resultIndexEntry(ctx context.Context, base *workflowPlanInput,
 	if err != nil {
 		return index.MessageEntry{}, err
 	}
-	entry := index.MessageEntry{Kind: index.ToolResult, Hash: result.Refs.Result, Batch: batch, ToolUseIDs: []string{call.ToolCallID}, Bytes: result.ResultBytes, Result: &index.ResultProjection{Preview: preview, Bounds: result.Bounds}}
-	if result.Error != nil {
-		param, err := workflowText(ctx, result.Error.Error())
-		if err != nil {
-			return entry, err
-		}
-		entry.Kind, entry.Hash = index.Structural, ""
-		entry.Structural = &index.StructuralEntry{Kind: index.SynthesizedError, ProtocolVersion: index.TemplateProtocolVersion, Text: []index.TextParameter{param}}
-	} else if denial {
-		entry.Kind, entry.Hash = index.Structural, ""
-		entry.Structural = &index.StructuralEntry{Kind: index.ConfirmationDenial, ProtocolVersion: index.TemplateProtocolVersion, Text: []index.TextParameter{{Hash: result.Refs.Result}}}
+	entry := index.MessageEntry{Kind: index.ToolResult, Hash: result.Refs.Result, Batch: batch, ToolUseIDs: []string{call.ToolCallID}, Bytes: result.ResultBytes, Role: model.ConversationRoleUser, Result: &index.ResultProjection{ContentBytes: result.ResultBytes, Preview: preview, Bounds: result.Bounds}}
+	entry.Keep = keepCompactionResult(base.compaction, call.Name)
+	entry, err = projectResultEntry(ctx, entry, result, denial)
+	if err != nil {
+		return entry, err
 	}
 	if result.Refs.ServerData != "" {
 		entry.Record = append(entry.Record, result.Refs.ServerData)
@@ -130,6 +131,30 @@ func (r *Runtime) resultIndexEntry(ctx context.Context, base *workflowPlanInput,
 	}
 	entry.Output, err = r.storeIndexToolOutput(ctx, base, call, result)
 	return entry, err
+}
+
+// projectResultEntry measures successful projections or deterministic error templates.
+func projectResultEntry(ctx context.Context, entry index.MessageEntry, result *planner.ToolResult, denial bool) (index.MessageEntry, error) {
+	if result.ResultBytes > transcript.MaxToolResultContentBytes && result.Error == nil {
+		entry.Bytes = len(result.Preview)
+	}
+	if result.Error != nil {
+		param, err := workflowText(ctx, result.Error.Error())
+		if err != nil {
+			return entry, err
+		}
+		entry.Kind, entry.Hash = index.Structural, ""
+		entry.Structural = &index.StructuralEntry{Kind: index.SynthesizedError, ProtocolVersion: index.TemplateProtocolVersion, Text: []index.TextParameter{param}}
+		size, err := index.StructuralSize(entry, []string{result.Error.Error()}, nil)
+		if err != nil {
+			return entry, err
+		}
+		entry.Bytes, entry.NonText, entry.Role = size.Bytes, size.NonText, size.Role
+	} else if denial {
+		entry.Kind, entry.Hash = index.Structural, ""
+		entry.Structural = &index.StructuralEntry{Kind: index.ConfirmationDenial, ProtocolVersion: index.TemplateProtocolVersion, Text: []index.TextParameter{{Hash: result.Refs.Result}}}
+	}
+	return entry, nil
 }
 
 func (r *Runtime) hiddenBookkeepingIDs(calls []planner.ToolRequest, byID map[string]*planner.ToolResult) []string {

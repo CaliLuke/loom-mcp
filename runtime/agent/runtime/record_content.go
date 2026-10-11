@@ -7,6 +7,7 @@ import (
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextmeasure"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
@@ -98,7 +99,15 @@ func (r *Runtime) recordContentItems(ctx context.Context, input *api.RecordConte
 	if input.SeedMessages {
 		entries := make([]index.MessageEntry, len(refs))
 		for i, ref := range refs {
-			entries[i] = index.MessageEntry{ID: index.MessageID(i + 1), Kind: index.Message, Hash: ref, Bytes: len(input.Items[i])}
+			var message *model.Message
+			if err := json.Unmarshal(input.Items[i], &message); err != nil {
+				return nil, fmt.Errorf("seed message %d: %w", i, err)
+			}
+			size, err := contextmeasure.MeasureMessages([]*model.Message{message})
+			if err != nil {
+				return nil, err
+			}
+			entries[i] = index.MessageEntry{ID: index.MessageID(i + 1), Kind: index.Message, Hash: ref, Bytes: size.Bytes, NonText: size.NonText, Role: size.Role}
 		}
 		head, committed, err := storeIndexSegments(ctx, r.RunStore, input.RootRunID, "", "", entries)
 		if err != nil {

@@ -264,8 +264,9 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   GuardCount.GuardOn requires a positive known budget and exact or calibrated
   measurement. Zero triggerAt disables counting while retaining the estimate
   and calibrated GuardOn; only the estimation rate defaults to 1/3.
-  There is no rejection wiring. K12 owns facts/rates in activity
-  shapes and trigger/events; K14 owns rejections. No K10 protocol/activity bump.
+  K12 carries durable Completion.Facts parallel to CallKeys and sorted Models
+  across activity boundaries. Only compaction-enabled agents Observe adopted facts or send Models in K12; K14
+  owns rejection wiring.
 - Planner call recording sits inside model interceptors, capturing the decorated
   request against the committed pre-history-policy view (loaded IndexHead, no
   Pending). Recording is required in planner contexts. Missing CallInfo or
@@ -495,7 +496,7 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 
 ## Transcript Views And Child Validation
 
-- Protocol 6 planner activity inputs carry only ViewRef for history: IndexHead
+- Protocol 7 planner activity inputs carry ViewRef for history: IndexHead
   plus one step's Pending. Caller seed history is committed before the first
   planner invocation and never sent in Pending. Entries are immutable; a later
   HideBookkeeping entry changes rendering without changing earlier hashes.
@@ -523,8 +524,8 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   engines must implement the typed register/execute child-dispatch methods.
 - The run-loop ledger and ledger_messages query are removed. Content signals
   contain refs only. Over-1-MB planner envelopes return PlanActivityInputBudgetError
-  with Bytes, Limit and RunID, matching errors.As. Replay fixture is protocol 6; the unchanged protocol 5
-  fixture verifies protocol mismatch rejection before effects. Structural templates
+  with Bytes, Limit and RunID, matching errors.As. Replay fixture is protocol 7 with real recorded facts and a receipt checkpoint;
+  unchanged protocol 5 and 6 fixtures verify mismatch rejection before effects. Structural templates
   remain version 5.
 - `make test-payload-growth` runs full non-short payload/growth acceptance. Fixed per-run
   ToolArgs, Labels and tool catalogs remain inline; K7 accepts the measured
@@ -544,7 +545,7 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   acknowledgement. EventKey is deterministic; ID remains the store-owned cursor.
   Custom engines add RegisterSealRecordActivity and ExecuteSealRecordActivity
   (breaking). External termination has no seal; latest planner_step is its readable
-  head. Unreleased K8 retains protocol 6; the history fixture includes seal commands.
+  head. K12 uses protocol 7; the history fixture includes seal and compaction commands.
 
 - runrecord.Read(ctx, runStore, runLog, rootRunID, runID) walks child_run_linked
   descendants without workflow/history access. It uses the seal or latest step
@@ -560,16 +561,16 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   its exact rebuilt request, Activity and Step. Presentations are adopted,
   presented-not-adopted or presented-unrecorded. Full results, typed/clarification
   answers and separate server-only content remain available beyond previews.
-  Recorded checkpoint refs resolve index.CheckpointRecord including Calls; K8
-  produces no checkpoint or compaction projection. Entry template versions stay
-  independent of workflow protocol 6.
+  Recorded checkpoint refs resolve index.CheckpointRecord including Calls. K12
+  produces receipt-only records; RunRecord rebuilds exact compacted call views.
+  Entry template versions remain 5, independent of workflow protocol 7.
 - record.Export().Marshal() writes deterministic version-1 JSON with rendered
   transcripts, original call/log bytes and addressed content, server-only bytes
   included. runrecord.FromExport restores identical evidence without a store or
   historical renderer. Exact request numeric tokens above 2^53 are preserved.
   New 1000-step recorder-write growth and real Temporal P1 tests skip -short and are
   wired into test-payload-growth with explicit timeouts. KeepRecentTurns/Compress
-  are compaction stand-ins; K12 must rerun growth with real compaction.
+  remain comparison cases; K12 adds real compaction to the same recorder-growth proof.
 
 - ToolResultReceivedEvent always carries Refs for the full eligible result and
   server-only sidecar/executed payload. Small bodies remain inline unchanged.
@@ -592,7 +593,7 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   BeforeEvent cannot hide the run tree. Pure loop-state preparation precedes the
   initial planner_step/execution-phase batch without another activity.
   test-payload-growth sets 20m for runtime growth and 3m for real Temporal P1;
-  make itest invokes both. K12 reruns with real compaction.
+  make itest invokes both. K12 includes real compaction.
 
 ## Workflow Composition
 
@@ -750,9 +751,9 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 
 ## Pure Checkpoint Helpers
 
-- `runtime/agent/transcript/checkpoint` is pure and independent of stored
-  checkpoint encodings. K12 owns FromRecord, loading, repeatable newest-first
-  receipt traversal, selected pin storage, caching and validator wiring.
+- `runtime/agent/transcript/checkpoint` owns FromRecord, repeatable newest-first
+  receipt traversal and read-only projection shared with RunRecord. The runtime
+  stores receipt-only records and caches input, pins, checkpoint and tail renders.
 - Atomic units include assistant batches/results, bookkeeping, reminders,
   typed/finalize attachments and an open-await suffix. CutPoints only yields
   assistant starts after complete preceding call sets; ChooseTail always keeps
@@ -778,7 +779,8 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - transcript.AssembleView strips pre-tail ThinkingPart, including Redacted,
   and marks the checkpoint. ValidateView applies GrammarBedrock/Anthropic,
   first-user/post-checkpoint-assistant constraints and bidirectional tool
-  handshakes. These validators are not wired before K12.
+  handshakes. K12 applies both grammars to checkpoint views at load;
+  uncompacted views keep the existing resume-only ValidateBedrock.
 
 ## Engine Conformance
 
@@ -825,3 +827,60 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   including nested failures, in workflow/client results and recorded tool payloads.
 - Outbound conversion never hoists an engine node out of external joins or reason
   wrappers. Only root engine nodes or adapter-owned synthetic wrappers convert.
+
+## Context Compaction
+
+- WithContextCompaction(agent.Ident, ContextCompaction{TriggerAt, KeepResultTools})
+  opts an agent in; registration and workflow start reject HistoryPolicy when
+  stamped compaction settings are present, including split client/worker deployments. TriggerAt is rational,
+  default 85/100. Zero token settings resolve against the smallest adopted usable
+  budget: keep 10% (cap 20k), protect 15% (cap 40k), save 10% (cap 20k).
+- Clients overwrite caller settings with owned resolved configuration in RunInput,
+  including a snapshot for child starts. Canonical planner_step and run_sealed
+  records preserve settings and keep tools for RunRecord. Replay never reads worker
+  compaction options. DisableRecall belongs to ContextRecovery in K13.
+- Every entry writer records model-facing text bytes, non-text tokens and role;
+  result entries of KeepResultTools set Keep. Caller signal measurements are
+  overwritten by the runtime storing the content. The writer inventory test covers
+  content items, assistant output, resume, clarification, result and structural entries.
+  Resume requires equal MessageRefs/MessageSizes lengths; clarification AnswerBytes
+  must be present (pointer to zero for an empty answer), otherwise fail before indexing.
+- Before every planner schedule, including finalize, pure Decide consumes adopted
+  facts and immutable sizes. The first request remains full. Tier 1 clears old
+  non-Keep results only above MinSavingTokens; eviction uses closed-unit CutPoints.
+  No-progress suppresses attempts until enough estimated growth and records one
+  skipped event per suppression episode. Prefix system entries remain resident and
+  count in the estimate. Resident budgets shrink with MinB; B < 2900 disables threshold compaction for the run, including
+  a known window exhausted by its output reserve (BudgetTooSmall, not unknown limits).
+- Rendered checkpoint size is reused only for the same hash, tail and budget;
+  otherwise estimate uses MaxBytes. planner_step records the adopted measurement.
+  Recovery outputs adopt facts, never ViewUpdate or threshold transitions.
+  planner_step records recovery (rejected output), recovering (correction retry)
+  and the actual loader-built ViewRef, including Pinned, supplied by activity CallView. Offline
+  reconstruction preserves the last successful view/decision state across rejected
+  steps, advances its head, Observes adopted facts and preserves the view on retries.
+- Receipt-only records preserve Summary, SummaryRun and CitedUsers and link Prev;
+  deterministic JSON v2 Put succeeds before any returned hash is adopted. Receipt
+  lines carry Kind, ToolUseID and Unsummarised (empty until K15); construction stays
+  in receiptLines for K13/K15 integration. Only eligible arguments and assistant
+  prose enter receipts; hidden calls and server-only content stay out. Seeded and
+  resumed message ToolUseParts also supply eligible name/ID/bounded arguments;
+  result-only user messages are covered by calls and never create empty user rows.
+- Input cache: record hash. Pins: hash and budget. Checkpoint message: hash, budget,
+  effective pins. Tail: head, TailFrom, ClearedThrough. Hidden-call state crosses the
+  cut. Cache eviction reconstructs byte-identical views. RunRecord shares projection
+  rules and verifies each compacted request's canonical digest. Loader pins are
+  canonical SelectPins(record users, Budget), not incoming overrides; ViewUpdate
+  and CallView record the derived list. Tests prove rendering these recorded pins
+  equals loader rendering, warm/cold and after budget shrink.
+- context_compacted/context_compaction_skipped are canonical record events, bypass
+  BeforeEvent and use <type>:<run>:<step>, with empty call_keys in K12. Diagnostics
+  context_unmeasured/context_limits_unknown/context_budget_too_small are normal
+  hooks, once per run for compaction-enabled agents only. Opt-out agents do not
+  Observe or send Models and retain pre-K12 events. K14 widens enablement.
+  Protocol 7 covers facts, views, entry sizes and settings;
+  structural templates remain version 5. Drain older workflows before upgrading.
+- K12 recorder growth over 1,000 steps: off 2212.230 bytes/step (max residual
+  990.001 bytes), keep_recent 2242.624 (1239.443), compress 2669.240 (3937.941),
+  real_compaction 2740.337 (542.128), with two evictions after 1,000 seed turns.
+  Entry-size metadata moved all four modes; index/checkpoint setup writes are excluded.

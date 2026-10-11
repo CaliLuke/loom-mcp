@@ -265,6 +265,7 @@ func (e *toolBatchExec) dispatchInlineAgentToolCall(wfCtx engine.WorkflowContext
 		return err
 	}
 	input := buildInlineAgentRunInput(route.ID, nestedRunCtx, messages)
+	inheritCompaction(wfCtx.Context(), &input)
 	handle, err := startInlineAgentChildWorkflow(wfCtx, ctx, route, &input)
 	if err != nil {
 		return fmt.Errorf("failed to start agent child workflow for %s: %w", call.Name, e.r.rejectChildStart(wfCtx, nestedRunCtx, err))

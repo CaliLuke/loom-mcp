@@ -81,7 +81,7 @@ func waitAwaitClarification(ctx context.Context, ctrl *interrupt.Controller, bas
 	if clarification.ID != "" && ans.ID != "" && ans.ID != clarification.ID {
 		return nil, errors.New("unexpected await ID for clarification")
 	}
-	return nil, appendClarificationAnswer(base, ans.AnswerRef)
+	return nil, appendClarificationAnswer(base, ans.AnswerRef, ans.AnswerBytes)
 }
 
 func waitAwaitTypedInput(ctx context.Context, ctrl *interrupt.Controller, input *RunInput, base *workflowPlanInput, timeout time.Duration, typedInput *planner.AwaitTypedInput) ([]*planner.ToolResult, error) {

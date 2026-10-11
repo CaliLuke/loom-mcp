@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextmeasure"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
@@ -33,6 +35,14 @@ func (r *Runtime) storeResumeRequest(ctx context.Context, req *api.ResumeRequest
 		return nil, err
 	}
 	out := *req
+	out.MessageSizes = make([]contextmeasure.MessageSize, len(req.Messages))
+	for i, message := range req.Messages {
+		size, err := contextmeasure.MeasureMessages([]*model.Message{message})
+		if err != nil {
+			return nil, err
+		}
+		out.MessageSizes[i] = size
+	}
 	out.MessageRefs = refs
 	out.Messages = nil
 	return &out, nil

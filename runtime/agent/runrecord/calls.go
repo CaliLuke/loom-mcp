@@ -64,7 +64,7 @@ func (r *runReader) readCall(record runstore.CallRecord) (Call, error) {
 		if err := r.resolveView(view); err != nil {
 			return nil, err
 		}
-		return r.render(view.IndexHead)
+		return r.project(view)
 	})
 	return call, err
 }

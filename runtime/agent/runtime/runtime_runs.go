@@ -42,11 +42,11 @@ func (r *Runtime) ExecuteAgentChildWithRoute(
 	if err := r.reserveChildRun(wfCtx, nestedRunCtx, string(route.ID)); err != nil {
 		return nil, err
 	}
-	return r.executeReservedAgentChild(wfCtx, route, messages, nestedRunCtx)
+	return r.executeReservedAgentChild(wfCtx, route, messages, nestedRunCtx, wfCtx.Context())
 }
 
 // executeReservedAgentChild submits an already admitted child and awaits its result.
-func (r *Runtime) executeReservedAgentChild(wfCtx engine.WorkflowContext, route AgentRoute, messages []*model.Message, nestedRunCtx run.Context) (*RunOutput, error) {
+func (r *Runtime) executeReservedAgentChild(wfCtx engine.WorkflowContext, route AgentRoute, messages []*model.Message, nestedRunCtx run.Context, settingsContext context.Context) (*RunOutput, error) {
 	input := RunInput{
 		AgentID:          route.ID,
 		RunID:            nestedRunCtx.RunID,
@@ -62,6 +62,7 @@ func (r *Runtime) executeReservedAgentChild(wfCtx engine.WorkflowContext, route 
 		Labels:           nestedRunCtx.Labels,
 	}
 	stampWorkflowProtocol(&input)
+	inheritCompaction(settingsContext, &input)
 	handle, err := wfCtx.StartChildWorkflow(wfCtx.Context(), engine.ChildWorkflowRequest{
 		ID:        input.RunID,
 		Workflow:  route.WorkflowName,
@@ -139,6 +140,7 @@ func (r *Runtime) startRunOn(ctx context.Context, input *RunInput, workflowName,
 		input.RootRunID = input.RunID
 	}
 	stampWorkflowProtocol(input)
+	r.stampContextCompaction(input)
 	if err := validateWorkflowInput(input); err != nil {
 		return nil, err
 	}
@@ -329,6 +331,7 @@ func (r *Runtime) ProvideClarification(ctx context.Context, ans interrupt.Clarif
 	}
 	stored := *ans
 	stored.AnswerRef = refs[0]
+	stored.AnswerBytes = new(len(ans.Answer))
 	stored.Answer = ""
 	ans = &stored
 	if s, ok := r.Engine.(engine.Signaler); ok {

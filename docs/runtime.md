@@ -183,7 +183,7 @@ Typed consumers can call
 eligible bytes and decode them with the generated result codec. Empty or missing
 hashes fail. Tool activities return references; terminal completion decoding runs in the finish activity.
 
-### Transcript index and planner views (protocol 6)
+### Transcript index and planner views (protocol 7)
 
 The workflow keeps immutable `index.MessageEntry` values and a committed
 `IndexHead`, rather than accumulated messages, tool outputs, typed answers, or a
@@ -217,17 +217,107 @@ its stored `IndexHead`, producing the same messages, tool outputs and typed inpu
 Warm steps append only new entries. An owned canonical message
 snapshot still costs work proportional to the visible message history.
 
+The K12 loader also supports checkpoint projections. A safe `TailFrom` cut
+creates a receipt-only checkpoint covering the newly evicted prefix, with the
+previous summary and citations preserved. The record is stored before its hash
+can appear in activity output or a planner-step event. Receipts read only eligible
+call arguments and assistant prose; hidden bookkeeping calls and server-only
+content are excluded. The full receipt remains in the immutable record chain.
+
+Checkpoint messages render under the current `Budget`, including after a model
+switch reduces it. Pins use `SelectPins`, cached by record and budget. Checkpoint
+messages are cached by record hash, budget and effective pins; tail messages by
+committed head, tail start and clear watermark. Cleared results retain the stored
+result's size, tool-use ID and first error line, while `Keep` results retain their
+existing projection. Hidden-call state crosses the cut. Checkpoint views pass both
+Anthropic and Bedrock view grammars; views without checkpoints retain the existing
+resume-time Bedrock validation. Successful activity outputs may return `ViewUpdate`;
+recovery outputs never adopt it. Protocol 7 covers these view updates, recorded
+request facts and model rates, entry size metadata and stamped run settings.
+Drain older workflows before upgrading; v5 and v6 fixtures retain mismatch
+rejection before effects. Structural templates remain version 5.
+
+### Opt-in context compaction
+
+Configure each agent on the runtime used by its clients:
+
+```go
+rt := runtime.New(runtime.WithContextCompaction("service.agent", runtime.ContextCompaction{
+    TriggerAt: contextmeasure.Rate{Tokens: 85, Bytes: 100},
+    KeepResultTools: []tools.Ident{"service.keep_result"},
+}))
+```
+
+Registration rejects an agent with compaction and `HistoryPolicy`. Workflow
+start also rejects stamped compaction settings against a worker registration
+with `HistoryPolicy`, including separate client and worker deployments. The client
+stamps owned settings into `RunInput`, overwriting caller values, and snapshots
+child-agent settings for replayable child starts. Worker option changes cannot
+alter an existing run. `KeepResultTools` marks result entries `Keep`; those
+results retain their normal projection when clearing.
+
+For agents with compaction settings, the workflow observes facts only from
+adopted planner outputs. Agents without those settings send no `Models` and
+emit no K12 diagnostics or compaction events. `Facts` parallels
+`CallKeys` and contains the recorder's durable `Completion.Facts`; `Models` sends
+a sorted snapshot of the last adopted rate and usable budget for each model.
+Only view-bearing calls update rates and budgets. The first planner step sends
+the full history because no usable budget has been observed yet.
+
+Before every planner step, including finalization, a pure integer/rational
+decision compares the estimated view plus fixed overhead with `TriggerAt × B`.
+The estimate includes system entries retained before the tail cut, including
+reminders, finalization hints and stored system messages.
+Tier 1 clears older non-Keep results, protecting the newest result suffix, only
+when it saves at least `MinSavingTokens`. If still above the threshold, eviction
+uses closed-unit cut points and `KeepRecentTokens`. Zero token settings resolve
+against the smallest adopted usable budget: keep 10%, protect 15%, minimum saving
+10%, capped at 20k, 40k and 20k respectively. Checkpoint budgets shrink with that
+budget. Below 2,900 usable tokens, including a known window fully consumed by
+its output reserve, threshold compaction stays off for the run.
+
+If compaction remains above the threshold, the no-progress guard suppresses
+another attempt until estimated growth reaches `MinSavingTokens`. Checkpoint
+size uses the last adopted rendered measurement only for the same record, tail
+and budget; otherwise it uses `checkpoint.MaxBytes`. Recovery outputs adopt
+facts but never a `ViewUpdate` or a threshold transition. `planner_step` records
+the calls' actual loader-built view, including its pins, and marks rejected
+outputs with `recovery` and correction retries with `recovering`. Reconstruction
+keeps the last successful view and decision state across rejected outputs,
+advances its index head, observes their adopted call facts, and preserves that
+view during correction retries.
+
+`context_compacted` and `context_compaction_skipped` are canonical record events,
+with keys `<type>:<run>:<step>`, bypassing `BeforeEvent`. Their `call_keys` is empty
+in K12. `context_compacted` records threshold reason, tier, unit/call counts,
+before/after estimates and checkpoint; skipped records report `no_progress` or
+`below_min_saving`. `no_progress` is recorded once per suppression episode;
+reaching the minimum-growth boundary permits another attempt and episode. Normal hooks `context_unmeasured`, `context_limits_unknown`
+and `context_budget_too_small` each occur at most once per run, keyed by type and
+run for agents with compaction settings. These diagnostics describe adopted
+facts, including rewriting planners; K14 widens diagnostics to other agents.
+
+The loader derives canonical pins with `SelectPins(record users, Budget)`,
+recomputing only when the record or budget changes. `ViewUpdate` and `CallView`
+carry that exact list; incoming pins do not override canonical selection.
+Rendering these recorded ViewRef pins through RunRecord is byte-identical to
+the loader, including on a cold worker and after a budget shrink. Seeded and
+resumed assistant tool-use parts produce call receipts with bounded arguments;
+result-only user messages are covered by those receipts and get no user index row.
+Resume references require one measurement per message; clarification answers
+require a present size, with zero measuring an empty answer.
+
 The index types have these fields:
 
 | Type | Fields and meaning |
 | --- | --- |
 | `MessageID` | One-based `uint64` entry position |
-| `MessageEntry` | `ID`, `Kind`, `Hash`, `Calls`, `Structural`, `Role`, `ToolUseIDs`, `Bytes`, `Record`, `Batch`, `Result`, `InputID`, `Output`, `Chain`; reserved `Call`, `NonText`, `Keep`, `Origin` remain zero |
+| `MessageEntry` | `ID`, `Kind`, `Hash`, `Calls`, `Structural`, `Role`, `ToolUseIDs`, `Bytes`, `NonText`, `Record`, `Call`, `Keep`, `Batch`, `Result`, `InputID`, `Output`, `Chain`; `Bytes` measures model text, `NonText` measures non-text tokens; `Origin` remains reserved |
 | `StructuralEntry` | `Kind`, `ProtocolVersion`, `Text`, `Reason` |
 | `TextParameter` | Either inline `Text` (at most 16 KiB) or a full-content `Hash` |
 | `IndexSegment` | `Prev`, `First`, `Entries`; only the first segment has no predecessor |
-| `ViewRef` | `IndexHead`, `Pending`; reserved `Checkpoint`, `TailFrom`, `ClearedThrough`, `Pinned`, `Budget` remain zero |
-| `RenderBudget` | Reserved user, summary, receipt, framing and preview token budgets |
+| `ViewRef` | `IndexHead`, `Pending`, `Checkpoint`, `TailFrom`, `ClearedThrough`, `Pinned`, `Budget` |
+| `RenderBudget` | Current user, summary, receipt, framing and preview token budgets |
 | `Origin` | Reserved continuation scope, run, position, ID and carried form |
 
 Entry kinds are stored message, assistant transcript/call batch, tool result,
@@ -237,7 +327,7 @@ dispatched `planner.ToolRequest` values, including IDs and normalized metadata.
 Planner activities canonicalize and store ordinary, question, and external calls
 before return. `Output` addresses reference-only planner-output metadata; `Record`
 is server-only and is never rendered. `ResultProjection` contains a preview,
-bounds and optional rendered error. `Batch` groups adjacent results into one user
+bounds, canonical `ContentBytes` and optional rendered error. `Batch` groups adjacent results into one user
 message. `Chain` hashes the previous chain and the whole entry except `Chain`
 using domain-separated deterministic JSON. `Walk` verifies content addresses,
 contiguous IDs, predecessor links, and every chain hash; orphans are not committed.
@@ -935,8 +1025,10 @@ call is incomplete. Presentation commits are reported separately as adopted,
 presented-not-adopted or presented-unrecorded. The record also contains full
 eligible results, typed and clarification answers, and a separate `ServerOnly`
 field. `index.CheckpointRecord` includes summary call keys and all checkpoint
-metadata; the reader resolves recorded checkpoint references. K8 produces no
-checkpoints or compaction projection.
+metadata; the reader resolves recorded checkpoint references. K12 produces receipt-only checkpoints and RunRecord rebuilds each request from
+its exact tail, cleared-result watermark, checkpoint budget and recorded pins.
+`Run.CompactionSettings` and `KeepResultTools` come from canonical planner-step
+or terminal seal records, so event interception cannot erase the configuration.
 
 `record.Export().Marshal()` produces deterministic version-1 JSON with rendered
 transcripts, rebuilt requests, events and addressed content, including server-only
@@ -946,13 +1038,24 @@ request metadata above 2^53 retains its exact value.
 
 The 1,000-step recorder-write growth and real Temporal reconstruction proofs skip
 `-short` and run through `make test-payload-growth` (also invoked by `make itest`).
-The compaction-on measurements use `KeepRecentTurns` and `Compress` as stand-ins;
-K12 must repeat this proof with real compaction. Counting every recorder `Put`
-and every `PutCall` body write, including repeated writes, fitted slopes were
-1,999.743 bytes/step with policies off, 2,032.677 with `KeepRecentTurns`, and
-2,458.549 with `Compress`. Maximum residuals were 700.227, 1,103.159 and
-3,799.192 bytes respectively over 1,000 steps. Index/view setup writes are
-excluded; all recorder-owned addressed content and call bodies are included.
+The same proof includes real threshold compaction with stored receipt-only
+checkpoints. The recorder owns all call writes; index and checkpoint setup writes
+remain excluded from this recorder-growth measurement. Counting every recorder `Put` and every `PutCall` body write, including repeated
+writes, the K12 run measured these four modes over 1,000 steps:
+
+| Mode | Bytes/step slope | Maximum residual (bytes) |
+| --- | ---: | ---: |
+| `off` | 2,212.230 | 990.001 |
+| `keep_recent` | 2,242.624 | 1,239.443 |
+| `compress` | 2,669.240 | 3,937.941 |
+| `real_compaction` | 2,740.337 | 542.128 |
+
+The entry-size metadata change moved all modes from the K8 baselines. Index and
+checkpoint setup writes are excluded; all recorder-owned addressed content and
+call bodies are included. The real-compaction mode starts with 1,000 seed turns,
+then measures 1,000 new steps with two evictions. Its first request sends the full
+seed. The non-race proof passed once (60.881s for all four comparison modes).
+
 The complete request is only a canonical verification digest: it is never
 stored as addressed content or copied into export `Content`. Rebuild and import
 verify the reconstructed request against that digest.
@@ -3383,10 +3486,11 @@ and remains zero here because recording does not invoke token counting.
 
 `runrecord.Read` exposes facts through each call's `Completion`; `Export` and
 `FromExport` preserve them, including nanosecond durations. K10 adds no workflow
-or activity-output fields and does not change the workflow protocol. K12 owns
-`RequestFacts` in `PlanActivityOutput`, per-model rates in activity input,
+or activity-output fields and does not change the workflow protocol. K12 adds
+`Facts` to `PlanActivityOutput`, sorted `Models` to activity input,
 trigger decisions and `context_unmeasured` / `context_limits_unknown` events;
-K14 owns guard rejection.
+K12 applies Observe, Models and diagnostics only to compaction-enabled agents;
+K14 widens their enablement and owns guard rejection.
 
 ### Rate Limiting
 
@@ -4602,11 +4706,11 @@ requires a first user and an assistant after the checkpoint, validates
 bidirectional complete tool handshakes, and applies `GrammarBedrock` role
 alternation/thinking or `GrammarAnthropic`.
 
-K12 must implement `FromRecord`, load user content/provenance and citation
-metadata, provide repeatable receipt traversal, store selected pins, assemble
-and validate loaded views, and cache by record hash. K12 also extends stored
-receipt lines with tool use IDs, entry kinds and unsummarised ranges. These
-pure helpers are not wired into loading yet. K13 owns handle resolution;
+K12 implements `FromRecord`, user content and citation metadata loading,
+repeatable newest-first receipt traversal, selected pins, view assembly, grammar
+validation and caches. Stored receipt lines include tool-use IDs, entry kinds
+and unsummarised ranges. The loader and RunRecord share the tail projection
+rules, including hidden calls and cleared placeholders. K13 owns handle resolution;
 K15 calls citation validation/qualification; K17 owns settings validation;
 K18 supplies continuation positions, carried origins and earlier totals.
 

@@ -10,6 +10,7 @@ package runtime
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
@@ -95,8 +96,14 @@ func (r *Runtime) handleResumeWaitError(ctx context.Context, input *RunInput, tu
 }
 
 func applyResumeMessages(base *workflowPlanInput, nextAttempt *int, resumeReq interrupt.ResumeRequest) error {
-	for _, ref := range resumeReq.MessageRefs {
-		if err := base.appendEntry(index.MessageEntry{Kind: index.Message, Hash: ref}); err != nil {
+	if len(resumeReq.MessageSizes) != len(resumeReq.MessageRefs) {
+		return fmt.Errorf("resume measurement count must match message references")
+	}
+	for i, ref := range resumeReq.MessageRefs {
+		entry := index.MessageEntry{Kind: index.Message, Hash: ref}
+		size := resumeReq.MessageSizes[i]
+		entry.Bytes, entry.NonText, entry.Role = size.Bytes, size.NonText, size.Role
+		if err := base.appendEntry(entry); err != nil {
 			return err
 		}
 	}

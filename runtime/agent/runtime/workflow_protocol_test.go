@@ -70,7 +70,7 @@ func TestChildInputsStampWorkflowProtocol(t *testing.T) {
 				input = &built
 			} else {
 				wf := &testWorkflowContext{ctx: t.Context()}
-				_, err := New().executeReservedAgentChild(wf, AgentRoute{ID: "child.agent", WorkflowName: "child.workflow", DefaultTaskQueue: "q"}, nil, nested)
+				_, err := New().executeReservedAgentChild(wf, AgentRoute{ID: "child.agent", WorkflowName: "child.workflow", DefaultTaskQueue: "q"}, nil, nested, wf.Context())
 				require.NoError(t, err)
 				require.Len(t, wf.childRequests, 1)
 				input = wf.childRequests[0].Input

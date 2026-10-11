@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextmeasure"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
@@ -16,6 +17,11 @@ import (
 // storePlanActivityOutput publishes no activity output until every content write
 // succeeds, including framework-authored recovery corrections.
 func (r *Runtime) storePlanActivityOutput(ctx context.Context, root string, out *PlanActivityOutput, transcript []*model.Message, awaitCalls []planner.ToolRequest) (*PlanActivityOutput, error) {
+	size, err := contextmeasure.MeasureMessages(transcript)
+	if err != nil {
+		return nil, err
+	}
+	out.TranscriptSize = size
 	items, err := encodePlanActivityContent(out, transcript, awaitCalls)
 	if err != nil {
 		return nil, err

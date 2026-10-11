@@ -10,6 +10,7 @@ import (
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/artifact"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextmeasure"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
@@ -30,6 +31,10 @@ type (
 	// It includes the full conversational context plus caller-provided labels and
 	// metadata.
 	RunInput struct {
+		// ContextCompaction is runtime-stamped configuration for this run.
+		ContextCompaction *ContextCompaction `json:"context_compaction,omitzero"`
+		// CompactionAgents snapshots child-agent settings so child starts replay independently of worker options.
+		CompactionAgents map[agent.Ident]ContextCompaction `json:"compaction_agents,omitzero"`
 		// WorkflowProtocolVersion is stamped by the runtime and must match the
 		// worker's WorkflowProtocolVersion, including when replaying history.
 		WorkflowProtocolVersion int
@@ -384,6 +389,8 @@ type (
 
 	// PlanActivityInput carries the planner input for PlanStart and PlanResume activities.
 	PlanActivityInput struct {
+		// Models is the sorted snapshot of adopted model rates and budgets.
+		Models []ModelContext `json:"models,omitzero"`
 		// AgentID identifies which agent is being planned.
 		AgentID agent.Ident
 
@@ -451,16 +458,51 @@ type (
 		ToolCatalog []tools.Ident
 	}
 
+	// ContextCompaction configures opt-in threshold compaction. Zero token settings use budget-derived defaults.
+	ContextCompaction struct {
+		TriggerAt               contextmeasure.Rate
+		KeepRecentTokens        int
+		ProtectRecentToolTokens int
+		MinSavingTokens         int
+		KeepResultTools         []tools.Ident
+	}
+	// ModelContext carries the last adopted calibration for one model.
+	ModelContext struct {
+		Model      string              `json:"m"`
+		Rate       contextmeasure.Rate `json:"r"`
+		Calibrated bool                `json:"c,omitzero"`
+		Budget     int                 `json:"b"`
+	}
+	// ViewUpdate reports a stored checkpoint and its current rendering.
+	ViewUpdate struct {
+		// Checkpoint is returned only after the immutable record is stored.
+		Checkpoint runstore.Hash
+		// Pinned is the selection for the current record and render budget.
+		Pinned []index.MessageID
+		// CheckpointBytes measures the rendered model-facing text.
+		CheckpointBytes int
+	}
 	// PlanActivityOutput wraps the planner result produced by a plan/resume activity.
 	PlanActivityOutput struct {
+		// Facts parallels CallKeys and comes from durable Completion.Facts.
+		Facts []contextmeasure.RequestFacts `json:"facts,omitzero"`
 		// Result is the planner output describing next tool calls, await requests, or final response.
 		Result *planner.PlanResult
 
 		// IndexHead is returned only after the input pending entries have been stored.
 		IndexHead runstore.Hash
 
+		// View is adopted only for successful planner results, never recovery outputs.
+		View *ViewUpdate
+		// CallView names the loader-built view used by calls, including rejected outputs.
+		// It records evidence without adopting a recovery ViewUpdate.
+		CallView *index.ViewRef `json:"call_view,omitzero"`
+
 		// TranscriptRef addresses the encoded non-empty Transcript in the root scope.
 		TranscriptRef runstore.Hash
+
+		// TranscriptSize is measured by the planner activity before content is stored.
+		TranscriptSize contextmeasure.MessageSize
 
 		// ToolCallRefs addresses each returned Result.ToolCalls entry, in order.
 		ToolCallRefs []runstore.Hash
@@ -645,6 +687,9 @@ type (
 
 		// MessageRefs addresses each encoded Messages entry in the root scope.
 		MessageRefs []runstore.Hash
+
+		// MessageSizes is overwritten by the runtime client from Messages.
+		MessageSizes []contextmeasure.MessageSize
 	}
 
 	// ClarificationAnswer carries a typed answer for a paused clarification request.
@@ -660,6 +705,10 @@ type (
 
 		// AnswerRef addresses the answer text in the root scope.
 		AnswerRef runstore.Hash
+
+		// AnswerBytes is overwritten by the runtime client from Answer. A nil
+		// measurement is invalid; a pointer to zero measures an empty answer.
+		AnswerBytes *int
 
 		// Labels carries optional metadata associated with the clarification answer.
 		Labels map[string]string

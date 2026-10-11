@@ -84,7 +84,7 @@ func TestAwaitBarrierSignalsAroundContentActivityKeepOneResume(t *testing.T) {
 			resultRef, err := rt.RunStore.Put(t.Context(), input.RootRunID, []byte(`{"ok":true}`))
 			require.NoError(t, err)
 			base.ensureSignals()
-			answer := &api.ClarificationAnswer{ID: "topic", AnswerRef: answerRef}
+			answer := &api.ClarificationAnswer{ID: "topic", AnswerRef: answerRef, AnswerBytes: new(len("use loom"))}
 			if duringContent {
 				wf.duringProvided = func() {
 					base.clarifyCh <- answer

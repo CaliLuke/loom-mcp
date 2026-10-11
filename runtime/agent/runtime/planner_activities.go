@@ -37,9 +37,8 @@ func (r *Runtime) PlanStartActivity(ctx context.Context, input *PlanActivityInpu
 	if err != nil {
 		return nil, err
 	}
-	owned := *input
-	input = &owned
-	input.View.IndexHead, input.View.Pending = view.Head, nil
+	input = loadedPlanActivityInput(input, view)
+	defer returnLoadedView(&out, view)
 	if input.Recovery != nil {
 		copy := *input.Recovery
 		data, err := r.RunStore.Get(ctx, input.RunContext.RootRunID, copy.CorrectionRef)
@@ -93,9 +92,8 @@ func (r *Runtime) PlanResumeActivity(ctx context.Context, input *PlanActivityInp
 	if err != nil {
 		return nil, err
 	}
-	owned := *input
-	input = &owned
-	input.View.IndexHead, input.View.Pending = view.Head, nil
+	input = loadedPlanActivityInput(input, view)
+	defer returnLoadedView(&out, view)
 	if input.Recovery != nil {
 		copy := *input.Recovery
 		data, err := r.RunStore.Get(ctx, input.RunContext.RootRunID, copy.CorrectionRef)
@@ -128,6 +126,24 @@ func (r *Runtime) PlanResumeActivity(ctx context.Context, input *PlanActivityInp
 		return out, err
 	}
 	return r.completePlanActivity(ctx, result, input, events, recoveryRecorder)
+}
+
+// loadedPlanActivityInput owns the adopted loader references for call recording.
+func loadedPlanActivityInput(input *PlanActivityInput, view *loadedView) *PlanActivityInput {
+	owned := *input
+	owned.View.IndexHead, owned.View.Pending = view.Head, nil
+	if view.View != nil {
+		owned.View.Checkpoint = new(view.View.Checkpoint)
+		owned.View.Pinned = view.View.Pinned
+	}
+	return &owned
+}
+
+// returnLoadedView excludes recoverable rejections from view adoption.
+func returnLoadedView(out **PlanActivityOutput, view *loadedView) {
+	if *out != nil && (*out).Recovery == nil {
+		(*out).View = view.View
+	}
 }
 
 func plannerActivityError(ctx context.Context, events *runtimePlannerEvents, err error) error {

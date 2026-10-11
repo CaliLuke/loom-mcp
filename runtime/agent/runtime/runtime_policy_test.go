@@ -499,7 +499,7 @@ func TestAwaitResumeReappliesToolPolicy(t *testing.T) {
 	}
 	wfCtx.ensureSignals()
 	ctrl := interrupt.NewController(wfCtx)
-	wfCtx.clarifyCh <- &api.ClarificationAnswer{ID: "clar-1", Answer: "the first one"}
+	wfCtx.clarifyCh <- &api.ClarificationAnswer{ID: "clar-1", AnswerRef: testPutBytes(t, rt, "run-1", []byte("the first one")), AnswerBytes: new(len("the first one"))}
 
 	input := &RunInput{RootRunID: "run-1", AgentID: "svc.agent", RunID: "run-1", SessionID: "sess-1", TurnID: "turn-1"}
 	_, err := rt.CreateSession(context.Background(), input.SessionID)

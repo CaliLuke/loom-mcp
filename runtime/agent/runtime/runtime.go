@@ -131,9 +131,10 @@ type (
 		toolsets  map[string]ToolsetRegistration
 		toolSpecs map[tools.Ident]tools.ToolSpec
 		// parsed tool payload schemas cached by tool name for hint building
-		toolSchemas   map[string]map[string]any
-		models        map[string]model.Client
-		contextLimits map[string]model.ContextLimits
+		toolSchemas       map[string]map[string]any
+		models            map[string]model.Client
+		contextLimits     map[string]model.ContextLimits
+		contextCompaction map[agent.Ident]ContextCompaction
 
 		// Per-agent tool specs registered during agent registration for introspection.
 		agentToolSpecs map[agent.Ident][]tools.ToolSpec
@@ -202,6 +203,8 @@ type (
 		// ContextLimits overrides adapter limits by resolved model, with registered-ID fallback.
 		// Positive fields win; negative values or max output above the window panic.
 		ContextLimits map[string]model.ContextLimits
+		// ContextCompaction enables threshold compaction per agent.
+		ContextCompaction map[agent.Ident]ContextCompaction
 		// Engine is the workflow backend adapter (Temporal by default).
 		Engine engine.Engine
 		// MemoryStore persists run transcripts and annotations.

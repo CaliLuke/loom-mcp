@@ -26,8 +26,19 @@ type (
 		// Origin qualifies a carried message.
 		Origin *Origin `json:"origin,omitzero"`
 	}
+	// ByteRange is an inclusive unsummarised range in the original result.
+	ByteRange struct {
+		From    int `json:"from"`
+		Through int `json:"through"`
+	}
 	// ReceiptLine describes one evicted call, assistant message or unsummarised range.
 	ReceiptLine struct {
+		// Kind is call or assistant.
+		Kind string `json:"kind"`
+		// ToolUseID identifies a covered model-eligible call.
+		ToolUseID string `json:"tool_use_id,omitzero"`
+		// Unsummarised names result byte ranges not yet summarised.
+		Unsummarised []ByteRange `json:"unsummarised,omitzero"`
 		// From is the first covered message.
 		From MessageID `json:"from"`
 		// Through is the last covered message.

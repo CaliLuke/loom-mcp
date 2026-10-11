@@ -34,9 +34,12 @@ type (
 	// ResultProjection contains only metadata needed by the existing transcript
 	// projection. A non-nil Error preserves IsError even for empty error text.
 	ResultProjection struct {
-		Preview TextParameter  `json:"preview,omitzero"`
-		Bounds  *agent.Bounds  `json:"bounds,omitzero"`
-		Error   *TextParameter `json:"error,omitzero"`
+		// ContentBytes retains the canonical result size independently of measured
+		// preview bytes, so omission and cleared placeholders preserve their meaning.
+		ContentBytes int            `json:"content_bytes,omitzero"`
+		Preview      TextParameter  `json:"preview,omitzero"`
+		Bounds       *agent.Bounds  `json:"bounds,omitzero"`
+		Error        *TextParameter `json:"error,omitzero"`
 	}
 
 	// StructuralEntry is a versioned rendering operation. Text contains template
@@ -65,14 +68,15 @@ type (
 		Structural *StructuralEntry       `json:"structural,omitzero"`
 		Role       model.ConversationRole `json:"role,omitzero"`
 		ToolUseIDs []string               `json:"tool_use_ids,omitzero"`
-		Bytes      int                    `json:"bytes,omitzero"`
-		NonText    int                    `json:"non_text,omitzero"`
-		Record     []runstore.Hash        `json:"record,omitzero"`
-		Keep       bool                   `json:"keep,omitzero"`
-		Origin     *Origin                `json:"origin,omitzero"`
-		Batch      MessageID              `json:"batch,omitzero"`
-		Result     *ResultProjection      `json:"result,omitzero"`
-		InputID    string                 `json:"input_id,omitzero"`
+		// Bytes counts model-facing text bytes, not the stored encoding.
+		Bytes   int               `json:"bytes,omitzero"`
+		NonText int               `json:"non_text,omitzero"`
+		Record  []runstore.Hash   `json:"record,omitzero"`
+		Keep    bool              `json:"keep,omitzero"`
+		Origin  *Origin           `json:"origin,omitzero"`
+		Batch   MessageID         `json:"batch,omitzero"`
+		Result  *ResultProjection `json:"result,omitzero"`
+		InputID string            `json:"input_id,omitzero"`
 		// Output addresses ref-only planner tool-output metadata. It is not model content.
 		Output runstore.Hash `json:"output,omitzero"`
 		Chain  runstore.Hash `json:"chain,omitzero"`

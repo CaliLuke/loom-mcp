@@ -487,6 +487,24 @@ type CheckpointRecord struct {
 }
 ```
 
+K12 stores the following receipt fields (continuation origins are K18):
+
+```go
+type ByteRange struct { From, Through int }
+type ReceiptLine struct {
+    From, Through MessageID
+    Kind        string       // "call" or "assistant"
+    Tool        string
+    ToolUseID   string
+    Text        string       // eligible argument preview (160 bytes) or assistant first line
+    Unsummarised []ByteRange  // empty until K15
+}
+```
+
+Receipt-only records preserve `Summary`, `SummaryRun` and `CitedUsers`; their
+`Prev`, `Through` and `Chain` name the exact newly evicted interval. Deterministic
+JSON v2 is stored before the returned hash can enter a planner-step record.
+
 **`ViewRef` has constant size** apart from `Pending`, which holds one step's
 entries, and `Pinned`, which has at most `MaxPins` IDs. A step adds at most
 one entry per tool call of one planner turn plus a few structural entries;
@@ -1443,6 +1461,18 @@ DSL lands, until the release criteria (7.4) pass. Then it becomes the default
 (K21, D1), per provider configuration and with the non-text rule of 4.10. An agent cannot declare both `Context(...)` and `History(...)`;
 registration fails fast.
 
+**Runtime option (K12).** Before the DSL lands, use
+`runtime.WithContextCompaction(agentID, runtime.ContextCompaction{TriggerAt:
+contextmeasure.Rate{Tokens: 85, Bytes: 100}, KeepResultTools: []tools.Ident{...}})`.
+Zero token settings select the defaults above. Registration rejects an agent
+with both compaction and `HistoryPolicy`. Workflow start also rejects stamped
+compaction settings against a worker registration with `HistoryPolicy`, so split
+client/worker deployments fail before effects. Observe, sorted Models and the
+three diagnostic hooks run only for compaction-enabled agents in K12; K14 widens
+their enablement. `KeepResultTools` sets immutable result
+entry `Keep` bits. `DisableRecall` belongs to `ContextRecovery` (K13), not this
+option.
+
 **DSL.**
 
 ```go
@@ -1612,6 +1642,24 @@ into run input and checked at workflow start and on replay; a mismatch fails
 fast. Every ticket that changes workflow code bumps it and adds a replay test.
 Operators drain running workflows before upgrading.
 
+K12 uses protocol 7, including entry-size metadata, `PlanActivityOutput.View`
+and `Facts`, sorted `PlanActivityInput.Models`, and run settings. K12 applies
+Observe, Models and diagnostics only when compaction settings are stamped.
+`planner_step.recovery` marks rejected outputs; `recovering` marks correction
+retries. Every step records the loader-built view its calls used, including pins.
+Rejected outputs leave the stable view and decision state unchanged, but their
+adopted facts update State; correction retries preserve the stable view.
+The loader derives canonical pins from record users and Budget, returning the
+exact list in ViewUpdate and CallView. Rendering the recorded ViewRef pins is
+therefore equivalent to loader selection, warm or cold and after budget shrink;
+incoming pins do not override canonical selection. Structural
+`TemplateProtocolVersion` remains 5. The client stamps resolved compaction
+settings into `RunInput` at start and overwrites caller values. Child settings
+are snapshotted with that input. Canonical planner-step and seal records preserve
+the settings in RunRecord; replay and offline decisions use recorded settings,
+limits, rates and entry sizes rather than worker configuration. Code changes
+still require draining; changing worker options cannot change an existing run.
+
 The roadmap's durable cross-workflow continuations must carry the index head
 and latest checkpoint as part of the successor's replay seed. The index
 segments are what make `ContinueAsNew` possible later.
@@ -1626,7 +1674,7 @@ with run length:
 | Temporal history events | One set per step | `ContinueAsNew` (follow-up), which the index segments make possible |
 | The index in workflow memory and replay | About 400 bytes per entry | The same follow-up; at 1,000 steps with batches of 50 calls, about 20 MB |
 | Store size: content, segments, call records | Linear | Retention (D7) |
-| All recorder writes (addressed content + every `PutCall` body, K8) | At 1,000 steps: off 1,999.743 bytes/step (max residual 700.227 bytes); `KeepRecentTurns` 2,032.677 (1,103.159); `Compress` 2,458.549 (3,799.192) | Linear-fit regression: slope 500–4,000 bytes/step; max residual < 16 KiB. Includes repeated writes and recorder-owned content; excludes view/index setup; K12 repeats with real compaction |
+| All recorder writes (addressed content + every `PutCall` body, K12 run) | At 1,000 steps: off 2,212.230 bytes/step (max residual 990.001 bytes); `keep_recent` 2,242.624 (1,239.443); `compress` 2,669.240 (3,937.941); `real_compaction` 2,740.337 (542.128), two evictions after 1,000 seed turns | Entry-size metadata moved all four modes from K8. Same 500–4,000 bytes/step slope and <16 KiB residual bounds; first request full; repeated recorder writes included; index/checkpoint setup excluded |
 | Building `ToolOutputs` and `TypedInputs` (4.7) | A cold worker walks every segment: work linear in the run *per step*, so quadratic over a run whose steps all land on cold workers | The loader keeps both slices per worker and appends only new entries, so a warm step does work linear in its new entries |
 | Planner memory | `ToolOutputs` holds a hash and a bounded preview per call | Linear in calls. If measurements show it matters, a lazy accessor is a follow-up planner API change |
 | Recall `find` | Scans up to `RecallScanBytes` per call | Bounded per call; the allowance bounds calls (4.18) |
