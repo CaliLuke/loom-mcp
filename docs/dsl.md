@@ -2047,6 +2047,13 @@ Distinct authored tool names can normalize to the same Go identifier. Generated
 helper names are disambiguated while each helper retains its own method binding
 and payload, result, and server-data shapes. Authored tool IDs remain unchanged.
 
+Method-backed tools also support primitive payloads (`String`, `Boolean`, numeric
+types, and `Bytes`) and arrays or maps of primitives. Payload codecs return
+pointers; `Init<Tool>MethodPayload` accepts a value for these shapes. Generated
+method dispatchers and registry providers dereference the decoded payload before
+calling the transform. Custom executors must likewise pass `*args` for these
+shapes; object payload transforms accept `args` directly.
+
 Generated transforms in `gen/svc/toolsets/ts/transforms.go`:
 
 ```go

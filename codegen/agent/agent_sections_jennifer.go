@@ -2,6 +2,7 @@ package codegen
 
 import (
 	gocodegen "github.com/CaliLuke/loom/codegen"
+	"github.com/CaliLuke/loom/expr"
 	"github.com/dave/jennifer/jen"
 )
 
@@ -548,7 +549,7 @@ func emitToolProviderDispatchers(stmt *jen.Statement, data toolProviderFileData)
 					if tool.MethodPayloadTypeRef == "" {
 						eg.Id("methodIn").Op("=").Nil()
 					} else {
-						eg.Id("methodIn").Op("=").Id("Init" + tool.ConstName + "MethodPayload").Call(jen.Id("toolArgs").Assert(jen.Op("*").Id(tool.ConstName + "Payload")))
+						eg.Id("methodIn").Op("=").Id("Init" + tool.ConstName + "MethodPayload").Call(toolProviderPayloadArgument(tool, jen.Id("toolArgs").Assert(jen.Op("*").Id(tool.ConstName+"Payload"))))
 					}
 				})
 				if len(tool.InjectedFields) > 0 {
@@ -742,6 +743,15 @@ func emitToolProviderHelpers(stmt *jen.Statement) {
 	stmt.Line()
 }
 
+// toolProviderPayloadArgument adapts pointer-returning payload codecs to the
+// value parameters used by primitive and collection method transforms.
+func toolProviderPayloadArgument(tool *ToolData, arg *jen.Statement) *jen.Statement {
+	if expr.IsPrimitive(tool.Args.Type) || expr.IsArray(tool.Args.Type) || expr.IsMap(tool.Args.Type) {
+		return jen.Op("*").Add(arg)
+	}
+	return arg
+}
+
 func emitToolProviderCtor(stmt *jen.Statement, data toolProviderFileData) {
 	gocodegen.Doc(stmt, "NewProvider returns a Provider for the toolset.")
 	stmt.Func().Id("NewProvider").Params(jen.Id("svc").Add(gocodegen.TypeRef(data.ServiceTypeRef))).Op("*").Id("Provider").Block(
@@ -785,7 +795,7 @@ func emitToolProviderHandle(stmt *jen.Statement, data toolProviderFileData) {
 								),
 								jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessage").Call(jen.Id("msg").Dot("RegistrationToken"), jen.Id("msg").Dot("ToolUseID"), jen.Id("toolregistry").Dot("ToolErrorCodeInvalidArguments"), jen.Lit("tool arguments failed validation")), jen.Nil()),
 							)
-							cg.Id("methodIn").Op(":=").Id("Init" + tool.ConstName + "MethodPayload").Call(jen.Id("args"))
+							cg.Id("methodIn").Op(":=").Id("Init" + tool.ConstName + "MethodPayload").Call(toolProviderPayloadArgument(tool, jen.Id("args")))
 							for _, field := range tool.InjectedFields {
 								cg.Id("methodIn").Dot(gocodegen.Goify(field, true)).Op("=").Id("msg").Dot("Meta").Dot(gocodegen.Goify(field, true))
 							}

@@ -231,15 +231,26 @@ func (b *toolSpecBuilder) buildTypeInfo(tool *ToolData, att *goaexpr.AttributeEx
 	// transform helpers must retain the toolhttp qualifier in both directions.
 	srcCtx := codegen.NewAttributeContext(true, false, false, "toolhttp", scope)
 	tgtCtx := codegen.NewAttributeContextForConversion(false, false, true, "", scope)
-	decodeBody, decodeHelpers, err := codegen.GoTransform(src, dst, "in", "out", srcCtx, tgtCtx, "decode", false)
+	sourceVar, targetVar := "in", "out"
+	collectionPayload := usage == usagePayload && (goaexpr.IsArray(baseAttr.Type) || goaexpr.IsMap(baseAttr.Type))
+	if collectionPayload {
+		// Codecs hold pointers to top-level collections, while GoTransform
+		// operates on collection values. Parentheses preserve indexing precedence.
+		sourceVar, targetVar = "(*in)", "(*out)"
+	}
+	decodeBody, decodeHelpers, err := codegen.GoTransform(src, dst, sourceVar, targetVar, srcCtx, tgtCtx, "decode", false)
 	if err != nil {
 		return nil, err
 	}
 	encSrcCtx := codegen.NewAttributeContextForConversion(false, false, true, "", scope)
 	encTgtCtx := codegen.NewAttributeContext(true, false, false, "toolhttp", scope)
-	encodeBody, encodeHelpers, err := codegen.GoTransform(dst, src, "in", "out", encSrcCtx, encTgtCtx, "encode", false)
+	encodeBody, encodeHelpers, err := codegen.GoTransform(dst, src, sourceVar, targetVar, encSrcCtx, encTgtCtx, "encode", false)
 	if err != nil {
 		return nil, err
+	}
+	if collectionPayload {
+		decodeBody = fmt.Sprintf("out = new(%s)\n%s", scope.GoTypeName(dst), decodeBody)
+		encodeBody = fmt.Sprintf("out = new(toolhttp.%s)\n%s", scope.GoTypeName(src), encodeBody)
 	}
 	if usage == usagePayload && goaexpr.IsPrimitive(baseAttr.Type) {
 		// Payload codecs expose pointers even when the designed payload is a

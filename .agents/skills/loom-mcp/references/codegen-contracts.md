@@ -242,6 +242,12 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   server-data projection, retry hints, or tool-error mapping. Registry provider
   loops still use their generated provider adapter path unless that path is
   explicitly unified in a later milestone.
+- Method-backed primitive, array, and map payload codecs return pointers,
+  while `Init<Tool>MethodPayload` takes values. Both method dispatchers and
+  registry providers must dereference those decoded payloads before mapping.
+  Collection codecs must transform dereferenced inputs into allocated output
+  values. Preserve object payload pointer semantics and prove scalar and
+  collection bindings with generated compile-and-round-trip tests.
 - Generated method dispatchers with injected fields must validate `MapPayload`
   output before field injection. Mapper errors, nil results, and wrong types
   become tool errors. The dispatcher must not panic.
