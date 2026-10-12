@@ -1,0 +1,1751 @@
+{
+  "format": "selvedge.history/v1",
+  "instance": {
+    "instance_id": "run-protocol-history",
+    "workflow_name": "features.coordinator.workflow",
+    "status": "completed",
+    "input": {
+      "context_settings": {
+        "threshold": true,
+        "max_tier": "summary",
+        "guard_margin": {
+          "Tokens": 1,
+          "Bytes": 10
+        },
+        "prompt": {
+          "Ref": {
+            "ID": "features.coordinator.context.summary",
+            "Version": "sha256:c213a63837087dad5fb990d74a4fea84f0072c70f4455cce27e9a646268aef95"
+          },
+          "Template": "sha256:c213a63837087dad5fb990d74a4fea84f0072c70f4455cce27e9a646268aef95"
+        },
+        "context_window": 5000,
+        "framing_tokens": 200,
+        "max_pins": 32,
+        "max_pinned_parts": 2,
+        "max_summary_chunks": 8,
+        "recall_scan_bytes": 8000000,
+        "TriggerAt": {
+          "Tokens": 17,
+          "Bytes": 20
+        },
+        "RecallDiscoveryCalls": 3,
+        "RecallReadCalls": 3
+      },
+      "context_fingerprint": "sha256:051f6aab83e71d340c4d4f37ff6d1b13aa99438a38ef43933a35b91c163876f1",
+      "context_compaction": {
+        "ContextModel": null,
+        "TriggerAt": {
+          "Tokens": 85,
+          "Bytes": 100
+        },
+        "KeepRecentTokens": 0,
+        "ProtectRecentToolTokens": 0,
+        "MinSavingTokens": 0,
+        "RecallDiscoveryCalls": 20,
+        "RecallReadCalls": 20,
+        "KeepResultTools": null,
+        "Summary": {
+          "Instructions": "",
+          "Prompt": ""
+        }
+      },
+      "context_recovery": {
+        "guard_margin": {
+          "Tokens": 1,
+          "Bytes": 10
+        },
+        "disable_recall": false
+      },
+      "compaction_agents": {
+        "features.coordinator": {
+          "ContextModel": null,
+          "TriggerAt": {
+            "Tokens": 85,
+            "Bytes": 100
+          },
+          "KeepRecentTokens": 0,
+          "ProtectRecentToolTokens": 0,
+          "MinSavingTokens": 0,
+          "RecallDiscoveryCalls": 20,
+          "RecallReadCalls": 20,
+          "KeepResultTools": null,
+          "Summary": {
+            "Instructions": "",
+            "Prompt": ""
+          }
+        }
+      },
+      "WorkflowProtocolVersion": 18,
+      "AgentID": "features.coordinator",
+      "RunID": "run-protocol-history",
+      "RootRunID": "run-protocol-history",
+      "SessionID": "sess-protocol-history",
+      "TurnID": "",
+      "ParentToolCallID": "",
+      "ParentRunID": "",
+      "ParentAgentID": "",
+      "Tool": "",
+      "ToolArgs": null,
+      "Messages": [
+        {
+          "Role": "user",
+          "Parts": [
+            {
+              "Kind": "text",
+              "Text": "record this request"
+            }
+          ],
+          "Meta": null
+        },
+        {
+          "Role": "assistant",
+          "Parts": [
+            {
+              "Kind": "text",
+              "Text": "earlier answer"
+            }
+          ],
+          "Meta": null
+        },
+        {
+          "Role": "user",
+          "Parts": [
+            {
+              "Kind": "text",
+              "Text": "earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history earlier history "
+            }
+          ],
+          "Meta": null
+        },
+        {
+          "Role": "assistant",
+          "Parts": [
+            {
+              "Kind": "text",
+              "Text": "recent answer"
+            }
+          ],
+          "Meta": null
+        },
+        {
+          "Role": "user",
+          "Parts": [
+            {
+              "Kind": "text",
+              "Text": "continue"
+            }
+          ],
+          "Meta": null
+        }
+      ],
+      "Labels": null,
+      "Metadata": null,
+      "WorkflowOptions": null,
+      "Policy": {
+        "context": {
+          "recall_discovery_calls": 3,
+          "recall_read_calls": 3,
+          "context_window": 5000
+        },
+        "PerTurnMaxToolCalls": 0,
+        "RestrictToTool": "",
+        "CompletionTool": "",
+        "AllowedTags": null,
+        "DeniedTags": null,
+        "MaxToolCalls": 0,
+        "MaxRecoveryTurns": 0,
+        "MaxConsecutiveFailedToolCalls": 0,
+        "TimeBudget": 0,
+        "PlanTimeout": 0,
+        "ToolTimeout": 0,
+        "PerToolTimeout": {},
+        "FinalizerGrace": 0,
+        "LimitTerminalPlans": null,
+        "InterruptsAllowed": false
+      }
+    },
+    "output": {
+      "AgentID": "features.coordinator",
+      "RunID": "run-protocol-history",
+      "Final": {
+        "Role": "assistant",
+        "Parts": [
+          {
+            "Kind": "text",
+            "Text": "history replay complete"
+          }
+        ],
+        "Meta": null
+      },
+      "FinalRef": "sha256:152ae89cf12cf8f84c65382d50f11636fa4dcc9283746d2aee16d7f0ebce8e52",
+      "FinalToolResult": null,
+      "ToolEventsRef": "sha256:9e3045d7091bdfa76960619ef248c6ca3188d1be9217e79b2622085b13c12a51",
+      "ToolEventCount": 3,
+      "ToolSummary": {
+        "FailedCount": 1,
+        "LastError": {
+          "Message": "topic requires evidence",
+          "Cause": null
+        },
+        "Telemetry": null
+      },
+      "Notes": [],
+      "Usage": {
+        "Model": "",
+        "ModelClass": "",
+        "InputTokens": 0,
+        "OutputTokens": 0,
+        "TotalTokens": 0,
+        "CacheReadTokens": 0,
+        "CacheWriteTokens": 0
+      }
+    },
+    "cancel_requested": false,
+    "cancel_reason": "",
+    "parent_instance_id": "",
+    "parent_key": ""
+  },
+  "events": [
+    {
+      "seq": 1,
+      "key": "#1",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 29
+    },
+    {
+      "seq": 2,
+      "key": "#2",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 29
+    },
+    {
+      "seq": 3,
+      "key": "#3",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:47.148657Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 3
+    },
+    {
+      "seq": 4,
+      "key": "#4",
+      "command": "activity:features.coordinator.record_content",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "continuation": {
+          "Prev": null,
+          "Pos": 1,
+          "ContinuedFrom": null,
+          "Outcome": "fresh",
+          "Reason": "no_head",
+          "View": {
+            "chain_pos": 1,
+            "context_fingerprint": "sha256:051f6aab83e71d340c4d4f37ff6d1b13aa99438a38ef43933a35b91c163876f1"
+          },
+          "Limits": {
+            "ContextWindow": 0,
+            "MaxOutputTokens": 0,
+            "DefaultMaxTokens": 0,
+            "ImageTokens": 0
+          },
+          "Visible": [
+            "sha256:7a4ece2c600ab5531c1c0f4f8a871d36c18322485661f4e563b8f0c5feb91588",
+            "sha256:1bb920e6512980c92c515577b40a8e56327c6e4bc2187ba5a42b99087ec369b0",
+            "sha256:d56ae2928cf9e1a28cf69b3719036effed69b1398cc9c217e44630899125b763",
+            "sha256:1d6aa869ad106ab7fef4ac7c7f8bfb852b9b92b76818d157db00b04a28f5e782",
+            "sha256:dcbf19e4133d8d4b194877e5f2215a7a0c8d68d14236cdf17bd73c28cbdbf086"
+          ]
+        },
+        "Refs": [
+          "sha256:fa8ce1d764f20e2c1ea0e53c7a2cea2dc8f16a764399b9e0c160af2c6f3f7dc4",
+          "sha256:1468e5aaf8cd5e6c0610a63db12732da55d678e17236d6a64323393d8e39af21",
+          "sha256:a7368800570feb9eb2cfacab746f45e7b29bcccb5f360dcf2c1e40c281bc3324",
+          "sha256:a50d20addbe1d7571172bea7e0f32c3e1118c9ae907a2b62c8297700e95cf7fb",
+          "sha256:6f91a9eb4ee6acd7aa689597d58d953bfce429592d29146e7e9e9fa06c1685c8"
+        ],
+        "IndexHead": "sha256:61dcf61e0cfede2a11a3360ca444a0d5b015c61c1d9a5aa9c91e5957b0e169d3",
+        "Entries": [
+          {
+            "id": 1,
+            "kind": "message",
+            "hash": "sha256:fa8ce1d764f20e2c1ea0e53c7a2cea2dc8f16a764399b9e0c160af2c6f3f7dc4",
+            "role": "user",
+            "bytes": 19,
+            "chain": "sha256:becd0a1993c1ae6b797927be750483db924268e33dde622d64acb873d0a7713e"
+          },
+          {
+            "id": 2,
+            "kind": "message",
+            "hash": "sha256:1468e5aaf8cd5e6c0610a63db12732da55d678e17236d6a64323393d8e39af21",
+            "role": "assistant",
+            "bytes": 14,
+            "chain": "sha256:c69750e68799258be1d11d8b5f5e2c8320956593640382e105e60fa9a2d05691"
+          },
+          {
+            "id": 3,
+            "kind": "message",
+            "hash": "sha256:a7368800570feb9eb2cfacab746f45e7b29bcccb5f360dcf2c1e40c281bc3324",
+            "role": "user",
+            "bytes": 32000,
+            "chain": "sha256:d4c1647f59c4f60d4d8e96a0de967dc9efce898143cc5f7f820baadff5e79129"
+          },
+          {
+            "id": 4,
+            "kind": "message",
+            "hash": "sha256:a50d20addbe1d7571172bea7e0f32c3e1118c9ae907a2b62c8297700e95cf7fb",
+            "role": "assistant",
+            "bytes": 13,
+            "chain": "sha256:991b061f6a5d19c844e9f814e254edc5f232cf33ee0666a4d7b975d3d0960127"
+          },
+          {
+            "id": 5,
+            "kind": "message",
+            "hash": "sha256:6f91a9eb4ee6acd7aa689597d58d953bfce429592d29146e7e9e9fa06c1685c8",
+            "role": "user",
+            "bytes": 8,
+            "chain": "sha256:8c409c4351ed7b4d7132976bb4bb8cf3693cd923ea82eca97920730dcc1dca87"
+          }
+        ],
+        "ToolResults": null,
+        "Calls": null,
+        "CallRefs": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 29
+    },
+    {
+      "seq": 5,
+      "key": "#5",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:47.368675Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 5
+    },
+    {
+      "seq": 6,
+      "key": "#6",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:47.392254Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 6
+    },
+    {
+      "seq": 7,
+      "key": "#7",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 29
+    },
+    {
+      "seq": 8,
+      "key": "#8",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:47.432847Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 8
+    },
+    {
+      "seq": 9,
+      "key": "#9",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:47.442346Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 9
+    },
+    {
+      "seq": 10,
+      "key": "#10",
+      "command": "activity:features.coordinator.plan",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "context_overflow": {
+          "provider": {
+            "provider": "history",
+            "operation": "complete",
+            "http_status": 400,
+            "code": "context_length_exceeded",
+            "message": "recorded overflow",
+            "request_id": ""
+          },
+          "source": "provider",
+          "failed": {
+            "call": {
+              "RunID": "run-protocol-history",
+              "Seq": 1,
+              "Attempt": 1
+            },
+            "model": "history",
+            "context_window": 6000,
+            "output_reserve": 0,
+            "view_bearing": true,
+            "view_text_bytes": 32054,
+            "input_tokens": 0,
+            "text_bytes": 32654,
+            "fixed_bytes": 600,
+            "non_text": 0,
+            "count_latency": 0,
+            "outcome": "overflow",
+            "recovery_tool_bytes": 2776
+          },
+          "ordinal": 1,
+          "view_text_bytes": 32054
+        },
+        "facts": [
+          {
+            "call": {
+              "RunID": "run-protocol-history",
+              "Seq": 1,
+              "Attempt": 1
+            },
+            "model": "history",
+            "context_window": 6000,
+            "output_reserve": 0,
+            "view_bearing": true,
+            "view_text_bytes": 32054,
+            "input_tokens": 0,
+            "text_bytes": 32654,
+            "fixed_bytes": 600,
+            "non_text": 0,
+            "count_latency": 0,
+            "outcome": "overflow",
+            "recovery_tool_bytes": 2776
+          }
+        ],
+        "Result": null,
+        "IndexHead": "sha256:61dcf61e0cfede2a11a3360ca444a0d5b015c61c1d9a5aa9c91e5957b0e169d3",
+        "View": null,
+        "call_view": {
+          "chain_pos": 1,
+          "context_fingerprint": "sha256:051f6aab83e71d340c4d4f37ff6d1b13aa99438a38ef43933a35b91c163876f1",
+          "index_head": "sha256:61dcf61e0cfede2a11a3360ca444a0d5b015c61c1d9a5aa9c91e5957b0e169d3"
+        },
+        "TranscriptRef": "",
+        "TranscriptSize": {
+          "Bytes": 0,
+          "NonText": 0,
+          "Role": ""
+        },
+        "ToolCallRefs": null,
+        "AwaitCallRefs": null,
+        "CallKeys": [
+          {
+            "RunID": "run-protocol-history",
+            "Seq": 1,
+            "Attempt": 1
+          }
+        ],
+        "ProducingCall": null,
+        "RequestGrowth": null,
+        "Usage": {
+          "Model": "",
+          "ModelClass": "",
+          "InputTokens": 0,
+          "OutputTokens": 0,
+          "TotalTokens": 0,
+          "CacheReadTokens": 0,
+          "CacheWriteTokens": 0
+        },
+        "ToolPolicyActive": false,
+        "AllowedTools": null,
+        "PolicyCaps": {
+          "MaxToolCalls": 0,
+          "RemainingToolCalls": 0,
+          "MaxRecoveryTurns": 0,
+          "RemainingRecoveryTurns": 0,
+          "ExpiresAt": "0001-01-01T00:00:00Z"
+        },
+        "Recovery": null,
+        "Attempt": 0
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 29
+    },
+    {
+      "seq": 11,
+      "key": "#11",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:47.660495Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 11
+    },
+    {
+      "seq": 12,
+      "key": "#12",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:47.736396Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 12
+    },
+    {
+      "seq": 13,
+      "key": "#13",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 29
+    },
+    {
+      "seq": 14,
+      "key": "#14",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:47.915315Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 14
+    },
+    {
+      "seq": 15,
+      "key": "#15",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:47.95964Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 15
+    },
+    {
+      "seq": 16,
+      "key": "#16",
+      "command": "activity:features.coordinator.plan",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "facts": [
+          {
+            "call": {
+              "RunID": "run-protocol-history",
+              "Seq": 2,
+              "Attempt": 1
+            },
+            "model": "history",
+            "context_window": 6000,
+            "output_reserve": 0,
+            "view_bearing": true,
+            "view_text_bytes": 623,
+            "input_tokens": 0,
+            "text_bytes": 4394,
+            "fixed_bytes": 3771,
+            "non_text": 0,
+            "count_latency": 0,
+            "outcome": "ok"
+          }
+        ],
+        "Result": {
+          "ToolCalls": [
+            {
+              "Name": "workflow.draft",
+              "Payload": {
+                "topic": "history replay"
+              },
+              "Error": null,
+              "AgentID": "features.coordinator",
+              "RunID": "run-protocol-history",
+              "RootRunID": "run-protocol-history",
+              "SessionID": "sess-protocol-history",
+              "Labels": null,
+              "TurnID": "",
+              "ToolCallID": "history-draft",
+              "ParentToolCallID": ""
+            }
+          ],
+          "FinalResponse": null,
+          "FinalToolResult": null,
+          "Streamed": false,
+          "Await": {
+            "Items": [
+              {
+                "Kind": "clarification",
+                "Clarification": {
+                  "ID": "history-clarification",
+                  "Question": "Which topic should the draft use?",
+                  "MissingFields": null,
+                  "RestrictToTool": "",
+                  "ExampleInput": null,
+                  "ClarifyingPrompt": ""
+                },
+                "Questions": null,
+                "ExternalTools": null,
+                "TypedInput": null
+              }
+            ]
+          },
+          "RetryHint": null,
+          "ExpectedChildren": 0,
+          "Notes": null
+        },
+        "IndexHead": "sha256:61dcf61e0cfede2a11a3360ca444a0d5b015c61c1d9a5aa9c91e5957b0e169d3",
+        "View": {
+          "Checkpoint": "sha256:3afa0b3f75d266280cfc7152b36f9c8af3b73533d3a9795f9e1ea2ed80da26b6",
+          "Pinned": [
+            1
+          ],
+          "CheckpointBytes": 602
+        },
+        "call_view": {
+          "chain_pos": 1,
+          "context_fingerprint": "sha256:051f6aab83e71d340c4d4f37ff6d1b13aa99438a38ef43933a35b91c163876f1",
+          "index_head": "sha256:61dcf61e0cfede2a11a3360ca444a0d5b015c61c1d9a5aa9c91e5957b0e169d3",
+          "checkpoint": "sha256:3afa0b3f75d266280cfc7152b36f9c8af3b73533d3a9795f9e1ea2ed80da26b6",
+          "tail_from": 4,
+          "pinned": [
+            1
+          ],
+          "budget": {
+            "keep_user_tokens": 250,
+            "max_summary_tokens": 500,
+            "receipt_tokens": 150,
+            "framing_tokens": 200
+          }
+        },
+        "TranscriptRef": "sha256:5ca6a418ed32f8bcb2a74e929f802e25d12b933a0427ad81cfeafcf31bf516aa",
+        "TranscriptSize": {
+          "Bytes": 20,
+          "NonText": 0,
+          "Role": "assistant"
+        },
+        "ToolCallRefs": [
+          "sha256:4180bb4a3d24ef92a819b4dfb287a00a78f21843e7a523f3b6028fae980aeccb"
+        ],
+        "AwaitCallRefs": null,
+        "CallKeys": [
+          {
+            "RunID": "run-protocol-history",
+            "Seq": 2,
+            "Attempt": 1
+          }
+        ],
+        "ProducingCall": {
+          "RunID": "run-protocol-history",
+          "Seq": 2,
+          "Attempt": 1
+        },
+        "RequestGrowth": null,
+        "Usage": {
+          "Model": "",
+          "ModelClass": "",
+          "InputTokens": 0,
+          "OutputTokens": 0,
+          "TotalTokens": 0,
+          "CacheReadTokens": 0,
+          "CacheWriteTokens": 0
+        },
+        "ToolPolicyActive": true,
+        "AllowedTools": [
+          "delegated.summarize",
+          "workflow.draft",
+          "workflow.finalize",
+          "workflow.method_echo",
+          "workflow.publish",
+          "workflow.retry",
+          "workflow.review",
+          "workflow.revise",
+          "runtime.recall_context"
+        ],
+        "PolicyCaps": {
+          "MaxToolCalls": 12,
+          "RemainingToolCalls": 12,
+          "MaxRecoveryTurns": 2,
+          "RemainingRecoveryTurns": 2,
+          "ExpiresAt": "0001-01-01T00:00:00Z"
+        },
+        "Recovery": null,
+        "Attempt": 2
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 29
+    },
+    {
+      "seq": 17,
+      "key": "#17",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:48.13921Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 17
+    },
+    {
+      "seq": 18,
+      "key": "#18",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 29
+    },
+    {
+      "seq": 19,
+      "key": "#19",
+      "command": "receive_async:loom_mcp.runtime.pause",
+      "event_type": "SignalNone",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 20,
+      "key": "#20",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:48.405021Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 20
+    },
+    {
+      "seq": 21,
+      "key": "#21",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:48.407184Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 21
+    },
+    {
+      "seq": 22,
+      "key": "#22",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:48.409185Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 22
+    },
+    {
+      "seq": 23,
+      "key": "#23",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:48.411559Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 23
+    },
+    {
+      "seq": 24,
+      "key": "#24",
+      "command": "sleep",
+      "event_type": "Reserved",
+      "data_type": "json",
+      "binary": null,
+      "reservation": {
+        "expires_at": "2026-10-12T21:16:17.370647Z"
+      },
+      "delivered_seq": 0
+    },
+    {
+      "seq": 25,
+      "key": "#25",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 29
+    },
+    {
+      "seq": 26,
+      "key": "#26",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 29
+    },
+    {
+      "seq": 27,
+      "key": "#27",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 29
+    },
+    {
+      "seq": 28,
+      "key": "#28",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:48.478791Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 28
+    },
+    {
+      "seq": 29,
+      "key": "#29",
+      "command": "receive:loom_mcp.runtime.provide.confirmation",
+      "event_type": "SignalReceived",
+      "data": {
+        "RunID": "run-protocol-history",
+        "ID": "",
+        "Approved": true,
+        "RequestedBy": "history-recorder",
+        "Labels": null,
+        "Metadata": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 29
+    },
+    {
+      "seq": 30,
+      "key": "#30",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:48.681719Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 30
+    },
+    {
+      "seq": 31,
+      "key": "#31",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 39
+    },
+    {
+      "seq": 32,
+      "key": "#32",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:48.701174Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 32
+    },
+    {
+      "seq": 33,
+      "key": "#33",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:48.703219Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 33
+    },
+    {
+      "seq": 34,
+      "key": "#34",
+      "command": "sleep",
+      "event_type": "Reserved",
+      "data_type": "json",
+      "binary": null,
+      "reservation": {
+        "expires_at": "2026-10-12T21:16:17.573752Z"
+      },
+      "delivered_seq": 0
+    },
+    {
+      "seq": 35,
+      "key": "#35",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 39
+    },
+    {
+      "seq": 36,
+      "key": "#36",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:48.728451Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 36
+    },
+    {
+      "seq": 37,
+      "key": "#37",
+      "command": "activity:features.coordinator.executetool",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "Preview": "",
+        "ResultBytes": 27,
+        "Refs": {
+          "Result": "sha256:ce2d59223e6653b8e03f54a8e761d2d046f4f2d01d14bf7e6b2c7c37522ddfa0",
+          "ServerData": "",
+          "Payload": "sha256:f843911dd6834458d7cd2f38862cd65bf9f718856336ab1bc46205193e1f5f35"
+        },
+        "Payload": null,
+        "ServerData": null,
+        "Bounds": null,
+        "Telemetry": null,
+        "Error": "",
+        "ErrorKind": "",
+        "RetryHint": null,
+        "Pause": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 39
+    },
+    {
+      "seq": 38,
+      "key": "#38",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:48.735295Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 38
+    },
+    {
+      "seq": 39,
+      "key": "#39",
+      "command": "await",
+      "event_type": "AwaitCompleted",
+      "data": {
+        "history": 3,
+        "signals": 0
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 39
+    },
+    {
+      "seq": 40,
+      "key": "#40",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:49.168364Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 40
+    },
+    {
+      "seq": 41,
+      "key": "#41",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 44
+    },
+    {
+      "seq": 42,
+      "key": "#42",
+      "command": "activity:features.coordinator.record_content",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "Refs": [
+          "sha256:1153ebf32cfb675255cf560532d90088051d5785e584a91f73d5ebfe19e29294"
+        ],
+        "IndexHead": "",
+        "Entries": null,
+        "ToolResults": null,
+        "Calls": null,
+        "CallRefs": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 44
+    },
+    {
+      "seq": 43,
+      "key": "#43",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:49.391368Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 43
+    },
+    {
+      "seq": 44,
+      "key": "#44",
+      "command": "receive:loom_mcp.runtime.provide.clarification",
+      "event_type": "SignalReceived",
+      "data": {
+        "RunID": "run-protocol-history",
+        "ID": "history-clarification",
+        "Answer": "",
+        "AnswerRef": "sha256:2f1e6105b547c92f74da2c44fec1cce69403123bf6ec812708c13321fd03938e",
+        "AnswerBytes": 22,
+        "Labels": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 44
+    },
+    {
+      "seq": 45,
+      "key": "#45",
+      "command": "activity:features.coordinator.record_content",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "Refs": [
+          "sha256:e40ab5c1fd338d4e39e201c7fa62012e5f5a063253fecad9ad12a4169a45ea4f"
+        ],
+        "IndexHead": "",
+        "Entries": null,
+        "ToolResults": null,
+        "Calls": null,
+        "CallRefs": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 46,
+      "key": "#46",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:49.426053Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 46
+    },
+    {
+      "seq": 47,
+      "key": "#47",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 48,
+      "key": "#48",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:49.453526Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 48
+    },
+    {
+      "seq": 49,
+      "key": "#49",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:49.455609Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 49
+    },
+    {
+      "seq": 50,
+      "key": "#50",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:49.458002Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 50
+    },
+    {
+      "seq": 51,
+      "key": "#51",
+      "command": "activity:features.coordinator.resume",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "facts": [
+          {
+            "call": {
+              "RunID": "run-protocol-history",
+              "Seq": 3,
+              "Attempt": 1
+            },
+            "model": "history",
+            "context_window": 6000,
+            "output_reserve": 0,
+            "view_bearing": true,
+            "view_text_bytes": 791,
+            "input_tokens": 0,
+            "text_bytes": 4562,
+            "fixed_bytes": 3771,
+            "non_text": 0,
+            "count_latency": 0,
+            "outcome": "ok"
+          }
+        ],
+        "Result": {
+          "ToolCalls": [
+            {
+              "Name": "delegated.summarize",
+              "Payload": {
+                "topic": "history replay"
+              },
+              "Error": null,
+              "AgentID": "features.coordinator",
+              "RunID": "run-protocol-history",
+              "RootRunID": "run-protocol-history",
+              "SessionID": "sess-protocol-history",
+              "Labels": null,
+              "TurnID": "",
+              "ToolCallID": "history-child",
+              "ParentToolCallID": ""
+            },
+            {
+              "Name": "runtime.recall_context",
+              "Payload": {
+                "read": {
+                  "id": "1",
+                  "part": "result",
+                  "offset": 0
+                }
+              },
+              "Error": null,
+              "AgentID": "features.coordinator",
+              "RunID": "run-protocol-history",
+              "RootRunID": "run-protocol-history",
+              "SessionID": "sess-protocol-history",
+              "Labels": null,
+              "TurnID": "",
+              "ToolCallID": "history-recall",
+              "ParentToolCallID": ""
+            }
+          ],
+          "FinalResponse": null,
+          "FinalToolResult": null,
+          "Streamed": false,
+          "Await": null,
+          "RetryHint": null,
+          "ExpectedChildren": 0,
+          "Notes": null
+        },
+        "IndexHead": "sha256:05de4fdb9d514682e709e83357eaa0648c420778cb4e52f201b97daa64f2decd",
+        "View": {
+          "Checkpoint": "sha256:3afa0b3f75d266280cfc7152b36f9c8af3b73533d3a9795f9e1ea2ed80da26b6",
+          "Pinned": [
+            1
+          ],
+          "CheckpointBytes": 602
+        },
+        "call_view": {
+          "chain_pos": 1,
+          "context_fingerprint": "sha256:051f6aab83e71d340c4d4f37ff6d1b13aa99438a38ef43933a35b91c163876f1",
+          "index_head": "sha256:05de4fdb9d514682e709e83357eaa0648c420778cb4e52f201b97daa64f2decd",
+          "checkpoint": "sha256:3afa0b3f75d266280cfc7152b36f9c8af3b73533d3a9795f9e1ea2ed80da26b6",
+          "tail_from": 4,
+          "pinned": [
+            1
+          ],
+          "budget": {
+            "keep_user_tokens": 250,
+            "max_summary_tokens": 500,
+            "receipt_tokens": 150,
+            "framing_tokens": 200
+          }
+        },
+        "TranscriptRef": "sha256:5ca6a418ed32f8bcb2a74e929f802e25d12b933a0427ad81cfeafcf31bf516aa",
+        "TranscriptSize": {
+          "Bytes": 20,
+          "NonText": 0,
+          "Role": "assistant"
+        },
+        "ToolCallRefs": [
+          "sha256:ec948eaa420c96cb44440c18ac46be4996dfeca9ff754f4d10325363c842b900",
+          "sha256:612cdfae4a6d66fa74a284b8e9c4f7398d39d78020afd62201bacc3e13ca50d2"
+        ],
+        "AwaitCallRefs": null,
+        "CallKeys": [
+          {
+            "RunID": "run-protocol-history",
+            "Seq": 3,
+            "Attempt": 1
+          }
+        ],
+        "ProducingCall": {
+          "RunID": "run-protocol-history",
+          "Seq": 3,
+          "Attempt": 1
+        },
+        "RequestGrowth": null,
+        "Usage": {
+          "Model": "",
+          "ModelClass": "",
+          "InputTokens": 0,
+          "OutputTokens": 0,
+          "TotalTokens": 0,
+          "CacheReadTokens": 0,
+          "CacheWriteTokens": 0
+        },
+        "ToolPolicyActive": true,
+        "AllowedTools": [
+          "delegated.summarize",
+          "workflow.draft",
+          "workflow.finalize",
+          "workflow.method_echo",
+          "workflow.publish",
+          "workflow.retry",
+          "workflow.review",
+          "workflow.revise",
+          "runtime.recall_context"
+        ],
+        "PolicyCaps": {
+          "MaxToolCalls": 12,
+          "RemainingToolCalls": 11,
+          "MaxRecoveryTurns": 2,
+          "RemainingRecoveryTurns": 2,
+          "ExpiresAt": "0001-01-01T00:00:00Z"
+        },
+        "Recovery": null,
+        "Attempt": 3
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 52,
+      "key": "#52",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:49.541374Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 52
+    },
+    {
+      "seq": 53,
+      "key": "#53",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 54,
+      "key": "#54",
+      "command": "receive_async:loom_mcp.runtime.pause",
+      "event_type": "SignalNone",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 55,
+      "key": "#55",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:49.575732Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 55
+    },
+    {
+      "seq": 56,
+      "key": "#56",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:49.577964Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 56
+    },
+    {
+      "seq": 57,
+      "key": "#57",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:49.580405Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 57
+    },
+    {
+      "seq": 58,
+      "key": "#58",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:49.583264Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 58
+    },
+    {
+      "seq": 59,
+      "key": "#59",
+      "command": "sleep",
+      "event_type": "Reserved",
+      "data_type": "json",
+      "binary": null,
+      "reservation": {
+        "expires_at": "2026-10-12T21:16:17.608316Z"
+      },
+      "delivered_seq": 0
+    },
+    {
+      "seq": 60,
+      "key": "#60",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 61,
+      "key": "#61",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 62,
+      "key": "#62",
+      "command": "activity:features.coordinator.child_dispatch",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "IndexHead": "sha256:bd29108a963f3b059d34a2715caabf0801a0d7c8a8bf591b2d9a2f89ca227c55",
+        "Error": "topic requires evidence",
+        "RetryHint": {
+          "Reason": "invalid_arguments",
+          "Tool": "delegated.summarize",
+          "RestrictToTool": true,
+          "MissingFields": [
+            "topic"
+          ],
+          "ExampleInput": null,
+          "PriorInput": null,
+          "ClarifyingQuestion": "I need additional information to run delegated.summarize. Please provide: topic.",
+          "Message": "Field contract: topic:string,required"
+        }
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 63,
+      "key": "#63",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 64,
+      "key": "#64",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:50.113064Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 64
+    },
+    {
+      "seq": 65,
+      "key": "#65",
+      "command": "activity:features.coordinator.recall",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "Result": {
+          "Preview": "context lookup result",
+          "ResultBytes": 30,
+          "Refs": {
+            "Result": "sha256:238c0f499fb9c0ad276e77786040433930d6c0cc811a615a7247488003be8829",
+            "ServerData": "",
+            "Payload": ""
+          },
+          "Payload": null,
+          "ServerData": null,
+          "Bounds": null,
+          "Telemetry": null,
+          "Error": "",
+          "ErrorKind": "",
+          "RetryHint": null,
+          "Pause": null
+        },
+        "Code": "",
+        "Bytes": 30
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 66,
+      "key": "#66",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:50.177003Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 66
+    },
+    {
+      "seq": 67,
+      "key": "#67",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 68,
+      "key": "#68",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 69,
+      "key": "#69",
+      "command": "activity:features.coordinator.record_content",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "Refs": [
+          "sha256:e7089ab5dcfaa5c2ecc636bc7c086cbbde67047cfc0c333777c16cdc014e16e8",
+          "sha256:5321e171eeee7cab66a6ac7c7f98d6096c123e52ce2071df7f5d0ff07545dc25"
+        ],
+        "IndexHead": "",
+        "Entries": null,
+        "ToolResults": null,
+        "Calls": null,
+        "CallRefs": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 70,
+      "key": "#70",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 71,
+      "key": "#71",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 72,
+      "key": "#72",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 73,
+      "key": "#73",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 74,
+      "key": "#74",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:50.679772Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 74
+    },
+    {
+      "seq": 75,
+      "key": "#75",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:50.682193Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 75
+    },
+    {
+      "seq": 76,
+      "key": "#76",
+      "command": "activity:features.coordinator.resume",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "facts": [
+          {
+            "call": {
+              "RunID": "run-protocol-history",
+              "Seq": 4,
+              "Attempt": 1
+            },
+            "model": "history",
+            "context_window": 6000,
+            "output_reserve": 0,
+            "view_bearing": true,
+            "view_text_bytes": 1860,
+            "input_tokens": 0,
+            "text_bytes": 2855,
+            "fixed_bytes": 1822,
+            "non_text": 0,
+            "count_latency": 0,
+            "outcome": "ok"
+          }
+        ],
+        "Result": {
+          "ToolCalls": null,
+          "FinalResponse": {
+            "Message": {
+              "Role": "assistant",
+              "Parts": [
+                {
+                  "Kind": "text",
+                  "Text": "history replay complete"
+                }
+              ],
+              "Meta": null
+            }
+          },
+          "FinalToolResult": null,
+          "Streamed": false,
+          "Await": null,
+          "RetryHint": null,
+          "ExpectedChildren": 0,
+          "Notes": null
+        },
+        "IndexHead": "sha256:d0ac09cd5c53bcfb7fb8ddc3a040d7c3c9d1ab891e4493b10352e06c7083f253",
+        "View": {
+          "Checkpoint": "sha256:3afa0b3f75d266280cfc7152b36f9c8af3b73533d3a9795f9e1ea2ed80da26b6",
+          "Pinned": [
+            1
+          ],
+          "CheckpointBytes": 602
+        },
+        "call_view": {
+          "chain_pos": 1,
+          "context_fingerprint": "sha256:051f6aab83e71d340c4d4f37ff6d1b13aa99438a38ef43933a35b91c163876f1",
+          "index_head": "sha256:d0ac09cd5c53bcfb7fb8ddc3a040d7c3c9d1ab891e4493b10352e06c7083f253",
+          "checkpoint": "sha256:3afa0b3f75d266280cfc7152b36f9c8af3b73533d3a9795f9e1ea2ed80da26b6",
+          "tail_from": 4,
+          "pinned": [
+            1
+          ],
+          "budget": {
+            "keep_user_tokens": 250,
+            "max_summary_tokens": 500,
+            "receipt_tokens": 150,
+            "framing_tokens": 200
+          }
+        },
+        "TranscriptRef": "sha256:413c9925a44ef63c0f1ee89dd8c3d3f7ad92b4977f7c6ed0f293d6b4d7b72869",
+        "TranscriptSize": {
+          "Bytes": 23,
+          "NonText": 0,
+          "Role": "assistant"
+        },
+        "ToolCallRefs": null,
+        "AwaitCallRefs": null,
+        "CallKeys": [
+          {
+            "RunID": "run-protocol-history",
+            "Seq": 4,
+            "Attempt": 1
+          }
+        ],
+        "ProducingCall": {
+          "RunID": "run-protocol-history",
+          "Seq": 4,
+          "Attempt": 1
+        },
+        "RequestGrowth": null,
+        "Usage": {
+          "Model": "",
+          "ModelClass": "",
+          "InputTokens": 0,
+          "OutputTokens": 0,
+          "TotalTokens": 0,
+          "CacheReadTokens": 0,
+          "CacheWriteTokens": 0
+        },
+        "ToolPolicyActive": true,
+        "AllowedTools": [
+          "workflow.finalize"
+        ],
+        "PolicyCaps": {
+          "MaxToolCalls": 12,
+          "RemainingToolCalls": 9,
+          "MaxRecoveryTurns": 2,
+          "RemainingRecoveryTurns": 1,
+          "ExpiresAt": "0001-01-01T00:00:00Z"
+        },
+        "Recovery": null,
+        "Attempt": 4
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 77,
+      "key": "#77",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:50.735038Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 77
+    },
+    {
+      "seq": 78,
+      "key": "#78",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 79,
+      "key": "#79",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 80,
+      "key": "#80",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 81,
+      "key": "#81",
+      "command": "activity:features.coordinator.finish",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "FinalRef": "sha256:152ae89cf12cf8f84c65382d50f11636fa4dcc9283746d2aee16d7f0ebce8e52",
+        "ToolEventsRef": "sha256:9e3045d7091bdfa76960619ef248c6ca3188d1be9217e79b2622085b13c12a51",
+        "ToolEventCount": 3,
+        "ToolSummary": {
+          "FailedCount": 1,
+          "LastError": {
+            "Message": "topic requires evidence",
+            "Cause": null
+          },
+          "Telemetry": null
+        },
+        "FinalToolResult": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 82,
+      "key": "#82",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:15:51.164075Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 82
+    },
+    {
+      "seq": 83,
+      "key": "#83",
+      "command": "activity:features.coordinator.seal",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "IndexHead": "sha256:17301543cf522f6119af2e7c60eff6b1906421d2838bae7d89729c1d657bf39e"
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 84,
+      "key": "#84",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    }
+  ],
+  "signals": [
+    {
+      "id": 1,
+      "channel": "loom_mcp.runtime.provide.confirmation",
+      "delivered_seq": 29,
+      "consumed_seq": 29
+    },
+    {
+      "id": 2,
+      "channel": "loom_mcp.runtime.provide.clarification",
+      "delivered_seq": 29,
+      "consumed_seq": 44
+    }
+  ]
+}

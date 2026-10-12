@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	sv "github.com/CaliLuke/selvedge"
-	"github.com/CaliLuke/selvedge/retry"
 )
+
+// activityHeartbeatRecorder reports progress without persisting user details.
+type activityHeartbeatRecorder struct{ ctx context.Context }
 
 type activityRegistry struct {
 	names            map[string]struct{}
@@ -30,49 +31,49 @@ func (e *Engine) RegisterHookActivity(_ context.Context, name string, opts engin
 	if fn == nil {
 		return errors.New("selvedge: activity handler is required")
 	}
-	return registerActivity(e, e.activities.hook, name, opts, func(ctx context.Context, in *api.HookActivityInput) (struct{}, error) {
+	return registerActivity(e, e.activities.hook, name, applyActivityDefaults(opts, e.activityDefaults.Hook), func(ctx context.Context, in *api.HookActivityInput) (struct{}, error) {
 		return struct{}{}, fn(ctx, in)
 	})
 }
 
 // RegisterPlannerActivity registers the typed planner handler.
 func (e *Engine) RegisterPlannerActivity(_ context.Context, name string, opts engine.ActivityOptions, fn func(context.Context, *api.PlanActivityInput) (*api.PlanActivityOutput, error)) error {
-	return registerActivity(e, e.activities.planner, name, opts, fn)
+	return registerActivity(e, e.activities.planner, name, applyActivityDefaults(opts, e.activityDefaults.Planner), fn)
 }
 
 // RegisterExecuteToolActivity registers the typed tool handler.
 func (e *Engine) RegisterExecuteToolActivity(_ context.Context, name string, opts engine.ActivityOptions, fn func(context.Context, *api.ToolInput) (*api.ToolOutput, error)) error {
-	return registerActivity(e, e.activities.tool, name, opts, fn)
+	return registerActivity(e, e.activities.tool, name, applyActivityDefaults(opts, e.activityDefaults.Tool), fn)
 }
 
 // RegisterSealRecordActivity registers the typed sealRecord handler.
 func (e *Engine) RegisterSealRecordActivity(_ context.Context, name string, opts engine.ActivityOptions, fn func(context.Context, *api.SealRecordInput) (*api.SealRecordOutput, error)) error {
-	return registerActivity(e, e.activities.sealRecord, name, opts, fn)
+	return registerActivity(e, e.activities.sealRecord, name, applyActivityDefaults(opts, e.activityDefaults.Hook), fn)
 }
 
 // RegisterFinishRunActivity registers the typed finishRun handler.
 func (e *Engine) RegisterFinishRunActivity(_ context.Context, name string, opts engine.ActivityOptions, fn func(context.Context, *api.FinishRunInput) (*api.FinishRunOutput, error)) error {
-	return registerActivity(e, e.activities.finishRun, name, opts, fn)
+	return registerActivity(e, e.activities.finishRun, name, applyActivityDefaults(opts, e.activityDefaults.Hook), fn)
 }
 
 // RegisterRecordContentActivity registers the typed recordContent handler.
 func (e *Engine) RegisterRecordContentActivity(_ context.Context, name string, opts engine.ActivityOptions, fn func(context.Context, *api.RecordContentInput) (*api.RecordContentOutput, error)) error {
-	return registerActivity(e, e.activities.recordContent, name, opts, fn)
+	return registerActivity(e, e.activities.recordContent, name, applyActivityDefaults(opts, e.activityDefaults.Hook), fn)
 }
 
 // RegisterSummarizeContextActivity registers the typed summarizeContext handler.
 func (e *Engine) RegisterSummarizeContextActivity(_ context.Context, name string, opts engine.ActivityOptions, fn func(context.Context, *api.SummarizeContextInput) (*api.SummarizeContextOutput, error)) error {
-	return registerActivity(e, e.activities.summarizeContext, name, opts, fn)
+	return registerActivity(e, e.activities.summarizeContext, name, applyActivityDefaults(opts, e.activityDefaults.Planner), fn)
 }
 
 // RegisterRecallActivity registers the typed recall handler.
 func (e *Engine) RegisterRecallActivity(_ context.Context, name string, opts engine.ActivityOptions, fn func(context.Context, *api.RecallActivityInput) (*api.RecallActivityOutput, error)) error {
-	return registerActivity(e, e.activities.recall, name, opts, fn)
+	return registerActivity(e, e.activities.recall, name, applyActivityDefaults(opts, e.activityDefaults.Hook), fn)
 }
 
 // RegisterChildDispatchActivity registers the typed childDispatch handler.
 func (e *Engine) RegisterChildDispatchActivity(_ context.Context, name string, opts engine.ActivityOptions, fn func(context.Context, *api.ChildDispatchInput) (*api.ChildDispatchOutput, error)) error {
-	return registerActivity(e, e.activities.childDispatch, name, opts, fn)
+	return registerActivity(e, e.activities.childDispatch, name, applyActivityDefaults(opts, e.activityDefaults.Hook), fn)
 }
 
 func newActivityRegistry() activityRegistry {
@@ -110,16 +111,20 @@ func registerActivity[I, O any](e *Engine, registry map[string]*sv.Activity[I, O
 }
 
 func defineActivity[I, O any](name string, opts engine.ActivityOptions, fn func(context.Context, I) (O, error)) *sv.Activity[I, O] {
-	timeout := opts.StartToCloseTimeout
-	if timeout == 0 {
-		timeout = 2 * time.Minute
-	}
 	return sv.DefineActivity(name, func(ctx context.Context, input I) (O, error) {
 		info := sv.GetActivityInfo(ctx)
 		ctx = engine.WithActivityContext(ctx)
 		ctx = engine.WithActivityAttempt(ctx, info.Attempt)
-		ctx = engine.WithActivityHeartbeatTimeout(ctx, 0)
+		ctx = engine.WithActivityHeartbeatTimeout(ctx, info.Options.HeartbeatTimeout)
+		ctx = engine.WithActivityHeartbeatRecorder(ctx, activityHeartbeatRecorder{ctx: ctx})
 		out, err := fn(ctx, input)
 		return out, activityError(err)
-	}, sv.WithRetryPolicy[I, O](retry.NoRetry()), sv.WithTimeout[I, O](timeout))
+	}, sv.WithActivityDefaults[I, O](definitionActivityOptions(opts)))
+}
+
+func (r activityHeartbeatRecorder) RecordHeartbeat(...any) {
+	// The engine recorder has no error result; activity cancellation carries loss of ownership.
+	if err := sv.RecordHeartbeat(r.ctx); err != nil {
+		return
+	}
 }

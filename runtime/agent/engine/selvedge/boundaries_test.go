@@ -112,8 +112,8 @@ func TestActivityContextHelpers(t *testing.T) {
 		assert.True(t, engine.IsActivityContext(ctx))
 		assert.Positive(t, engine.ActivityAttemptFromContext(ctx))
 		assert.Nil(t, engine.WorkflowContextFromContext(ctx))
-		assert.Zero(t, engine.ActivityHeartbeatTimeout(ctx))
-		assert.False(t, engine.RecordActivityHeartbeat(ctx, "ignored"))
+		assert.Equal(t, time.Second, engine.ActivityHeartbeatTimeout(ctx))
+		assert.True(t, engine.RecordActivityHeartbeat(ctx, "ignored"))
 		return nil, engine.NewNonRetryableApplicationError("no retry", "terminal", nil, nil)
 	}))
 	err := runWorkflow(t, e, "activity", func(w engine.WorkflowContext, _ *api.RunInput) (*api.RunOutput, error) {
@@ -356,7 +356,7 @@ func TestRegistrationAndUnregisteredActivity(t *testing.T) {
 				return nil, errors.New("invalid activity call was accepted")
 			}
 		}
-		_, err := w.ExecuteToolActivity(w.Context(), engine.ToolActivityCall{Name: "registered", Input: &api.ToolInput{}, Options: engine.ActivityOptions{Queue: "no-poller", StartToCloseTimeout: time.Nanosecond, ScheduleToStartTimeout: time.Nanosecond}})
+		_, err := w.ExecuteToolActivity(w.Context(), engine.ToolActivityCall{Name: "registered", Input: &api.ToolInput{}})
 		return &api.RunOutput{}, err
 	})
 	require.NoError(t, err)

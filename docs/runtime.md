@@ -4938,7 +4938,7 @@ App stays caller-owned. `NewClient(Options{Client: client})` rejects registratio
 it can start by name, signal, cancel, describe and wait. A shared client keeps old
 handles usable when replacing a worker. Configure observability with `sv.WithHooks`.
 
-The initial adapter has these limits:
+The adapter has these limits:
 
 - Workflow task queues, start/child run timeouts and retry policies, memo, search
   attributes and termination are not supported. Workflow/run IDs are the same
@@ -4947,12 +4947,32 @@ The initial adapter has these limits:
 - Root-run and tool-await queries require the workflow registered on a worker App.
   Client mode returns `selvedge.ErrQueriesNeedWorker`; `ProvideToolResults` must
   run in a worker process. Activity definitions must also be registered locally.
-- Activity execution uses registration `StartToCloseTimeout`, defaulting to two
-  minutes. Retries are disabled. Per-call options, activity queues,
-  schedule-to-start timeouts, heartbeat enforcement and heartbeat recorders are
-  not wired yet. Heartbeat details are not retained. Activity contexts report the
-  claim attempt, a zero heartbeat timeout and no workflow context; retry-based
-  unique attempt guarantees and the replay harness arrive in the next adapter phase.
+- Heartbeat details are not retained; the recorder reports progress only.
+
+Activity registration options become durable defaults. Nonzero per-call fields
+replace the corresponding defaults, including activity queues, start-to-close,
+schedule-to-start, heartbeat and retry policy fields. Start-to-close defaults to
+two minutes. Retry defaults are unlimited attempts, a one-second initial interval,
+coefficient two, maximum interval 100 times the initial interval, and no jitter.
+Zero per-call fields inherit; they do not reset a finite registration policy to
+unlimited. Heartbeat timeout is capped at start-to-close. Schedule-to-start expiry
+is terminal; start-to-close and heartbeat failures follow the retry policy.
+
+`Options.ActivityDefaults` supplies `Hook`, `Planner` and `Tool` classes, each with
+`QueueWait` and `Liveness`. These fill omitted registration schedule-to-start and
+heartbeat values. Hook includes hook, finish, content recording, child dispatch,
+seal and recall; Planner includes planning and summary. Activity contexts expose
+the resolved heartbeat limit and unique claim attempt. Graceful replacement does
+not consume the failure retry budget, so attempt numbers can exceed `MaxAttempts`.
+
+`eng.ExportHistory(ctx, runID)` returns a portable `selvedge.history/v1` snapshot.
+`eng.ReplayHistory(ctx, history)` uses registered definitions without sealing or
+starting the App, storage writes, activities or hook delivery. It preserves typed
+replay divergence and the live workflow-protocol mismatch error. Current v18
+fixtures live under `integration_tests/fixtures/agent_features/testdata/selvedge`;
+record real completed runs with `LOOM_MCP_RECORD_WORKFLOW_HISTORY=1` and
+`go test -C integration_tests/fixtures/agent_features -run '^TestSelvedgeRecordWorkflowHistory$'`.
+There are no Selvedge histories below protocol 18.
 
 For local backend development, use `make selvedge-local` with optional
 `SELVEDGE_DIR`. Return to `make selvedge-remote` before committing; it restores the
@@ -6384,11 +6404,11 @@ Selvedge SQLite conformance also runs under `-short`. Its factory uses a fresh
 file database per scenario, a separate live client, and replacement worker Apps.
 PostgreSQL uses a fresh database per scenario on one test container; run
 `make test-engine-conformance-postgres` with Docker available. This opt-in target
-is not yet part of `make itest`. The initial adapter declares `Durable: true` and
-`Retries: false`: retry scenarios visibly skip. The nine `activity_options` cases
-are executable known gaps that observe zero heartbeat metadata; all other
-scenarios must pass. Recorded option inspection and these gaps are replaced in
-the next adapter phase.
+is not yet part of `make itest`. Both factories declare `Durable: true` and
+`Retries: true` with no known gaps. All nine activity kinds verify their actual
+recorded options through Selvedge's public `ListActivityTasks` API, including
+partial retry overrides and heartbeat metadata.
+
 
 
 ### Session continuation

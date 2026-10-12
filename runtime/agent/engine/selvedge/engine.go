@@ -13,6 +13,8 @@ import (
 
 // Options supplies the owned, unstarted worker App and optional caller-owned client.
 type Options struct {
+	// ActivityDefaults fills omitted registration timeouts by activity class.
+	ActivityDefaults ActivityDefaults
 	// App is required in worker mode and must not already be started.
 	App *sv.App
 	// Client is optional in worker mode and required in client mode. A supplied
@@ -31,6 +33,7 @@ type Engine struct {
 	cleanupErr                         error
 	workflows                          map[string]struct{}
 	activities                         activityRegistry
+	activityDefaults                   ActivityDefaults
 	startWorkflow                      func(context.Context, *sv.App, string, any, ...sv.StartOption) (string, error)
 }
 
@@ -50,7 +53,7 @@ func NewWorker(opts Options) (*Engine, error) {
 	if opts.Client == nil {
 		opts.Client = opts.App
 	}
-	return &Engine{app: opts.App, client: opts.Client, workflows: make(map[string]struct{}), activities: newActivityRegistry(), startWorkflow: sv.StartWorkflowByName}, nil
+	return &Engine{app: opts.App, client: opts.Client, workflows: make(map[string]struct{}), activities: newActivityRegistry(), activityDefaults: opts.ActivityDefaults, startWorkflow: sv.StartWorkflowByName}, nil
 }
 
 // NewClient constructs an engine using a started, caller-owned Client.

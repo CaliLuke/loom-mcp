@@ -2,12 +2,13 @@ package selvedge
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine/enginetest"
+	sv "github.com/CaliLuke/selvedge"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,11 +21,7 @@ func TestConformance(t *testing.T) {
 }
 
 func conformanceFactory(database func(*testing.T) string) enginetest.Factory {
-	gaps := make(map[string]string)
-	for _, kind := range []string{"hook", "planner", "tool", "finish", "record_content", "child_dispatch", "seal", "recall", "summary"} {
-		gaps["activity_options/"+kind] = "per-call options and heartbeat metadata need S15a/S15b; removed by S17b"
-	}
-	return enginetest.Factory{Durable: true, Retries: false, KnownGaps: gaps, New: func(t *testing.T) enginetest.Fixture {
+	return enginetest.Factory{Durable: true, Retries: true, New: func(t *testing.T) enginetest.Fixture {
 		db := database(t)
 		client := testApp(t, db)
 		require.NoError(t, client.Start(t.Context()))
@@ -47,8 +44,28 @@ func conformanceFactory(database func(*testing.T) string) enginetest.Factory {
 			register(current)
 			require.NoError(t, current.SealRegistration(t.Context()))
 			return current
-		}, VerifyActivityOptions: func(*testing.T, string, string, []engine.ActivityOptions) error {
-			return &enginetest.GapError{Err: errors.New("no recorded options before S15a")}
+		}, VerifyActivityOptions: func(t *testing.T, id, name string, want []engine.ActivityOptions) error {
+			return verifyActivityOptions(t, client, id, name, want)
 		}}
 	}}
+}
+
+func verifyActivityOptions(t *testing.T, client *sv.App, id, name string, want []engine.ActivityOptions) error {
+	t.Helper()
+	tasks, err := sv.ListActivityTasks(t.Context(), client, id)
+	if err != nil {
+		return err
+	}
+	got := make([]engine.ActivityOptions, 0, len(want))
+	for _, task := range tasks {
+		if task.Name != name {
+			continue
+		}
+		p := task.Options.RetryPolicy
+		got = append(got, engine.ActivityOptions{Queue: task.Queue, StartToCloseTimeout: task.Options.StartToCloseTimeout, ScheduleToStartTimeout: task.Options.ScheduleToStartTimeout, HeartbeatTimeout: task.Options.HeartbeatTimeout, RetryPolicy: engine.RetryPolicy{MaxAttempts: p.MaxAttempts, InitialInterval: p.InitialInterval, BackoffCoefficient: p.Multiplier}})
+	}
+	if !assert.ObjectsAreEqual(want, got) {
+		return fmt.Errorf("recorded activity options: want %#v, got %#v", want, got)
+	}
+	return nil
 }

@@ -1,0 +1,968 @@
+{
+  "format": "selvedge.history/v1",
+  "instance": {
+    "instance_id": "run-summary-history",
+    "workflow_name": "features.coordinator.workflow",
+    "status": "completed",
+    "input": {
+      "context_settings": {
+        "threshold": true,
+        "max_tier": "summary",
+        "guard_margin": {
+          "Tokens": 1,
+          "Bytes": 10
+        },
+        "summary": {
+          "Enabled": true,
+          "Model": {
+            "ID": "summary",
+            "Class": "",
+            "AcceptsImages": false,
+            "AcceptsDocuments": false
+          },
+          "Settings": {
+            "Instructions": "",
+            "Prompt": ""
+          }
+        },
+        "prompt": {
+          "Ref": {
+            "ID": "features.coordinator.context.summary",
+            "Version": "sha256:c213a63837087dad5fb990d74a4fea84f0072c70f4455cce27e9a646268aef95"
+          },
+          "Template": "sha256:c213a63837087dad5fb990d74a4fea84f0072c70f4455cce27e9a646268aef95"
+        },
+        "context_window": 5000,
+        "framing_tokens": 200,
+        "max_pins": 32,
+        "max_pinned_parts": 2,
+        "max_summary_chunks": 2,
+        "recall_scan_bytes": 8000000,
+        "TriggerAt": {
+          "Tokens": 1,
+          "Bytes": 100
+        },
+        "keep_recent_tokens": 30,
+        "min_saving_tokens": 20,
+        "RecallDiscoveryCalls": 20,
+        "RecallReadCalls": 20
+      },
+      "context_fingerprint": "sha256:85ba726d9f247d36f2d9933508fd6b21662a90e86315b3a4e53302c41478af99",
+      "context_compaction": {
+        "ContextModel": {
+          "ID": "summary",
+          "Class": "",
+          "AcceptsImages": false,
+          "AcceptsDocuments": false
+        },
+        "TriggerAt": {
+          "Tokens": 1,
+          "Bytes": 100
+        },
+        "KeepRecentTokens": 30,
+        "ProtectRecentToolTokens": 0,
+        "MinSavingTokens": 20,
+        "RecallDiscoveryCalls": 20,
+        "RecallReadCalls": 20,
+        "KeepResultTools": null,
+        "Summary": {
+          "Instructions": "",
+          "Prompt": ""
+        }
+      },
+      "context_recovery": {
+        "guard_margin": {
+          "Tokens": 1,
+          "Bytes": 10
+        },
+        "disable_recall": false
+      },
+      "compaction_agents": {
+        "features.coordinator": {
+          "ContextModel": {
+            "ID": "summary",
+            "Class": "",
+            "AcceptsImages": false,
+            "AcceptsDocuments": false
+          },
+          "TriggerAt": {
+            "Tokens": 1,
+            "Bytes": 100
+          },
+          "KeepRecentTokens": 30,
+          "ProtectRecentToolTokens": 0,
+          "MinSavingTokens": 20,
+          "RecallDiscoveryCalls": 20,
+          "RecallReadCalls": 20,
+          "KeepResultTools": null,
+          "Summary": {
+            "Instructions": "",
+            "Prompt": ""
+          }
+        }
+      },
+      "WorkflowProtocolVersion": 18,
+      "AgentID": "features.coordinator",
+      "RunID": "run-summary-history",
+      "RootRunID": "run-summary-history",
+      "SessionID": "sess-summary-history",
+      "TurnID": "",
+      "ParentToolCallID": "",
+      "ParentRunID": "",
+      "ParentAgentID": "",
+      "Tool": "",
+      "ToolArgs": null,
+      "Messages": [
+        {
+          "Role": "user",
+          "Parts": [
+            {
+              "Kind": "text",
+              "Text": "remember the task"
+            }
+          ],
+          "Meta": null
+        },
+        {
+          "Role": "assistant",
+          "Parts": [
+            {
+              "Kind": "text",
+              "Text": "recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence recorded evidence "
+            }
+          ],
+          "Meta": null
+        },
+        {
+          "Role": "user",
+          "Parts": [
+            {
+              "Kind": "text",
+              "Text": "continue"
+            }
+          ],
+          "Meta": null
+        }
+      ],
+      "Labels": null,
+      "Metadata": null,
+      "WorkflowOptions": null,
+      "Policy": {
+        "context": {
+          "max_summary_chunks": 2,
+          "context_window": 5000
+        },
+        "PerTurnMaxToolCalls": 0,
+        "RestrictToTool": "",
+        "CompletionTool": "",
+        "AllowedTags": null,
+        "DeniedTags": null,
+        "MaxToolCalls": 0,
+        "MaxRecoveryTurns": 0,
+        "MaxConsecutiveFailedToolCalls": 0,
+        "TimeBudget": 0,
+        "PlanTimeout": 0,
+        "ToolTimeout": 0,
+        "PerToolTimeout": {},
+        "FinalizerGrace": 0,
+        "LimitTerminalPlans": null,
+        "InterruptsAllowed": false
+      }
+    },
+    "output": {
+      "AgentID": "features.coordinator",
+      "RunID": "run-summary-history",
+      "Final": {
+        "Role": "assistant",
+        "Parts": [
+          {
+            "Kind": "text",
+            "Text": "summary replay complete"
+          }
+        ],
+        "Meta": null
+      },
+      "FinalRef": "sha256:8bc69c1d7b7ea47ea780ba15a3143c3d55b39e5fd68518471b56e3d9db738303",
+      "FinalToolResult": null,
+      "ToolEventsRef": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "ToolEventCount": 0,
+      "ToolSummary": {
+        "FailedCount": 0,
+        "LastError": null,
+        "Telemetry": null
+      },
+      "Notes": [],
+      "Usage": {
+        "Model": "",
+        "ModelClass": "",
+        "InputTokens": 0,
+        "OutputTokens": 0,
+        "TotalTokens": 0,
+        "CacheReadTokens": 0,
+        "CacheWriteTokens": 0
+      }
+    },
+    "cancel_requested": false,
+    "cancel_reason": "",
+    "parent_instance_id": "",
+    "parent_key": ""
+  },
+  "events": [
+    {
+      "seq": 1,
+      "key": "#1",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 18
+    },
+    {
+      "seq": 2,
+      "key": "#2",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 18
+    },
+    {
+      "seq": 3,
+      "key": "#3",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:16:00.759783Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 3
+    },
+    {
+      "seq": 4,
+      "key": "#4",
+      "command": "activity:features.coordinator.record_content",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "continuation": {
+          "Prev": null,
+          "Pos": 1,
+          "ContinuedFrom": null,
+          "Outcome": "fresh",
+          "Reason": "no_head",
+          "View": {
+            "chain_pos": 1,
+            "context_fingerprint": "sha256:85ba726d9f247d36f2d9933508fd6b21662a90e86315b3a4e53302c41478af99"
+          },
+          "Limits": {
+            "ContextWindow": 0,
+            "MaxOutputTokens": 0,
+            "DefaultMaxTokens": 0,
+            "ImageTokens": 0
+          },
+          "Visible": [
+            "sha256:28ca94ed24e730106eedbb44463ac24de7417ed85ba688e8199dc07b212b8f16",
+            "sha256:fbc4206de01d834e40736f5bc433fb5b2507a0321c8ecb457d3d1e2b0522f462",
+            "sha256:dcbf19e4133d8d4b194877e5f2215a7a0c8d68d14236cdf17bd73c28cbdbf086"
+          ]
+        },
+        "Refs": [
+          "sha256:53723732f46ef34c550db3ab7d15672739264991f89e72344e94f1e5bf7ba316",
+          "sha256:19a79d07707375d54854d89b7938d08d0cd686800ea5166bfe6d9e86235d6966",
+          "sha256:6f91a9eb4ee6acd7aa689597d58d953bfce429592d29146e7e9e9fa06c1685c8"
+        ],
+        "IndexHead": "sha256:90cdc47809c646cc9559a1e453d5f11ed05ce17a97b7f03e389e4d055e43f7d5",
+        "Entries": [
+          {
+            "id": 1,
+            "kind": "message",
+            "hash": "sha256:53723732f46ef34c550db3ab7d15672739264991f89e72344e94f1e5bf7ba316",
+            "role": "user",
+            "bytes": 17,
+            "chain": "sha256:f8eb5d92585842aa411e227982e70b48bde088720a61e34a54b9cddf371dcf1d"
+          },
+          {
+            "id": 2,
+            "kind": "message",
+            "hash": "sha256:19a79d07707375d54854d89b7938d08d0cd686800ea5166bfe6d9e86235d6966",
+            "role": "assistant",
+            "bytes": 9000,
+            "chain": "sha256:1809054cee8770218422abaeed1db13153db1e629415dfb5c6e29d0ceff082be"
+          },
+          {
+            "id": 3,
+            "kind": "message",
+            "hash": "sha256:6f91a9eb4ee6acd7aa689597d58d953bfce429592d29146e7e9e9fa06c1685c8",
+            "role": "user",
+            "bytes": 8,
+            "chain": "sha256:80ce5c1ce3d4e38d4f789770012a6a0dff5c1f5b40aa03d36ab8e62f28b7ef59"
+          }
+        ],
+        "ToolResults": null,
+        "Calls": null,
+        "CallRefs": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 18
+    },
+    {
+      "seq": 5,
+      "key": "#5",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:16:00.926378Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 5
+    },
+    {
+      "seq": 6,
+      "key": "#6",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:16:00.961436Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 6
+    },
+    {
+      "seq": 7,
+      "key": "#7",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 18
+    },
+    {
+      "seq": 8,
+      "key": "#8",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:16:00.976615Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 8
+    },
+    {
+      "seq": 9,
+      "key": "#9",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:16:00.978064Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 9
+    },
+    {
+      "seq": 10,
+      "key": "#10",
+      "command": "activity:features.coordinator.plan",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "facts": [
+          {
+            "call": {
+              "RunID": "run-summary-history",
+              "Seq": 1,
+              "Attempt": 1
+            },
+            "model": "history",
+            "context_window": 6000,
+            "output_reserve": 0,
+            "view_bearing": true,
+            "view_text_bytes": 9025,
+            "input_tokens": 0,
+            "text_bytes": 9625,
+            "fixed_bytes": 600,
+            "non_text": 0,
+            "count_latency": 0,
+            "outcome": "ok",
+            "recovery_tool_bytes": 2776
+          }
+        ],
+        "Result": {
+          "ToolCalls": null,
+          "FinalResponse": null,
+          "FinalToolResult": null,
+          "Streamed": false,
+          "Await": {
+            "Items": [
+              {
+                "Kind": "clarification",
+                "Clarification": {
+                  "ID": "summary-question",
+                  "Question": "Ready?",
+                  "MissingFields": null,
+                  "RestrictToTool": "",
+                  "ExampleInput": null,
+                  "ClarifyingPrompt": ""
+                },
+                "Questions": null,
+                "ExternalTools": null,
+                "TypedInput": null
+              }
+            ]
+          },
+          "RetryHint": null,
+          "ExpectedChildren": 0,
+          "Notes": null
+        },
+        "IndexHead": "sha256:90cdc47809c646cc9559a1e453d5f11ed05ce17a97b7f03e389e4d055e43f7d5",
+        "View": null,
+        "call_view": {
+          "chain_pos": 1,
+          "context_fingerprint": "sha256:85ba726d9f247d36f2d9933508fd6b21662a90e86315b3a4e53302c41478af99",
+          "index_head": "sha256:90cdc47809c646cc9559a1e453d5f11ed05ce17a97b7f03e389e4d055e43f7d5"
+        },
+        "TranscriptRef": "sha256:91091d908b0978993335253ae80acfbec9ed46339c7252ef6ef67db2e3f5d3ab",
+        "TranscriptSize": {
+          "Bytes": 34,
+          "NonText": 0,
+          "Role": "assistant"
+        },
+        "ToolCallRefs": null,
+        "AwaitCallRefs": null,
+        "CallKeys": [
+          {
+            "RunID": "run-summary-history",
+            "Seq": 1,
+            "Attempt": 1
+          }
+        ],
+        "ProducingCall": {
+          "RunID": "run-summary-history",
+          "Seq": 1,
+          "Attempt": 1
+        },
+        "RequestGrowth": null,
+        "Usage": {
+          "Model": "",
+          "ModelClass": "",
+          "InputTokens": 0,
+          "OutputTokens": 0,
+          "TotalTokens": 0,
+          "CacheReadTokens": 0,
+          "CacheWriteTokens": 0
+        },
+        "ToolPolicyActive": true,
+        "AllowedTools": [
+          "delegated.summarize",
+          "workflow.draft",
+          "workflow.finalize",
+          "workflow.method_echo",
+          "workflow.publish",
+          "workflow.retry",
+          "workflow.review",
+          "workflow.revise"
+        ],
+        "PolicyCaps": {
+          "MaxToolCalls": 12,
+          "RemainingToolCalls": 12,
+          "MaxRecoveryTurns": 2,
+          "RemainingRecoveryTurns": 2,
+          "ExpiresAt": "0001-01-01T00:00:00Z"
+        },
+        "Recovery": null,
+        "Attempt": 1
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 18
+    },
+    {
+      "seq": 11,
+      "key": "#11",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:16:01.034921Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 11
+    },
+    {
+      "seq": 12,
+      "key": "#12",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 18
+    },
+    {
+      "seq": 13,
+      "key": "#13",
+      "command": "receive_async:loom_mcp.runtime.pause",
+      "event_type": "SignalNone",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 14,
+      "key": "#14",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:16:01.169965Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 14
+    },
+    {
+      "seq": 15,
+      "key": "#15",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 18
+    },
+    {
+      "seq": 16,
+      "key": "#16",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 18
+    },
+    {
+      "seq": 17,
+      "key": "#17",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:16:01.285406Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 17
+    },
+    {
+      "seq": 18,
+      "key": "#18",
+      "command": "receive:loom_mcp.runtime.provide.clarification",
+      "event_type": "SignalReceived",
+      "data": {
+        "RunID": "run-summary-history",
+        "ID": "summary-question",
+        "Answer": "",
+        "AnswerRef": "sha256:8a798890fe93817163b10b5f7bd2ca4d25d84c52739a645a889c173eee7d9d3d",
+        "AnswerBytes": 3,
+        "Labels": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 18
+    },
+    {
+      "seq": 19,
+      "key": "#19",
+      "command": "activity:features.coordinator.record_content",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "Refs": null,
+        "IndexHead": "",
+        "Entries": [
+          {
+            "id": 0,
+            "kind": "assistant",
+            "hash": "sha256:0de625919e0f64913276614c88027ce94cdc884e6fb0577ad651ad085fd02d1c",
+            "role": "assistant",
+            "bytes": 40
+          }
+        ],
+        "ToolResults": null,
+        "Calls": null,
+        "CallRefs": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 20,
+      "key": "#20",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:16:01.340915Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 20
+    },
+    {
+      "seq": 21,
+      "key": "#21",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 22,
+      "key": "#22",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:16:01.357305Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 22
+    },
+    {
+      "seq": 23,
+      "key": "#23",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:16:01.358943Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 23
+    },
+    {
+      "seq": 24,
+      "key": "#24",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:16:01.360466Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 24
+    },
+    {
+      "seq": 25,
+      "key": "#25",
+      "command": "activity:features.coordinator.summarize_context",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "Latency": 8620083,
+        "From": 1,
+        "To": 4,
+        "IndexHead": "sha256:c5077af8d21afc8b09ee1e62a126d77c4772b32011c67a17e15927217d808753",
+        "Checkpoint": "sha256:63d395407ae624426238c42602d67016f37161579a8e0b0ddc687f3281f56fdf",
+        "Pinned": [
+          1,
+          3
+        ],
+        "Kind": "",
+        "CallKeys": [
+          {
+            "RunID": "run-summary-history",
+            "Seq": 2,
+            "Attempt": 1
+          }
+        ],
+        "Facts": [
+          {
+            "call": {
+              "RunID": "run-summary-history",
+              "Seq": 2,
+              "Attempt": 1
+            },
+            "model": "summary",
+            "context_window": 200000,
+            "output_reserve": 500,
+            "view_bearing": false,
+            "input_tokens": 0,
+            "text_bytes": 9985,
+            "fixed_bytes": 734,
+            "non_text": 0,
+            "count_latency": 0,
+            "outcome": "ok"
+          }
+        ],
+        "Prompt": {
+          "ID": "features.coordinator.context.summary",
+          "Version": "sha256:c213a63837087dad5fb990d74a4fea84f0072c70f4455cce27e9a646268aef95"
+        },
+        "Usage": {
+          "Model": "",
+          "ModelClass": "",
+          "InputTokens": 0,
+          "OutputTokens": 0,
+          "TotalTokens": 0,
+          "CacheReadTokens": 0,
+          "CacheWriteTokens": 0
+        },
+        "Chunks": 1,
+        "UnsummarisedBytes": 0,
+        "LooseRefs": 0
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 26,
+      "key": "#26",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:16:01.395755Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 26
+    },
+    {
+      "seq": 27,
+      "key": "#27",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 28,
+      "key": "#28",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:16:01.457941Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 28
+    },
+    {
+      "seq": 29,
+      "key": "#29",
+      "command": "activity:features.coordinator.resume",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "facts": [
+          {
+            "call": {
+              "RunID": "run-summary-history",
+              "Seq": 3,
+              "Attempt": 1
+            },
+            "model": "history",
+            "context_window": 6000,
+            "output_reserve": 0,
+            "view_bearing": true,
+            "view_text_bytes": 652,
+            "input_tokens": 0,
+            "text_bytes": 4423,
+            "fixed_bytes": 3771,
+            "non_text": 0,
+            "count_latency": 0,
+            "outcome": "ok"
+          }
+        ],
+        "Result": {
+          "ToolCalls": null,
+          "FinalResponse": {
+            "Message": {
+              "Role": "assistant",
+              "Parts": [
+                {
+                  "Kind": "text",
+                  "Text": "summary replay complete"
+                }
+              ],
+              "Meta": null
+            }
+          },
+          "FinalToolResult": null,
+          "Streamed": false,
+          "Await": null,
+          "RetryHint": null,
+          "ExpectedChildren": 0,
+          "Notes": null
+        },
+        "IndexHead": "sha256:c5077af8d21afc8b09ee1e62a126d77c4772b32011c67a17e15927217d808753",
+        "View": {
+          "Checkpoint": "sha256:63d395407ae624426238c42602d67016f37161579a8e0b0ddc687f3281f56fdf",
+          "Pinned": [
+            1,
+            3
+          ],
+          "CheckpointBytes": 609
+        },
+        "call_view": {
+          "chain_pos": 1,
+          "context_fingerprint": "sha256:85ba726d9f247d36f2d9933508fd6b21662a90e86315b3a4e53302c41478af99",
+          "index_head": "sha256:c5077af8d21afc8b09ee1e62a126d77c4772b32011c67a17e15927217d808753",
+          "checkpoint": "sha256:63d395407ae624426238c42602d67016f37161579a8e0b0ddc687f3281f56fdf",
+          "tail_from": 4,
+          "pinned": [
+            1,
+            3
+          ],
+          "budget": {
+            "keep_user_tokens": 250,
+            "max_summary_tokens": 500,
+            "receipt_tokens": 150,
+            "framing_tokens": 200
+          }
+        },
+        "TranscriptRef": "sha256:f72a1962a4db27dfaac7b53b93faee91cbde94c2ff27053cf1156d87a239d014",
+        "TranscriptSize": {
+          "Bytes": 23,
+          "NonText": 0,
+          "Role": "assistant"
+        },
+        "ToolCallRefs": null,
+        "AwaitCallRefs": null,
+        "CallKeys": [
+          {
+            "RunID": "run-summary-history",
+            "Seq": 3,
+            "Attempt": 1
+          }
+        ],
+        "ProducingCall": {
+          "RunID": "run-summary-history",
+          "Seq": 3,
+          "Attempt": 1
+        },
+        "RequestGrowth": null,
+        "Usage": {
+          "Model": "",
+          "ModelClass": "",
+          "InputTokens": 0,
+          "OutputTokens": 0,
+          "TotalTokens": 0,
+          "CacheReadTokens": 0,
+          "CacheWriteTokens": 0
+        },
+        "ToolPolicyActive": true,
+        "AllowedTools": [
+          "delegated.summarize",
+          "workflow.draft",
+          "workflow.finalize",
+          "workflow.method_echo",
+          "workflow.publish",
+          "workflow.retry",
+          "workflow.review",
+          "workflow.revise",
+          "runtime.recall_context"
+        ],
+        "PolicyCaps": {
+          "MaxToolCalls": 12,
+          "RemainingToolCalls": 12,
+          "MaxRecoveryTurns": 2,
+          "RemainingRecoveryTurns": 2,
+          "ExpiresAt": "0001-01-01T00:00:00Z"
+        },
+        "Recovery": null,
+        "Attempt": 2
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 30,
+      "key": "#30",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:16:01.633601Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 30
+    },
+    {
+      "seq": 31,
+      "key": "#31",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 32,
+      "key": "#32",
+      "command": "receive_async:loom_mcp.runtime.pause",
+      "event_type": "SignalNone",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 33,
+      "key": "#33",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 34,
+      "key": "#34",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 35,
+      "key": "#35",
+      "command": "activity:features.coordinator.finish",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "FinalRef": "sha256:8bc69c1d7b7ea47ea780ba15a3143c3d55b39e5fd68518471b56e3d9db738303",
+        "ToolEventsRef": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "ToolEventCount": 0,
+        "ToolSummary": {
+          "FailedCount": 0,
+          "LastError": null,
+          "Telemetry": null
+        },
+        "FinalToolResult": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 36,
+      "key": "#36",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T21:16:02.059938Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 36
+    },
+    {
+      "seq": 37,
+      "key": "#37",
+      "command": "activity:features.coordinator.seal",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "IndexHead": "sha256:b38b837d5ac031152c8f765a28d36b5cdac926792b40d7fb44a900b94d4a9ee6"
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 38,
+      "key": "#38",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    }
+  ],
+  "signals": [
+    {
+      "id": 1,
+      "channel": "loom_mcp.runtime.provide.clarification",
+      "delivered_seq": 18,
+      "consumed_seq": 18
+    }
+  ]
+}

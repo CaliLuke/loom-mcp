@@ -27,7 +27,7 @@ func TestSelvedgeAcceptance(t *testing.T) {
 
 func newSelvedgeAcceptanceEngine(t *testing.T, db string) *selvedgeengine.Engine {
 	t.Helper()
-	app := sv.NewApp(sv.WithDatabase(db), sv.WithMaxPollInterval(50*time.Millisecond), sv.WithActivityPollInterval(10*time.Millisecond), sv.WithWaitPollInterval(10*time.Millisecond), sv.WithTimerCheckInterval(10*time.Millisecond), sv.WithWorkflowResumptionInterval(10*time.Millisecond), sv.WithLeaderHeartbeatInterval(20*time.Millisecond), sv.WithLeaderLeaseDuration(100*time.Millisecond))
+	app := newSelvedgeAcceptanceApp(db)
 	eng, err := selvedgeengine.NewWorker(selvedgeengine.Options{App: app})
 	require.NoError(t, err)
 	t.Cleanup(func() {
@@ -35,4 +35,8 @@ func newSelvedgeAcceptanceEngine(t *testing.T, db string) *selvedgeengine.Engine
 	})
 
 	return eng
+}
+
+func newSelvedgeAcceptanceApp(db string, extra ...sv.Option) *sv.App {
+	return sv.NewApp(append([]sv.Option{sv.WithDatabase(db), sv.WithMaxPollInterval(50 * time.Millisecond), sv.WithActivityPollInterval(10 * time.Millisecond), sv.WithWaitPollInterval(10 * time.Millisecond), sv.WithTimerCheckInterval(10 * time.Millisecond), sv.WithWorkflowResumptionInterval(10 * time.Millisecond), sv.WithLeaderHeartbeatInterval(20 * time.Millisecond), sv.WithLeaderLeaseDuration(100 * time.Millisecond)}, extra...)...)
 }

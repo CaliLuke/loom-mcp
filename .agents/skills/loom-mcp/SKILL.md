@@ -361,8 +361,15 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   Selvedge workers own an unstarted App and activate during runtime sealing;
   an optional started client App stays caller-owned across worker replacement.
   Root-run/tool-await queries and `ProvideToolResults` require worker mode.
-  The initial adapter disables retries and uses registration StartToClose only;
-  per-call activity options, heartbeat wiring and replay are a later adapter phase.
+  Activity defaults and nonzero per-call overrides are recorded, including queues,
+  retries and all three timeout kinds. Retry defaults are unlimited/1s/coefficient2,
+  maximum100×initial with no jitter; StartToClose defaults to2m. Class defaults
+  fill omitted queue-wait/heartbeat limits. Heartbeat recorders retain no details.
+  Attempts identify durable claims and may exceed the failure budget after release.
+  ExportHistory captures genuine portable histories; ReplayHistory requires only
+  registration and runs without workers, activities or hook effects. Keep protocol18
+  fixtures in testdata/selvedge; no histories exist for earlier protocols. Live
+  typed-input checks and passive offline context observations are distinct proofs.
   SQLite conformance runs under `-short`; PostgreSQL conformance is opt-in via
   `make test-engine-conformance-postgres`. Commit only remote dependency mode,
   verified by `make selvedge-status`.

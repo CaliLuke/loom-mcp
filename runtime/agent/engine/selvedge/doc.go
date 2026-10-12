@@ -14,10 +14,15 @@
 // require worker mode. ProvideToolResults must run in a worker process. Workflow
 // Go contexts carry values only; use WithCancel for workflow scope cancellation.
 //
-// This initial adapter uses registration StartToCloseTimeout (default two minutes)
-// and disables activity retries. Per-call activity options, activity queues,
-// schedule-to-start timeouts, heartbeat enforcement, heartbeat recorders/details,
-// durable retry policies and replay harness methods are not exposed. Activity
-// contexts report the current claim attempt and a zero heartbeat timeout.
+// Registration activity options are recorded with nonzero per-call overrides.
+// StartToCloseTimeout defaults to two minutes. Retry policies default to unlimited
+// attempts, a one-second initial interval, coefficient two, and no jitter.
+// ActivityDefaults fills omitted queue-wait and heartbeat limits by class.
+// Activity contexts expose the claim attempt, resolved heartbeat timeout and a
+// progress recorder. Heartbeat details are not retained. Claim attempts can exceed
+// the failure retry limit after graceful worker replacement.
+//
+// ExportHistory reads portable histories from an initialized client. ReplayHistory
+// needs registered workflows only: no sealing, workers, activities or hook effects.
 // Configure backend observability through Selvedge App options.
 package selvedge
