@@ -31,6 +31,9 @@ func (r *Runtime) RecordContentActivity(ctx context.Context, input *api.RecordCo
 	if r.RunStore == nil {
 		return nil, fmt.Errorf("record content: run store is required")
 	}
+	if input.ContextStart != nil {
+		return r.recordContextStart(ctx, input)
+	}
 	if input.FinalizeCalls != nil {
 		return r.recordFinalizationCalls(ctx, input)
 	}

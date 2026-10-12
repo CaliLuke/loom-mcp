@@ -69,8 +69,9 @@ func TestChildInputsStampWorkflowProtocol(t *testing.T) {
 				built := buildInlineAgentRunInput("child.agent", nested, nil)
 				input = &built
 			} else {
-				wf := &testWorkflowContext{ctx: t.Context()}
-				_, err := New().executeReservedAgentChild(wf, AgentRoute{ID: "child.agent", WorkflowName: "child.workflow", DefaultTaskQueue: "q"}, nil, nested, wf.Context())
+				rt := New()
+				wf := &testWorkflowContext{ctx: t.Context(), hookRuntime: rt}
+				_, err := rt.executeReservedAgentChild(wf, AgentRoute{ID: "child.agent", WorkflowName: "child.workflow", DefaultTaskQueue: "q"}, nil, nested, wf.Context())
 				require.NoError(t, err)
 				require.Len(t, wf.childRequests, 1)
 				input = wf.childRequests[0].Input
@@ -85,7 +86,7 @@ func TestChildInputsStampWorkflowProtocol(t *testing.T) {
 }
 
 func TestExecuteWorkflowRejectsProtocolBeforeEffects(t *testing.T) {
-	for _, version := range []int{0, 9, 10, 11, 12, 13, api.WorkflowProtocolVersion + 1} {
+	for _, version := range []int{0, 9, 10, 11, 12, 13, 14, api.WorkflowProtocolVersion + 1} {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {
 			beforeRuns := 0
 			bus := &recordingHooks{}

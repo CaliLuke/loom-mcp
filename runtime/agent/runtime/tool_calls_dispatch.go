@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	agent "github.com/CaliLuke/loom-mcp/v2/runtime/agent"
@@ -274,6 +275,9 @@ func (e *toolBatchExec) dispatchInlineAgentToolCall(wfCtx engine.WorkflowContext
 	}
 	input := buildInlineAgentRunInput(route.ID, nestedRunCtx, messages)
 	inheritCompaction(wfCtx.Context(), &input)
+	if err := prepareChildContext(wfCtx, route, &input); err != nil {
+		return e.r.rejectChildStart(wfCtx, nestedRunCtx, errors.Join(engine.ErrWorkflowStartRejected, err))
+	}
 	handle, err := startInlineAgentChildWorkflow(wfCtx, ctx, route, &input)
 	if err != nil {
 		return fmt.Errorf("failed to start agent child workflow for %s: %w", call.Name, e.r.rejectChildStart(wfCtx, nestedRunCtx, err))

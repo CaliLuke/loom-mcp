@@ -243,6 +243,9 @@ func (r *runReader) readStep(event *runlog.Event) error {
 	if err := r.recordRecoverySettings(step.RecoverySettings); err != nil {
 		return err
 	}
+	if err := r.recordContextFingerprint(step.ContextFingerprint); err != nil {
+		return err
+	}
 	if err := r.recordContextSettings(step.ContextSettings); err != nil {
 		return err
 	}
@@ -252,6 +255,7 @@ func (r *runReader) readStep(event *runlog.Event) error {
 	if err := r.adopt(step.CallKeys); err != nil {
 		return err
 	}
+	r.state.ValidateBudgets = step.ContextOverrides
 	if err := r.observeStepFacts(step.CallKeys); err != nil {
 		return err
 	}
@@ -313,6 +317,9 @@ func (r *runReader) readSeal(event *runlog.Event) error {
 	if err := r.recordRecoverySettings(seal.RecoverySettings); err != nil {
 		return err
 	}
+	if err := r.recordContextFingerprint(seal.ContextFingerprint); err != nil {
+		return err
+	}
 	if err := r.recordContextSettings(seal.ContextSettings); err != nil {
 		return err
 	}
@@ -352,7 +359,7 @@ func (r *runReader) recordContextSettings(settings *compaction.ContextSettings) 
 		return nil
 	}
 	if r.run.ContextSettings == nil {
-		r.run.Recall = compaction.NewRecall(settings.Settings)
+		r.run.Recall = compaction.NewRecall(*settings)
 	} else if *r.run.ContextSettings != *settings {
 		return fmt.Errorf("conflicting recorded context settings")
 	}
@@ -378,7 +385,15 @@ func (r *runReader) observeStepFacts(keys []runstore.CallKey) error {
 			facts = append(facts, *completion.Facts)
 		}
 	}
-	r.state = compaction.Observe(r.state, facts)
+	if r.run.ContextFingerprint != "" && r.run.ContextSettings != nil {
+		var err error
+		r.state, err = compaction.ObserveEffective(r.state, facts, *r.run.ContextSettings)
+		if err != nil {
+			return err
+		}
+	} else {
+		r.state = compaction.Observe(r.state, facts)
+	}
 	return nil
 }
 
@@ -386,6 +401,9 @@ func (r *runReader) readCompactionRecord(event *runlog.Event) error {
 	if event.Type == hooks.ContextCompacted || event.Type == hooks.ContextCompactionSkipped {
 		var summary hooks.ContextCompactionEvent
 		if err := json.Unmarshal(event.Payload, &summary); err != nil {
+			return err
+		}
+		if err := r.recordContextFingerprint(summary.Fingerprint); err != nil {
 			return err
 		}
 		if err := r.recordContextSettings(summary.ContextSettings); err != nil {
@@ -400,7 +418,7 @@ func (r *runReader) readCompactionRecord(event *runlog.Event) error {
 		if event.Type == hooks.ContextCompacted {
 			settings := compaction.Settings{}
 			if r.run.ContextSettings != nil {
-				settings = r.run.ContextSettings.Settings
+				settings = *r.run.ContextSettings
 			} else if r.run.CompactionSettings != nil {
 				settings = *r.run.CompactionSettings
 			}

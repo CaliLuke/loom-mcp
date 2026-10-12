@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
@@ -38,7 +39,14 @@ func (r *Runtime) SummarizeContextActivity(ctx context.Context, in *SummarizeCon
 	}
 	stopHeartbeat := startActivityHeartbeat(ctx)
 	defer stopHeartbeat()
+	started := time.Now()
+	defer func() {
+		if out != nil {
+			out.Latency = int64(time.Since(started))
+		}
+	}()
 	recording := NewCallRecording(r.RunStore, in.Scope, index.ViewRef{}, nil, in.Step)
+	recording.fingerprint = in.ContextFingerprint
 	recording.activity = callrecord.ActivitySummarize
 	defer recording.finishSummaryActivity(context.WithoutCancel(ctx), &out, &activityErr)
 	out = &SummarizeContextOutput{From: in.From, To: in.To, IndexHead: in.ViewRef.IndexHead}

@@ -36,8 +36,8 @@ func (p *summaryPreparation) renderCandidate(ctx context.Context, in *SummarizeC
 	if err != nil {
 		return nil, nil, err
 	}
-	candidate.Pinned = checkpoint.SelectPins(candidate.Users, in.Budget, checkpoint.DefaultLimits)
-	message, err := checkpoint.Render(candidate, in.Budget, checkpoint.DefaultLimits, nil)
+	candidate.Pinned = checkpoint.SelectPins(candidate.Users, in.Budget, checkpoint.BudgetLimits(in.Budget))
+	message, err := checkpoint.Render(candidate, in.Budget, checkpoint.BudgetLimits(in.Budget), nil)
 	return message, candidate.Pinned, err
 }
 

@@ -22,7 +22,7 @@ import (
 
 type summaryHistoryPlanner struct{}
 
-const workflowSummaryHistoryFile = "testdata/workflow_protocol_v14_summary.json"
+const workflowSummaryHistoryFile = "testdata/workflow_protocol_v15_summary.json"
 const historySummaryText = "# Goal\nRemember the task [message 1].\n# Decisions\nUse evidence.\n# Facts\nHistory is recorded.\n# Progress\nRead it.\n# Open questions\nNone.\n# Next\nFinish."
 
 func recordSummaryWorkflowHistory(t *testing.T, c client.Client) {
@@ -39,7 +39,7 @@ func recordSummaryWorkflowHistory(t *testing.T, c client.Client) {
 		{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: strings.Repeat("recorded evidence ", 500)}}},
 		{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "continue"}}},
 	}
-	handle, err := coordinator.NewClient(fx.rt).Start(ctx, "sess-summary-history", messages, agentsruntime.WithRunID("run-summary-history"))
+	handle, err := coordinator.NewClient(fx.rt).Start(ctx, "sess-summary-history", messages, agentsruntime.WithRunID("run-summary-history"), agentsruntime.WithContextOverrides(agentsruntime.ContextOverrides{ContextWindow: new(5000), MaxSummaryChunks: new(2)}))
 	require.NoError(t, err)
 	require.Eventually(t, func() bool { return fx.recorder.count(hooks.AwaitClarification) == 1 }, 5*time.Second, 10*time.Millisecond)
 	require.NoError(t, fx.rt.ProvideClarification(ctx, &api.ClarificationAnswer{RunID: "run-summary-history", ID: "summary-question", Answer: "yes"}))

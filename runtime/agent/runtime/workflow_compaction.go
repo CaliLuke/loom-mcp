@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 
@@ -31,13 +32,13 @@ func compactionModels(state compaction.State) []api.ModelContext {
 func prepareCompaction(base *workflowPlanInput, input *PlanActivityInput) {
 	base.summaryApplied = false
 	base.compactionDecision = compaction.Decision{}
+	input.View.ContextFingerprint = base.contextFingerprint
 	input.Models = compactionModels(base.compactionState)
-	input.ContextSettings = base.contextSettings
-	if input.ContextSettings.GuardMargin.Bytes == 0 {
-		input.ContextSettings = resolvedContextSettings(base.compaction, base.recovery)
-		base.contextSettings = input.ContextSettings
+	if base.contextSettings.GuardMargin.Bytes == 0 {
+		base.contextSettings = resolvedContextSettings(base.compaction, base.recovery)
 	}
-	if base.compaction == nil || input.Overflow != nil {
+	input.ContextSettings = plannerContextSettings(base.contextSettings)
+	if !input.ContextSettings.Threshold || input.Overflow != nil {
 		return
 	}
 	state := base.compactionState
@@ -46,7 +47,7 @@ func prepareCompaction(base *workflowPlanInput, input *PlanActivityInput) {
 		// and their decision state are discarded on this schedule.
 		state.OpenFrom = 1
 	}
-	decision := compaction.Decide(state, base.Entries, input.View, pureCompactionSettings(base.compaction))
+	decision := compaction.Decide(state, base.Entries, input.View, base.contextSettings)
 	if input.Recovery != nil {
 		decision.View = input.View
 		decision.State = base.compactionState
@@ -65,13 +66,13 @@ func compactionRecord(wf engine.WorkflowContext, base *workflowPlanInput, input 
 	d := base.compactionDecision
 	if d.Tier == compaction.Clear || d.Tier == compaction.Evict {
 		units, calls := compactionCounts(base.Entries, max(base.compactionView.TailFrom, 1), view.TailFrom)
-		return hooks.NewContextCompactionEvent(input.RunID, input.AgentID, input.RunContext.SessionID, input.Step, hooks.ContextCompacted, "threshold", string(d.Tier), units, calls, d.Before, d.After, view.Checkpoint, wf.Now())
+		return stampCompactionEvent(base, hooks.NewContextCompactionEvent(input.RunID, input.AgentID, input.RunContext.SessionID, input.Step, hooks.ContextCompacted, "threshold", string(d.Tier), units, calls, d.Before, d.After, view.Checkpoint, wf.Now()))
 	}
 	if d.Skipped != "" {
 		if d.Skipped == compaction.NoProgress && base.compactionSuppressed && d.State.NoProgressAt == base.compactionState.NoProgressAt {
 			return nil
 		}
-		return hooks.NewContextCompactionEvent(input.RunID, input.AgentID, input.RunContext.SessionID, input.Step, hooks.ContextCompactionSkipped, string(d.Skipped), "", 0, 0, d.Before, d.After, view.Checkpoint, wf.Now())
+		return stampCompactionEvent(base, hooks.NewContextCompactionEvent(input.RunID, input.AgentID, input.RunContext.SessionID, input.Step, hooks.ContextCompactionSkipped, string(d.Skipped), "", 0, 0, d.Before, d.After, view.Checkpoint, wf.Now()))
 	}
 	return nil
 }
@@ -85,7 +86,7 @@ func (r *Runtime) adoptCompaction(wf engine.WorkflowContext, base *workflowPlanI
 			base.compactionState = base.compactionDecision.State
 		}
 		if !base.summaryApplied && (base.compactionDecision.Tier == compaction.Clear || base.compactionDecision.Tier == compaction.Evict) {
-			base.compactionState.Recall = base.compactionState.Recall.Refilled(pureCompactionSettings(base.compaction))
+			base.compactionState.Recall = base.compactionState.Recall.Refilled(base.contextSettings)
 			base.recallEpisode++
 			base.recallExhausted = nil
 		}
@@ -93,7 +94,11 @@ func (r *Runtime) adoptCompaction(wf engine.WorkflowContext, base *workflowPlanI
 			base.compactionState.Rendered = compaction.RenderedCheckpoint{Hash: string(out.View.Checkpoint), TailFrom: view.TailFrom, Budget: view.Budget, Bytes: out.View.CheckpointBytes}
 		}
 	}
-	base.compactionState = compaction.Observe(base.compactionState, out.Facts)
+	var err error
+	base.compactionState, err = compaction.ObserveEffective(base.compactionState, out.Facts, base.contextSettings)
+	if err != nil {
+		return errors.Join(engine.NewNonRetryableApplicationError(err.Error(), "context_settings", err, err), r.publishCompactionDiagnostics(wf, base, input))
+	}
 	if err := r.publishRecallDisabled(wf, base, input, view); err != nil {
 		return err
 	}
@@ -114,6 +119,10 @@ func (r *Runtime) publishCompactionDiagnostics(wf engine.WorkflowContext, base *
 	for _, diagnostic := range diagnostics {
 		if *diagnostic.seen && !*diagnostic.published {
 			event := hooks.NewContextDiagnosticEvent(input.RunID, input.AgentID, input.RunContext.SessionID, diagnostic.kind, wf.Now())
+			if diagnostic.kind == hooks.ContextLimitsUnknown && base.compactionState.InvalidLimitsModel != "" {
+				event.Reason = "invalid_override"
+				event.Model = base.compactionState.InvalidLimitsModel
+			}
 			if err := r.publishHook(wf.Context(), event, input.RunContext.TurnID); err != nil {
 				return fmt.Errorf("publish context diagnostic: %w", err)
 			}
@@ -148,4 +157,21 @@ func compactionCounts(entries []index.MessageEntry, from, to index.MessageID) (i
 		}
 	}
 	return units, calls
+}
+
+// stampCompactionEvent binds telemetry and offline evidence to effective settings.
+func stampCompactionEvent(base *workflowPlanInput, event *hooks.ContextCompactionEvent) *hooks.ContextCompactionEvent {
+	event.Fingerprint = base.contextFingerprint
+	event.Pretend = base.contextSettings.ContextWindow > 0
+	event.EffectiveWindow = base.compactionState.EffectiveWindow
+	if event.Pretend {
+		event.EffectiveWindow = base.contextSettings.ContextWindow
+	}
+	return event
+}
+
+// plannerContextSettings sends only guard inputs in the bounded planner envelope.
+// Canonical records retain the full workflow-stamped settings and fingerprint.
+func plannerContextSettings(settings compaction.Settings) compaction.Settings {
+	return compaction.Settings{Threshold: settings.Threshold, GuardMargin: settings.GuardMargin, TriggerAt: settings.TriggerAt, DisableRecall: settings.DisableRecall}
 }

@@ -151,6 +151,7 @@ func TestWorkflowSummaryDisableAndRecovery(t *testing.T) {
 				input.Recovery = &ModelRecovery{}
 			case "no model":
 				fresh.compaction.ContextModel = nil
+				fresh.contextSettings = resolvedContextSettings(fresh.compaction, ContextRecovery{})
 			case "expired":
 				deadline = wf.Now().Add(-time.Second)
 			}
@@ -266,16 +267,32 @@ func (l *summaryLogRecorder) Info(_ context.Context, message string, _ ...any) {
 }
 
 func TestWorkflowSummaryOptOutLogsOnce(t *testing.T) {
-	rt := New()
-	log := &summaryLogRecorder{}
-	rt.logger = log
-	base := &workflowPlanInput{}
-	wf := &summaryWorkflowContext{testWorkflowContext: &testWorkflowContext{ctx: t.Context(), runtime: rt}}
-	for step := 1; step <= 3; step++ {
-		require.NoError(t, rt.prepareWorkflowSummary(wf, base, &PlanActivityInput{RunID: "run", Step: step}, time.Time{}))
+	for _, tc := range []struct {
+		name      string
+		threshold bool
+		tier      compaction.Tier
+		enabled   bool
+		logs      int
+	}{
+		{"threshold off", false, compaction.Summary, false, 0},
+		{"clear", true, compaction.Clear, false, 0},
+		{"evict", true, compaction.Evict, false, 0},
+		{"no model", true, compaction.Summary, false, 1},
+		{"model enabled", true, compaction.Summary, true, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rt := New()
+			log := &summaryLogRecorder{}
+			rt.logger = log
+			base := &workflowPlanInput{contextSettings: compaction.Settings{Threshold: tc.threshold, MaxTier: tc.tier, Summary: compaction.SummaryConfig{Enabled: tc.enabled}}}
+			wf := &summaryWorkflowContext{testWorkflowContext: &testWorkflowContext{ctx: t.Context(), runtime: rt}}
+			for step := 1; step <= 3; step++ {
+				require.NoError(t, rt.prepareWorkflowSummary(wf, base, &PlanActivityInput{RunID: "run", Step: step}, time.Time{}))
+			}
+			assert.Equal(t, tc.logs, log.off)
+			assert.Zero(t, wf.calls)
+		})
 	}
-	assert.Equal(t, 1, log.off)
-	assert.Zero(t, wf.calls)
 }
 
 func TestWorkflowSummaryCannotPlanAfterBudgetExpiry(t *testing.T) {
@@ -284,6 +301,7 @@ func TestWorkflowSummaryCannotPlanAfterBudgetExpiry(t *testing.T) {
 	base.compaction.TriggerAt = contextmeasure.Rate{Tokens: 1, Bytes: 100}
 	base.compaction.KeepRecentTokens = 1
 	base.compaction.ProtectRecentToolTokens = 100000
+	base.contextSettings = resolvedContextSettings(base.compaction, ContextRecovery{})
 	base.compactionState = compaction.Observe(compaction.State{}, []contextmeasure.RequestFacts{{ViewBearing: true, Model: "planner", ContextWindow: 6000}})
 	wf := &summaryWorkflowContext{testWorkflowContext: &testWorkflowContext{ctx: engine.WithActivityAttempt(t.Context(), 1), runtime: rt, hookRuntime: rt}, advance: 2 * time.Second}
 	out, err := rt.runPlanActivity(wf, base, "plan", engine.ActivityOptions{}, PlanActivityInput{AgentID: in.AgentID, RunID: in.RunID, RunContext: base.RunContext, View: base.view()}, wf.Now().Add(time.Second))
@@ -304,6 +322,7 @@ func TestWorkflowRejectedSummaryFinalizesAfterBudgetExpiry(t *testing.T) {
 	base.compaction.TriggerAt = contextmeasure.Rate{Tokens: 1, Bytes: 100}
 	base.compaction.KeepRecentTokens = 1
 	base.compaction.ProtectRecentToolTokens = 100000
+	base.contextSettings = resolvedContextSettings(base.compaction, ContextRecovery{})
 	base.compactionState = compaction.Observe(compaction.State{}, []contextmeasure.RequestFacts{{ViewBearing: true, Model: "planner", ContextWindow: 6000}})
 	wf := &summaryWorkflowContext{testWorkflowContext: &testWorkflowContext{ctx: engine.WithActivityAttempt(t.Context(), 1), runtime: rt, hookRuntime: rt}, advance: 2 * time.Second}
 	out, err := rt.runPlanActivity(wf, base, "plan", engine.ActivityOptions{}, PlanActivityInput{AgentID: in.AgentID, RunID: in.RunID, RunContext: base.RunContext, View: base.view()}, wf.Now().Add(time.Second))

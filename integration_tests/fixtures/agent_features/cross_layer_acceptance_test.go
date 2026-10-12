@@ -67,7 +67,7 @@ func TestGeneratedCrossLayerInMemoryContracts(t *testing.T) {
 	})
 }
 
-func runGeneratedChildScenario(t *testing.T, ctx context.Context, fx *featureRuntime) {
+func runGeneratedChildScenario(t *testing.T, ctx context.Context, fx *featureRuntime, options ...agentsruntime.RunOption) {
 	t.Helper()
 	childPlanner := &specialistFinalResultPlanner{}
 	require.NoError(t, specialist.RegisterSpecialistAgent(ctx, fx.rt, specialist.SpecialistAgentConfig{Planner: childPlanner}))
@@ -80,7 +80,7 @@ func runGeneratedChildScenario(t *testing.T, ctx context.Context, fx *featureRun
 		ctx,
 		"sess-child",
 		[]*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "delegate"}}}},
-		agentsruntime.WithRunID("run-parent-child"),
+		append([]agentsruntime.RunOption{agentsruntime.WithRunID("run-parent-child")}, options...)...,
 	)
 	require.NoError(t, err)
 	require.Equal(t, "child complete", messageText(out.Final))

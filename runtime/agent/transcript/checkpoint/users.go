@@ -336,3 +336,15 @@ func collapsedUsers(in userInput, ordered []UserMessage, selected map[OrderKey]b
 		text: fmt.Sprintf("… %d user messages in %s–%s are not listed and may override earlier ones [users %s]\n", len(omitted), start, end, Handle("users", in.recordID)),
 	}
 }
+
+// BudgetLimits resolves pin-count overrides from the recorded view budget.
+func BudgetLimits(budget index.RenderBudget) Limits {
+	limits := DefaultLimits
+	if budget.MaxPins > 0 {
+		limits.MaxPins = budget.MaxPins
+	}
+	if budget.MaxPinnedParts > 0 {
+		limits.MaxPinnedParts = budget.MaxPinnedParts
+	}
+	return limits
+}

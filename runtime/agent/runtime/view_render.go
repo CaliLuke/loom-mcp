@@ -120,7 +120,7 @@ func (c *runViewCache) renderCheckpoint(ctx context.Context, store runstore.Stor
 		c.checkpointHash = hash
 	}
 	if changed || budgetChanged {
-		c.selectedPins = checkpoint.SelectPins(c.checkpointInput.Users, view.Budget, checkpoint.DefaultLimits)
+		c.selectedPins = checkpoint.SelectPins(c.checkpointInput.Users, view.Budget, checkpoint.BudgetLimits(view.Budget))
 	}
 	c.pinBudget = view.Budget
 	pins := slices.Clone(c.selectedPins)
@@ -141,7 +141,7 @@ func (c *runViewCache) checkpointFor(hash runstore.Hash, budget index.RenderBudg
 	if c.checkpointMessage == nil || key != c.checkpointKey {
 		input := c.checkpointInput
 		input.Pinned = pins
-		message, err := checkpoint.Render(input, budget, checkpoint.DefaultLimits, nil)
+		message, err := checkpoint.Render(input, budget, checkpoint.BudgetLimits(budget), nil)
 		if err != nil {
 			return nil, err
 		}

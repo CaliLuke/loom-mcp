@@ -11,24 +11,33 @@ import (
 
 type (
 	// ContextSettings snapshots both opt-in thresholds and always-on recovery.
-	ContextSettings struct {
-		// Summary records immutable, client-stamped summary configuration.
-		Summary SummaryConfig `json:"summary,omitzero"`
-		Settings
-		Threshold     bool                `json:"threshold,omitzero"`
-		GuardMargin   contextmeasure.Rate `json:"guard_margin,omitzero"`
-		DisableRecall bool                `json:"disable_recall,omitzero"`
-	}
+	ContextSettings = Settings
 
 	// Settings holds per-run trigger settings. Zero fields resolve to the design
 	// defaults against the smallest recorded usable model budget.
 	Settings struct {
-		TriggerAt               contextmeasure.Rate
-		KeepRecentTokens        int
-		ProtectRecentToolTokens int
-		MinSavingTokens         int
-		RecallDiscoveryCalls    int
-		RecallReadCalls         int
+		Threshold                 bool                `json:"threshold,omitzero"`
+		MaxTier                   Tier                `json:"max_tier,omitzero"`
+		GuardMargin               contextmeasure.Rate `json:"guard_margin,omitzero"`
+		DisableRecall             bool                `json:"disable_recall,omitzero"`
+		Summary                   SummaryConfig       `json:"summary,omitzero"`
+		Prompt                    SummaryPrompt       `json:"prompt,omitzero"`
+		ContextWindow             int                 `json:"context_window,omitzero"`
+		KeepUserTokens            int                 `json:"keep_user_tokens,omitzero"`
+		MaxSummaryTokens          int                 `json:"max_summary_tokens,omitzero"`
+		ReceiptTokens             int                 `json:"receipt_tokens,omitzero"`
+		FramingTokens             int                 `json:"framing_tokens,omitzero"`
+		MaxSummarisedResultTokens int                 `json:"max_summarised_result_tokens,omitzero"`
+		MaxPins                   int                 `json:"max_pins,omitzero"`
+		MaxPinnedParts            int                 `json:"max_pinned_parts,omitzero"`
+		MaxSummaryChunks          int                 `json:"max_summary_chunks,omitzero"`
+		RecallScanBytes           int                 `json:"recall_scan_bytes,omitzero"`
+		TriggerAt                 contextmeasure.Rate
+		KeepRecentTokens          int `json:"keep_recent_tokens,omitzero"`
+		ProtectRecentToolTokens   int `json:"protect_recent_tool_tokens,omitzero"`
+		MinSavingTokens           int `json:"min_saving_tokens,omitzero"`
+		RecallDiscoveryCalls      int
+		RecallReadCalls           int
 	}
 	// ModelState holds the last view-bearing measurements for one model. Rate is
 	// replaced only by usage-bearing facts, independently of the latest overhead.
@@ -45,13 +54,20 @@ type (
 	// is the first entry of an open await/confirmation/clarification, set by the
 	// caller from workflow state before Decide; zero means no open suffix.
 	State struct {
-		Summary      SummaryState
-		Recall       RecallAllowances
-		Models       map[string]ModelState
-		MinB         int
-		NoProgressAt int
-		OpenFrom     index.MessageID
-		Flags        Flags
+		// ValidateBudgets enables strict mid-run validation for explicit run overrides.
+		// This provenance is separate from the canonical effective settings.
+		ValidateBudgets bool
+		// InvalidLimitsModel retains the first invalid override diagnostic identity.
+		InvalidLimitsModel string
+		Summary            SummaryState
+		Recall             RecallAllowances
+		Models             map[string]ModelState
+		MinB               int
+		// EffectiveWindow is the window of the fact that established MinB.
+		EffectiveWindow int
+		NoProgressAt    int
+		OpenFrom        index.MessageID
+		Flags           Flags
 		// Rendered records the last adopted checkpoint measurement.
 		Rendered RenderedCheckpoint
 	}
@@ -104,6 +120,9 @@ func Observe(state State, facts []contextmeasure.RequestFacts) State {
 			continue
 		}
 		bearing = true
+		if fact.LimitsInvalid && state.InvalidLimitsModel == "" {
+			state.InvalidLimitsModel = fact.Model
+		}
 		previous := state.Models[fact.Model]
 		if fact.InputTokens > 0 {
 			previous.Rate, previous.Calibrated = contextmeasure.Calibrate(fact)
@@ -118,10 +137,11 @@ func Observe(state State, facts []contextmeasure.RequestFacts) State {
 			previous.Budget = fact.ContextWindow - max(fact.OutputReserve, 0)
 			if state.MinB == 0 || previous.Budget < state.MinB {
 				state.MinB = previous.Budget
+				state.EffectiveWindow = fact.ContextWindow
 			}
 			state.Flags.BudgetTooSmall = state.Flags.BudgetTooSmall || previous.Budget < 2900
 		}
-		state.Flags.LimitsUnknown = state.Flags.LimitsUnknown || fact.ContextWindow == 0
+		state.Flags.LimitsUnknown = state.Flags.LimitsUnknown || fact.ContextWindow == 0 || fact.LimitsInvalid
 		state.Models[fact.Model] = previous
 	}
 	state.Flags.Unmeasured = state.Flags.Unmeasured || (len(facts) > 0 && !bearing)

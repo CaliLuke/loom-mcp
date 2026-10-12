@@ -65,9 +65,12 @@ type (
 	}
 	// ChunkOptions uses recorded summariser limits and the agent's summary cap.
 	ChunkOptions struct {
-		Limits           model.ContextLimits
-		MaxSummaryTokens int
-		Prompt           string
+		// MaxSummaryChunks and MaxSummarisedResultTokens override the default rules.
+		MaxSummaryChunks          int
+		MaxSummarisedResultTokens int
+		Limits                    model.ContextLimits
+		MaxSummaryTokens          int
+		Prompt                    string
 		// PromptFor measures a resolved custom template using the same quoted data as the actual call.
 		PromptFor func(previous string, chunk Chunk) (string, error)
 	}

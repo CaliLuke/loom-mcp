@@ -17,7 +17,7 @@ func Measure(req *model.Request, limits model.ContextLimits, view []*model.Messa
 	if req == nil {
 		return RequestFacts{}, errors.New("contextmeasure: nil request")
 	}
-	facts := RequestFacts{Model: req.Model, ContextWindow: limits.ContextWindow, OutputReserve: OutputReserve(req, limits)}
+	facts := RequestFacts{LimitsInvalid: limits.InvalidOverride, Model: req.Model, ContextWindow: limits.ContextWindow, OutputReserve: OutputReserve(req, limits)}
 	matches, err := viewMatches(req, view)
 	if err != nil {
 		return RequestFacts{}, err

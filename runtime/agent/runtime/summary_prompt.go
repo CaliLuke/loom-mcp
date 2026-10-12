@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"bytes"
+	"context"
 	_ "embed"
 	"text/template"
 
@@ -55,4 +56,17 @@ func summaryTemplate(spec prompt.PromptSpec) (func(summaryPromptData) (string, e
 		}
 		return text.String(), nil
 	}, nil
+}
+
+// resolvePinnedSummary loads only recorded template bytes for submitted runs.
+func (r *Runtime) resolvePinnedSummary(ctx context.Context, in *SummarizeContextInput) (prompt.PromptSpec, error) {
+	pinned := in.ContextSettings.Prompt
+	if pinned.Template == "" {
+		return r.PromptRegistry.Resolve(ctx, in.PromptID, prompt.Scope{SessionID: in.SessionID, Labels: in.Labels})
+	}
+	data, err := r.RunStore.Get(ctx, in.Scope, pinned.Template)
+	if err != nil {
+		return prompt.PromptSpec{}, err
+	}
+	return prompt.PromptSpec{ID: pinned.Ref.ID, Version: pinned.Ref.Version, AgentID: string(in.AgentID), Role: prompt.PromptRoleSystem, Template: string(data)}, nil
 }

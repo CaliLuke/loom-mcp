@@ -400,6 +400,12 @@ func TestWorkflowCompactionDiagnosticsFromPlanner(t *testing.T) {
 			wf := &testWorkflowContext{ctx: engine.WithActivityAttempt(t.Context(), 1), runtime: rt, hookRuntime: rt}
 			for i := 0; i < 3; i++ {
 				out, err := rt.runPlanActivity(wf, base, "plan", engine.ActivityOptions{}, PlanActivityInput{AgentID: "agent", RunID: "run", RunContext: base.RunContext, View: base.view()}, time.Time{})
+				if tc.window == 0 {
+					var settingsErr *compaction.ContextSettingsError
+					require.ErrorAs(t, err, &settingsErr)
+					assert.Equal(t, "ContextWindow", settingsErr.Field)
+					return
+				}
 				require.NoError(t, err)
 				require.Len(t, out.Facts, 1)
 				assert.Equal(t, !tc.rewrite, out.Facts[0].ViewBearing)

@@ -55,7 +55,7 @@ func TestRecordContentRegistrationAndEmptyRun(t *testing.T) {
 			assert.Equal(t, 1, eng.activityCalls)
 			require.Len(t, eng.output.Refs, 3)
 			for i, hash := range eng.output.Refs {
-				assert.Equal(t, store.snapshot()[i].hash, hash)
+				assert.Equal(t, store.snapshot()[i+2].hash, hash)
 			}
 		})
 	}

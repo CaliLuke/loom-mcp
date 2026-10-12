@@ -49,7 +49,7 @@ func (r *runReader) readOverflow(event *runlog.Event) error {
 		if err != nil {
 			return err
 		}
-		expected := compaction.Recover(r.state, entries, overflow.ViewRef, overflow.Failure, r.run.ContextSettings.Settings)
+		expected := compaction.Recover(r.state, entries, overflow.ViewRef, overflow.Failure, *r.run.ContextSettings, r.run.ContextFingerprint != "")
 		if !reflect.DeepEqual(expected, *overflow.Recomputed) {
 			return fmt.Errorf("runrecord: recovery differs from recorded facts")
 		}

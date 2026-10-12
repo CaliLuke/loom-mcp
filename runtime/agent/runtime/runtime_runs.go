@@ -63,6 +63,9 @@ func (r *Runtime) executeReservedAgentChild(wfCtx engine.WorkflowContext, route 
 	}
 	stampWorkflowProtocol(&input)
 	inheritCompaction(settingsContext, &input)
+	if err := prepareChildContext(wfCtx, route, &input); err != nil {
+		return nil, r.rejectChildStart(wfCtx, nestedRunCtx, errors.Join(engine.ErrWorkflowStartRejected, err))
+	}
 	handle, err := wfCtx.StartChildWorkflow(wfCtx.Context(), engine.ChildWorkflowRequest{
 		ID:        input.RunID,
 		Workflow:  route.WorkflowName,
@@ -139,8 +142,11 @@ func (r *Runtime) startRunOn(ctx context.Context, input *RunInput, workflowName,
 		}
 		input.RootRunID = input.RunID
 	}
-	stampWorkflowProtocol(input)
 	r.stampContextCompaction(input)
+	if err := r.prepareContextStart(ctx, input); err != nil {
+		return nil, err
+	}
+	stampWorkflowProtocol(input)
 	if err := validateWorkflowInput(input); err != nil {
 		return nil, err
 	}

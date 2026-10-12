@@ -47,9 +47,11 @@ const (
 // Recover uses only the failed request's recorded budget and the adopted rate.
 // It ignores threshold protection and saving gates. Checkpoints are charged at
 // MaxBytes even when a preceding activity measured a smaller rendering.
-func Recover(state State, entries []index.MessageEntry, view index.ViewRef, failure contextmeasure.ContextOverflow, settings Settings) Recovery {
+// boundBudget preserves protocol-15 effective ceilings; pre-15 records use false.
+func Recover(state State, entries []index.MessageEntry, view index.ViewRef, failure contextmeasure.ContextOverflow, settings Settings, boundBudget bool) Recovery {
 	fact := failure.Failed
 	budget := max(0, fact.ContextWindow-fact.OutputReserve)
+	canonical := settings
 	settings = settings.resolved(budget)
 	m := recoveryMeasure{entries: entries, failed: fact, rate: state.Models[fact.Model].Rate, budget: budget, calibrated: state.Models[fact.Model].Calibrated, target: settings.TriggerAt}
 	if m.rate.Bytes <= 0 {
@@ -57,6 +59,13 @@ func Recover(state State, entries []index.MessageEntry, view index.ViewRef, fail
 	}
 	r := Recovery{View: view, Tier: None, Before: contextmeasure.Estimate(m.rate, 0, fact.TextBytes, fact.NonText)}
 	nextBudget := RecoveryBudget(fact, view.Budget.PreviewTokens)
+	current := view.Budget
+	if current == (index.RenderBudget{}) && state.MinB > 0 {
+		current = RenderBudget(canonical, state.MinB, 0)
+	}
+	if boundBudget {
+		nextBudget = boundRecoveryBudget(nextBudget, current)
+	}
 	if fact.ContextWindow > 0 && checkpoint.MaxBytes(nextBudget) < checkpoint.MinCheckpointBytes(nextBudget) {
 		r.Shortfall = &BudgetShortfallError{Budget: budget, MaxBytes: checkpoint.MaxBytes(nextBudget), MinBytes: checkpoint.MinCheckpointBytes(nextBudget)}
 		r.Reason, r.After = "budget_too_small", r.Before
@@ -210,4 +219,18 @@ func (m recoveryMeasure) enough(r *Recovery) bool {
 		return above(m.budget, r.After, contextmeasure.Rate{Tokens: m.target.Bytes, Bytes: m.target.Tokens})
 	}
 	return text <= m.failed.ViewTextBytes/2
+}
+
+// boundRecoveryBudget preserves the already committed component ceilings.
+func boundRecoveryBudget(real, current index.RenderBudget) index.RenderBudget {
+	if current == (index.RenderBudget{}) {
+		return real
+	}
+	real.MaxPins = current.MaxPins
+	real.MaxPinnedParts = current.MaxPinnedParts
+	real.KeepUserTokens = min(real.KeepUserTokens, current.KeepUserTokens)
+	real.MaxSummaryTokens = min(real.MaxSummaryTokens, current.MaxSummaryTokens)
+	real.ReceiptTokens = min(real.ReceiptTokens, current.ReceiptTokens)
+	real.FramingTokens = min(real.FramingTokens, current.FramingTokens)
+	return real
 }

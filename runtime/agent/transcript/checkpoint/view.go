@@ -179,7 +179,7 @@ func projectCheckpoint(ctx context.Context, source index.Source, entries []index
 			return nil, fmt.Errorf("checkpoint through does not match tail")
 		}
 		input.Pinned = slices.Clone(view.Pinned)
-		message, err = Render(input, view.Budget, DefaultLimits, nil)
+		message, err = Render(input, view.Budget, BudgetLimits(view.Budget), nil)
 		if err != nil {
 			return nil, err
 		}

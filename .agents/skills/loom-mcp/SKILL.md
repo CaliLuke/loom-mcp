@@ -69,11 +69,12 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   recorded-history replay test. Drain running workflows before deploying the
   new version; mismatched and unstamped inputs fail before workflow effects.
 
-- Protocol 14 changes deterministic overflow classification and retry sizing.
-  Drain v13 runs before deployment; selected v13 histories replaying successfully
-  does not establish compatibility for all in-flight decisions.
+- Protocol 15 records per-run context overrides, settings fingerprints and pinned
+  summary prompts, and validates effective budgets from recorded facts. Drain v14
+  runs before deployment. Preserve protocol 14 overflow source classification,
+  retry definition accounting and the fixed-rate progress check.
 
-- Current workflow protocol is 14. Every agent observes adopted call facts,
+- Current workflow protocol is 15. Every agent observes adopted call facts,
   sends sorted Models and runs the advisory guard, bounded overflow recovery and
   recall advertising. Threshold compaction stays opt-in. The existing
   run.ContextRecovery adds GuardMargin (zero=10%) beside DisableRecall; RunInput
@@ -94,14 +95,30 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   Agents without threshold compaction gain recall_context after the first
   shortened recovery view unless recall/tools are disabled; finalization omits it.
   Unrelated requests fail not_view_bearing; Compress alone does not imply failure.
-  The real v14 history covers recovery, a confirmation-gated
+  The real v15 history covers recovery, a confirmation-gated
   tool turn with a recorded clarification question/answer pair, one resume, lookup
-  and finalization. A second v14 budget history covers terminal adoption across
-  the active budget without a finalizer call; v5-v13 reject before effects. A third v14 history records summary adoption before a single post-await resume.
+  and finalization. A second v15 budget history covers terminal adoption across
+  the active budget without a finalizer call; v5-v14 reject before effects. A third v15 history records summary adoption before a single post-await resume.
   K15 adds explicit ContextModel configuration and synchronous summary folding at
   threshold eviction. Stale outputs adopt keys without changing the view; three
   non-stale rejections disable summaries. Summary adoption is a canonical record
   before the next planner command. Structural templates stay version 5.
+
+- Per-run `WithContextOverrides` / `PolicyOverrides.Context` merge pointer-valued
+  settings before workflow submission. Strict mid-run budget validation requires
+  explicit per-run overrides or a pretend window; registered/default-only runs
+  retain their existing diagnostics and continue. D12 still rejects threshold
+  compaction with unknown limits and no pretend window. Override presence is
+  recorded separately from the canonical settings fingerprint. Children resolve independent registration
+  settings and prompts through RecordContent before child submission. Canonical
+  v1 settings retain budget rules and reduced ratios; their stored hash is the
+  fingerprint on calls, checkpoints and compaction records. Pretend windows
+  constrain triggers and render budgets; guard and recovery use real facts, and
+  recovery cannot widen the current effective ceilings. Summary prompts are pinned
+  before start. Canonical compaction events emit deduplicated `context.compact`
+  internal spans with recorded timestamps, latency and settings identity.
+  Real parent/child protocol-15 histories prove context_start completes before
+  the child workflow command and that child settings remain independent.
 
 - Workflow protocol 6 uses immutable `runtime/agent/transcript/index` entries
   and linked segments. Workflows retain entries and IndexHead; planner activity
@@ -240,7 +257,7 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   materializers must be deterministic and free of I/O and side effects.
   Preflight discards enrichment. Activities repeat it and own artifact writes.
   Custom engines must implement `engine.ToolAwaitQuerier`. These query and
-  preflight changes add no workflow commands. Protocol remains 13.
+  preflight changes add no workflow commands and require no protocol change.
   The query hides the head while a tool-results signal is pending. The workflow
   clears the head when it takes the answer, before result recording. Query and
   signal are not atomic. Racing callers can both pass preflight. The workflow
@@ -248,7 +265,7 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   await ID, before validation, events, transcript entries, or result activities.
   Reusing an ID for a new await is allowed. Preflight and workflow consumption
   accept answers for the current head and its calls. Unknown IDs still fail.
-  RB8 preserves valid recorded workflow commands and protocol 13.
+  RB8 preserves valid recorded workflow commands and needs no protocol change.
 - Planner turns are workflow activities, not exactly-once method calls. Generated
   registrations retry failed plan/resume activities up to three attempts by
   default, so model calls and direct side effects can repeat after a late attempt

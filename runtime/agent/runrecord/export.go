@@ -28,7 +28,7 @@ type Export struct {
 // FromExport decodes an export without constructing a store or renderer.
 func FromExport(data []byte) (*RunRecord, error) {
 	var exported Export
-	if err := json.Unmarshal(data, &exported, jsonopts.FormatDurationAsNano(true), json.RejectUnknownMembers(true), json.WithUnmarshalers(json.UnmarshalFunc(decodeExportEvent))); err != nil {
+	if err := json.Unmarshal(data, &exported, jsonopts.FormatDurationAsNano(true), json.RejectUnknownMembers(true), json.WithUnmarshalers(json.JoinUnmarshalers(json.UnmarshalFunc(decodeExportEvent), json.UnmarshalFunc(decodeExportSettings)))); err != nil {
 		return nil, fmt.Errorf("decode runrecord export: %w", err)
 	}
 	if exported.Version != 1 || exported.RootRunID == "" {

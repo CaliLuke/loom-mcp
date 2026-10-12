@@ -23,6 +23,9 @@ type chunkPlanner struct {
 // Out <= (window-Out)/4 uses floor(window/5); when window mod 5 is 4 this is
 // conservatively one token below floor(Bs/4), which has no exact integer solution.
 func PlanChunks(evidence Evidence, options ChunkOptions) (Plan, error) {
+	if options.MaxSummaryChunks == 0 {
+		options.MaxSummaryChunks = MaxSummaryChunks
+	}
 	if options.Limits.ContextWindow <= 0 {
 		return Plan{}, &Rejection{Kind: "summariser_limits_unknown"}
 	}
@@ -73,10 +76,14 @@ func (p *chunkPlanner) appendUnit(unit Unit) error {
 	}
 	end := len(unit.Text)
 	if unit.IsResult {
-		end = runeEnd(unit.Text, min(end, tokenBytes(p.plan.Budget/2)))
+		resultTokens := p.options.MaxSummarisedResultTokens
+		if resultTokens == 0 {
+			resultTokens = p.plan.Budget / 2
+		}
+		end = runeEnd(unit.Text, min(end, tokenBytes(resultTokens)))
 	}
 	start := 0
-	for start < end && len(p.plan.Chunks) < MaxSummaryChunks {
+	for start < end && len(p.plan.Chunks) < p.options.MaxSummaryChunks {
 		next, err := p.fittingEnd(unit, start, end)
 		if err != nil {
 			return err
@@ -110,7 +117,7 @@ func (p *chunkPlanner) appendAttachment(unit Unit) error {
 			return err
 		}
 	}
-	if fits && len(p.plan.Chunks) < MaxSummaryChunks {
+	if fits && len(p.plan.Chunks) < p.options.MaxSummaryChunks {
 		p.current.Pieces = append(p.current.Pieces, piece)
 		return nil
 	}
@@ -145,7 +152,7 @@ func (p *chunkPlanner) fittingEnd(unit Unit, start, end int) (int, error) {
 }
 
 func (p *chunkPlanner) fits(piece Piece) (bool, error) {
-	if len(p.plan.Chunks) >= MaxSummaryChunks {
+	if len(p.plan.Chunks) >= p.options.MaxSummaryChunks {
 		return false, nil
 	}
 	chunk := p.current

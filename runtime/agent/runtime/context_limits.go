@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextmeasure"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 )
 
@@ -49,17 +50,18 @@ func (c *contextLimitsOverride) ContextLimits(ctx context.Context, req *model.Re
 	if override.ImageTokens > 0 {
 		limits.ImageTokens = override.ImageTokens
 	}
-	return limits, resolved, limits.ContextWindow > 0
+	limits.InvalidOverride = limits.ContextWindow > 0 && (limits.MaxOutputTokens > limits.ContextWindow || contextmeasure.OutputReserve(req, limits) >= limits.ContextWindow)
+	return limits, resolved, limits.ContextWindow > 0 && !limits.InvalidOverride
 }
 
 // cloneContextLimits validates configuration and takes ownership before runtime
-// registration. Partial overrides still obey MaxOutputTokens <= ContextWindow.
+// registration. A supplied window must accommodate a supplied output cap.
 func cloneContextLimits(overrides map[string]model.ContextLimits) map[string]model.ContextLimits {
 	for id, limits := range overrides {
 		if limits.ContextWindow < 0 || limits.MaxOutputTokens < 0 || limits.DefaultMaxTokens < 0 || limits.ImageTokens < 0 {
 			panic(fmt.Sprintf("runtime: context limits for %q must not be negative", id))
 		}
-		if limits.MaxOutputTokens > limits.ContextWindow {
+		if limits.ContextWindow > 0 && limits.MaxOutputTokens > limits.ContextWindow {
 			panic(fmt.Sprintf("runtime: context limits for %q max output tokens exceeds context window", id))
 		}
 	}

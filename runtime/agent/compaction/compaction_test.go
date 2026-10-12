@@ -106,7 +106,7 @@ func TestDecideCoverageDeterminismAndMonotonicity(t *testing.T) {
 	assert.GreaterOrEqual(t, next.View.TailFrom, got.View.TailFrom)
 	assert.GreaterOrEqual(t, next.View.ClearedThrough, got.View.ClearedThrough)
 	state.Models["a"] = state.Models["model"]
-	reverse := State{Models: map[string]ModelState{"a": state.Models["a"], "model": state.Models["model"]}, MinB: state.MinB}
+	reverse := State{Models: map[string]ModelState{"a": state.Models["a"], "model": state.Models["model"]}, MinB: state.MinB, EffectiveWindow: state.EffectiveWindow}
 	assert.Equal(t, Decide(state, entries, view, settings), Decide(reverse, entries, view, settings))
 	state.OpenFrom = 2
 	assert.Equal(t, index.MessageID(2), Decide(state, entries, view, settings).View.TailFrom)

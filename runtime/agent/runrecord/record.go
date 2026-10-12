@@ -30,6 +30,8 @@ type (
 	Run struct {
 		// Summary rebuilds rejection disablement from canonical summary records.
 		Summary compaction.SummaryState `json:"summary,omitzero"`
+		// ContextFingerprint identifies the stored canonical effective settings.
+		ContextFingerprint string `json:"context_fingerprint,omitzero"`
 		// ContextSettings holds resolved recovery and threshold settings for every agent.
 		ContextSettings *compaction.ContextSettings `json:"context_settings,omitzero"`
 		// RecoverySettings is the resolved runtime-stamped lookup configuration.

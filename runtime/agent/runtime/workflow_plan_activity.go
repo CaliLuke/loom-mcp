@@ -448,8 +448,10 @@ func plannerAdoptionEvent(wfCtx engine.WorkflowContext, base *workflowPlanInput,
 	}
 	event := hooks.NewPlannerStepEvent(input.RunID, input.AgentID, input.RunContext.SessionID, input.Step, view, out.CallKeys, base.protocolVersion, wfCtx.Now())
 	event.RecoverySettings = new(base.recovery)
-	settingsSnapshot := input.ContextSettings
+	settingsSnapshot := base.contextSettings
 	event.ContextSettings = &settingsSnapshot
+	event.ContextOverrides = base.compactionState.ValidateBudgets
+	event.ContextFingerprint = base.contextFingerprint
 	event.Recovery, event.Recovering = out.Recovery != nil, input.Recovery != nil
 	if base.compaction != nil {
 		settings := pureCompactionSettings(base.compaction)

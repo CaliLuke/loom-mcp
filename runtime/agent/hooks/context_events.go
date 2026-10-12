@@ -15,6 +15,11 @@ import (
 type (
 	// ContextCompactionEvent records a committed compaction or a suppressed attempt.
 	ContextCompactionEvent struct {
+		Fingerprint     string `json:"fingerprint,omitzero"`
+		EffectiveWindow int    `json:"effective_window,omitzero"`
+		Pretend         bool   `json:"pretend,omitzero"`
+		// Latency is the summary attempt duration in nanoseconds.
+		Latency int64 `json:"latency,omitzero"`
 		// Kind is the ordered validation or provider rejection, independent of Reason.
 		Kind              string                      `json:"kind,omitzero"`
 		Model             string                      `json:"model,omitzero"`
@@ -39,6 +44,8 @@ type (
 	}
 	// ContextDiagnosticEvent reports a run-scoped context measurement limitation.
 	ContextDiagnosticEvent struct {
+		Reason    string `json:"reason,omitzero"`
+		Model     string `json:"model,omitzero"`
 		baseEvent `json:"-"`
 		kind      EventType
 	}

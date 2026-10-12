@@ -51,6 +51,8 @@ func (r *Runtime) recordCanonicalEventTelemetry(ctx context.Context, evt hooks.E
 		metrics.IncCounter(runtimeRunStartedMetric, 1, runtimeMetricTagAgent, e.AgentID())
 	case *hooks.RunCompletedEvent:
 		metrics.IncCounter(runtimeRunCompletedMetric, 1, runtimeMetricTagAgent, e.AgentID(), runtimeMetricTagStatus, e.Status)
+	case *hooks.ContextCompactionEvent:
+		r.recordContextCompactionTelemetry(ctx, e)
 	case *hooks.ToolResultReceivedEvent:
 		r.recordToolResultTelemetry(ctx, e)
 	}

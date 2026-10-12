@@ -63,7 +63,7 @@ func TestCheckpointResolutionAndExport(t *testing.T) {
 	checkpoint := index.CheckpointRecord{
 		Prev: &earlier, From: &index.RunCheckpoint{Scope: "root", Run: "prior", Hash: earlier},
 		Earlier: index.EarlierReceipt{Runs: 1, Messages: 2, First: 1, Last: 1, Users: []index.IndexLine{{ID: 1, Text: "old user", Origin: &index.Origin{Scope: "root", Run: "prior", Pos: 1, ID: 1, Form: "full"}}}},
-		Summary: &summary, SummaryRun: "run", CitedUsers: []index.IndexLine{{ID: 1, Text: "user"}}, Receipt: []index.ReceiptLine{{From: 1, Through: 2, Tool: "tool", Text: "args"}}, Through: 2, Chain: "chain", Fingerprint: "configuration", Prompt: &prompt.PromptRef{ID: "summary", Version: "1"}, Calls: keys,
+		Summary: &summary, SummaryRun: "run", CitedUsers: []index.IndexLine{{ID: 1, Text: "user"}}, Receipt: []index.ReceiptLine{{From: 1, Through: 2, Tool: "tool", Text: "args"}}, Through: 2, Chain: "chain", Prompt: &prompt.PromptRef{ID: "summary", Version: "1"}, Calls: keys,
 	}
 	hash := f.put(t, checkpoint)
 	view := index.ViewRef{Checkpoint: &hash}

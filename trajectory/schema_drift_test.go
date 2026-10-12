@@ -11,6 +11,7 @@ import (
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/trajectory"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -23,6 +24,32 @@ type schemaWalker struct {
 
 func TestSchemaJSONTagDrift(t *testing.T) {
 	assert.Empty(t, schemaDrift(schemaObject(t)))
+}
+
+func TestSchemaLimitsInvalidOptionalBoolean(t *testing.T) {
+	compiler := jsonschema.NewCompiler()
+	require.NoError(t, compiler.AddResource("trajectory.v1.schema.json", schemaValue(t, trajectory.Schema())))
+	schema, err := compiler.Compile("trajectory.v1.schema.json#/$defs/RequestFacts")
+	require.NoError(t, err)
+	for _, test := range []struct {
+		name, member string
+		valid        bool
+	}{
+		{"legacy absent", "", true},
+		{"invalid limits", `,"limits_invalid":true`, true},
+		{"valid limits", `,"limits_invalid":false`, true},
+		{"wrong type", `,"limits_invalid":"true"`, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			data := `{"call":{"RunID":"run","Seq":1,"Attempt":1},"model":"model","outcome":"ok","context_window":6000,"output_reserve":1000,"input_tokens":0,"text_bytes":3,"fixed_bytes":0,"non_text":0,"view_bearing":true,"count_latency":0` + test.member + `}`
+			err := schema.Validate(schemaValue(t, []byte(data)))
+			if test.valid {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+			}
+		})
+	}
 }
 
 func TestSchemaDriftDetectsMissingAndExtraProperties(t *testing.T) {

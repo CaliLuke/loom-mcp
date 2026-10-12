@@ -127,6 +127,9 @@
     "RequestFacts": {
       "type": "object",
       "properties": {
+        "limits_invalid": {
+          "type": "boolean"
+        },
         "call": {
           "$ref": "#/$defs/CallKey"
         },

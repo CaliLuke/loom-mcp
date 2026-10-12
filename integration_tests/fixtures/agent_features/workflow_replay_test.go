@@ -42,7 +42,7 @@ import (
 type historyReplayPlanner struct{}
 
 const (
-	workflowHistoryFile        = "testdata/workflow_protocol_v14.json"
+	workflowHistoryFile        = "testdata/workflow_protocol_v15.json"
 	workflowHistoryIdentity    = "loom-mcp-history-recorder"
 	workflowHistoryStickyQueue = "loom-mcp-history-recorder-sticky"
 	workflowHistoryQuestion    = "Which topic should the draft use?"
@@ -70,6 +70,7 @@ func TestGeneratedFeatureWorkflowReplay(t *testing.T) {
 		{name: "protocol 11 rejected before effects", previous: 11},
 		{name: "protocol 12 rejected before effects", previous: 12},
 		{name: "protocol 13 rejected before effects", previous: 13},
+		{name: "protocol 14 rejected before effects", previous: 14},
 		{name: "future", rewrite: true},
 		{name: "missing", rewrite: true, missing: true},
 	} {
@@ -158,7 +159,7 @@ func recordWorkflowHistory(t *testing.T, temporalClient client.Client) {
 	registerHistoryReplayAgent(t, fx)
 	_, err := fx.rt.CreateSession(ctx, "sess-protocol-history")
 	require.NoError(t, err)
-	handle, err := coordinator.NewClient(fx.rt).Start(ctx, "sess-protocol-history", []*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "record this request"}}}, {Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "earlier answer"}}}, {Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: strings.Repeat("earlier history ", 2000)}}}, {Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "recent answer"}}}, {Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "continue"}}}}, agentsruntime.WithRunID("run-protocol-history"))
+	handle, err := coordinator.NewClient(fx.rt).Start(ctx, "sess-protocol-history", []*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "record this request"}}}, {Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "earlier answer"}}}, {Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: strings.Repeat("earlier history ", 2000)}}}, {Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "recent answer"}}}, {Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "continue"}}}}, agentsruntime.WithRunID("run-protocol-history"), agentsruntime.WithContextOverrides(agentsruntime.ContextOverrides{ContextWindow: new(5000), RecallDiscoveryCalls: new(3), RecallReadCalls: new(3)}))
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {
 		return fx.recorder.count(hooks.AwaitConfirmation) == 1 && fx.recorder.count(hooks.AwaitClarification) == 1
@@ -424,7 +425,11 @@ func assertHistoryToolContent(t *testing.T, history *historypb.History, protocol
 					if protocol >= 7 {
 						require.Len(t, input.Models, 1)
 						assert.Equal(t, "history", input.Models[0].Model)
-						assert.Equal(t, 6000, input.Models[0].Budget)
+						expectedBudget := 6000
+						if protocol >= 15 {
+							expectedBudget = 5000
+						}
+						assert.Equal(t, expectedBudget, input.Models[0].Budget)
 					}
 					assert.NotEmpty(t, input.View.Pending)
 					if childHead != "" && !childHeadAdopted {

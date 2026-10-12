@@ -38,6 +38,9 @@ func (r *runReader) readCall(record runstore.CallRecord) (Call, error) {
 	if err != nil {
 		return Call{}, err
 	}
+	if err := r.checkContextFingerprint(started.Context); err != nil {
+		return Call{}, err
+	}
 	if started.Key != record.Key || record.Key.RunID != r.run.RunID {
 		return Call{}, fmt.Errorf("runrecord: started identity differs from record key")
 	}

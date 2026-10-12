@@ -18,20 +18,20 @@ import (
 
 func TestContentChildOutputUsesRootScope(t *testing.T) {
 	for _, typed := range []bool{false, true} {
-		// Writes: parent call, child input, child events, child transcript (untyped),
+		// Writes: parent prompt/settings, parent call, child prompt/settings, child input, child events, child transcript (untyped),
 		// child Final, child seal segment (untyped), parent result.
 		// Keep failure injection at the terminal/result writes.
 		for _, failAt := range []int{0, 5, 6} {
 			t.Run(fmt.Sprintf("typed=%v/fail=%d", typed, failAt), func(t *testing.T) {
 				store := &contentPathStore{Store: storeinmem.New(), failAt: func() int {
 					if typed && failAt > 0 {
-						return failAt - 1
+						return failAt + 3
 					}
 					if !typed && failAt > 0 {
 						if failAt == 6 {
-							return failAt + 2
+							return failAt + 6
 						}
-						return failAt + 1
+						return failAt + 5
 					}
 					return failAt
 				}()}

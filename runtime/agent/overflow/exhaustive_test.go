@@ -220,7 +220,7 @@ func recoveredGuardView(state guardState, req int) guardState {
 		facts.ContextWindow = window * unit
 	}
 	models := map[string]compaction.ModelState{"m": {Rate: contextmeasure.Rate{Tokens: 1, Bytes: 3}, Calibrated: state.calibrated}}
-	recovery := compaction.Recover(compaction.State{Models: models}, guardEntries(state), state.projection, contextmeasure.ContextOverflow{Failed: facts}, compaction.Settings{})
+	recovery := compaction.Recover(compaction.State{Models: models}, guardEntries(state), state.projection, contextmeasure.ContextOverflow{Failed: facts}, compaction.Settings{}, true)
 	state.projection = recovery.View
 	state.view = guardRenderedBytes(state)
 	if !recovery.Reached {

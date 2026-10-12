@@ -118,6 +118,9 @@ func (r *runReader) checkpoint(scope string, hash runstore.Hash, active map[stri
 	if err := json.Unmarshal(data, &record, json.RejectUnknownMembers(true)); err != nil {
 		return fmt.Errorf("decode checkpoint: %w", err)
 	}
+	if err := r.checkContextFingerprint(string(record.Fingerprint)); err != nil {
+		return err
+	}
 	if record.Prev != nil {
 		if err := r.checkpoint(scope, *record.Prev, active); err != nil {
 			return err

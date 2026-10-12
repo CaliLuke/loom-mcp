@@ -34,12 +34,14 @@ type (
 	}
 
 	runtimeSpanRecord struct {
-		mu         sync.Mutex
-		name       string
-		attributes map[string]attribute.Value
-		status     codes.Code
-		errors     []error
-		ended      bool
+		startConfig trace.SpanConfig
+		endConfig   trace.SpanConfig
+		mu          sync.Mutex
+		name        string
+		attributes  map[string]attribute.Value
+		status      codes.Code
+		errors      []error
+		ended       bool
 	}
 )
 
@@ -195,8 +197,8 @@ func (r *runtimeTelemetryRecorder) RecordTimer(name string, _ time.Duration, tag
 
 func (*runtimeTelemetryRecorder) RecordGauge(string, float64, ...string) {}
 
-func (r *runtimeTelemetryRecorder) Start(ctx context.Context, name string, _ ...trace.SpanStartOption) (context.Context, telemetry.Span) {
-	span := &runtimeSpanRecord{name: name, attributes: make(map[string]attribute.Value)}
+func (r *runtimeTelemetryRecorder) Start(ctx context.Context, name string, options ...trace.SpanStartOption) (context.Context, telemetry.Span) {
+	span := &runtimeSpanRecord{startConfig: trace.NewSpanStartConfig(options...), name: name, attributes: make(map[string]attribute.Value)}
 	r.mu.Lock()
 	r.spans = append(r.spans, span)
 	r.mu.Unlock()
@@ -225,9 +227,10 @@ func (r *runtimeTelemetryRecorder) spanRecords() []*runtimeSpanRecord {
 	return append([]*runtimeSpanRecord(nil), r.spans...)
 }
 
-func (s *runtimeSpanRecord) End(...trace.SpanEndOption) {
+func (s *runtimeSpanRecord) End(options ...trace.SpanEndOption) {
 	s.mu.Lock()
 	s.ended = true
+	s.endConfig = trace.NewSpanEndConfig(options...)
 	s.mu.Unlock()
 }
 

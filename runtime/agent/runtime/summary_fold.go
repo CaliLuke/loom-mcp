@@ -33,7 +33,7 @@ func (r *Runtime) prepareSummaryExecution(ctx context.Context, in *SummarizeCont
 		return nil, err
 	}
 	out.IndexHead = prepared.head
-	spec, err := r.PromptRegistry.Resolve(ctx, in.PromptID, prompt.Scope{SessionID: in.SessionID, Labels: in.Labels})
+	spec, err := r.resolvePinnedSummary(ctx, in)
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +42,7 @@ func (r *Runtime) prepareSummaryExecution(ctx context.Context, in *SummarizeCont
 		return nil, err
 	}
 	out.Prompt = &prompt.PromptRef{ID: spec.ID, Version: spec.Version}
-	plan, err := summarize.PlanChunks(prepared.evidence, summarize.ChunkOptions{Limits: limits, MaxSummaryTokens: in.Budget.MaxSummaryTokens, PromptFor: func(previous string, chunk summarize.Chunk) (string, error) {
+	plan, err := summarize.PlanChunks(prepared.evidence, summarize.ChunkOptions{MaxSummaryChunks: in.ContextSettings.MaxSummaryChunks, MaxSummarisedResultTokens: in.ContextSettings.MaxSummarisedResultTokens, Limits: limits, MaxSummaryTokens: in.Budget.MaxSummaryTokens, PromptFor: func(previous string, chunk summarize.Chunk) (string, error) {
 		return render(summaryData(in, previous, chunk))
 	}})
 	if err != nil {

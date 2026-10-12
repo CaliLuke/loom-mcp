@@ -35,6 +35,8 @@ type (
 	RunInput struct {
 		// ContextSettings snapshots resolved recovery settings for every agent.
 		ContextSettings compaction.ContextSettings `json:"context_settings,omitzero"`
+		// ContextFingerprint addresses the canonical settings in the root scope.
+		ContextFingerprint string `json:"context_fingerprint,omitzero"`
 		// ContextCompaction is runtime-stamped configuration for this run.
 		ContextCompaction *ContextCompaction `json:"context_compaction,omitzero"`
 		// ContextRecovery is the resolved runtime-stamped lookup configuration.
@@ -140,6 +142,8 @@ type (
 	// PolicyOverrides configures per-run policy constraints. All fields are optional;
 	// zero values mean no override.
 	PolicyOverrides struct {
+		// Context overrides registered context settings for this run only.
+		Context *ContextOverrides `json:"context,omitzero"`
 		// PerTurnMaxToolCalls limits the number of tool calls the planner may issue per turn.
 		PerTurnMaxToolCalls int
 
@@ -201,6 +205,7 @@ type (
 	}
 
 	policyOverridesWire struct {
+		Context             *ContextOverrides `json:"context,omitzero"`
 		PerTurnMaxToolCalls int
 		RestrictToTool      tools.Ident
 		CompletionTool      tools.Ident
@@ -950,6 +955,7 @@ func (o *PolicyOverrides) UnmarshalJSON(data []byte) error {
 
 func policyOverridesToWire(o PolicyOverrides) policyOverridesWire {
 	return policyOverridesWire{
+		Context:             o.Context,
 		PerTurnMaxToolCalls: o.PerTurnMaxToolCalls,
 		RestrictToTool:      o.RestrictToTool,
 		CompletionTool:      o.CompletionTool,
@@ -969,6 +975,7 @@ func policyOverridesToWire(o PolicyOverrides) policyOverridesWire {
 
 func policyOverridesFromWire(wire policyOverridesWire) PolicyOverrides {
 	return PolicyOverrides{
+		Context:             wire.Context,
 		PerTurnMaxToolCalls: wire.PerTurnMaxToolCalls,
 		RestrictToTool:      wire.RestrictToTool,
 		CompletionTool:      wire.CompletionTool,

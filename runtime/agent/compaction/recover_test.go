@@ -20,7 +20,7 @@ func TestRecoverRecordedRequest(t *testing.T) {
 	}
 	failure := contextmeasure.ContextOverflow{Source: "provider", Failed: contextmeasure.RequestFacts{Model: "m", ViewBearing: true, ContextWindow: 10000, TextBytes: 43200, ViewTextBytes: 42200}}
 	state := Observe(State{}, []contextmeasure.RequestFacts{{Model: "m", ViewBearing: true, ContextWindow: 10000, InputTokens: 14400, TextBytes: 43200}})
-	got := Recover(state, entries, index.ViewRef{}, failure, Settings{MinSavingTokens: 99999, ProtectRecentToolTokens: 99999})
+	got := Recover(state, entries, index.ViewRef{}, failure, Settings{MinSavingTokens: 99999, ProtectRecentToolTokens: 99999}, true)
 	assert.Equal(t, Clear, got.Tier, "recovery ignores protected and minimum-saving windows")
 	assert.Equal(t, index.MessageID(3), got.View.ClearedThrough)
 	assert.True(t, got.Reached)
@@ -29,7 +29,7 @@ func TestRecoverRecordedRequest(t *testing.T) {
 	// Adapter limits and unrelated current model budgets are not recovery inputs.
 	state.Models["m"] = ModelState{Known: true, Budget: 1000000, Rate: state.Models["m"].Rate, Calibrated: true}
 	state.MinB = 1000000
-	assert.Equal(t, got, Recover(state, entries, index.ViewRef{}, failure, Settings{MinSavingTokens: 99999, ProtectRecentToolTokens: 99999}))
+	assert.Equal(t, got, Recover(state, entries, index.ViewRef{}, failure, Settings{MinSavingTokens: 99999, ProtectRecentToolTokens: 99999}, true))
 }
 
 func TestRecoverNewestPreviewsAndForcedKeep(t *testing.T) {
@@ -39,13 +39,13 @@ func TestRecoverNewestPreviewsAndForcedKeep(t *testing.T) {
 		{ID: 3, Kind: index.ToolResult, Role: "user", Bytes: 20000, Hash: "b", Keep: true, ToolUseIDs: []string{"b"}},
 	}
 	failure := contextmeasure.ContextOverflow{Failed: contextmeasure.RequestFacts{Model: "m", ViewBearing: true, TextBytes: 40050, ViewTextBytes: 40050}}
-	preview := Recover(State{}, entries, index.ViewRef{}, failure, Settings{})
+	preview := Recover(State{}, entries, index.ViewRef{}, failure, Settings{}, true)
 	assert.Equal(t, Preview, preview.Tier)
 	assert.True(t, preview.Reached, "uncalibrated recovery halves rendered bytes")
 	assert.Equal(t, index.MessageID(3), preview.View.PreviewThrough)
 	assert.Positive(t, preview.View.Budget.PreviewTokens)
 	failure.Failed.TextBytes, failure.Failed.ViewTextBytes = 566, 566
-	forced := Recover(State{}, entries, index.ViewRef{TailFrom: 1, PreviewThrough: 3, Budget: index.RenderBudget{PreviewTokens: MinPreviewBytes / 2}}, failure, Settings{})
+	forced := Recover(State{}, entries, index.ViewRef{TailFrom: 1, PreviewThrough: 3, Budget: index.RenderBudget{PreviewTokens: MinPreviewBytes / 2}}, failure, Settings{}, true)
 	assert.Equal(t, Placeholder, forced.Tier)
 	assert.Equal(t, index.MessageID(3), forced.View.ForceClearThrough)
 	assert.GreaterOrEqual(t, forced.View.PreviewThrough, preview.View.PreviewThrough)
@@ -56,7 +56,7 @@ func TestRecoverNewestPreviewsAndForcedKeep(t *testing.T) {
 func TestRecoverEvictionBudgetAndHalfTarget(t *testing.T) {
 	entries := []index.MessageEntry{{ID: 1, Kind: index.Message, Role: "user", Bytes: 50000}, {ID: 2, Kind: index.Assistant, Role: "assistant", Bytes: 50000}, {ID: 3, Kind: index.Assistant, Role: "assistant", Bytes: 1000}}
 	failure := contextmeasure.ContextOverflow{Failed: contextmeasure.RequestFacts{Model: "small", ViewBearing: true, ContextWindow: 8000, TextBytes: 101000, ViewTextBytes: 101000}}
-	got := Recover(State{}, entries, index.ViewRef{Budget: index.RenderBudget{MaxSummaryTokens: 16000}}, failure, Settings{})
+	got := Recover(State{}, entries, index.ViewRef{Budget: index.RenderBudget{MaxSummaryTokens: 16000}}, failure, Settings{}, true)
 	assert.Equal(t, Evict, got.Tier)
 	assert.Equal(t, index.MessageID(3), got.View.TailFrom)
 	assert.Equal(t, 800, got.View.Budget.MaxSummaryTokens)
@@ -70,7 +70,7 @@ func TestRecoverSmallKnownBudgetIsLoadable(t *testing.T) {
 	entries := []index.MessageEntry{{ID: 1, Kind: index.Message, Role: "user", Bytes: 30000}, {ID: 2, Kind: index.Assistant, Role: "assistant", Bytes: 30000}, {ID: 3, Kind: index.Assistant, Role: "assistant", Bytes: 30000}}
 	view := index.ViewRef{}
 	failure := contextmeasure.ContextOverflow{Source: "provider", Failed: contextmeasure.RequestFacts{Model: "small", ViewBearing: true, ContextWindow: 200, TextBytes: 90000, ViewTextBytes: 90000}}
-	got := Recover(State{}, entries, view, failure, Settings{})
+	got := Recover(State{}, entries, view, failure, Settings{}, true)
 	assert.Equal(t, view, got.View, "recovery is not attempted")
 	assert.Equal(t, None, got.Tier)
 	assert.False(t, got.Reached)

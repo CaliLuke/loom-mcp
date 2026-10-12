@@ -77,7 +77,8 @@ func TestActivityContentGeneratedDispatchAndWorkflow(t *testing.T) {
 		t.Run([]string{"success", "result put fails", "server data put fails", "payload put fails"}[failAt], func(t *testing.T) {
 			store := &recordingContentStore{Store: runstoreinmem.New(), failAt: func() int {
 				if failAt > 0 {
-					return failAt + 1
+					// Start stores the pinned prompt and canonical settings before the call.
+					return failAt + 3
 				}
 				return 0
 			}()}

@@ -2,6 +2,7 @@ package api
 
 import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/compaction"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
@@ -11,6 +12,8 @@ import (
 
 // RecordContentInput carries ordered content to store before workflow adoption.
 type RecordContentInput struct {
+	// ContextStart pins child context settings outside workflow execution.
+	ContextStart *ContextStartInput `json:"context_start,omitzero"`
 	// RootRunID is the shared storage scope of the run tree.
 	RootRunID string
 	// Items contains the exact bytes to store, in order.
@@ -43,6 +46,8 @@ type ProvidedContent struct {
 
 // RecordContentOutput is returned only after every input item has been stored.
 type RecordContentOutput struct {
+	// ContextStart is the recorded result of child prompt and settings pinning.
+	ContextStart *ContextStartOutput `json:"context_start,omitzero"`
 	// Refs addresses Items in the same order and with the same length.
 	Refs        []runstore.Hash
 	IndexHead   runstore.Hash
@@ -68,4 +73,18 @@ type PublishToolContent struct {
 type FinalizationContent struct {
 	Input PlanActivityInput
 	Calls []planner.ToolRequest
+}
+
+// ContextStartInput resolves a child prompt using its own registered settings.
+type ContextStartInput struct {
+	AgentID   agent.Ident
+	SessionID string
+	Labels    map[string]string
+	Settings  compaction.Settings
+}
+
+// ContextStartOutput contains the immutable settings and their stored identity.
+type ContextStartOutput struct {
+	Settings    compaction.Settings
+	Fingerprint string
 }

@@ -68,7 +68,7 @@ func registerContentAgent(t *testing.T, rt *Runtime, p planner.Planner) {
 }
 
 func TestContentRunStartRecordsEffectiveMessagesBeforePlanner(t *testing.T) {
-	for _, failAt := range []int{0, 1, 2, 3} {
+	for _, failAt := range []int{0, 3, 4, 5} {
 		t.Run(fmt.Sprint(failAt), func(t *testing.T) {
 			store := &contentPathStore{Store: storeinmem.New(), failAt: failAt}
 			effective := []*model.Message{contentMessage("first"), contentMessage("rewritten"), contentMessage("third")}
@@ -83,8 +83,8 @@ func TestContentRunStartRecordsEffectiveMessagesBeforePlanner(t *testing.T) {
 			registerContentAgent(t, rt, &stubPlanner{start: func(_ context.Context, in *planner.PlanInput) (*planner.PlanResult, error) {
 				called = true
 				writes := store.snapshot()
-				if assert.Len(t, writes, 4) {
-					for i, w := range writes[:3] {
+				if assert.Len(t, writes, 6) {
+					for i, w := range writes[2:5] {
 						data, err := json.Marshal(effective[i])
 						require.NoError(t, err)
 						assert.Equal(t, "root", w.scope)

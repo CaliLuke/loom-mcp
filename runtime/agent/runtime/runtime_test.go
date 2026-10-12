@@ -52,6 +52,7 @@ func (p *nestedPlannerStub) PlanResume(ctx context.Context, in *planner.PlanResu
 func TestStartRunSetsWorkflowName(t *testing.T) {
 	eng := &stubEngine{}
 	rt := &Runtime{
+		RunStore:     runstoreinmem.New(),
 		Engine:       eng,
 		logger:       telemetry.NoopLogger{},
 		metrics:      telemetry.NoopMetrics{},
@@ -81,6 +82,7 @@ func TestRunAndStartRejectNegativeRecoveryOverride(t *testing.T) {
 	t.Parallel()
 
 	rt := &Runtime{
+		RunStore:     runstoreinmem.New(),
 		Engine:       &stubEngine{},
 		SessionStore: sessioninmem.New(),
 		agents: map[agent.Ident]AgentRegistration{
@@ -106,6 +108,7 @@ func TestRunAndStartRejectNegativeRecoveryOverride(t *testing.T) {
 func TestStartRunRequiresSessionID(t *testing.T) {
 	eng := &stubEngine{}
 	rt := &Runtime{
+		RunStore:     runstoreinmem.New(),
 		Engine:       eng,
 		logger:       telemetry.NoopLogger{},
 		metrics:      telemetry.NoopMetrics{},
@@ -134,6 +137,7 @@ func TestStartRunRequiresSessionID(t *testing.T) {
 func TestStartRunDoesNotInjectSessionSearchAttribute(t *testing.T) {
 	eng := &stubEngine{}
 	rt := &Runtime{
+		RunStore:     runstoreinmem.New(),
 		Engine:       eng,
 		logger:       telemetry.NoopLogger{},
 		metrics:      telemetry.NoopMetrics{},
@@ -242,6 +246,7 @@ func TestFinishWithoutToolCalls_PublishesAssistantTurnCommitted(t *testing.T) {
 
 func TestFinishWithoutToolCallsRejectsDualTerminalOutputs(t *testing.T) {
 	rt := &Runtime{
+		RunStore:      runstoreinmem.New(),
 		logger:        telemetry.NoopLogger{},
 		metrics:       telemetry.NoopMetrics{},
 		tracer:        telemetry.NoopTracer{},
@@ -282,6 +287,7 @@ func TestFinishWithoutToolCallsRejectsDualTerminalOutputs(t *testing.T) {
 func TestOneShotRunDoesNotRequireSession(t *testing.T) {
 	eng := &stubEngine{}
 	rt := &Runtime{
+		RunStore:   runstoreinmem.New(),
 		Engine:     eng,
 		logger:     telemetry.NoopLogger{},
 		metrics:    telemetry.NoopMetrics{},
@@ -320,10 +326,11 @@ func TestOneShotRunDoesNotRequireSession(t *testing.T) {
 func TestOneShotRunRejectsSessionSearchAttribute(t *testing.T) {
 	eng := &stubEngine{}
 	rt := &Runtime{
-		Engine:  eng,
-		logger:  telemetry.NoopLogger{},
-		metrics: telemetry.NoopMetrics{},
-		tracer:  telemetry.NoopTracer{},
+		RunStore: runstoreinmem.New(),
+		Engine:   eng,
+		logger:   telemetry.NoopLogger{},
+		metrics:  telemetry.NoopMetrics{},
+		tracer:   telemetry.NoopTracer{},
 		agents: map[agent.Ident]AgentRegistration{
 			"service.agent": {
 				ID: "service.agent",
@@ -349,6 +356,7 @@ func TestOneShotRunRejectsSessionSearchAttribute(t *testing.T) {
 func TestStartRunOmitsEngineTimeoutWithInteractivePolicyBudget(t *testing.T) {
 	eng := &stubEngine{}
 	rt := &Runtime{
+		RunStore:     runstoreinmem.New(),
 		Engine:       eng,
 		logger:       telemetry.NoopLogger{},
 		metrics:      telemetry.NoopMetrics{},
@@ -383,6 +391,7 @@ func TestStartRunOmitsEngineTimeoutWithInteractivePolicyBudget(t *testing.T) {
 func TestStartRunOmitsEngineTimeoutWithoutPolicyBudget(t *testing.T) {
 	eng := &stubEngine{}
 	rt := &Runtime{
+		RunStore:     runstoreinmem.New(),
 		Engine:       eng,
 		logger:       telemetry.NoopLogger{},
 		metrics:      telemetry.NoopMetrics{},
@@ -409,6 +418,7 @@ func TestStartRunOmitsEngineTimeoutWithoutPolicyBudget(t *testing.T) {
 func TestRouteStartOmitsEngineTimeout(t *testing.T) {
 	eng := &stubEngine{}
 	rt := &Runtime{
+		RunStore:     runstoreinmem.New(),
 		Engine:       eng,
 		logger:       telemetry.NoopLogger{},
 		metrics:      telemetry.NoopMetrics{},
@@ -503,6 +513,7 @@ func TestRegisterAgentAppliesWorkerQueueOverride(t *testing.T) {
 func TestRunOptionsPropagateToStartRequest(t *testing.T) {
 	eng := &stubEngine{}
 	rt := &Runtime{
+		RunStore:     runstoreinmem.New(),
 		Engine:       eng,
 		logger:       telemetry.NoopLogger{},
 		metrics:      telemetry.NoopMetrics{},
@@ -561,6 +572,7 @@ func TestRunOptionsPropagateToStartRequest(t *testing.T) {
 
 func TestRuntimePauseRunSignalsWorkflow(t *testing.T) {
 	rt := &Runtime{
+		RunStore:   runstoreinmem.New(),
 		runHandles: make(map[string]engine.WorkflowHandle),
 	}
 	handle := &stubWorkflowHandle{}
@@ -626,6 +638,7 @@ func TestRecoveryTurnAllowsOneReplacementPlannerActivity(t *testing.T) {
 func TestStartRunForwardsWorkflowOptions(t *testing.T) {
 	eng := &stubEngine{}
 	rt := &Runtime{
+		RunStore:     runstoreinmem.New(),
 		Engine:       eng,
 		SessionStore: sessioninmem.New(),
 		runHandles:   make(map[string]engine.WorkflowHandle),
@@ -666,6 +679,7 @@ func TestRegisterAgentAfterFirstRunIsRejected(t *testing.T) {
 	t.Parallel()
 	eng := &stubEngine{}
 	rt := &Runtime{
+		RunStore:     runstoreinmem.New(),
 		Engine:       eng,
 		logger:       telemetry.NoopLogger{},
 		metrics:      telemetry.NoopMetrics{},
@@ -721,6 +735,7 @@ func TestSealClosesRegistrationAndDelegatesToEngine(t *testing.T) {
 
 	eng := &stubEngine{}
 	rt := &Runtime{
+		RunStore:     runstoreinmem.New(),
 		Engine:       eng,
 		logger:       telemetry.NoopLogger{},
 		metrics:      telemetry.NoopMetrics{},
@@ -751,6 +766,7 @@ func TestSealRetriesAfterActivationFailure(t *testing.T) {
 
 	eng := &stubEngine{sealErrors: []error{errors.New("temporal unavailable"), nil}}
 	rt := &Runtime{
+		RunStore:     runstoreinmem.New(),
 		Engine:       eng,
 		logger:       telemetry.NoopLogger{},
 		metrics:      telemetry.NoopMetrics{},
@@ -886,6 +902,7 @@ func TestRegisterAgentRejectsLongTermMemoryPreloadWithoutBackend(t *testing.T) {
 
 func TestTimeBudgetExceeded(t *testing.T) {
 	rt := &Runtime{
+		RunStore: runstoreinmem.New(),
 		toolsets: map[string]ToolsetRegistration{"svc.ts": {Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
 			return Executed(&planner.ToolResult{
 				Name: call.Name,
@@ -914,6 +931,7 @@ func TestTimeBudgetExceeded(t *testing.T) {
 func TestOverridePolicy_AppliesToNewRuns_MaxToolCalls(t *testing.T) {
 	agentID := agent.Ident("svc.agent")
 	rt := &Runtime{
+		RunStore: runstoreinmem.New(),
 		agents: map[agent.Ident]AgentRegistration{
 			agentID: {
 				ID:     agentID,
@@ -1152,6 +1170,7 @@ func TestChildTrackerLifecycle(t *testing.T) {
 func TestExecuteToolCallsPublishesChildUpdates(t *testing.T) {
 	recorder := &recordingHooks{}
 	rt := &Runtime{
+		RunStore: runstoreinmem.New(),
 		toolsets: map[string]ToolsetRegistration{
 			"svc.export": {
 				Execute: func(ctx context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {

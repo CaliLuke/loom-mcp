@@ -87,8 +87,10 @@ func (r *Runtime) ExecuteWorkflow(wfCtx engine.WorkflowContext, input *RunInput)
 	}
 	runCtx = workflowRunContext(input)
 	defer r.cleanupWorkflowRun(input.RunID)
-	planInput := &workflowPlanInput{AgentID: input.AgentID, RunContext: runCtx, protocolVersion: protocolVersion, compaction: settings, recovery: recoverySettings, contextSettings: input.ContextSettings}
-	planInput.compactionState.Recall = compaction.NewRecall(input.ContextSettings.Settings)
+	planInput := &workflowPlanInput{AgentID: input.AgentID, RunContext: runCtx, protocolVersion: protocolVersion, compaction: settings, recovery: recoverySettings, contextSettings: input.ContextSettings, contextFingerprint: input.ContextFingerprint}
+	planInput.compactionState.ValidateBudgets = input.Policy != nil && input.Policy.Context != nil
+	planInput.compactionView.ContextFingerprint = input.ContextFingerprint
+	planInput.compactionState.Recall = compaction.NewRecall(input.ContextSettings)
 	finalStatus := runStatusSuccess
 	var finalErr error
 	defer r.finishWorkflowExecution(wfCtx, input, planInput, runCtx, turnID, &out, &retErr, &finalStatus, &finalErr)

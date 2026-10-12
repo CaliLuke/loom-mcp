@@ -18,7 +18,7 @@ func Decide(state State, entries []index.MessageEntry, view index.ViewRef, setti
 		return d
 	}
 	settings = settings.resolved(state.MinB)
-	d.View.Budget = index.RenderBudget{KeepUserTokens: min(state.MinB/20, 10000), MaxSummaryTokens: min(state.MinB/10, 16000), ReceiptTokens: min(fraction(state.MinB, 3), 6000), FramingTokens: 200, PreviewTokens: view.Budget.PreviewTokens}
+	d.View.Budget = RenderBudget(settings, state.MinB, view.Budget.PreviewTokens)
 	d.Before = estimate(state, entries, d.View)
 	d.After = d.Before
 	if !triggered(state, entries, d.View, settings.TriggerAt) {
@@ -29,7 +29,9 @@ func Decide(state State, entries []index.MessageEntry, view index.ViewRef, setti
 		return d
 	}
 	applyClear(&d, state, entries, settings)
-	applyEviction(&d, state, entries, settings)
+	if settings.MaxTier != Clear {
+		applyEviction(&d, state, entries, settings)
+	}
 	d.After = estimate(state, entries, d.View)
 	if triggered(state, entries, d.View, settings.TriggerAt) {
 		d.State.NoProgressAt = d.After

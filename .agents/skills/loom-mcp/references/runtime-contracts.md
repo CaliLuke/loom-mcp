@@ -764,7 +764,7 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   materializers must be deterministic and free of I/O and side effects.
   Preflight discards enrichment. Activities repeat it and own artifact writes.
   Custom engines must implement `engine.ToolAwaitQuerier`. These query and
-  preflight changes add no workflow commands. Protocol remains 13.
+  preflight changes add no workflow commands and require no protocol change.
   The query hides the head while a tool-results signal is pending. The workflow
   clears the head when it takes the answer, before result recording. Query and
   signal are not atomic. Racing callers can both pass preflight. The workflow
@@ -772,7 +772,7 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   await ID, before validation, events, transcript entries, or result activities.
   Reusing an ID for a new await is allowed. Preflight and workflow consumption
   accept answers for the current head and its calls. Unknown IDs still fail.
-  RB8 preserves valid recorded workflow commands and protocol 13.
+  RB8 preserves valid recorded workflow commands and needs no protocol change.
 - Generated validation errors use fixed framework text. Do not preserve raw Goa
   validation messages because they can contain submitted values. Bound generated
   retry hints after all field-contract enrichment and before durable storage.
@@ -1348,12 +1348,13 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   encoded string, including control characters. A no_progress source takes precedence over a
   checkpoint budget shortfall. Find includes retained-tail results under
   PreviewThrough and ForceClearThrough as well as ClearedThrough.
-- Protocol 14 changes deterministic overflow classification and retry sizing;
-  drain v13 runs before upgrading. It records overflow recovery, a confirmation-gated tool turn with
+- Protocol 15 records per-run overrides, settings fingerprints and pinned prompts;
+  drain v14 runs before upgrading. Preserve source-first overflow classification
+  and retry sizing, including newly advertised recall definitions. It records overflow recovery, a confirmation-gated tool turn with
   a clarification question/answer pair, one resume, lookup and finalization in
-  workflow_protocol_v14.json. The separate workflow_protocol_v14_budget.json
+  workflow_protocol_v15.json. The separate workflow_protocol_v15_budget.json
   records terminal adoption across the active budget without a finalizer call;
-  v5-v13 fixtures reject before effects. Structural templates stay version 5.
+  v5-v14 fixtures reject before effects. Structural templates stay version 5.
   Anthropic/Bedrock Claude recognize older input-length/max_tokens overflow text;
   OpenAI recognizes nested response.failed/error.code mid-stream and Anthropic
   handles status-200 SSE error events. Tests cite documented recorded-body shapes.
@@ -1406,9 +1407,45 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   the third non-stale rejection adds one summaries_disabled record keyed :disabled
   after its ordinary rejection identity to avoid event-key deduplication.
 - Agent registration installs the embedded <agent>.context.summary baseline or
-  Summary.Prompt replacement. Resolve scoped overrides once per activity; render
+  Summary.Prompt replacement. Pin scoped overrides at run start; render the stored template for
   Previous/Evicted (quoted), Instructions and integer Budget per fold. Preserve
   PromptRef on every call and checkpoint. Legacy Compress stays unrecorded.
-- Three real v14 fixtures cover recovery/confirmation/clarification/lookup,
+- Three real v15 fixtures cover recovery/confirmation/clarification/lookup,
   terminal adoption across the budget, and summary adoption before resume.
-  v13 and older histories reject before effects. Structural templates stay at 5.
+  v14 and older histories reject before effects. Structural templates stay at 5.
+
+## K17 per-run context settings (protocol 15)
+
+- `WithContextOverrides` snapshots pointer-valued settings in `PolicyOverrides.Context`;
+  nil inherits and explicit ContextModel null disables summaries. Ratios reduce
+  before use. Validate before workflow submission. For explicit per-run overrides or a pretend
+  window, revalidate from recorded facts when MinB first becomes known or falls.
+  Registered/default-only runs keep existing diagnostics and continue. Record
+  explicit override presence separately from the canonical settings fingerprint. Unknown real limits with no
+  pretend window reject threshold compaction; with a pretend window, trigger
+  decisions use it while the guard stays off.
+- Canonical version-1 JSON stores fixed-order effective settings and unresolved
+  budget rules. Store its bytes and resolved summary template before submission.
+  Stamp the fingerprint on planner/summarizer calls, every checkpoint, and
+  compaction records. RunRecord loads and strictly validates settings and exports
+  their bytes, rejecting call/checkpoint fingerprint mismatches.
+- Children do not inherit root overrides. RecordContent on the child queue pins
+  child registration settings and prompt before child workflow submission;
+  preparation rejection settles the reservation.
+- Pretend ContextWindow changes thresholds, MinB and render budgets. Guard tokens
+  and overflow recovery use real recorded limits; recovery takes component-wise
+  minima against the current effective budget, including first-overflow defaults.
+  MaxTier limits threshold clear/evict/summary only. Recall allowances, pins and
+  summary chunk/result limits consume effective overrides.
+- Each canonical compacted/skipped event emits one internal `context.compact`
+  span ending at the event timestamp, starting one recorded summary latency
+  earlier (zero otherwise). Attributes include reason, tier, outcome, kind,
+  counts, sizes, checkpoint, fingerprint, step, model, usage, chunks, effective
+  window, pretend and agent/run/session/turn IDs.
+- Main and summary protocol-15 recordings activate per-run overrides; all three
+  histories carry pinned settings. Protocol 14 rejects before workflow effects.
+  Structural templates remain version 5.
+- Parent and child recordings cover context_start completion before the child
+  command and child execution with independent settings. RunRecord applies
+  recovery budget bounds only when ContextFingerprint is non-empty, preserving
+  pre-15 multi-model overflow reconstruction.

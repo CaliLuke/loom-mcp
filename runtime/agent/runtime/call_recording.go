@@ -42,6 +42,7 @@ type (
 		failures     []error
 		overflowStep overflow.Step
 		models       []api.ModelContext
+		fingerprint  string
 		guardMargin  contextmeasure.Rate
 		triggerAt    contextmeasure.Rate
 		retryTools   []*model.ToolDefinition
@@ -90,6 +91,7 @@ func (r *CallRecording) configureOverflow(input *PlanActivityInput) {
 	if input.Overflow != nil {
 		r.overflowStep = *input.Overflow
 	}
+	r.fingerprint = input.View.ContextFingerprint
 	r.models = input.Models
 	r.guardMargin = input.ContextSettings.GuardMargin
 	r.triggerAt = input.ContextSettings.TriggerAt
@@ -240,7 +242,7 @@ func (r *CallRecording) begin(ctx context.Context, req *model.Request, registere
 		return nil, err
 	}
 	now := time.Now().UTC()
-	started := callrecord.Started{Key: key, Activity: r.activity, TurnID: info.TurnID, Step: r.step, Request: parts, Started: now, Model: req.Model, ModelID: info.ModelID, Class: req.ModelClass, Prompts: req.PromptRefs}
+	started := callrecord.Started{Context: r.fingerprint, Key: key, Activity: r.activity, TurnID: info.TurnID, Step: r.step, Request: parts, Started: now, Model: req.Model, ModelID: info.ModelID, Class: req.ModelClass, Prompts: req.PromptRefs}
 	body, err := callrecord.Encode(started)
 	if err != nil {
 		return nil, err

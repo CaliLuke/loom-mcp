@@ -12,6 +12,8 @@ import (
 // SealRecordInput fixes the terminal index and event identity before scheduling.
 // Retries must receive the same pending entries, key and workflow timestamp.
 type SealRecordInput struct {
+	// ContextFingerprint identifies the stored canonical effective settings.
+	ContextFingerprint string `json:"context_fingerprint,omitzero"`
 	// ContextSettings snapshots resolved settings even before a first plan.
 	ContextSettings compaction.ContextSettings
 	// ContextRecovery is the resolved run configuration.

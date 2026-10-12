@@ -17,6 +17,10 @@ type (
 	// PlannerStepEvent adopts every started call returned by one planner activity.
 	// ViewRef names the committed view used by that activity before history policy.
 	PlannerStepEvent struct {
+		// ContextOverrides records explicit per-run settings for budget validation.
+		ContextOverrides bool `json:"context_overrides,omitzero"`
+		// ContextFingerprint identifies the stored canonical effective settings.
+		ContextFingerprint string `json:"context_fingerprint,omitzero"`
 		// ContextSettings is resolved for every agent, including threshold opt-outs.
 		ContextSettings *compaction.ContextSettings `json:"context_settings,omitzero"`
 		// CompactionSettings is the client-stamped configuration, repeated on canonical adoption records.
@@ -48,7 +52,9 @@ type (
 
 	// RunSealedEvent names the terminal transcript after pending entries commit.
 	RunSealedEvent struct {
-		ContextSettings *compaction.ContextSettings `json:"context_settings,omitzero"`
+		// ContextFingerprint identifies the stored canonical effective settings.
+		ContextFingerprint string                      `json:"context_fingerprint,omitzero"`
+		ContextSettings    *compaction.ContextSettings `json:"context_settings,omitzero"`
 		// CompactionSettings and KeepResultTools are the stamped run configuration.
 		CompactionSettings *compaction.Settings `json:"compaction_settings,omitzero"`
 		// RecoverySettings records resolved lookup settings independently of compaction.

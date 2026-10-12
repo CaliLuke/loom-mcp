@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 
@@ -30,15 +31,21 @@ const (
 // advisory guard budgets are independent of output-validation recovery turns.
 func (r *Runtime) recoverOverflow(wf engine.WorkflowContext, base *workflowPlanInput, input *PlanActivityInput, out *PlanActivityOutput, step *overflow.Step, rejected map[string]runstore.CallKey, nextAttempt *int) error {
 	input.Step = base.step
-	input.ContextSettings = base.contextSettings
+	input.ContextSettings = plannerContextSettings(base.contextSettings)
+	input.View.ContextFingerprint = base.contextFingerprint
 	view, adoption := plannerAdoptionEvent(wf, base, *input, out)
 	state := base.compactionState
 	if base.compaction != nil && input.Overflow == nil {
 		state = base.compactionDecision.State
 	}
-	state = compaction.Observe(state, out.Facts)
+	var err error
+	state, err = compaction.ObserveEffective(state, out.Facts, base.contextSettings)
+	if err != nil {
+		base.compactionState = state
+		return errors.Join(engine.NewNonRetryableApplicationError(err.Error(), "context_settings", err, err), r.publishCompactionDiagnostics(wf, base, *input))
+	}
 	failure := *out.ContextOverflow
-	decision := decideOverflow(state, base.Entries, view, failure, input.ContextSettings.Settings, step, rejected)
+	decision := decideOverflow(state, base.Entries, view, failure, base.contextSettings, step, rejected)
 	if err := r.commitOverflow(wf, base, *input, out, view, adoption, state, failure, decision); err != nil {
 		return err
 	}
@@ -103,7 +110,7 @@ func (r *Runtime) commitOverflow(wf engine.WorkflowContext, base *workflowPlanIn
 			// threshold identity while giving recovery a distinct deterministic key.
 			recovered.SetEventKey(recovered.EventKey() + ":overflow")
 		}
-		publications = append(publications, recovered)
+		publications = append(publications, stampCompactionEvent(base, recovered))
 	}
 	if err := r.publishWorkflowHookBatch(wf, input.RunContext.TurnID, publications...); err != nil {
 		return fmt.Errorf("commit context overflow: %w", err)
@@ -129,14 +136,14 @@ func (base *workflowPlanInput) adoptOverflowView(input PlanActivityInput, view i
 		base.compactionSuppressed = base.compactionDecision.Skipped == compaction.NoProgress
 	}
 	if threshold != nil && threshold.Type() == hooks.ContextCompacted {
-		base.compactionState.Recall = base.compactionState.Recall.Refilled(input.ContextSettings.Settings)
+		base.compactionState.Recall = base.compactionState.Recall.Refilled(base.contextSettings)
 		base.recallEpisode++
 		base.recallExhausted = nil
 	}
 	if decision.recovery != nil {
 		base.compactionView = decision.recovery.View
 		if decision.recovery.Tier != compaction.None {
-			base.compactionState.Recall = base.compactionState.Recall.Refilled(input.ContextSettings.Settings)
+			base.compactionState.Recall = base.compactionState.Recall.Refilled(base.contextSettings)
 			base.recallEpisode++
 			base.recallExhausted = nil
 		}
@@ -172,7 +179,7 @@ func (d *overflowDecision) decideViewRecovery(state compaction.State, entries []
 			}
 			step.ProviderLeft--
 		}
-		computed := compaction.Recover(state, entries, view, failure, settings)
+		computed := compaction.Recover(state, entries, view, failure, settings, true)
 		d.recovery = &computed
 		if !computed.Reached || computed.After >= computed.Before {
 			step.GuardOff, d.outcome = true, overflowOutcomeGuardOff

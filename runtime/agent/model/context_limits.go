@@ -5,6 +5,8 @@ import "context"
 // ContextLimits describes a model's token limits. Zero fields are unknown,
 // except ImageTokens: zero selects the measurement default of 1,500 tokens.
 type ContextLimits struct {
+	// InvalidOverride marks a merged runtime override with unusable provider limits.
+	InvalidOverride bool `json:"invalid_override,omitzero"`
 	// ContextWindow is the shared token window used for input/output budgeting.
 	ContextWindow int
 	// MaxOutputTokens is the provider's maximum completion cap.

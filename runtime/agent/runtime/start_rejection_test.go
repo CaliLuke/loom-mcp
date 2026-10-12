@@ -7,10 +7,12 @@ import (
 	"time"
 
 	agent "github.com/CaliLuke/loom-mcp/v2/runtime/agent"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	runloginmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog/inmem"
+	runstoreinmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore/inmem"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
 	sessioninmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/session/inmem"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
@@ -85,7 +87,7 @@ func TestStartRunPreservesExistingIdentity(t *testing.T) {
 }
 
 func newStartRejectionRuntime(eng engine.Engine) *Runtime {
-	return &Runtime{
+	return &Runtime{RunStore: runstoreinmem.New(),
 		Engine: eng,
 		logger: telemetry.NoopLogger{}, metrics: telemetry.NoopMetrics{}, tracer: telemetry.NoopTracer{},
 		SessionStore: sessioninmem.New(),
@@ -94,6 +96,7 @@ func newStartRejectionRuntime(eng engine.Engine) *Runtime {
 }
 
 type rejectingChildContext struct {
+	contextErr error
 	*testWorkflowContext
 	err    error
 	calls  int
@@ -114,16 +117,18 @@ func (w *rejectingChildContext) StartChildWorkflow(context.Context, engine.Child
 
 func (w *rejectingChildContext) WithCancel() (engine.WorkflowContext, func()) {
 	derived, cancel := w.testWorkflowContext.WithCancel()
-	return &rejectingChildContext{testWorkflowContext: derived.(*testWorkflowContext), err: w.err, parent: w, cancel: w.cancel}, cancel
+	return &rejectingChildContext{testWorkflowContext: derived.(*testWorkflowContext), err: w.err, parent: w, cancel: w.cancel, contextErr: w.contextErr}, cancel
 }
 
 func TestAgentChildImmediateRejectionSettlesReservation(t *testing.T) {
 	for _, tc := range []struct {
-		name   string
-		cause  error
-		status session.RunStatus
-		cancel bool
+		name    string
+		cause   error
+		status  session.RunStatus
+		cancel  bool
+		prepare bool
 	}{
+		{name: "context preparation", cause: errors.New("prompt resolution failed"), status: session.RunStatusFailed, prepare: true},
 		{name: "definite", cause: engine.ErrWorkflowStartRejected, status: session.RunStatusFailed},
 		{name: "canceled definite", cause: engine.ErrWorkflowStartRejected, status: session.RunStatusFailed, cancel: true},
 		{name: "uncertain", cause: errors.New("unknown child start"), status: session.RunStatusPending},
@@ -152,10 +157,13 @@ func TestAgentChildImmediateRejectionSettlesReservation(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 				wf := &rejectingChildContext{testWorkflowContext: &testWorkflowContext{ctx: ctx, hookRuntime: rt}, err: tc.cause}
+				if tc.prepare {
+					wf.contextErr = tc.cause
+				}
 				if tc.cancel {
 					wf.cancel = cancel
 				}
-				call := planner.ToolRequest{Name: toolID, RunID: parent.RunID, SessionID: parent.SessionID, TurnID: parent.TurnID, ToolCallID: "call"}
+				call := planner.ToolRequest{Name: toolID, RootRunID: parent.RootRunID, RunID: parent.RunID, SessionID: parent.SessionID, TurnID: parent.TurnID, ToolCallID: "call"}
 				var err error
 				switch dispatch {
 				case "batch":
@@ -166,7 +174,11 @@ func TestAgentChildImmediateRejectionSettlesReservation(t *testing.T) {
 					_, err = reg.Execute(engine.WithWorkflowContext(wf.Context(), wf), &call)
 				}
 				require.ErrorIs(t, err, tc.cause)
-				assert.Equal(t, 1, wf.calls)
+				wantCalls := 1
+				if tc.prepare {
+					wantCalls = 0
+				}
+				assert.Equal(t, wantCalls, wf.calls)
 				childID := NestedRunIDForToolCall(parent.RunID, toolID, call.ToolCallID)
 				child, err := rt.SessionStore.LoadRun(context.Background(), childID)
 				require.NoError(t, err)
@@ -198,4 +210,11 @@ func TestStartRunReportsRejectionPersistenceFailure(t *testing.T) {
 	require.ErrorIs(t, err, ErrWorkflowStartFailed)
 	require.ErrorIs(t, err, engine.ErrWorkflowStartRejected)
 	require.ErrorIs(t, err, persistenceErr)
+}
+
+func (w *rejectingChildContext) ExecuteRecordContentActivity(ctx context.Context, call engine.RecordContentActivityCall) (*api.RecordContentOutput, error) {
+	if w.contextErr != nil && call.Input.ContextStart != nil {
+		return nil, w.contextErr
+	}
+	return w.testWorkflowContext.ExecuteRecordContentActivity(ctx, call)
 }

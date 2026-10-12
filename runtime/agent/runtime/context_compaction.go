@@ -131,7 +131,10 @@ func resolvedContextSettings(threshold *ContextCompaction, recovery ContextRecov
 	if margin.Bytes == 0 {
 		margin = contextmeasure.Rate{Tokens: 1, Bytes: 10}
 	}
-	resolved := compaction.ContextSettings{Settings: settings, Threshold: threshold != nil, GuardMargin: margin, DisableRecall: recovery.DisableRecall}
+	resolved := settings
+	resolved.Threshold = threshold != nil
+	resolved.GuardMargin = margin
+	resolved.DisableRecall = recovery.DisableRecall
 	if threshold != nil {
 		resolved.Summary.Settings = threshold.Summary
 		if threshold.ContextModel != nil {

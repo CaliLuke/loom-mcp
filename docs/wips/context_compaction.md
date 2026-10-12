@@ -717,6 +717,7 @@ request in `PlanActivityOutput`:
 
 ```go
 type RequestFacts struct {
+    LimitsInvalid bool `json:"limits_invalid,omitzero"` // invalid merged limits override, distinct from unknown limits
     Call          CallKey // (RunID, Seq, Attempt), see 4.13
     Model         string
     ContextWindow int     // from the adapter's ContextLimits (4.14); 0 if unknown
@@ -1199,7 +1200,11 @@ Gemini currently have empty tables under this rule.
 `runtime.Options.ContextLimits` (or `WithContextLimits`) overrides positive
 fields by resolved model ID, falling back to the registered client ID when no
 resolved-model entry exists. Zero fields retain adapter values. Construction
-rejects negative fields and `MaxOutputTokens > ContextWindow`. Overrides are
+rejects negative fields and `MaxOutputTokens > ContextWindow` when both are set.
+Output-only overrides are accepted. After merging with adapter limits, an invalid
+max-output/window pair or reserve at least the window produces unknown limits.
+Facts mark `LimitsInvalid`; the workflow emits one `context_limits_unknown` with
+reason `invalid_override` and the model. Overrides are
 copied at construction. Ollama's effective `num_ctx` and gateway limits require
 an override. `model.NewClient` and the rate-limit middleware preserve both
 `ContextInfo` and `TokenCounter` through the shared capability construction.
@@ -1591,16 +1596,40 @@ without code changes. Rendering happens in `SummarizeContext`; the checkpoint
 records the `PromptRef`. Template data: `.Previous`, `.Evicted`,
 `.Instructions`, `.Budget`.
 
-**Per-run overrides.** `PolicyOverrides.Context` overrides every setting, the
-summariser model, and `ContextWindow`, a pretend window, so a short eval
-scenario crosses the trigger several times. Overflow handling and the
-pre-send guard still use the real window.
+**Per-run overrides and fingerprint (K17).**
 
-**Fingerprint.** Effective settings, including the pretend `ContextWindow` and
-the `ContextModel`, and the prompt reference hash to a
-`ContextConfigFingerprint`, recorded on checkpoints and call records. The
-canonical settings are stored with `Put`, and the fingerprint is their hash,
-so a reader resolves a fingerprint to the settings behind it.
+Per-run context settings use `runtime.WithContextOverrides(runtime.ContextOverrides{...})`
+or `api.PolicyOverrides.Context`. Nil pointers inherit registration values; explicit
+pointers replace them. `Ratio{Num, Den}` uses reduced integer fractions. TriggerAt
+must be strictly between zero and one; GuardMargin includes zero and one half.
+Absolute token and count overrides must be positive; MaxSummaryChunks is at most
+64. MaxTier is clear, evict or summary and requires threshold compaction. An
+explicit ContextModel pointer to nil disables summaries. Children use their own
+registration settings and resolve their own prompt, without inheriting overrides.
+
+Start validates overrides before submitting a workflow. It resolves the active
+`<agent>.context.summary` template for the run scope, stores the bytes, and pins
+`SummaryPrompt{Ref, Template}`. Summary activities render those bytes even if a
+stored prompt override changes later. Canonical version-1 JSON records all settings,
+reduced ratios, the pinned prompt and the unresolved B-dependent budget rules.
+Its content hash is the run's ContextFingerprint. Every planner/summarizer call,
+checkpoint and compacted/skipped event carries this fingerprint. RunRecord resolves
+and strictly decodes the canonical settings, rejects call/checkpoint mismatches,
+and exports the settings and template bytes.
+
+ContextWindow is a pretend window for threshold decisions. With a known real
+window it cannot exceed that window; its usable budget must be at least 2,900 and
+its output reserve must fit. With unknown real limits it supplies the trigger
+budget while the guard stays off. Without a pretend window, threshold compaction
+requires known limits. The guard and overflow recovery use recorded real limits;
+recovery cannot enlarge the current checkpoint budget. ValidateAt checks resident
+budgets plus framing against B/2 and checkpoint capacity against MinCheckpointBytes
+when B first becomes known and whenever MinB falls, but only for an explicit
+per-run override (`Policy.Context` present) or a pretend window. Default and
+registration-only runs retain the existing budget diagnostics and continue.
+Override presence is recorded separately from the canonical settings fingerprint.
+For a validated run, failure terminates the run with a non-retryable
+ContextSettingsError naming the field, model and B.
 
 ### 4.18 recall_context
 
@@ -1693,8 +1722,13 @@ head, actual view, step, facts, stamped settings and pure recomputation), `conte
 `context_request_growth`,
 `recall_budget_exhausted` (which allowance), `continuation_superseded`,
 `context_nontext_resident`.
-The same attributes go
-on a `context.compact` span.
+Each newly inserted compacted or skipped record produces one `context.compact`
+internal span. Duplicate event keys produce no additional span. It ends at the
+event timestamp and lasts the recorded summary latency (zero for other tiers).
+Attributes under `loom_mcp.context.*` are reason, tier, outcome, kind, units,
+calls, before, after, checkpoint, fingerprint, step, model, usage token counts,
+chunks, effective_window and pretend. Agent, run, session and turn IDs provide
+correlation. These record events reach the canonical telemetry subscriber.
 
 ### 4.20 Failure modes
 
@@ -1736,6 +1770,16 @@ workflows cannot replay on new code. A `WorkflowProtocolVersion` is stamped
 into run input and checked at workflow start and on replay; a mismatch fails
 fast. Every ticket that changes workflow code bumps it and adds a replay test.
 Operators drain running workflows before upgrading.
+
+K17 adds Policy.Context, canonical stamped settings and fingerprint, pinned
+SummaryPrompt, child-start context resolution activities, effective-budget
+validation and context telemetry fields. Workflow protocol is 15; template
+version stays 5. The real `workflow_protocol_v15.json`,
+`workflow_protocol_v15_budget.json` and `workflow_protocol_v15_summary.json`
+fixtures cover overrides, recovery and summary/budget adoption.
+`workflow_protocol_v15_child.json` and `workflow_protocol_v15_child_run.json`
+record and replay child context preparation followed by the child start and run.
+Protocol 14 is rejected before workflow effects; drain older runs before deployment.
 
 K12 uses protocol 7, including entry-size metadata, `PlanActivityOutput.View`
 and `Facts`, sorted `PlanActivityInput.Models`, and run settings. K12 applies

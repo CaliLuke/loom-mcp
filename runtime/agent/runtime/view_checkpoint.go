@@ -41,7 +41,7 @@ func receiptRecord(ctx context.Context, store runstore.Store, scope string, sour
 	if err != nil {
 		return "", err
 	}
-	record := index.CheckpointRecord{Prev: view.Checkpoint, Summary: previous.Summary, SummaryRun: previous.SummaryRun, CitedUsers: previous.CitedUsers, Receipt: lines, Through: view.TailFrom - 1, Chain: entries[view.TailFrom-2].Chain}
+	record := index.CheckpointRecord{Fingerprint: index.Fingerprint(view.ContextFingerprint), Prev: view.Checkpoint, Summary: previous.Summary, SummaryRun: previous.SummaryRun, CitedUsers: previous.CitedUsers, Receipt: lines, Through: view.TailFrom - 1, Chain: entries[view.TailFrom-2].Chain}
 	data, err := json.Marshal(record, json.Deterministic(true))
 	if err != nil {
 		return "", err

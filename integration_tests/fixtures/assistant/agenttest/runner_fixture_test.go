@@ -133,11 +133,13 @@ func TestRunnerVariantCompactionFixture(t *testing.T) {
 	script := agenttest.ScriptedModel("fixture", agenttest.Respond(agenttest.Text("ready")))
 	r, err := eval.Run(t.Context(), eval.Config{Harness: runnerFactory(), Scenarios: []eval.Scenario{runnerScenario()}, Variants: []eval.Variant{
 		{ID: "off", Options: []agenttest.Option{script}},
-		{ID: "on", Options: []agenttest.Option{script, agenttest.WithRuntimeOptions(runtime.WithContextCompaction("assistant.assistant_runtime", runtime.ContextCompaction{}))}},
+		{ID: "on", Options: []agenttest.Option{script, agenttest.WithRuntimeOptions(runtime.WithContextCompaction("assistant.assistant_runtime", runtime.ContextCompaction{}), runtime.WithContextLimits(map[string]model.ContextLimits{"fixture": {ContextWindow: 200000}}))}},
 	}})
 	require.NoError(t, err)
 	require.NoError(t, r.Attempts[0].HarnessErr)
 	require.NoError(t, r.Attempts[1].HarnessErr)
+	require.NoError(t, r.Attempts[0].Outcome.Err)
+	require.NoError(t, r.Attempts[1].Outcome.Err)
 	assert.Nil(t, r.Attempts[0].Runs()[0].Export.Runs[0].CompactionSettings)
 	assert.NotNil(t, r.Attempts[1].Runs()[0].Export.Runs[0].CompactionSettings)
 }

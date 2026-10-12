@@ -45,7 +45,7 @@ func (r *Runtime) prepareSummary(ctx context.Context, in *SummarizeContextInput)
 	if err != nil {
 		return nil, err
 	}
-	record := index.CheckpointRecord{Prev: in.ViewRef.Checkpoint, Through: in.To - 1, Chain: entries[in.To-2].Chain, SummaryRun: in.RunID, Receipt: lines}
+	record := index.CheckpointRecord{Fingerprint: index.Fingerprint(in.ContextFingerprint), Prev: in.ViewRef.Checkpoint, Through: in.To - 1, Chain: entries[in.To-2].Chain, SummaryRun: in.RunID, Receipt: lines}
 	allowance, err := checkpoint.SummaryBytes(checkpoint.Input{Through: record.Through, Summary: &checkpoint.Summary{}}, in.Budget)
 	if err != nil {
 		return nil, err
@@ -112,7 +112,7 @@ func (p *summaryPreparation) replacedEstimate(ctx context.Context, in *Summarize
 		if budget == (index.RenderBudget{}) {
 			budget = in.Budget
 		}
-		msg, err := checkpoint.Render(previous, budget, checkpoint.DefaultLimits, nil)
+		msg, err := checkpoint.Render(previous, budget, checkpoint.BudgetLimits(budget), nil)
 		if err != nil {
 			return 0, err
 		}

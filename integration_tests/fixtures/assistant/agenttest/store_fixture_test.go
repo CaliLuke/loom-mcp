@@ -43,7 +43,7 @@ func TestStoreMatrixFixture(t *testing.T) {
 	}}
 	cfg := eval.Config{Harness: factory, Scenarios: []eval.Scenario{scenario}, Repeats: 2, Concurrency: 2, Variants: []eval.Variant{
 		{ID: "base", Labels: map[string]string{"system": "base"}},
-		{ID: "changed", Labels: map[string]string{"system": "changed"}, Options: []agenttest.Option{agenttest.WithRuntimeOptions(runtime.WithContextCompaction("parent", runtime.ContextCompaction{}))}},
+		{ID: "changed", Labels: map[string]string{"system": "changed"}, Options: []agenttest.Option{agenttest.WithRuntimeOptions(runtime.WithContextCompaction("parent", runtime.ContextCompaction{}), runtime.WithContextLimits(map[string]model.ContextLimits{"fixture": {ContextWindow: 200000}}))}},
 	}}
 	store, err := eval.Open(t.TempDir())
 	require.NoError(t, err)

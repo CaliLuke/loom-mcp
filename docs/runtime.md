@@ -183,7 +183,7 @@ Typed consumers can call
 eligible bytes and decode them with the generated result codec. Empty or missing
 hashes fail. Tool activities return references; terminal completion decoding runs in the finish activity.
 
-### Transcript index and planner views (protocol 14)
+### Transcript index and planner views (protocol 15)
 
 The workflow keeps immutable `index.MessageEntry` values and a committed
 `IndexHead`, rather than accumulated messages, tool outputs, typed answers, or a
@@ -234,10 +234,46 @@ Anthropic and Bedrock view grammars; views without checkpoints retain the existi
 resume-time Bedrock validation. Successful activity outputs may return `ViewUpdate`;
 output-validation recovery outputs never adopt it. Protocol 7 introduced these view updates, recorded
 request facts and model rates, entry size metadata and stamped run settings.
-The current protocol is 14 (overflow source classification and retry sizing that
-includes newly advertised recall tools). These change deterministic workflow
-decisions. Drain older workflows before upgrading; v5–v13
-fixtures retain mismatch rejection before effects. Structural templates remain version 5.
+The current protocol is 15. Per-run context overrides, pinned summary prompts,
+settings fingerprints and effective-window validation change workflow inputs and
+deterministic decisions. Recovery retains source-first classification and retry
+sizing that includes newly advertised recall tools. Drain older workflows before
+upgrading; v5–v14 fixtures retain mismatch rejection before effects. Structural templates remain version 5.
+
+### Per-run context overrides
+
+Per-run context settings use `runtime.WithContextOverrides(runtime.ContextOverrides{...})`
+or `api.PolicyOverrides.Context`. Nil pointers inherit registration values; explicit
+pointers replace them. `Ratio{Num, Den}` uses reduced integer fractions. TriggerAt
+must be strictly between zero and one; GuardMargin includes zero and one half.
+Absolute token and count overrides must be positive; MaxSummaryChunks is at most
+64. MaxTier is clear, evict or summary and requires threshold compaction. An
+explicit ContextModel pointer to nil disables summaries. Children use their own
+registration settings and resolve their own prompt, without inheriting overrides.
+
+Start validates overrides before submitting a workflow. It resolves the active
+`<agent>.context.summary` template for the run scope, stores the bytes, and pins
+`SummaryPrompt{Ref, Template}`. Summary activities render those bytes even if a
+stored prompt override changes later. Canonical version-1 JSON records all settings,
+reduced ratios, the pinned prompt and the unresolved B-dependent budget rules.
+Its content hash is the run's ContextFingerprint. Every planner/summarizer call,
+checkpoint and compacted/skipped event carries this fingerprint. RunRecord resolves
+and strictly decodes the canonical settings, rejects call/checkpoint mismatches,
+and exports the settings and template bytes.
+
+ContextWindow is a pretend window for threshold decisions. With a known real
+window it cannot exceed that window; its usable budget must be at least 2,900 and
+its output reserve must fit. With unknown real limits it supplies the trigger
+budget while the guard stays off. Without a pretend window, threshold compaction
+requires known limits. The guard and overflow recovery use recorded real limits;
+recovery cannot enlarge the current checkpoint budget. ValidateAt checks resident
+budgets plus framing against B/2 and checkpoint capacity against MinCheckpointBytes
+when B first becomes known and whenever MinB falls, but only for an explicit
+per-run override (`Policy.Context` present) or a pretend window. Default and
+registration-only runs retain the existing budget diagnostics and continue.
+Override presence is recorded separately from the canonical settings fingerprint.
+For a validated run, failure terminates the run with a non-retryable
+ContextSettingsError naming the field, model and B.
 
 ### Opt-in context compaction
 
@@ -1175,6 +1211,9 @@ transcripts, rebuilt requests, events and addressed content, including server-on
 bytes. `runrecord.FromExport(data)` restores the identical record without a store
 or historical renderer. Opaque log payloads retain their exact bytes; numeric
 request metadata above 2^53 retains its exact value.
+The export decoder also accepts the pre-K17 flattened context settings, preserving
+their recorded values and empty fingerprint. Current settings and legacy settings
+each reject unknown members; loading old exports does not apply new defaults.
 
 The 1,000-step recorder-write growth and real Temporal reconstruction proofs skip
 `-short` and run through `make test-payload-growth` (also invoked by `make itest`).
@@ -1366,7 +1405,7 @@ when preserving the evidence.
 | `Step` | `kind`: `model`, `tool`, `await`, `answer` or `event`; `step`: planner schedule number; optional `entry_id`: index entry identity; `verified`: evidence trust; exactly one populated `model`, `tool`, `event` or `answer` member. |
 | `ModelStep` | `key`: `RunID`, `Seq`, `Attempt`; `class`: `adopted`, `abandoned` or `incomplete`; `activity`: `planner` or `summarize`; `step`: recorded planner number; `model`, `model_id`: provider and registration identity; `usage`: token counts; `latency`: duration; optional `error`: `kind`, `message`; optional `facts`: request measurements; `chosen`: tool calls; `system_hash`, `tools_hash`, `request_digest`: full request provenance; `prompts`: prompt refs. |
 | `TokenUsage` | `Model`, `ModelClass`: attribution; `InputTokens`, `OutputTokens`, `TotalTokens`, `CacheReadTokens`, `CacheWriteTokens`: disjoint normalized token counts. |
-| `RequestFacts` | `call`: call key; `model`: resolved identity; `context_window`, `output_reserve`, `input_tokens`, `text_bytes`, `fixed_bytes`, `non_text`: measurements; `view_bearing`: transcript-view inclusion; `view_text_bytes`, `view_non_text`: the matched view's text bytes and non-text parts (optional); `recovery_tool_bytes`: tool definition bytes added only after view shortening, excluded from the failed request's `text_bytes` and `fixed_bytes` (optional); `count_latency`: counting duration; `outcome`: measurement outcome. |
+| `RequestFacts` | `call`: call key; `model`: resolved identity; `context_window`, `output_reserve`, `input_tokens`, `text_bytes`, `fixed_bytes`, `non_text`: measurements; `limits_invalid`: invalid merged limits override (optional boolean); `view_bearing`: transcript-view inclusion; `view_text_bytes`, `view_non_text`: the matched view's text bytes and non-text parts (optional); `recovery_tool_bytes`: tool definition bytes added only after view shortening, excluded from the failed request's `text_bytes` and `fixed_bytes` (optional); `count_latency`: counting duration; `outcome`: measurement outcome. |
 | Chosen tool call / prompt ref | Tool call: `Name`, `ID`, `Payload` (raw JSON). Prompt ref: `ID`, `Version`. |
 | `ToolStep` | `name`, `tool_call_id`, optional `parent_tool_call_id`: call identity; `arguments`: original JSON before injection; `result`: complete JSON or null if absent; optional `bounds`, `error`: stored metadata; `duration`: execution duration; `children`: linked trajectories in canonical link order. |
 | Bounds / structured tool error | Bounds: `Returned`, nullable `Total`, `Truncated`, nullable `NextCursor`, `RefinementHint`. Error: `Message`, optional `kind`, nullable recursive `Cause`. |
@@ -4437,7 +4476,9 @@ interceptor short-circuits remain outside planner call recording.
 
 Facts include the call key, resolved model, context window, output reserve,
 view participation, text/fixed byte counts, non-text token estimate, normalized
-input usage and outcome. Unknown limits give a zero window. Without a resolved
+input usage and outcome. `LimitsInvalid` (`limits_invalid`) is an optional boolean
+that distinguishes invalid merged limits overrides from absent limits. Omitted
+values decode as false. Unknown limits give a zero window. Without a resolved
 provider model, the request model or registered client ID supplies the key.
 Output reserve uses request `MaxTokens`, then configured `DefaultMaxTokens`,
 then `min(MaxOutputTokens, ContextWindow / 4)`.
@@ -4730,17 +4771,22 @@ external `Client`, also supply `ClientOptions` with that client's converter
 external client whose converter configuration was not supplied.
 
 The generated fixture keeps a completed history under
-`integration_tests/fixtures/agent_features/testdata/workflow_protocol_v14.json`.
-The scrubbed recording includes overflow recovery, a confirmation-gated tool turn
-with clarification, its recorded assistant question and user answer, one resume
+`integration_tests/fixtures/agent_features/testdata/workflow_protocol_v15.json`.
+The main and summary recordings use per-run pretend windows and record pinned
+settings fingerprints. The scrubbed main recording includes overflow recovery, a
+confirmation-gated tool turn with clarification, its recorded assistant question and user answer, one resume
 that selects child validation and context lookup, seed/result/question content
 batches, planner-step commits and terminal finish activity. A second recording,
-`workflow_protocol_v14_budget.json`, exercises an external-await resume whose
+`workflow_protocol_v15_budget.json`, exercises an external-await resume whose
 terminal answer arrives within budget, but whose adoption crosses the budget.
-It completes without a finalizer call. `workflow_protocol_v14_summary.json` records
+It completes without a finalizer call. `workflow_protocol_v15_summary.json` records
 a validated summary and its canonical adoption before the single post-await resume.
-The unchanged protocol 5–13 fixtures verify rejection before workflow effects;
-protocol versions must match, so workers running protocol 14 cannot replay them
+`workflow_protocol_v15_child.json` records child context preparation completing
+before `StartChildWorkflow`; `workflow_protocol_v15_child_run.json` records that
+child execution. The child uses its own settings and fingerprint despite the
+parent's pretend-window override. Both histories have offline replay coverage.
+The unchanged protocol 5–14 fixtures verify rejection before workflow effects;
+protocol versions must match, so workers running protocol 15 cannot replay them
 as successful runs. Run
 `go test -C integration_tests/fixtures/agent_features ./... -run '^TestGeneratedFeatureWorkflowReplay$'`
 for offline replay. To re-record it against the pinned Temporal development
@@ -5816,9 +5862,9 @@ Each invocation records one keyed context_recalled event with kind, outcome
 and step. Exhaustion emits recall_budget_exhausted once per allowance episode,
 reset by refill. RunRecord rebuilds and validates recorded charges and settings.
 Workflow protocol 9 adds overflow recovery to these lookup contracts. The recorded
-v14 fixture exercises bounded recovery, lookup and a single resume after
+v15 fixture exercises bounded recovery, lookup and a single resume after
 confirmation and clarification, including the recorded question/answer pair.
-The v14 budget fixture covers terminal adoption across the active budget without a finalizer call; v5–v13 fail
+The v15 budget fixture covers terminal adoption across the active budget without a finalizer call; v5–v14 fail
 before effects.
 Structural templates remain version 5.
 

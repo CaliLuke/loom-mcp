@@ -23,7 +23,10 @@ const (
 
 // prepareWorkflowSummary adopts the summary attempt before any planner command.
 func (r *Runtime) prepareWorkflowSummary(wf engine.WorkflowContext, base *workflowPlanInput, input *PlanActivityInput, deadline time.Time) error {
-	if base.compaction == nil || base.compaction.ContextModel == nil {
+	if !base.contextSettings.Threshold || base.contextSettings.MaxTier == compaction.Clear || base.contextSettings.MaxTier == compaction.Evict {
+		return nil
+	}
+	if !base.contextSettings.Summary.Enabled {
 		if !base.summariesOffLogged && r.logger != nil {
 			r.logger.Info(wf.Context(), "context summaries are off: no ContextModel", "run_id", input.RunID)
 			base.summariesOffLogged = true
@@ -38,7 +41,7 @@ func (r *Runtime) prepareWorkflowSummary(wf engine.WorkflowContext, base *workfl
 		return err
 	}
 	original := base.view()
-	in := &SummarizeContextInput{AgentID: input.AgentID, RunID: input.RunID, Scope: input.RunContext.RootRunID, SessionID: input.RunContext.SessionID, TurnID: input.RunContext.TurnID, Labels: input.RunContext.Labels, Step: input.Step, ViewRef: original, From: max(original.TailFrom, 1), To: input.View.TailFrom, Budget: input.View.Budget, Rate: summaryEstimateRate(base.compactionState), ContextModel: *base.compaction.ContextModel, PromptID: prompt.Ident(string(input.AgentID) + ".context.summary"), Settings: base.compaction.Summary}
+	in := &SummarizeContextInput{AgentID: input.AgentID, RunID: input.RunID, Scope: input.RunContext.RootRunID, SessionID: input.RunContext.SessionID, TurnID: input.RunContext.TurnID, Labels: input.RunContext.Labels, Step: input.Step, ViewRef: original, From: max(original.TailFrom, 1), To: input.View.TailFrom, Budget: input.View.Budget, Rate: summaryEstimateRate(base.compactionState), ContextSettings: base.contextSettings, ContextFingerprint: base.contextFingerprint, ContextModel: base.contextSettings.Summary.Model, PromptID: prompt.Ident(string(input.AgentID) + ".context.summary"), Settings: base.contextSettings.Summary.Settings}
 	out, err := wf.ExecuteSummarizeContextActivity(wf.Context(), engine.SummarizeContextActivityCall{Name: SummarizeContextActivityName(input.AgentID), Input: in, Options: options})
 	if err != nil {
 		return fmt.Errorf("summarize context: %w", err)
@@ -66,6 +69,7 @@ func (r *Runtime) adoptWorkflowSummary(wf engine.WorkflowContext, base *workflow
 	next := base.compactionState.Summary.Reject(kind)
 	if !base.compactionState.Summary.Disabled && next.Disabled {
 		disabled := hooks.NewContextCompactionEvent(input.RunID, input.AgentID, input.RunContext.SessionID, input.Step, hooks.ContextCompactionSkipped, "summaries_disabled", "", 0, 0, 0, 0, base.compactionView.Checkpoint, wf.Now())
+		stampCompactionEvent(base, disabled)
 		disabled.SetEventKey(disabled.EventKey() + ":disabled")
 		if err := r.publishHook(wf.Context(), disabled, input.RunContext.TurnID); err != nil {
 			return err
@@ -120,6 +124,8 @@ func summaryAdoptionEvent(wf engine.WorkflowContext, base *workflowPlanInput, in
 	event.Kind, event.CallKeys, event.Model, event.Usage, event.Chunks, event.UnsummarisedBytes, event.LooseRefs, event.Prompt = kind, slices.Clone(out.CallKeys), in.ContextModel.ID, out.Usage, out.Chunks, out.UnsummarisedBytes, out.LooseRefs, out.Prompt
 	settings := base.contextSettings
 	event.ContextSettings = &settings
+	stampCompactionEvent(base, event)
+	event.Latency = out.Latency
 	if kind == "" {
 		event.Units, event.Calls = compactionCounts(base.Entries, in.From, in.To)
 		event.Checkpoint = view.Checkpoint
@@ -148,7 +154,7 @@ func (base *workflowPlanInput) applySummaryView(input *PlanActivityInput, out *S
 	base.summaryApplied = true
 	base.compactionView = view
 	base.compactionState = base.compactionDecision.State
-	base.compactionState.Recall = base.compactionState.Recall.Refilled(input.ContextSettings.Settings)
+	base.compactionState.Recall = base.compactionState.Recall.Refilled(base.contextSettings)
 	base.compactionDecision.State = base.compactionState
 	base.recallEpisode++
 	base.recallExhausted = nil

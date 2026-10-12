@@ -65,9 +65,9 @@ func (e *toolBatchExec) executeRecall(ctx context.Context, wf engine.WorkflowCon
 
 	pageBytes := 512
 	if e.base.compaction != nil {
-		pageBytes = pureCompactionSettings(e.base.compaction).RecallPageBytes(e.base.compactionState.MinB)
+		pageBytes = e.base.contextSettings.RecallPageBytes(e.base.compactionState.MinB)
 	}
-	output, err := wf.ExecuteRecallActivity(ctx, engine.RecallActivityCall{Name: RecallActivityName(e.agentID), Input: &api.RecallActivityInput{RunID: e.runID, Scope: e.base.RunContext.RootRunID, ViewRef: e.base.view(), Head: e.base.IndexHead, Call: call, PageBytes: pageBytes, ScanBytes: 8_000_000}, Options: computeToolActivityOptions(wf, e.toolActOptions, e.finishBy)})
+	output, err := wf.ExecuteRecallActivity(ctx, engine.RecallActivityCall{Name: RecallActivityName(e.agentID), Input: &api.RecallActivityInput{RunID: e.runID, Scope: e.base.RunContext.RootRunID, ViewRef: e.base.view(), Head: e.base.IndexHead, Call: call, PageBytes: pageBytes, ScanBytes: e.base.contextSettings.RecallScanBytes}, Options: computeToolActivityOptions(wf, e.toolActOptions, e.finishBy)})
 	if err != nil {
 		return recallExecution{}, err
 	}

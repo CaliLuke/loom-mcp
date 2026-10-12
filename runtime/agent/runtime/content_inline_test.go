@@ -16,7 +16,7 @@ import (
 )
 
 func TestContentInlineResultBeforeResume(t *testing.T) {
-	for _, failAt := range []int{0, 2, 3} {
+	for _, failAt := range []int{0, 4, 5} {
 		t.Run(fmt.Sprint(failAt), func(t *testing.T) {
 			store := &contentPathStore{Store: storeinmem.New(), failAt: failAt}
 			rt := New(WithRunStore(store))
@@ -38,7 +38,7 @@ func TestContentInlineResultBeforeResume(t *testing.T) {
 				data, err = store.Get(t.Context(), "root", result.Refs.ServerData)
 				require.NoError(t, err)
 				assert.JSONEq(t, `{"private":true}`, string(data))
-				assert.Len(t, store.snapshot(), 5)
+				assert.Len(t, store.snapshot(), 7)
 				return &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: &model.Message{Role: model.ConversationRoleAssistant}}}, nil
 			}})
 			_, err := rt.MustClient("content.agent").Run(t.Context(), "session", nil, WithRunID("root"))
@@ -65,7 +65,7 @@ func TestContentErrorOnlyInlineDoesNotStoreResult(t *testing.T) {
 	}, resume: func(_ context.Context, in *planner.PlanResumeInput) (*planner.PlanResult, error) {
 		require.Len(t, in.ToolOutputs, 1)
 		assert.Empty(t, in.ToolOutputs[0].Refs.Result)
-		assert.Len(t, store.snapshot(), 3, "call, output metadata, and segment")
+		assert.Len(t, store.snapshot(), 5, "pinned prompt, settings, call, output metadata, and segment")
 		return &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: contentMessage("done")}}, nil
 	}})
 	_, err := rt.MustClient("content.agent").Run(t.Context(), "session", nil, WithRunID("root"))

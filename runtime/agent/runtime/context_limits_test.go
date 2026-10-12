@@ -93,7 +93,7 @@ func TestContextLimitsOverridesUnknownClient(t *testing.T) {
 func TestContextLimitsOverrideValidation(t *testing.T) {
 	for _, limits := range []model.ContextLimits{
 		{ContextWindow: -1}, {MaxOutputTokens: -1}, {DefaultMaxTokens: -1}, {ImageTokens: -1},
-		{ContextWindow: 100, MaxOutputTokens: 101}, {MaxOutputTokens: 1},
+		{ContextWindow: 100, MaxOutputTokens: 101},
 	} {
 		assert.Panics(t, func() {
 			newFromOptions(Options{ContextLimits: map[string]model.ContextLimits{"model": limits}})

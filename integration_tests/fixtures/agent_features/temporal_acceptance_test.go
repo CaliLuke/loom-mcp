@@ -95,6 +95,7 @@ func TestGeneratedFeatureRealTemporalContracts(t *testing.T) {
 		if os.Getenv("LOOM_MCP_RECORD_WORKFLOW_HISTORY") != "1" {
 			t.Skip("set LOOM_MCP_RECORD_WORKFLOW_HISTORY=1 to re-record")
 		}
+		t.Run("child start", func(t *testing.T) { recordChildWorkflowHistory(t, server.Client()) })
 		t.Run("main", func(t *testing.T) {
 			recordWorkflowHistory(t, server.Client())
 		})
