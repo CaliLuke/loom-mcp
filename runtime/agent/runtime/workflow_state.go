@@ -33,6 +33,9 @@ type (
 		// ToolEvents are the accumulated tool results emitted over the lifetime of this run.
 		ToolEvents []*planner.ToolResult
 
+		// consumedToolAwaits retains accepted IDs across all await queues in this run.
+		consumedToolAwaits map[string]struct{}
+
 		// ToolPolicy is the canonical model-visible and execution-visible allowlist
 		// for the current planner turn.
 		ToolPolicy toolPolicyEnvelope

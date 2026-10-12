@@ -12,8 +12,8 @@ import (
 )
 
 // ToolAwaitNotReadyError identifies a submission whose await is not the current
-// tool-channel head. The ID can also be unknown or already consumed. Callers must
-// wait until QueryToolAwaits advertises this ID before resubmitting.
+// tool-channel head. The ID can also be unknown, already accepted, or consumed.
+// Callers must wait until QueryToolAwaits advertises this ID before resubmitting.
 type ToolAwaitNotReadyError struct {
 	ID string
 }
@@ -103,7 +103,13 @@ func setToolAwaitsQuery(wf engine.WorkflowContext, items []planner.AwaitItem) er
 		awaits = append(awaits, await)
 		break
 	}
+	results := wf.ExternalToolResults()
 	return wf.SetQueryHandler(engine.QueryToolAwaits, func() ([]planner.AwaitExternalTools, error) {
+		// A delivered answer already owns the head until the workflow takes it.
+		// Query and signal are not atomic; consumption deduplicates racing callers.
+		if results.Pending() > 0 {
+			return nil, nil
+		}
 		out := slices.Clone(awaits)
 		for i := range out {
 			out[i].Items = slices.Clone(out[i].Items)

@@ -142,7 +142,7 @@ func (r *Runtime) waitAwaitQuestions(ctx context.Context, ctrl *interrupt.Contro
 	if questions == nil {
 		return nil, errors.New("await questions missing payload")
 	}
-	rs, err := waitForProvidedToolResults(ctx, ctrl, timeout, questions.ID, "await questions")
+	rs, err := waitForProvidedToolResults(ctx, ctrl, st, timeout, questions.ID, "await questions")
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +164,7 @@ func (r *Runtime) waitAwaitExternalTools(ctx context.Context, ctrl *interrupt.Co
 	if external == nil {
 		return nil, errors.New("await external_tools missing payload")
 	}
-	rs, err := waitForProvidedToolResults(ctx, ctrl, timeout, external.ID, "await external_tools")
+	rs, err := waitForProvidedToolResults(ctx, ctrl, st, timeout, external.ID, "await external_tools")
 	if err != nil {
 		return nil, err
 	}
@@ -180,18 +180,36 @@ func (r *Runtime) waitAwaitExternalTools(ctx context.Context, ctrl *interrupt.Co
 	return r.consumeProvidedToolResults(ctx, input, base, st, rs, allowed, expected)
 }
 
-func waitForProvidedToolResults(ctx context.Context, ctrl *interrupt.Controller, timeout time.Duration, awaitID string, kind string) (*api.ToolResultsSet, error) {
-	rs, err := ctrl.WaitProvideToolResults(ctx, timeout)
-	if err != nil {
-		return nil, err
+// waitForProvidedToolResults discards previously accepted IDs that differ from
+// the current await before validation, transcript mutation, or activity. A new
+// await may reuse an ID. Unknown IDs still fail the run.
+func waitForProvidedToolResults(ctx context.Context, ctrl *interrupt.Controller, st *runLoopState, timeout time.Duration, awaitID string, kind string) (*api.ToolResultsSet, error) {
+	for {
+		rs, err := ctrl.WaitProvideToolResults(ctx, timeout)
+		if err != nil {
+			return nil, err
+		}
+		if rs == nil {
+			return nil, toolResultContractErrorf("%s: nil tool results set", kind)
+		}
+		if _, consumed := st.consumedToolAwaits[rs.ID]; consumed && rs.ID != awaitID {
+			continue
+		}
+		if awaitID != "" && rs.ID != "" && rs.ID != awaitID {
+			return nil, toolResultContractErrorf("unexpected await ID for %s", strings.TrimPrefix(kind, "await "))
+		}
+		// Hide the taken head before result recording can yield to an activity.
+		if err := setToolAwaitsQuery(engine.WorkflowContextFromContext(ctx), nil); err != nil {
+			return nil, err
+		}
+		if awaitID != "" {
+			if st.consumedToolAwaits == nil {
+				st.consumedToolAwaits = make(map[string]struct{})
+			}
+			st.consumedToolAwaits[awaitID] = struct{}{}
+		}
+		return rs, nil
 	}
-	if rs == nil {
-		return nil, toolResultContractErrorf("%s: nil tool results set", kind)
-	}
-	if awaitID != "" && rs.ID != "" && rs.ID != awaitID {
-		return nil, toolResultContractErrorf("unexpected await ID for %s", strings.TrimPrefix(kind, "await "))
-	}
-	return rs, nil
 }
 
 func buildExternalAwaitRequests(items []planner.AwaitToolItem) ([]planner.ToolRequest, map[string]struct{}, error) {

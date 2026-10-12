@@ -230,7 +230,8 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   The read-only `tool_awaits` query exposes this head, including call payloads.
   Other IDs return a root non-retryable `tool_result_contract` error with a
   `ToolAwaitNotReadyError` cause, detectable with `errors.As`. Unknown and consumed
-  IDs return the same error. Retry only after the query advertises the ID.
+  IDs return the same error unless the query advertises the ID for a new await.
+  Accepted awaits also return this error. Retry only after the query advertises the ID.
   Rejections leave the run paused without content writes or signals.
   Tool uses and results remain paired at consumption in queue order (RB3).
   Preflight validates call identities and decodes results, then runs the same
@@ -240,6 +241,14 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   Preflight discards enrichment. Activities repeat it and own artifact writes.
   Custom engines must implement `engine.ToolAwaitQuerier`. These query and
   preflight changes add no workflow commands. Protocol remains 13.
+  The query hides the head while a tool-results signal is pending. The workflow
+  clears the head when it takes the answer, before result recording. Query and
+  signal are not atomic. Racing callers can both pass preflight. The workflow
+  ignores a duplicate of a consumed await ID only if it differs from the current
+  await ID, before validation, events, transcript entries, or result activities.
+  Reusing an ID for a new await is allowed. Preflight and workflow consumption
+  accept answers for the current head and its calls. Unknown IDs still fail.
+  RB8 preserves valid recorded workflow commands and protocol 13.
 - Planner turns are workflow activities, not exactly-once method calls. Generated
   registrations retry failed plan/resume activities up to three attempts by
   default, so model calls and direct side effects can repeat after a late attempt

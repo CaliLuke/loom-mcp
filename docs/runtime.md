@@ -3052,9 +3052,20 @@ tool-channel await. An answer for another ID returns a `*runtime.ToolAwaitNotRea
 as the cause of a non-retryable `*engine.ApplicationError` with type
 `runtime.ToolResultContractErrorType` (`"tool_result_contract"`). Callers can detect
 this cause with `errors.As`. The run stays paused without content writes or signals
-from the rejected submission. An unknown or consumed ID returns the same error.
+from the rejected submission. An ID that the query does not advertise returns the same error.
 Retry only after the query advertises the requested ID. Tool uses and results
 remain recorded together in queue order, followed by one logical planner resume.
+
+The query hides the head while an answer waits in the signal channel. The workflow
+also clears the head as soon as it takes the answer, before it records results.
+The query and signal are separate operations, so racing submissions can both pass
+preflight.
+
+The workflow ignores a duplicate of an already consumed await ID only if it differs
+from the current await ID. It records no events, transcript entries, or result
+activities for that duplicate. Reusing an ID for a new await is allowed. The caller
+preflight and workflow accept an answer that matches the current head and its calls.
+A direct signal for an unknown await ID still fails the run.
 
 The runtime decodes each result, runs its registered materializer, then applies the
 shared tool-result contract, including bounds and retry hints. The client runtime
