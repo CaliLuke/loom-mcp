@@ -163,11 +163,16 @@ test-docker: tools coverage-parser-test
 docker-coverage: test-docker
 
 test-stress: tools
+	# itest retains full payload and cache-growth acceptance.
+	TESTCONTAINERS_RYUK_DISABLED=$(TESTCONTAINERS_RYUK_DISABLED) \
+	LOOM_MCP_RUN_DOCKER_TESTS=1 \
+	LOOM_MCP_REQUIRE_DOCKER_TESTS=$(LOOM_MCP_REQUIRE_DOCKER_TESTS) \
+	$(GO) test -short -tags=integration -race -shuffle=on -count=$(STRESS_COUNT) -timeout=$(STRESS_TIMEOUT) \
+		./runtime/agent/runtime
 	TESTCONTAINERS_RYUK_DISABLED=$(TESTCONTAINERS_RYUK_DISABLED) \
 	LOOM_MCP_RUN_DOCKER_TESTS=1 \
 	LOOM_MCP_REQUIRE_DOCKER_TESTS=$(LOOM_MCP_REQUIRE_DOCKER_TESTS) \
 	$(GO) test -tags=integration -race -shuffle=on -count=$(STRESS_COUNT) -timeout=$(STRESS_TIMEOUT) \
-		./runtime/agent/runtime \
 		./runtime/agent/model \
 		./runtime/agent/completion \
 		./runtime/agent/planner \
