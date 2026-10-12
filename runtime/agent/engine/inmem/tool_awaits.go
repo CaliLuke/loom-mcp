@@ -2,6 +2,7 @@ package inmem
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
@@ -12,6 +13,9 @@ import (
 func (e *eng) QueryToolAwaits(ctx context.Context, workflowID string) ([]planner.AwaitExternalTools, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+	if workflowID == "" {
+		return nil, errors.New("workflow id is required")
 	}
 	e.mu.RLock()
 	h, ok := e.handles[workflowID]

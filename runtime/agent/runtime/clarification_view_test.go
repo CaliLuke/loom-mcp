@@ -62,7 +62,7 @@ func runClarificationView(t *testing.T, path string, compacted bool) []*model.Me
 	t.Run(fmt.Sprintf("compacted=%t", compacted), func(t *testing.T) {
 		first := agenttest.Respond(agenttest.Text("checking"), agenttest.RawToolCall("resume.first", rawjson.Message(`{}`)), agenttest.CallID("first"))
 		if path == "await_only" {
-			first = agenttest.Respond(agenttest.Text("which?"))
+			first = agenttest.Respond(agenttest.Text("I need a detail before continuing."))
 		}
 		script, err := agenttest.NewScript(first, agenttest.Respond(agenttest.Text("finished")))
 		require.NoError(t, err)
@@ -84,6 +84,32 @@ func runClarificationView(t *testing.T, path string, compacted bool) []*model.Me
 		if path == "clarification" || path == "pause" || path == "missing_fields" || path == "await_only" || strings.Contains(path, "_") {
 			assertClarificationExchange(t, messages, path)
 		}
+		if path == "await_only" {
+			var found bool
+			for _, message := range messages {
+				for _, part := range message.Parts {
+					if text, ok := part.(model.TextPart); ok && text.Text == "I need a detail before continuing." {
+						found = true
+					}
+				}
+			}
+			assert.True(t, found, "retain streamed text from the clarification-only turn")
+		}
+		wantTools := 1
+		if path == "await_only" {
+			wantTools = 0
+		}
+		if strings.HasSuffix(path, "_questions") || strings.HasSuffix(path, "_external") || path == "questions" || path == "external" {
+			wantTools++
+		}
+		assert.Equal(t, 2, result.Trajectory.Totals.AdoptedModelCalls, "A4: model step count")
+		var toolSteps int
+		for _, step := range result.Trajectory.Steps {
+			if step.Tool != nil {
+				toolSteps++
+			}
+		}
+		assert.Equal(t, wantTools, toolSteps, "A4: tool step count")
 		assertClarificationRecord(t, result, requests)
 	})
 	return messages
@@ -191,8 +217,8 @@ func assertClarificationExchange(t *testing.T, messages []*model.Message, path s
 	t.Helper()
 	promptAt := -1
 	for i, message := range messages {
-		if len(message.Parts) == 1 && message.Role == model.ConversationRoleAssistant {
-			if text, ok := message.Parts[0].(model.TextPart); ok && text.Text == "which?" {
+		if len(message.Parts) > 0 && message.Role == model.ConversationRoleAssistant {
+			if text, ok := message.Parts[len(message.Parts)-1].(model.TextPart); ok && text.Text == "which?" {
 				promptAt = i
 			}
 		}

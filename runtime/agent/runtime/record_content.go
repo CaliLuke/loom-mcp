@@ -46,6 +46,9 @@ func (r *Runtime) RecordContentActivity(ctx context.Context, input *api.RecordCo
 			return nil, err
 		}
 	}
+	if input.Clarification != nil {
+		return r.recordClarificationContent(ctx, input)
+	}
 	if input.Provided != nil {
 		return r.recordProvidedContent(ctx, input)
 	}

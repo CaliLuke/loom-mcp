@@ -38,6 +38,11 @@ func (r *Runtime) materializeToolResult(ctx context.Context, call planner.ToolRe
 	if err := r.prepareToolResult(ctx, spec, call, result); err != nil {
 		return nil, err
 	}
+	return r.persistAndEncodeToolResult(ctx, call, result)
+}
+
+// persistAndEncodeToolResult finishes an already materialized and validated result.
+func (r *Runtime) persistAndEncodeToolResult(ctx context.Context, call planner.ToolRequest, result *planner.ToolResult) (rawjson.Message, error) {
 	if err := r.persistToolResultArtifacts(ctx, call, result); err != nil {
 		return nil, err
 	}
@@ -52,8 +57,8 @@ func (r *Runtime) materializeToolResult(ctx context.Context, call planner.ToolRe
 	return resultJSON, nil
 }
 
-// prepareToolResult shares the materialize-then-validate pipeline between
-// submission preflight and activity consumption, without persisting artifacts.
+// prepareToolResult materializes execution results before validation, preserving
+// materializer errors for the execution retry policy.
 func (r *Runtime) prepareToolResult(ctx context.Context, spec tools.ToolSpec, call planner.ToolRequest, result *planner.ToolResult) error {
 	if err := r.applyResultMaterializer(ctx, spec, call, result); err != nil {
 		return err
@@ -171,6 +176,15 @@ func (r *Runtime) applyResultMaterializer(ctx context.Context, spec tools.ToolSp
 	return nil
 }
 
+// prepareProvidedToolResult rejects invalid provided-result enrichment in both
+// submission preflight and activity consumption, before any artifact writes.
+func (r *Runtime) prepareProvidedToolResult(ctx context.Context, spec tools.ToolSpec, call planner.ToolRequest, result *planner.ToolResult) error {
+	if err := r.applyResultMaterializer(ctx, spec, call, result); err != nil {
+		return engine.NewNonRetryableApplicationError(err.Error(), ToolResultContractErrorType, nil, err)
+	}
+	return r.enforceToolResultContracts(spec, call, result)
+}
+
 // decodeProvidedToolResults decodes externally supplied raw tool results in the
 // canonical awaited call order and materializes their runtime-owned sidecars.
 func (r *Runtime) decodeProvidedToolResults(ctx context.Context, allowed []planner.ToolRequest, provided map[string]*api.ProvidedToolResult) ([]*planner.ToolResult, []rawjson.Message, error) {
@@ -202,7 +216,10 @@ func (r *Runtime) decodeProvidedToolResult(ctx context.Context, spec tools.ToolS
 	if err != nil {
 		return nil, nil, err
 	}
-	resultJSON, err := r.materializeToolResult(ctx, call, result)
+	if err := r.prepareProvidedToolResult(ctx, spec, call, result); err != nil {
+		return nil, nil, err
+	}
+	resultJSON, err := r.persistAndEncodeToolResult(ctx, call, result)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -268,7 +285,7 @@ func decodeProvidedToolResultValue(spec tools.ToolSpec, call planner.ToolRequest
 }
 
 // cloneProvidedToolBounds copies provided bounds metadata into an internal
-// planner result. Contract validation is centralized in materializeToolResult.
+// planner result. Contract validation runs after materialization.
 func cloneProvidedToolBounds(bounds *agent.Bounds) *agent.Bounds {
 	if bounds == nil {
 		return nil

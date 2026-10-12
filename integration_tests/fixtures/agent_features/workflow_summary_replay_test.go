@@ -2,7 +2,9 @@ package agentfeatures_test
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json/v2"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -13,7 +15,9 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	agentsruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	historypb "go.temporal.io/api/history/v1"
@@ -22,7 +26,9 @@ import (
 
 type summaryHistoryPlanner struct{}
 
-const workflowSummaryHistoryFile = "testdata/workflow_protocol_v15_summary.json"
+const workflowSummaryHistoryFile = "testdata/workflow_protocol_v16_summary.json"
+const historyClarificationText = "I need a detail before continuing."
+
 const historySummaryText = "# Goal\nRemember the task [message 1].\n# Decisions\nUse evidence.\n# Facts\nHistory is recorded.\n# Progress\nRead it.\n# Open questions\nNone.\n# Next\nFinish."
 
 func recordSummaryWorkflowHistory(t *testing.T, c client.Client) {
@@ -53,7 +59,7 @@ func recordSummaryWorkflowHistory(t *testing.T, c client.Client) {
 func registerSummaryHistoryAgent(t *testing.T, fx *featureRuntime) {
 	t.Helper()
 	require.NoError(t, fx.rt.RegisterModel("history", modelClientFunc(func(context.Context, *model.Request) (*model.Response, error) {
-		return &model.Response{Content: []model.Message{{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "measurement"}}}}, StopReason: "end_turn"}, nil
+		return &model.Response{Content: []model.Message{{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: historyClarificationText}}}}, StopReason: "end_turn"}, nil
 	})))
 	require.NoError(t, fx.rt.RegisterModel("summary", modelClientFunc(func(context.Context, *model.Request) (*model.Response, error) {
 		return &model.Response{Content: []model.Message{{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: historySummaryText}}}}, StopReason: "end_turn"}, nil
@@ -69,6 +75,9 @@ func (summaryHistoryPlanner) PlanStart(ctx context.Context, in *planner.PlanInpu
 	return &planner.PlanResult{Await: planner.NewAwait(planner.AwaitClarificationItem(&planner.AwaitClarification{ID: "summary-question", Question: "Ready?"}))}, nil
 }
 func (summaryHistoryPlanner) PlanResume(ctx context.Context, in *planner.PlanResumeInput) (*planner.PlanResult, error) {
+	if len(in.Messages) < 2 || messageText(in.Messages[len(in.Messages)-2]) != historyClarificationText+"Ready?" || messageText(in.Messages[len(in.Messages)-1]) != "yes" {
+		return nil, fmt.Errorf("clarification-only resume must retain model text, question and answer")
+	}
 	if err := measureHistoryRequest(ctx, in.Agent, in.Messages); err != nil {
 		return nil, err
 	}
@@ -77,14 +86,37 @@ func (summaryHistoryPlanner) PlanResume(ctx context.Context, in *planner.PlanRes
 
 func assertHistorySummary(t *testing.T, history *historypb.History) {
 	t.Helper()
-	summaries, adoptions, resumes := 0, 0, 0
+	summaries, adoptions, resumes, clarifications := 0, 0, 0, 0
+	var clarificationActivity int64
+	var merged runstore.Hash
+	expected, err := json.Marshal([]*model.Message{{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: historyClarificationText}, model.TextPart{Text: "Ready?"}}}}, json.Deterministic(true))
+	require.NoError(t, err)
+	expectedHash := runstore.Hash(fmt.Sprintf("sha256:%x", sha256.Sum256(expected)))
 	for _, event := range history.Events {
+		if completed := event.GetActivityTaskCompletedEventAttributes(); completed != nil && clarificationActivity != 0 && completed.ScheduledEventId == clarificationActivity {
+			var out api.RecordContentOutput
+			require.NoError(t, json.Unmarshal(completed.Result.Payloads[0].Data, &out))
+			require.Len(t, out.Entries, 1)
+			assert.Equal(t, index.Assistant, out.Entries[0].Kind)
+			merged = out.Entries[0].Hash
+			assert.Equal(t, expectedHash, merged, "recorded content must contain original text and question")
+		}
 		scheduled := event.GetActivityTaskScheduledEventAttributes()
 		if scheduled == nil {
 			continue
 		}
 		data := scheduled.Input.Payloads[0].Data
 		switch scheduled.ActivityType.Name {
+		case agentsruntime.RecordContentActivityName(coordinator.AgentID):
+			var in api.RecordContentInput
+			require.NoError(t, json.Unmarshal(data, &in))
+			if in.Clarification != nil {
+				assert.NotEmpty(t, in.Clarification.TranscriptRef)
+				assert.Equal(t, "Ready?", in.Clarification.Question)
+				assert.Zero(t, resumes)
+				clarifications++
+				clarificationActivity = event.EventId
+			}
 		case agentsruntime.SummarizeContextActivityName(coordinator.AgentID):
 			summaries++
 			var in api.SummarizeContextInput
@@ -114,6 +146,8 @@ func assertHistorySummary(t *testing.T, history *historypb.History) {
 			assert.Equal(t, 1, adoptions, "summary adopted before resume")
 		}
 	}
+	assert.Equal(t, 1, clarifications, "held transcript must enter the clarification recording")
+	assert.Equal(t, expectedHash, merged)
 	assert.Equal(t, 1, summaries)
 	assert.Equal(t, 1, adoptions)
 	assert.Equal(t, 1, resumes)

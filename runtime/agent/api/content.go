@@ -22,6 +22,8 @@ type RecordContentInput struct {
 	SeedMessages bool
 	// Typed validates a referenced answer without returning its content.
 	Typed *TypedContentValidation
+	// Clarification joins an await-only transcript and its question in one assistant turn.
+	Clarification *ClarificationContent
 	// Provided materializes external results without exposing signal content to workflows.
 	Provided *ProvidedContent
 	// FinalizeCalls canonicalizes and stores a fixed terminal plan before dispatch.
@@ -34,14 +36,22 @@ type TypedContentValidation struct {
 	PayloadRef runstore.Hash
 }
 
+// ClarificationContent preserves streamed text before an awaited question.
+type ClarificationContent struct {
+	TranscriptRef runstore.Hash
+	Question      string
+}
+
 // ProvidedContent carries only awaited call metadata and signal references.
 type ProvidedContent struct {
-	RunContext run.Context
-	AgentID    agent.Ident
-	Calls      []planner.ToolRequest
-	Results    []*ProvidedToolResult
-	First      index.MessageID
-	CallRefs   map[string]runstore.Hash
+	// TimestampMS is workflow time at consumption, stable across activity retries.
+	TimestampMS int64
+	RunContext  run.Context
+	AgentID     agent.Ident
+	Calls       []planner.ToolRequest
+	Results     []*ProvidedToolResult
+	First       index.MessageID
+	CallRefs    map[string]runstore.Hash
 }
 
 // RecordContentOutput is returned only after every input item has been stored.

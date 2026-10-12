@@ -82,7 +82,7 @@ func (r *Runtime) ExecuteWorkflow(wfCtx engine.WorkflowContext, input *RunInput)
 	if err != nil {
 		return nil, err
 	}
-	if err := setRootRunIDQuery(wfCtx, input.RootRunID); err != nil {
+	if err := setWorkflowQueries(wfCtx, input.RootRunID); err != nil {
 		return nil, err
 	}
 	runCtx = workflowRunContext(input)
@@ -176,7 +176,7 @@ func applyWorkflowCaps(caps policy.CapsState, input *RunInput) policy.CapsState 
 	return caps
 }
 
-func setRootRunIDQuery(wfCtx engine.WorkflowContext, rootRunID string) error {
+func setWorkflowQueries(wfCtx engine.WorkflowContext, rootRunID string) error {
 	if err := setToolAwaitsQuery(wfCtx, nil); err != nil {
 		return err
 	}

@@ -795,6 +795,27 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   Reusing an ID for a new await is allowed. Preflight and workflow consumption
   accept answers for the current head and its calls. Unknown IDs still fail.
   RB8 preserves valid recorded workflow commands and needs no protocol change.
+  Query payloads count toward Temporal query-response limits; the head is not
+  paged or truncated. Keep its combined payload and metadata size within the
+  deployment limit. A query failure stops submission preflight.
+  Provided metadata crosses a JSON round trip on both engines: any-valued
+  structs/slices/numbers become JSON objects/arrays/float64. Use strings for
+  exact large identifiers; declared result codecs still own result-body types.
+  The query/signal TOCTOU window can admit two concurrent submissions and writes.
+  Serialize submissions and use distinct await IDs when stale answers could
+  otherwise match a later await's reused ID and call identities.
+  Unanswered awaited calls have no trajectory tool step until consumption records
+  the tool-use/result pair; await and scheduled-tool hooks expose pending work.
+  Missing stored call refs fail before prompts. Clarification-only turns preserve
+  their streamed transcript with the question in one assistant turn; confirmed
+  tool pauses publish and await their
+  clarification before the single planner resume.
+  Provided-result materializer errors are root non-retryable tool_result_contract
+  failures with their original cause. Execution materializer errors stay plain
+  wrapped errors and follow the execution retry policy.
+  Provided-result RecordContent retries use workflow time
+  and transcript-position event identities, with canonical JSON hook payloads.
+  Canonical storage deduplicates; hook/stream delivery remains at least once.
 - Generated validation errors use fixed framework text. Do not preserve raw Goa
   validation messages because they can contain submitted values. Bound generated
   retry hints after all field-contract enrichment and before durable storage.
@@ -1375,12 +1396,12 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   checkpoint budget shortfall. Find includes retained-tail results under
   PreviewThrough and ForceClearThrough as well as ClearedThrough.
 - Protocol 15 records per-run overrides, settings fingerprints and pinned prompts;
-  drain v14 runs before upgrading. Preserve source-first overflow classification
+  FR1 advances the workflow to protocol 16; drain v15 runs before upgrading. Preserve source-first overflow classification
   and retry sizing, including newly advertised recall definitions. It records overflow recovery, a confirmation-gated tool turn with
   a clarification question/answer pair, one resume, lookup and finalization in
-  workflow_protocol_v15.json. The separate workflow_protocol_v15_budget.json
+  workflow_protocol_v16.json. The separate workflow_protocol_v16_budget.json
   records terminal adoption across the active budget without a finalizer call;
-  v5-v14 fixtures reject before effects. Structural templates stay version 5.
+  v5-v15 fixtures reject before effects. Structural templates stay version 5.
   Anthropic/Bedrock Claude recognize older input-length/max_tokens overflow text;
   OpenAI recognizes nested response.failed/error.code mid-stream and Anthropic
   handles status-200 SSE error events. Tests cite documented recorded-body shapes.
@@ -1436,9 +1457,9 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   Summary.Prompt replacement. Pin scoped overrides at run start; render the stored template for
   Previous/Evicted (quoted), Instructions and integer Budget per fold. Preserve
   PromptRef on every call and checkpoint. Legacy Compress stays unrecorded.
-- Three real v15 fixtures cover recovery/confirmation/clarification/lookup,
+- Three real v16 fixtures cover recovery/confirmation/clarification/lookup,
   terminal adoption across the budget, and summary adoption before resume.
-  v14 and older histories reject before effects. Structural templates stay at 5.
+  v15 and older histories reject before effects. Structural templates stay at 5.
 
 ## K17 per-run context settings (protocol 15)
 
@@ -1468,8 +1489,8 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   earlier (zero otherwise). Attributes include reason, tier, outcome, kind,
   counts, sizes, checkpoint, fingerprint, step, model, usage, chunks, effective
   window, pretend and agent/run/session/turn IDs.
-- Main and summary protocol-15 recordings activate per-run overrides; all three
-  histories carry pinned settings. Protocol 14 rejects before workflow effects.
+- Main and summary protocol-16 recordings activate per-run overrides; all three
+  histories carry pinned settings. Protocol 15 rejects before workflow effects.
   Structural templates remain version 5.
 - Parent and child recordings cover context_start completion before the child
   command and child execution with independent settings. RunRecord applies
@@ -1479,3 +1500,14 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - Trajectory AgentID and SessionID come from the first canonical record event,
   including an empty session. Observer identity is a fallback only when the run
   has no record events.
+
+## FR1 await follow-ups (protocol 16)
+
+- Preserve held model text with the clarification question in the existing
+  RecordContent activity. Publish and consume pauses returned by confirmed tools
+  before the single post-await resume. Provided-result retries retain stable
+  publication identities and workflow timestamps.
+- Record genuine v16 main, budget, summary and parent/child histories. The summary
+  recording validates retained clarification-only text; the confirmed-pause
+  recording proves approval, prompt, answer, content recording and one resume.
+  Keep v15 fixtures and reject protocol 15 before effects.

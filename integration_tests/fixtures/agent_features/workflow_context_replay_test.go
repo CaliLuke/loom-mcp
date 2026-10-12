@@ -30,7 +30,7 @@ func TestGeneratedFeatureContextOverrideHistory(t *testing.T) {
 			require.NoError(t, err)
 			var start api.RunInput
 			require.NoError(t, json.Unmarshal(history.Events[0].GetWorkflowExecutionStartedEventAttributes().Input.Payloads[0].Data, &start, jsonopts.FormatDurationAsNano(true)))
-			assert.Equal(t, 15, start.WorkflowProtocolVersion)
+			assert.Equal(t, api.WorkflowProtocolVersion, start.WorkflowProtocolVersion)
 			assert.Equal(t, fmt.Sprintf("sha256:%x", sha256.Sum256(compaction.Canonical(start.ContextSettings))), start.ContextFingerprint)
 			assert.NotEmpty(t, start.ContextSettings.Prompt.Template)
 			assert.NotEmpty(t, start.ContextSettings.Prompt.Ref.ID)

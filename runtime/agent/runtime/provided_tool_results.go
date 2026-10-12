@@ -63,7 +63,7 @@ func (r *Runtime) validateProvidedToolResults(ctx context.Context, rs *api.ToolR
 			if err != nil {
 				return err
 			}
-			if err := r.prepareToolResult(ctx, spec, call, result); err != nil {
+			if err := r.prepareProvidedToolResult(ctx, spec, call, result); err != nil {
 				return err
 			}
 		}

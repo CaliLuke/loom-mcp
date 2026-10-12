@@ -1771,13 +1771,18 @@ Operators drain running workflows before upgrading.
 
 K17 adds Policy.Context, canonical stamped settings and fingerprint, pinned
 SummaryPrompt, child-start context resolution activities, effective-budget
-validation and context telemetry fields. Workflow protocol is 15; template
-version stays 5. The real `workflow_protocol_v15.json`,
-`workflow_protocol_v15_budget.json` and `workflow_protocol_v15_summary.json`
+validation and context telemetry fields in protocol 15. FR1 advances the workflow
+protocol to 16: clarification-only text enters the question content activity,
+confirmed-tool pauses are published and answered before resume, and provided-result
+publication identities remain stable across retries. The template
+version stays 5. The real `workflow_protocol_v16.json`,
+`workflow_protocol_v16_budget.json` and `workflow_protocol_v16_summary.json`
 fixtures cover overrides, recovery and summary/budget adoption.
-`workflow_protocol_v15_child.json` and `workflow_protocol_v15_child_run.json`
+`workflow_protocol_v16_child.json` and `workflow_protocol_v16_child_run.json`
 record and replay child context preparation followed by the child start and run.
-Protocol 14 is rejected before workflow effects; drain older runs before deployment.
+`workflow_protocol_v16_confirmed_pause.json` proves approval, tool-returned
+clarification, answer, recording and one resume; the summary fixture also proves
+clarification-only text retention. Protocol 15 is rejected before workflow effects; drain older runs before deployment.
 
 K12 uses protocol 7, including entry-size metadata, `PlanActivityOutput.View`
 and `Facts`, sorted `PlanActivityInput.Models`, and run settings. K12 applies

@@ -92,6 +92,9 @@ func (r *Runtime) handleAwaitQueue(
 	if err := validateAwaitQueueInputs(ctrl, deadlines, confirmations, items); err != nil {
 		return nil, err
 	}
+	if err := validateAwaitCallRefs(base, confirmations, items); err != nil {
+		return nil, err
+	}
 	if err := setToolAwaitsQuery(wfCtx, items); err != nil {
 		return nil, err
 	}
@@ -115,6 +118,20 @@ func (r *Runtime) handleAwaitQueue(
 		return out, nil
 	}
 	return nil, nil
+}
+
+// validateAwaitCallRefs rejects missing durable calls before prompts or waits.
+func validateAwaitCallRefs(base *workflowPlanInput, confirmations []confirmationAwait, items []planner.AwaitItem) error {
+	calls := canonicalAwaitCalls(&planner.PlanResult{Await: planner.NewAwait(items...)})
+	for _, confirmation := range confirmations {
+		calls = append(calls, confirmation.call)
+	}
+	for _, call := range calls {
+		if base.CallRefs[call.ToolCallID] == "" {
+			return fmt.Errorf("missing stored call %s", call.ToolCallID)
+		}
+	}
+	return nil
 }
 
 func validateAwaitQueueInputs(ctrl *interrupt.Controller, deadlines *runDeadlines, confirmations []confirmationAwait, items []planner.AwaitItem) error {
@@ -190,14 +207,13 @@ func (r *Runtime) collectAwaitResults(ctx context.Context, wfCtx engine.Workflow
 			return nil, nil, out, nil
 		}
 		allToolResults = appendAwaitToolResults(allToolResults, res)
-		if len(pauses) > 0 {
-			pauseItems, err := toolPauseAwaitItems(pauses)
-			if err != nil {
-				return nil, nil, nil, err
-			}
-			extraItems = append(extraItems, pauseItems...)
+		pauseItems, err := r.publishConfirmedToolPauses(ctx, input, base, turnID, pauses)
+		if err != nil {
+			return nil, nil, nil, err
 		}
+		extraItems = append(extraItems, pauseItems...)
 	}
+	items = append(items, extraItems...)
 	for i, it := range items {
 		res, err := r.waitForAwaitItem(ctx, wfCtx, ctrl, input, base, st, waitTimeout, deadlines, it)
 		if err != nil {
@@ -216,6 +232,18 @@ func (r *Runtime) collectAwaitResults(ctx context.Context, wfCtx engine.Workflow
 		allToolResults = appendAwaitToolResults(allToolResults, res)
 	}
 	return allToolResults, extraItems, nil, nil
+}
+
+// publishConfirmedToolPauses exposes new clarification prompts before waiting.
+func (r *Runtime) publishConfirmedToolPauses(ctx context.Context, input *RunInput, base *workflowPlanInput, turnID string, pauses []*ToolPause) ([]planner.AwaitItem, error) {
+	items, err := toolPauseAwaitItems(pauses)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.publishAwaitPrompts(ctx, input, base, turnID, nil, items); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 func (r *Runtime) waitForAwaitItem(ctx context.Context, wfCtx engine.WorkflowContext, ctrl *interrupt.Controller, input *RunInput, base *workflowPlanInput, st *runLoopState, timeout time.Duration, deadlines *runDeadlines, it planner.AwaitItem) ([]*planner.ToolResult, error) {

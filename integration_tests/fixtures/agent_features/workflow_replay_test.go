@@ -42,7 +42,7 @@ import (
 type historyReplayPlanner struct{}
 
 const (
-	workflowHistoryFile        = "testdata/workflow_protocol_v15.json"
+	workflowHistoryFile        = "testdata/workflow_protocol_v16.json"
 	workflowHistoryIdentity    = "loom-mcp-history-recorder"
 	workflowHistoryStickyQueue = "loom-mcp-history-recorder-sticky"
 	workflowHistoryQuestion    = "Which topic should the draft use?"
@@ -57,10 +57,12 @@ func TestGeneratedFeatureWorkflowReplay(t *testing.T) {
 		previous int
 		budget   bool
 		summary  bool
+		pause    bool
 	}{
 		{name: "current"},
 		{name: "summary adoption", summary: true},
 		{name: "terminal adoption crosses budget", budget: true},
+		{name: "confirmed tool pause", pause: true},
 		{name: "protocol 5 rejected before effects", previous: 5},
 		{name: "protocol 6 rejected before effects", previous: 6},
 		{name: "protocol 7 rejected before effects", previous: 7},
@@ -71,11 +73,15 @@ func TestGeneratedFeatureWorkflowReplay(t *testing.T) {
 		{name: "protocol 12 rejected before effects", previous: 12},
 		{name: "protocol 13 rejected before effects", previous: 13},
 		{name: "protocol 14 rejected before effects", previous: 14},
+		{name: "protocol 15 rejected before effects", previous: 15},
 		{name: "future", rewrite: true},
 		{name: "missing", rewrite: true, missing: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			historyFile := workflowHistoryFile
+			if test.pause {
+				historyFile = workflowPauseHistoryFile
+			}
 			if test.summary {
 				historyFile = workflowSummaryHistoryFile
 			}
@@ -99,6 +105,8 @@ func TestGeneratedFeatureWorkflowReplay(t *testing.T) {
 			var recordedVersion int
 			require.NoError(t, json.Unmarshal(input["WorkflowProtocolVersion"], &recordedVersion))
 			switch {
+			case test.pause:
+				assertHistoryConfirmedPause(t, history)
 			case test.summary:
 				assertHistorySummary(t, history)
 			case test.budget:
@@ -134,9 +142,12 @@ func TestGeneratedFeatureWorkflowReplay(t *testing.T) {
 				require.NoError(t, eng.Close())
 			})
 			fx := newFeatureRuntime(t, agentsruntime.WithEngine(eng), historyConfirmation())
-			if test.summary {
+			switch {
+			case test.pause:
+				registerPauseHistoryAgent(t, fx)
+			case test.summary:
 				registerSummaryHistoryAgent(t, fx)
-			} else {
+			default:
 				registerHistoryReplayAgent(t, fx)
 			}
 			err = eng.ReplayWorkflowHistory(silentTemporalLogger{}, history)

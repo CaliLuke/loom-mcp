@@ -96,7 +96,7 @@ func TestResumeClarificationAndTypedEntrySizes(t *testing.T) {
 	wf := &testWorkflowContext{ctx: t.Context(), finishRuntime: rt}
 	wf.ensureSignals()
 	wf.clarifyCh <- &api.ClarificationAnswer{ID: "question", AnswerRef: "other", AnswerBytes: new(5)}
-	_, err := waitAwaitClarification(wf.Context(), interrupt.NewController(wf), base, 0, &planner.AwaitClarification{ID: "question", Question: "which?"})
+	_, err := waitAwaitClarification(wf.Context(), interrupt.NewController(wf), base, 0, &planner.AwaitClarification{ID: "question", Question: "which?"}, "")
 	require.NoError(t, err)
 	assert.Equal(t, 6, base.Entries[2].Bytes)
 	assert.Equal(t, model.ConversationRoleAssistant, base.Entries[2].Role)

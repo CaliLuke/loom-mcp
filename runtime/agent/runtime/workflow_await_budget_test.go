@@ -91,6 +91,7 @@ func TestPlanActivityExpiredDeadlineDoesNotSchedule(t *testing.T) {
 			rt := New()
 			base, planInput, input := terminalPolicyRunInputs(t, rt)
 			base.plannerOutputs = []*api.PlanActivityOutput{{Result: oracleFinal()}}
+			planInput.step = 7
 			wf := &seedBudgetWorkflowContext{testWorkflowContext: base, now: time.Unix(0, 0)}
 			out, err := rt.runPlanActivity(wf, planInput, "resume", engine.ActivityOptions{}, PlanActivityInput{
 				AgentID: input.AgentID, RunID: input.RunID, RunContext: planInput.RunContext,
@@ -98,6 +99,7 @@ func TestPlanActivityExpiredDeadlineDoesNotSchedule(t *testing.T) {
 			require.ErrorIs(t, err, context.DeadlineExceeded)
 			assert.Nil(t, out)
 			assert.Empty(t, base.plannerCalls)
+			assert.Equal(t, 7, planInput.step, "expired schedules must not reserve a step")
 		})
 	}
 }

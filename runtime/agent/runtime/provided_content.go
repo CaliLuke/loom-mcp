@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"encoding/json/jsontext"
 	"time"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
@@ -24,10 +25,8 @@ func (r *Runtime) recordProvidedContent(ctx context.Context, input *api.RecordCo
 		batch.seen[item.Refs.Result] = true
 	}
 	batchCtx := context.WithValue(ctx, workflowContentKey{}, batch)
-	for i, result := range results {
-		if err := r.recordWorkflowToolResult(batchCtx, result, data[i]); err != nil {
-			return nil, err
-		}
+	if err := r.recordProvidedResults(batchCtx, results, data); err != nil {
+		return nil, err
 	}
 	base := &workflowPlanInput{AgentID: p.AgentID, RunContext: p.RunContext, CallRefs: p.CallRefs}
 	entries, err := r.buildIndexResultEntries(batchCtx, base, p.Calls, results, false, p.First)
@@ -41,7 +40,7 @@ func (r *Runtime) recordProvidedContent(ctx context.Context, input *api.RecordCo
 	if err := batch.verify(stored); err != nil {
 		return nil, err
 	}
-	if err := r.publishProvidedToolResults(ctx, &RunInput{AgentID: p.AgentID}, base, p.RunContext.TurnID, results, data); err != nil {
+	if err := r.publishProvidedToolResults(ctx, p, results, data); err != nil {
 		return nil, err
 	}
 	events, err := r.encodeToolEvents(ctx, results)
@@ -104,4 +103,23 @@ func (r *Runtime) loadProvidedContent(ctx context.Context, root string, p *api.P
 		provided[item.ToolCallID] = &copy
 	}
 	return r.decodeProvidedToolResults(ctx, p.Calls, provided)
+}
+
+// recordProvidedResults sorts object keys before assigning retry-stable content refs.
+func (r *Runtime) recordProvidedResults(batchCtx context.Context, results []*planner.ToolResult, data []rawjson.Message) error {
+	for i, result := range results {
+		// Materialized JSON can contain maps. Stable bytes keep content refs and
+		// retry publication bodies identical without rounding JSON numbers.
+		if len(data[i]) > 0 {
+			value := jsontext.Value(data[i])
+			if err := value.Format(jsontext.ReorderRawObjects(true)); err != nil {
+				return err
+			}
+			data[i] = rawjson.Message(value)
+		}
+		if err := r.recordWorkflowToolResult(batchCtx, result, data[i]); err != nil {
+			return err
+		}
+	}
+	return nil
 }

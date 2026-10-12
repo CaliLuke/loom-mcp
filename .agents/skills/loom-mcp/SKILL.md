@@ -70,11 +70,11 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   new version; mismatched and unstamped inputs fail before workflow effects.
 
 - Protocol 15 records per-run context overrides, settings fingerprints and pinned
-  summary prompts, and validates effective budgets from recorded facts. Drain v14
+  summary prompts, and validates effective budgets from recorded facts. FR1 advances the workflow to protocol 16; drain v15
   runs before deployment. Preserve protocol 14 overflow source classification,
   retry definition accounting and the fixed-rate progress check.
 
-- Current workflow protocol is 15. Every agent observes adopted call facts,
+- Current workflow protocol is 16. Every agent observes adopted call facts,
   sends sorted Models and runs the advisory guard, bounded overflow recovery and
   recall advertising. Threshold compaction stays opt-in. The existing
   run.ContextRecovery adds GuardMargin (zero=10%) beside DisableRecall; RunInput
@@ -95,10 +95,13 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   Agents without threshold compaction gain recall_context after the first
   shortened recovery view unless recall/tools are disabled; finalization omits it.
   Unrelated requests fail not_view_bearing; Compress alone does not imply failure.
-  The real v15 history covers recovery, a confirmation-gated
+  The real v16 history covers recovery, a confirmation-gated
   tool turn with a recorded clarification question/answer pair, one resume, lookup
-  and finalization. A second v15 budget history covers terminal adoption across
-  the active budget without a finalizer call; v5-v14 reject before effects. A third v15 history records summary adoption before a single post-await resume.
+  and finalization. A second v16 budget history covers terminal adoption across
+  the active budget without a finalizer call; v5-v15 reject before effects. A third v16 history records summary adoption before a single post-await resume
+  and proves clarification-only text retention. The v16 confirmed-pause history
+  proves tool approval, AwaitClarification, ProvideClarification, recording and
+  one resume in order. Keep the v15 histories for rejection coverage.
   K15 adds explicit ContextModel configuration and synchronous summary folding at
   threshold eviction. Stale outputs adopt keys without changing the view; three
   non-stale rejections disable summaries. Summary adoption is a canonical record
@@ -117,7 +120,7 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   recovery cannot widen the current effective ceilings. Summary prompts are pinned
   before start. Canonical compaction events emit deduplicated `context.compact`
   internal spans with recorded timestamps, latency and settings identity.
-  Real parent/child protocol-15 histories prove context_start completes before
+  Real parent/child protocol-16 histories prove context_start completes before
   the child workflow command and that child settings remain independent.
 
 - Workflow protocol 6 uses immutable `runtime/agent/transcript/index` entries
@@ -266,6 +269,27 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   Reusing an ID for a new await is allowed. Preflight and workflow consumption
   accept answers for the current head and its calls. Unknown IDs still fail.
   RB8 preserves valid recorded workflow commands and needs no protocol change.
+  Query payloads count toward Temporal query-response limits; the head is not
+  paged or truncated. Keep its combined payload and metadata size within the
+  deployment limit. A query failure stops submission preflight.
+  Provided metadata crosses a JSON round trip on both engines: any-valued
+  structs/slices/numbers become JSON objects/arrays/float64. Use strings for
+  exact large identifiers; declared result codecs still own result-body types.
+  The query/signal TOCTOU window can admit two concurrent submissions and writes.
+  Serialize submissions and use distinct await IDs when stale answers could
+  otherwise match a later await's reused ID and call identities.
+  Unanswered awaited calls have no trajectory tool step until consumption records
+  the tool-use/result pair; await and scheduled-tool hooks expose pending work.
+  Missing stored call refs fail before prompts. Clarification-only turns preserve
+  their streamed transcript with the question in one assistant turn; confirmed
+  tool pauses publish and await their
+  clarification before the single planner resume.
+  Provided-result materializer errors are root non-retryable tool_result_contract
+  failures with their original cause. Execution materializer errors stay plain
+  wrapped errors and follow the execution retry policy.
+  Provided-result RecordContent retries use workflow time
+  and transcript-position event identities, with canonical JSON hook payloads.
+  Canonical storage deduplicates; hook/stream delivery remains at least once.
 - Planner turns are workflow activities, not exactly-once method calls. Generated
   registrations retry failed plan/resume activities up to three attempts by
   default, so model calls and direct side effects can repeat after a late attempt

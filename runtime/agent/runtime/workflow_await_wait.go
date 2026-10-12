@@ -15,6 +15,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
 )
@@ -22,7 +23,11 @@ import (
 func (r *Runtime) waitAwaitQueueItem(ctx context.Context, ctrl *interrupt.Controller, input *RunInput, base *workflowPlanInput, st *runLoopState, timeout time.Duration, it planner.AwaitItem) ([]*planner.ToolResult, error) {
 	switch it.Kind {
 	case planner.AwaitItemKindClarification:
-		return waitAwaitClarification(ctx, ctrl, base, timeout, it.Clarification)
+		var transcript runstore.Hash
+		if len(canonicalAwaitCalls(st.Result)) == 0 {
+			transcript = st.takeTurnTranscript()
+		}
+		return waitAwaitClarification(ctx, ctrl, base, timeout, it.Clarification, transcript)
 	case planner.AwaitItemKindQuestions:
 		return r.waitAwaitQuestions(ctx, ctrl, input, base, st, timeout, it.Questions)
 	case planner.AwaitItemKindExternalTools:
@@ -51,7 +56,7 @@ func (r *Runtime) consumeProvidedToolResults(ctx context.Context, input *RunInpu
 	}
 	out, err := wf.ExecuteRecordContentActivity(ctx, engine.RecordContentActivityCall{
 		Name:  RecordContentActivityName(input.AgentID),
-		Input: &api.RecordContentInput{RootRunID: base.RunContext.RootRunID, Provided: &api.ProvidedContent{Calls: allowed, Results: rs.Results, RunContext: base.RunContext, AgentID: input.AgentID, First: index.MessageID(len(base.Entries) + 1), CallRefs: base.CallRefs}},
+		Input: &api.RecordContentInput{RootRunID: base.RunContext.RootRunID, Provided: &api.ProvidedContent{TimestampMS: wf.Now().UnixMilli(), Calls: allowed, Results: rs.Results, RunContext: base.RunContext, AgentID: input.AgentID, First: index.MessageID(len(base.Entries) + 1), CallRefs: base.CallRefs}},
 	})
 	if err != nil {
 		return nil, err
@@ -67,7 +72,7 @@ func (r *Runtime) consumeProvidedToolResults(ctx context.Context, input *RunInpu
 	return decoded, nil
 }
 
-func waitAwaitClarification(ctx context.Context, ctrl *interrupt.Controller, base *workflowPlanInput, timeout time.Duration, clarification *planner.AwaitClarification) ([]*planner.ToolResult, error) {
+func waitAwaitClarification(ctx context.Context, ctrl *interrupt.Controller, base *workflowPlanInput, timeout time.Duration, clarification *planner.AwaitClarification, transcript runstore.Hash) ([]*planner.ToolResult, error) {
 	if clarification == nil {
 		return nil, errors.New("await clarification missing payload")
 	}
@@ -80,6 +85,9 @@ func waitAwaitClarification(ctx context.Context, ctrl *interrupt.Controller, bas
 	}
 	if clarification.ID != "" && ans.ID != "" && ans.ID != clarification.ID {
 		return nil, errors.New("unexpected await ID for clarification")
+	}
+	if transcript != "" {
+		return nil, appendClarificationTranscript(ctx, base, clarification.Question, ans.AnswerRef, ans.AnswerBytes, transcript)
 	}
 	return nil, appendClarificationExchange(ctx, base, clarification.Question, ans.AnswerRef, ans.AnswerBytes)
 }
@@ -105,6 +113,9 @@ func waitAwaitTypedInput(ctx context.Context, ctrl *interrupt.Controller, input 
 		return nil, errors.New("unexpected await ID for typed_input")
 	}
 	wf := engine.WorkflowContextFromContext(ctx)
+	if wf == nil {
+		return nil, errors.New("typed input requires workflow context")
+	}
 	_, err = wf.ExecuteRecordContentActivity(ctx, engine.RecordContentActivityCall{
 		Name:  RecordContentActivityName(input.AgentID),
 		Input: &api.RecordContentInput{RootRunID: base.RunContext.RootRunID, Typed: &api.TypedContentValidation{Schema: typedInput.Schema, PayloadRef: ans.PayloadRef}},
@@ -256,27 +267,27 @@ func indexProvidedToolResults(rs *api.ToolResultsSet, expected map[string]struct
 	return providedByID, nil
 }
 
-func (r *Runtime) publishProvidedToolResults(ctx context.Context, input *RunInput, base *workflowPlanInput, turnID string, decoded []*planner.ToolResult, resultJSONs []rawjson.Message) error {
+func (r *Runtime) publishProvidedToolResults(ctx context.Context, provided *api.ProvidedContent, decoded []*planner.ToolResult, resultJSONs []rawjson.Message) error {
 	for i, tr := range decoded {
 		if tr == nil {
 			continue
 		}
-		if err := r.publishProvidedToolResult(ctx, input, base, turnID, tr, resultJSONs, i); err != nil {
+		if err := r.publishProvidedToolResult(ctx, provided, tr, resultJSONs, i); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (r *Runtime) publishProvidedToolResult(ctx context.Context, input *RunInput, base *workflowPlanInput, turnID string, tr *planner.ToolResult, resultJSONs []rawjson.Message, idx int) error {
+func (r *Runtime) publishProvidedToolResult(ctx context.Context, provided *api.ProvidedContent, tr *planner.ToolResult, resultJSONs []rawjson.Message, idx int) error {
 	var resultJSON rawjson.Message
 	if idx < len(resultJSONs) {
 		resultJSON = resultJSONs[idx]
 	}
 	ev := hooks.NewToolResultReceivedEvent(
-		base.RunContext.RunID,
-		input.AgentID,
-		base.RunContext.SessionID,
+		provided.RunContext.RunID,
+		provided.AgentID,
+		provided.RunContext.SessionID,
 		tr.Name,
 		tr.ToolCallID,
 		"",
@@ -292,5 +303,26 @@ func (r *Runtime) publishProvidedToolResult(ctx context.Context, input *RunInput
 	)
 	ev.Artifacts = artifactRefsFromContents(tr.Artifacts)
 	ev.Refs = tr.Refs
-	return r.publishHook(ctx, ev, turnID)
+	// The batch's first transcript position distinguishes later awaits even when
+	// they reuse a call ID. Activity retries reuse the same identity and time.
+	ev.SetEventKey(fmt.Sprintf("provided_tool_result:%d:%d", provided.First, idx))
+	ev.SetTimestampMS(provided.TimestampMS)
+	in, err := hooks.EncodeToHookInput(ev, provided.RunContext.TurnID)
+	if err != nil {
+		return err
+	}
+	if len(in.Payload) > maxHookPayloadBytes {
+		in, err = compactOversizedHookInput(ev, provided.RunContext.TurnID)
+		if err != nil {
+			return err
+		}
+	}
+	// Runlog compares immutable bytes. JSON map iteration must not make a
+	// deterministic materializer's retry conflict with its first publication.
+	payload := jsontext.Value(in.Payload)
+	if err := payload.Format(jsontext.ReorderRawObjects(true)); err != nil {
+		return err
+	}
+	in.Payload = rawjson.Message(payload)
+	return r.hookActivity(ctx, in)
 }

@@ -19,8 +19,8 @@ import (
 )
 
 const (
-	workflowChildHistoryFile    = "testdata/workflow_protocol_v15_child.json"
-	workflowChildRunHistoryFile = "testdata/workflow_protocol_v15_child_run.json"
+	workflowChildHistoryFile    = "testdata/workflow_protocol_v16_child.json"
+	workflowChildRunHistoryFile = "testdata/workflow_protocol_v16_child_run.json"
 )
 
 func TestGeneratedFeatureChildWorkflowReplay(t *testing.T) {
@@ -36,7 +36,7 @@ func TestGeneratedFeatureChildWorkflowReplay(t *testing.T) {
 			assertWorkflowHistoryAnonymized(t, history)
 			var input api.RunInput
 			require.NoError(t, json.Unmarshal(history.Events[0].GetWorkflowExecutionStartedEventAttributes().Input.Payloads[0].Data, &input, jsonopts.FormatDurationAsNano(true)))
-			assert.Equal(t, 15, input.WorkflowProtocolVersion)
+			assert.Equal(t, api.WorkflowProtocolVersion, input.WorkflowProtocolVersion)
 			require.NotEmpty(t, input.ContextFingerprint)
 			if filename == workflowChildHistoryFile {
 				assertHistoryChildStart(t, history, input)

@@ -228,9 +228,6 @@ func (l *workflowLoop) finalizeIfPastBudget() (*RunOutput, error) {
 	if l.deadlines.shouldFinalize(now) {
 		return l.finalizeForTimeBudget()
 	}
-	if !l.deadlines.Hard.IsZero() && now.After(l.deadlines.Hard) {
-		return l.finalizeForTimeBudget()
-	}
 	return nil, nil
 }
 

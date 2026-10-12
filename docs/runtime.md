@@ -183,7 +183,7 @@ Typed consumers can call
 eligible bytes and decode them with the generated result codec. Empty or missing
 hashes fail. Tool activities return references; terminal completion decoding runs in the finish activity.
 
-### Transcript index and planner views (protocol 15)
+### Transcript index and planner views (protocol 16)
 
 The workflow keeps immutable `index.MessageEntry` values and a committed
 `IndexHead`, rather than accumulated messages, tool outputs, typed answers, or a
@@ -234,11 +234,14 @@ Anthropic and Bedrock view grammars; views without checkpoints retain the existi
 resume-time Bedrock validation. Successful activity outputs may return `ViewUpdate`;
 output-validation recovery outputs never adopt it. Protocol 7 introduced these view updates, recorded
 request facts and model rates, entry size metadata and stamped run settings.
-The current protocol is 15. Per-run context overrides, pinned summary prompts,
+The current protocol is 16. FR1 preserves clarification-only model text in the
+question content activity and consumes pauses returned by confirmed tools before
+resuming. Provided-result content retries keep stable publication identities.
+Per-run context overrides, pinned summary prompts,
 settings fingerprints and effective-window validation change workflow inputs and
 deterministic decisions. Recovery retains source-first classification and retry
 sizing that includes newly advertised recall tools. Drain older workflows before
-upgrading; v5–v14 fixtures retain mismatch rejection before effects. Structural templates remain version 5.
+upgrading; v5–v15 fixtures retain mismatch rejection before effects. Structural templates remain version 5.
 
 ### Per-run context overrides
 
@@ -3129,11 +3132,21 @@ this cause with `errors.As`. The run stays paused without content writes or sign
 from the rejected submission. An ID that the query does not advertise returns the same error.
 Retry only after the query advertises the requested ID. Tool uses and results
 remain recorded together in queue order, followed by one logical planner resume.
+Unanswered awaited tool calls have no canonical tool-use/result pair yet and do
+not appear as trajectory tool steps. Await and scheduled-tool hook events still
+show the pending requests. Missing stored call references fail before prompts are
+published. Clarification-only turns retain the model's streamed text and the
+question in one assistant turn before the recorded answer. A confirmed tool's pause publishes a clarification
+prompt and consumes its answer before the queue resumes planning.
 
 The query hides the head while an answer waits in the signal channel. The workflow
 also clears the head as soon as it takes the answer, before it records results.
 The query and signal are separate operations, so racing submissions can both pass
-preflight.
+preflight. This is a time-of-check/time-of-use window, not an atomic admission
+reservation: both callers may write content and signal. Serialize submissions for
+a given await. If a new await reuses the same ID and call identities, a delayed
+old answer cannot be distinguished from an answer to the new await; use distinct
+IDs when stale concurrent submissions are possible.
 
 The workflow ignores a duplicate of an already consumed await ID only if it differs
 from the current await ID. It records no events, transcript entries, or result
@@ -3147,17 +3160,36 @@ must register the same tool specs, result codecs, and materializers as the worke
 For provided results, materializers must be deterministic and free of I/O and side
 effects. Preflight discards enrichment. The activity repeats materialization from
 the original submission and owns artifact writes. A materializer can add required
-Bounds before validation. Invalid result contracts return a non-retryable
-`tool_result_contract` error before content writes or signals.
+Bounds before validation. For provided results, materializer failures and invalid
+result contracts return a non-retryable `tool_result_contract` error before content
+writes or signals. On normal tool execution, materializer failures remain plain
+wrapped errors and follow the execution retry policy.
 
 Custom engines must implement `engine.ToolAwaitQuerier` for this API. The
 `tool_awaits` query returns the head await ID, call identities, and call payloads
-from workflow state. Both built-in engines support this query. Workflow-side
+from workflow state. The serialized payloads count toward the deployment's
+Temporal query-response size limit; this query does not page or truncate them.
+Keep the entire head await (all its call payloads and metadata) within that limit,
+using application-owned references for large inputs. A query failure prevents
+preflight from submitting results. Both built-in engines support this query. Workflow-side
 validation remains active for direct signals. Direct signal callers must preserve
 queue order themselves.
 
-These preflight and query changes add no workflow commands. Workflow protocol
-remains 13, with no new replay fixture required.
+Provided result metadata crosses a JSON round trip on both engines, including
+in-memory preflight. Values in `any` fields (for example retry-hint metadata) use
+JSON types: structs become objects, slices become arrays, and numbers become
+`float64`. Go concrete types and integers outside exact floating-point precision
+are not preserved in those metadata fields. The declared result codec still owns
+the typed result body. Use strings for exact large identifiers in metadata.
+
+`RecordContent` retries retain the provided-result event key and the workflow
+consumption timestamp. The canonical event log deduplicates the publication;
+hook and stream observers can receive it again and must deduplicate by `EventKey`.
+A later await that reuses a tool-call ID has a distinct transcript position and
+event identity.
+
+Preflight and query validation add no workflow commands. Protocol assignment and
+recorded-history validation remain required for changes to await workflow behavior.
 
 Provided tool results are strict boundary inputs:
 
@@ -3752,7 +3784,7 @@ can wait without that policy flag. Deterministic active-work deadlines remain
 the time-budget authority and move forward by each measured wait duration.
 
 `FinalizerGrace` and `WithRunFinalizerGrace` reserve time after the active
-budget ends. The finalizer can return a response or execute an advertised
+budget ends. The planner finalizer can return a response or execute an advertised
 terminal bookkeeping tool.
 
 The grace period does not permit normal planning or domain tool execution.
@@ -4806,22 +4838,25 @@ external `Client`, also supply `ClientOptions` with that client's converter
 external client whose converter configuration was not supplied.
 
 The generated fixture keeps a completed history under
-`integration_tests/fixtures/agent_features/testdata/workflow_protocol_v15.json`.
+`integration_tests/fixtures/agent_features/testdata/workflow_protocol_v16.json`.
 The main and summary recordings use per-run pretend windows and record pinned
 settings fingerprints. The scrubbed main recording includes overflow recovery, a
 confirmation-gated tool turn with clarification, its recorded assistant question and user answer, one resume
 that selects child validation and context lookup, seed/result/question content
 batches, planner-step commits and terminal finish activity. A second recording,
-`workflow_protocol_v15_budget.json`, exercises an external-await resume whose
+`workflow_protocol_v16_budget.json`, exercises an external-await resume whose
 terminal answer arrives within budget, but whose adoption crosses the budget.
-It completes without a finalizer call. `workflow_protocol_v15_summary.json` records
+It completes without a finalizer call. `workflow_protocol_v16_summary.json` records
 a validated summary and its canonical adoption before the single post-await resume.
-`workflow_protocol_v15_child.json` records child context preparation completing
-before `StartChildWorkflow`; `workflow_protocol_v15_child_run.json` records that
+Its clarification-only turn retains the original model text with the question.
+`workflow_protocol_v16_confirmed_pause.json` records tool approval, a tool-returned
+clarification prompt, its answer, content recording and one planner resume.
+`workflow_protocol_v16_child.json` records child context preparation completing
+before `StartChildWorkflow`; `workflow_protocol_v16_child_run.json` records that
 child execution. The child uses its own settings and fingerprint despite the
 parent's pretend-window override. Both histories have offline replay coverage.
-The unchanged protocol 5–14 fixtures verify rejection before workflow effects;
-protocol versions must match, so workers running protocol 15 cannot replay them
+The unchanged protocol 5–15 fixtures verify rejection before workflow effects;
+protocol versions must match, so workers running protocol 16 cannot replay them
 as successful runs. Run
 `go test -C integration_tests/fixtures/agent_features ./... -run '^TestGeneratedFeatureWorkflowReplay$'`
 for offline replay. To re-record it against the pinned Temporal development
@@ -5897,9 +5932,9 @@ Each invocation records one keyed context_recalled event with kind, outcome
 and step. Exhaustion emits recall_budget_exhausted once per allowance episode,
 reset by refill. RunRecord rebuilds and validates recorded charges and settings.
 Workflow protocol 9 adds overflow recovery to these lookup contracts. The recorded
-v15 fixture exercises bounded recovery, lookup and a single resume after
+v16 fixture exercises bounded recovery, lookup and a single resume after
 confirmation and clarification, including the recorded question/answer pair.
-The v15 budget fixture covers terminal adoption across the active budget without a finalizer call; v5–v14 fail
+The v16 budget fixture covers terminal adoption across the active budget without a finalizer call; v5–v15 fail
 before effects.
 Structural templates remain version 5.
 
