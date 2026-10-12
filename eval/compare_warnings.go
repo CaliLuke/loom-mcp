@@ -2,7 +2,7 @@ package eval
 
 import "fmt"
 
-func comparisonWarnings(base, cand Side, candidateAttempts []*StoredAttempt) ([]Warning, error) {
+func comparisonWarnings(base, cand Side, candidateAttempts []*StoredAttempt, parent *Experiment) ([]Warning, error) {
 	bh, ch := base.Experiment.Header, cand.Experiment.Header
 	var warnings []Warning
 	warnings = append(warnings, datasetWarnings(bh, ch)...)
@@ -25,7 +25,11 @@ func comparisonWarnings(base, cand Side, candidateAttempts []*StoredAttempt) ([]
 	if truncated {
 		warnings = append(warnings, Warning{Code: "judgments_truncated", Message: "some judgments used truncated subjects"})
 	}
-	for _, e := range []*Experiment{base.Experiment, cand.Experiment} {
+	experiments := []*Experiment{base.Experiment, cand.Experiment}
+	if parent != nil && !sameExperiment(parent, base.Experiment) && !sameExperiment(parent, cand.Experiment) {
+		experiments = append(experiments, parent)
+	}
+	for _, e := range experiments {
 		if e.Header.Status == statusRunning || e.TruncatedTail {
 			warnings = append(warnings, Warning{Code: "incomplete", Message: fmt.Sprintf("experiment %s is running or has a truncated tail", e.Header.ID)})
 		}

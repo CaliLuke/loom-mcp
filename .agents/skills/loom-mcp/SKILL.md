@@ -719,7 +719,10 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   scenario/item intersection, with integer pass fractions, changed check/claim
   fractions, score medians and modal tool-sequence edits. CompareVariants handles
   one experiment; CompareOptions.Parent overlays whole rerun groups. Preserve
-  calibration/truncation flags and all stable warnings. See docs/runtime.md and
+  calibration/truncation flags only on affected judgments and all stable warnings.
+  Show orphan judgments explicitly. Variant totals retain each comparison's baseline
+  intersection. Parent overlays warn about incomplete parents. List returns valid
+  sorted summaries alongside joined errors for invalid headers. See docs/runtime.md and
   references/runtime-contracts.md for report formats and ordering.
 - Execute supports concurrent use of one harness. Drive, Assert and expectation
   predicates must be concurrency-safe and cooperate with cancellation.

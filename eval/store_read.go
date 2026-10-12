@@ -27,12 +27,14 @@ type Experiment struct {
 var ErrNothingToRerun = errors.New("eval: nothing to rerun")
 
 // List returns summaries newest first by (Started, ID), ignoring reserved/temp paths.
+// Invalid entries are skipped and reported in the error alongside valid summaries.
 func (s *Store) List() ([]ExperimentHeader, error) {
 	entries, err := os.ReadDir(s.dir)
 	if err != nil {
 		return nil, err
 	}
 	var headers []ExperimentHeader
+	var readErrors []error
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
@@ -43,7 +45,8 @@ func (s *Store) List() ([]ExperimentHeader, error) {
 		}
 		h, err := s.readHeader(entry.Name())
 		if err != nil {
-			return nil, err
+			readErrors = append(readErrors, err)
+			continue
 		}
 		headers = append(headers, *h)
 	}
@@ -53,7 +56,7 @@ func (s *Store) List() ([]ExperimentHeader, error) {
 		}
 		return strings.Compare(b.ID, a.ID)
 	})
-	return headers, nil
+	return headers, errors.Join(readErrors...)
 }
 
 // Resolve accepts a full ID, a unique prefix of at least eight bytes, or last.

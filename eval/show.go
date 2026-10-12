@@ -113,7 +113,9 @@ func showErrors(out *strings.Builder, a *StoredAttempt) {
 
 func showClaims(out *strings.Builder, a *StoredAttempt) {
 	out.WriteString("Claims:\n")
+	claimed := make(map[string]bool, len(a.Claims))
 	for _, claim := range a.Claims {
+		claimed[claim.ID] = true
 		fmt.Fprintf(out, "  %s: %s\n", claim.ID, claim.Text)
 		found := false
 		for _, j := range a.Judgments {
@@ -125,6 +127,17 @@ func showClaims(out *strings.Builder, a *StoredAttempt) {
 		if !found {
 			showJudgment(out, claim, StoredJudgment{ClaimID: claim.ID, Subject: claim.Subject, Informational: claim.Informational})
 		}
+	}
+	orphans := false
+	for _, j := range a.Judgments {
+		if claimed[j.ClaimID] {
+			continue
+		}
+		if !orphans {
+			out.WriteString("Orphan judgments:\n")
+			orphans = true
+		}
+		showJudgment(out, StoredClaim{}, j)
 	}
 }
 

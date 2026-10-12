@@ -49,9 +49,6 @@ var storeMarshalers = json.JoinMarshalers(
 	json.MarshalFunc(func(v expect.Score) ([]byte, error) {
 		return callrecord.Encode(wireScore(v))
 	}),
-	json.MarshalFunc(func(v Claim) ([]byte, error) {
-		return callrecord.Encode(wireClaim(v))
-	}),
 	json.MarshalFunc(func(v Selection) ([]byte, error) {
 		return callrecord.Encode(wireSelection(v))
 	}),

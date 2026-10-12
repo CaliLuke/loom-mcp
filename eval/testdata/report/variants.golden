@@ -12,6 +12,7 @@ Not comparable:
   Item | a | b | c
 Unchanged: 0 items
 Totals:
-  a 1/1 passed; median tokens 0; duration 0s; tools_unavailable 0
+  a (vs b) 1/1 passed; median tokens 0; duration 0s; tools_unavailable 0
   b 0/1 passed; median tokens 0; duration 0s; tools_unavailable 0
+  a (vs c) 1/1 passed; median tokens 0; duration 0s; tools_unavailable 0
   c 0/1 passed; median tokens 0; duration 0s; tools_unavailable 0

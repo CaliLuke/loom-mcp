@@ -93,14 +93,14 @@ func compareSides(base, cand Side, opts CompareOptions, allowSame bool) (*Compar
 	}
 	bg, cg := sideGroups(base, base.Experiment.Attempts), sideGroups(cand, attempts)
 	c := &Comparison{Baseline: sideInfo(base), Candidate: sideInfo(cand)}
-	c.Warnings, err = comparisonWarnings(base, cand, attempts)
+	c.Warnings, err = comparisonWarnings(base, cand, attempts, opts.Parent)
 	if err != nil {
 		return nil, err
 	}
-	return alignComparison(c, bg, cg, base.Experiment.Header.Judge, cand.Experiment.Header.Judge), nil
+	return alignComparison(c, bg, cg), nil
 }
 
-func alignComparison(c *Comparison, bg, cg []reportGroup, baseJudge, candJudge *JudgeInfo) *Comparison {
+func alignComparison(c *Comparison, bg, cg []reportGroup) *Comparison {
 	baseline := make(map[Pair]reportGroup)
 	for _, g := range bg {
 		baseline[Pair{g.Scenario, g.Item}] = g
@@ -115,7 +115,7 @@ func alignComparison(c *Comparison, bg, cg []reportGroup, baseJudge, candJudge *
 			c.OnlyCandidate = append(c.OnlyCandidate, pair)
 			continue
 		}
-		c.Groups = append(c.Groups, compareGroup(b, g, baseJudge, candJudge))
+		c.Groups = append(c.Groups, compareGroup(b, g))
 		baseAttempts = append(baseAttempts, b.attempts...)
 		candAttempts = append(candAttempts, g.attempts...)
 	}

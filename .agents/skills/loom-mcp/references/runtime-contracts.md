@@ -247,7 +247,10 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   Request.Tools. Context hashes cover each root run's context, recovery,
   compaction and retained-tool configuration. Finish stores sorted set unions per
   variant. Policy keeps Go field names. Opaque variant Options are not stored.
-- List sorts by descending Started and ID. Resolve accepts a full ID, unique
+- List sorts by descending Started and ID. Invalid headers are skipped and
+  reported in a joined error alongside the valid summaries; Resolve and Last
+  continue to fail on that error. The CLI list command prints valid table/JSON
+  output before reporting errors on stderr and exiting 1. Resolve accepts a full ID, unique
   prefix of at least eight characters, or last. Last requires an overlapping
   scenario/item pair and excludes the supplied ID. Both skip running summaries.
   There is no last pointer file. Complete includes fully recorded stopped runs.
@@ -261,7 +264,9 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 
 ## Eval Show and Compare
 
-- Show uses default trajectory limits unless Full is set. Render panics and
+- Show prints judgments without matching claim IDs under Orphan judgments,
+  retaining subjects, step locators, flags and diagnostics. It uses default
+  trajectory limits unless Full is set. Render panics and
   missing exports become diagnostics. ShowJSON embeds trajectory.Marshal bytes;
   Export additionally includes raw exports. Summary orders non-passed groups
   first and uses full experiment IDs. JSON formats are loom-mcp.eval.show,
@@ -270,11 +275,14 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   CompareExperiments aligns shared variants, or sole variants even with different
   IDs. CompareVariants is required within one experiment. No shared variants is
   an error. Parent overlays replace whole variant/scenario/item groups; the ID
-  must match candidate.Header.Parent. Warnings use candidate header provenance.
+  must match candidate.Header.Parent. Provenance warnings use the candidate
+  header. Incomplete also warns for a running or torn-tail parent; candidate
+  identity and completion still describe the standalone rerun.
 - Compare only the intersection; list other pairs separately. JSON groups follow
   candidate declaration order. Text orders regressed, improved, not comparable,
   collapsed unchanged count, totals. Totals cover the intersection. More than two
-  variants use one column per variant against the first.
+  variants use one column per variant against the first; totals pair each
+  candidate with its own baseline intersection, labelled by candidate variant.
 - ran excludes not_run; pending never passes. Integer cross-products compare pass
   fractions. Zero ran on either side is not comparable. Checks use passed/total;
   claims use entailed/total judged units by claim/subject/declared tool selector.
@@ -288,7 +296,9 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - Stable warning codes are dataset_changed, no_agent_change, judge_changed,
   judge_uncalibrated, judgments_truncated, incomplete, variant_unmatched.
   no_agent_change includes models and policy as well as hashes/context/prompts.
-  Calibration and truncation mark groups and claim rows without suppressing status;
+  Calibration and truncation mark only groups and claim rows containing affected
+  judgments. An uncalibrated header alone sets the experiment warning, not group
+  or claim flags. These flags do not suppress status;
   text truncation fractions pool both sides. Keep report examples snippet-synced.
 
 ## Eval CLI

@@ -1863,7 +1863,13 @@ tool content hashes. Context hashes cover each root run's recorded configuration
 Every fingerprint contains sorted unique sets. `Finish` stores their union per
 variant. Opaque harness options are absent from the summary.
 
-`List` sorts summaries by newest start time, then descending ID. `Resolve` accepts
+`List` sorts summaries by newest start time, then descending ID. Invalid experiment
+headers are skipped; it returns the valid summaries together with a joined error
+identifying every rejected entry. Callers can display partial results and report
+the error. `eval list` writes the available table or JSON to stdout, then reports
+the errors on stderr and exits with status 1. `Resolve` and `Last` still return
+an error when listing is incomplete.
+`Resolve` accepts
 an ID, a unique prefix of at least eight characters, or `last`. `last` selects the
 newest non-running experiment. `Last(pairs, exclude)` also requires an overlapping
 scenario/item pair and excludes the supplied ID. There is no pointer file.
@@ -1884,7 +1890,9 @@ deletes experiments. Redaction would invalidate exported request digests.
 ### Eval show and compare
 
 `eval.Show` renders one stored attempt with checks, scores, claim judgments, errors,
-run and trace IDs, and its reconstructed session. It defaults to the trajectory
+run and trace IDs, and its reconstructed session. Judgments whose claim ID is
+absent from the attempt appear under `Orphan judgments`, with their recorded
+subjects, step locators, flags, and diagnostics. It defaults to the trajectory
 renderer's limits; `ShowOptions.Full` removes them. Missing exports and renderer
 panics produce a `trajectory unavailable` diagnostic without hiding the remaining
 results. `Summary` groups stored verdicts with failing, error, pending, and not-run
@@ -1919,7 +1927,9 @@ variants when each experiment has exactly one, even if their names differ.
 Otherwise, it compares shared variant IDs and warns with `variant_unmatched` for
 unmatched variants. No shared variants is an error. Comparing the same experiment
 requires `CompareVariants(e, []string{"base", "candidate"})`. More than two variants
-produce one text column per variant against the first.
+produce one text column per variant against the first. Totals show a baseline and
+candidate pair for each comparison, labelled with the candidate variant, because
+each comparison can cover a different intersection.
 
 Comparisons pool all repeats by scenario and item, compare the intersection, and
 list pairs present on only one side. Totals cover that intersection. The candidate's
@@ -1948,12 +1958,17 @@ Warnings retain stable codes in text and JSON: `dataset_changed`, `no_agent_chan
 `variant_unmatched`. `no_agent_change` requires equal system and tool hashes,
 context hashes, prompt references, models, and policy. Uncalibrated or truncated
 judgments mark affected groups and claim rows without suppressing their status.
+An uncalibrated header alone produces the experiment warning; group and claim
+flags require an uncalibrated judgment in that group or claim.
 Text truncation fractions pool judgments from both sides.
 
 A rerun is standalone unless `CompareOptions.Parent` supplies its recorded parent.
 The supplied ID must match the candidate's `Header.Parent`. Candidate groups replace
 whole parent groups by variant/scenario/item; remaining parent groups are added.
-Warnings use candidate header provenance. Input experiments are not modified.
+Provenance warnings use the candidate header. The `incomplete` warning also
+identifies a supplied parent with running status or a truncated tail. Candidate
+identity and completion still describe the standalone rerun. Input experiments
+are not modified.
 
 ### Eval CLI
 

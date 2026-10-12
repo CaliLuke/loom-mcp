@@ -68,6 +68,39 @@ func TestList(t *testing.T) {
 	assert.Contains(t, out, "revision")
 }
 
+func TestListRetainsValidHeadersOnError(t *testing.T) {
+	cfg := config(t)
+	valid := seed(t, cfg)
+	corrupt := seed(t, cfg)
+	require.NoError(t, os.WriteFile(filepath.Join(corrupt.Dir, "experiment.json"), []byte("broken"), 0600))
+	for _, tc := range []struct {
+		name string
+		args []string
+		json bool
+	}{
+		{name: "table", args: []string{"list"}},
+		{name: "json", args: []string{"list", "--json"}, json: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			code, out, diagnostic := invoke(t.Context(), cfg, tc.args...)
+			assert.Equal(t, 1, code)
+			assert.Contains(t, diagnostic, corrupt.Header.ID)
+			assert.Contains(t, diagnostic, "experiment.json")
+			assert.NotContains(t, out, corrupt.Header.ID)
+			if tc.json {
+				var headers []eval.ExperimentHeader
+				require.NoError(t, json.Unmarshal([]byte(out), &headers, jsonopts.FormatDurationAsNano(true)))
+				require.Len(t, headers, 1)
+				assert.Equal(t, valid.Header.ID, headers[0].ID)
+			} else {
+				assert.Contains(t, out, valid.Header.ID)
+				assert.Contains(t, out, "planned")
+				assert.Contains(t, out, "revision")
+			}
+		})
+	}
+}
+
 func TestUsageErrors(t *testing.T) {
 	cfg := config(t)
 	e := seed(t, cfg)

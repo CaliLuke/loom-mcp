@@ -180,8 +180,8 @@ func writeVariantColumns(out *strings.Builder, cs []*Comparison) {
 		}
 	}
 	fmt.Fprintf(out, "Unchanged: %d items\nTotals:\n", unchanged)
-	writeSideTotals(out, cs[0].Baseline.Variant, cs[0].Totals.Baseline)
 	for _, c := range cs {
+		writeSideTotals(out, fmt.Sprintf("%s (vs %s)", c.Baseline.Variant, c.Candidate.Variant), c.Totals.Baseline)
 		writeSideTotals(out, c.Candidate.Variant, c.Totals.Candidate)
 	}
 }

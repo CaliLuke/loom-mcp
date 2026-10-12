@@ -3,6 +3,7 @@ package evalcli
 import (
 	jsonopts "encoding/json"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -15,15 +16,15 @@ func list(cfg Config, f flags) error {
 	if err != nil {
 		return err
 	}
-	headers, err := store.List()
-	if err != nil {
-		return err
+	headers, listErr := store.List()
+	if listErr != nil && len(headers) == 0 {
+		return listErr
 	}
 	if f.limit > 0 && len(headers) > f.limit {
 		headers = headers[:f.limit]
 	}
 	if f.json {
-		return writeJSON(cfg.Stdout, headers)
+		return errors.Join(listErr, writeJSON(cfg.Stdout, headers))
 	}
 	var out strings.Builder
 	out.WriteString("ID\tstarted\tlabel\tparent\tstatus\tstop\tplanned\ttokens\trevision\n")
@@ -36,9 +37,9 @@ func list(cfg Config, f flags) error {
 	}
 	table := tabwriter.NewWriter(cfg.Stdout, 0, 4, 2, ' ', 0)
 	if _, err := io.WriteString(table, out.String()); err != nil {
-		return err
+		return errors.Join(listErr, err)
 	}
-	return table.Flush()
+	return errors.Join(listErr, table.Flush())
 }
 
 func writeJSON(w io.Writer, value any) error {

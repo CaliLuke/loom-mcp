@@ -8,7 +8,7 @@ type scoreSamples struct {
 	threshold *float64
 }
 
-func compareGroup(base, cand reportGroup, baseJudge, candJudge *JudgeInfo) GroupDelta {
+func compareGroup(base, cand reportGroup) GroupDelta {
 	g := GroupDelta{Scenario: cand.Scenario, Item: cand.Item, Baseline: base.GroupStats, Candidate: cand.GroupStats}
 	g.Status = regression(g.Baseline.Passed, g.Baseline.Ran, g.Candidate.Passed, g.Candidate.Ran)
 	sample := failingSample(cand.attempts)
@@ -29,11 +29,7 @@ func compareGroup(base, cand reportGroup, baseJudge, candJudge *JudgeInfo) Group
 			}
 		}
 	}
-	g.Uncalibrated = g.Uncalibrated || judgeUncalibrated(baseJudge) || judgeUncalibrated(candJudge)
 	g.Truncated = g.TruncatedJudgments > 0
-	for i := range g.Claims {
-		g.Claims[i].Uncalibrated = g.Claims[i].Uncalibrated || judgeUncalibrated(baseJudge) || judgeUncalibrated(candJudge)
-	}
 	bseq, bu := attemptSequences(base.attempts)
 	cseq, cu := attemptSequences(cand.attempts)
 	g.Baseline.ToolsUnavailable, g.Candidate.ToolsUnavailable = bu, cu
