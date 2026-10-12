@@ -250,7 +250,7 @@ func {{ .UnmarshalFunc }}(data []byte) ({{ if .Pointer }}*{{ end }}{{ .FullRef }
         return nil, fmt.Errorf("{{ .DecodeError }}: %w", err)
     }
     {{- if .TransportValidationSrc }}
-    if err := toolhttp.Validate{{ .TransportTypeName }}(&tv); err != nil {
+    if err := toolhttp.Validate{{ .TransportTypeName }}({{ if .TransportPointer }}&{{ end }}tv); err != nil {
         err = newValidationError(err)
         {{- if .FieldDescs }}
         err = enrich{{ .TypeName }}ValidationError(err)

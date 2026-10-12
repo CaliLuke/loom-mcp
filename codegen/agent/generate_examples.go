@@ -195,6 +195,7 @@ func emitExecutorInternalStub(ag *AgentData, ts *ToolsetData) *codegen.File {
 		GoName           string
 		PayloadUnmarshal string
 		PayloadType      string
+		DereferenceArgs  bool
 	}
 	count := 0
 	for _, t := range ts.Tools {
@@ -213,6 +214,7 @@ func emitExecutorInternalStub(ag *AgentData, ts *ToolsetData) *codegen.File {
 			GoName:           g,
 			PayloadUnmarshal: "Unmarshal" + g + "Payload",
 			PayloadType:      g + "Payload",
+			DereferenceArgs:  toolMethodPayloadIsValue(t),
 		})
 	}
 	sections := []*codegen.SectionTemplate{

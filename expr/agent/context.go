@@ -119,7 +119,8 @@ func (s *SummarizeExpr) validate(verr *eval.ValidationErrors) {
 	}
 	data := &contextPromptProbe{}
 	if err := t.Execute(io.Discard, data); err != nil {
-		verr.Add(s, "invalid context summary Prompt: %s", err)
+		message := strings.ReplaceAll(err.Error(), fmt.Sprintf("%T", data), "summary prompt data")
+		verr.Add(s, "invalid context summary Prompt: %s", message)
 		return
 	}
 	if !data.evicted {

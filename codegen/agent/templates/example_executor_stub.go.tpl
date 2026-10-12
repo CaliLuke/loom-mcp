@@ -41,7 +41,7 @@ func Execute(ctx context.Context, meta *runtime.ToolCallMeta, call *planner.Tool
         }
         _ = args
         // Optional: transform to method payload if compatible
-        // mp := {{ $.SpecsAlias }}.Init{{ .ConstName }}MethodPayload(args)
+        // mp := {{ $.SpecsAlias }}.Init{{ .ConstName }}MethodPayload({{ if .DereferenceArgs }}*{{ end }}args)
         // TODO: Call your service client with mp (or args), map result back:
         // tr := {{ $.SpecsAlias }}.Init{{ .ConstName }}ToolResult(methodRes)
         return runtime.Executed(&planner.ToolResult{

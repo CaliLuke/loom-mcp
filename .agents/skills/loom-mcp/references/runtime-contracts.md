@@ -1475,3 +1475,7 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   command and child execution with independent settings. RunRecord applies
   recovery budget bounds only when ContextFingerprint is non-empty, preserving
   pre-15 multi-model overflow reconstruction.
+
+- Trajectory AgentID and SessionID come from the first canonical record event,
+  including an empty session. Observer identity is a fallback only when the run
+  has no record events.

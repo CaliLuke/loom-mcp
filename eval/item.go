@@ -34,6 +34,16 @@ type prefixedProblem struct {
 
 var idPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
+// Error locates every diagnostic line while Unwrap preserves the original cause.
+func (e *prefixedProblem) Error() string {
+	return e.prefix + strings.ReplaceAll(e.err.Error(), "\n", "\n"+e.prefix)
+}
+
+// Unwrap retains typed errors and sentinel causes under the diagnostic prefix.
+func (e *prefixedProblem) Unwrap() error {
+	return e.err
+}
+
 // validateItem collects all item problems without changing the caller's value.
 func validateItem(item Item) error {
 	var problems []error
@@ -119,14 +129,4 @@ func prefixProblems(prefix string, err error) []error {
 		return problems
 	}
 	return []error{&prefixedProblem{prefix: prefix, err: err}}
-}
-
-// Error locates every diagnostic line while Unwrap preserves the original cause.
-func (e *prefixedProblem) Error() string {
-	return e.prefix + strings.ReplaceAll(e.err.Error(), "\n", "\n"+e.prefix)
-}
-
-// Unwrap retains typed errors and sentinel causes under the diagnostic prefix.
-func (e *prefixedProblem) Unwrap() error {
-	return e.err
 }

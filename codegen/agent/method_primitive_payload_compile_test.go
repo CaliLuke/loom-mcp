@@ -5,10 +5,16 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	codegen "github.com/CaliLuke/loom-mcp/v2/codegen/agent"
+	"github.com/CaliLuke/loom-mcp/v2/codegen/testhelpers"
 	. "github.com/CaliLuke/loom-mcp/v2/dsl"
+	agentsexpr "github.com/CaliLuke/loom-mcp/v2/expr/agent"
 	. "github.com/CaliLuke/loom/dsl"
+	"github.com/CaliLuke/loom/eval"
+	goaexpr "github.com/CaliLuke/loom/expr"
 	"github.com/stretchr/testify/require"
 )
 
@@ -92,6 +98,10 @@ func TestMethodPrimitivePayloadsCompileAndRoundTrip(t *testing.T) {
 		value   string
 		payload string
 	}{
+		{"any", Any, "loom.JSONValue", "loom.JSONValue(`{\"query\":\"search\"}`)", `{"query":"search"}`},
+		{"object", "object", "*assistant.Item", `&assistant.Item{Query: "search"}`, `{"query":"search"}`},
+		{"object_array", "object_array", "[]*assistant.Item", `[]*assistant.Item{{Query: "search"}}`, `[{"query":"search"}]`},
+		{"object_map", "object_map", "map[string]*assistant.Item", `map[string]*assistant.Item{"first": {Query: "search"}}`, `{"first":{"query":"search"}}`},
 		{"string", String, "string", `"search query"`, `"search query"`},
 		{"boolean", Boolean, "bool", "true", "true"},
 		{"int", Int, "int", "42", "42"},
@@ -110,26 +120,71 @@ func TestMethodPrimitivePayloadsCompileAndRoundTrip(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			files := generateCompileDesign(t, func() {
 				API("assistant", func() {})
+				shape := tc.shape
+				if name, ok := shape.(string); ok {
+					item := Type("Item", func() {
+						Attribute("query", String)
+						Required("query")
+					})
+					switch name {
+					case "object":
+						shape = item
+					case "object_array":
+						shape = ArrayOf(item)
+					case "object_map":
+						shape = MapOf(String, item)
+					}
+				}
 				Service("assistant", func() {
 					Method("search", func() {
-						Payload(tc.shape)
-						Result(tc.shape)
+						Payload(shape)
+						Result(shape)
 					})
 					Agent("planner", "Planner", func() {
 						Use("lookup", func() {
 							Tool("search", "Search", func() {
-								Args(tc.shape)
-								Return(tc.shape)
+								Args(shape)
+								Return(shape)
 								BindTo("assistant", "search")
 							})
 						})
 					})
 				})
 			})
+			examples, err := codegen.GenerateExample("example.com/fmcp/gen", []eval.Root{goaexpr.Root, agentsexpr.Root}, nil)
+			require.NoError(t, err)
+			executor := testhelpers.FileContent(t, examples, "internal/agents/assistant/planner/toolsets/lookup/execute.go")
+			// Compile the documented transform as executable code alongside the round trips.
+			var transform string
+			for line := range strings.SplitSeq(executor, "\n") {
+				if strings.Contains(line, "// mp :=") {
+					transform = strings.TrimSpace(strings.Replace(line, "// mp :=", "methodIn :=", 1))
+				}
+			}
+			require.NotEmpty(t, transform)
 			dir := writeGeneratedModule(t, files)
 			source := fmt.Sprintf(methodPrimitivePayloadRuntimeTest, tc.goType, tc.value, tc.payload)
+			if tc.name == "object" {
+				source = strings.ReplaceAll(source, "result.Result.(lookup.SearchResult)", "result.Result.(*lookup.SearchResult)")
+			}
+			if tc.name == "any" {
+				source = strings.Replace(source, `"testing"`, `"testing"; loom "github.com/CaliLuke/loom/pkg"`, 1)
+			}
+			transform = strings.ReplaceAll(transform, "lookupspecs.", "lookup.")
+			source += fmt.Sprintf(`
+func TestExampleTransform(t *testing.T) {
+    args, err := lookup.UnmarshalSearchPayload([]byte(%q))
+    require.NoError(t, err)
+    %s
+    var got payload = methodIn
+    var want payload = %s
+    assert.Equal(t, want, got)
+}
+`, tc.payload, transform, tc.value)
 			require.NoError(t, os.WriteFile(filepath.Join(dir, "primitive_runtime_test.go"), []byte(source), 0o600))
-			cmd := exec.CommandContext(t.Context(), "go", "test", "-short", "-race", "-p", "2", "./...")
+			// Generation uses global DSL state; only compile fully written, isolated modules in parallel.
+			t.Parallel()
+			cmd := exec.CommandContext(t.Context(), "go", "test", "-short", "-race", "-count=1", "-p", "2", "./...")
 			cmd.Dir = dir
 			cmd.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=-mod=mod")
 			output, err := cmd.CombinedOutput()

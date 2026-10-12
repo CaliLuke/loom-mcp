@@ -34,14 +34,17 @@ func (r *runBuilder) readEventsAndEntries() error {
 	var first, last time.Time
 	hasRecord := false
 	for _, event := range r.run.Events {
-		if r.out.AgentID == "" {
+		if !hasRecord && r.out.AgentID == "" {
 			r.out.AgentID = event.AgentID
 		}
-		if r.out.SessionID == "" {
+		if !hasRecord && r.out.SessionID == "" {
 			r.out.SessionID = event.SessionID
 		}
 		if hooks.IsRecordEvent(event.Type) {
 			if !hasRecord {
+				// Canonical identity replaces observer metadata, including an empty session.
+				r.out.AgentID = event.AgentID
+				r.out.SessionID = event.SessionID
 				first = event.Timestamp
 				hasRecord = true
 			}

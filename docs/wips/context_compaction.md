@@ -1309,7 +1309,6 @@ in a typed error naming both the provider cause and checkpoint byte shortfall;
 `context_budget_too_small` is emitted and no recovery retry is consumed. A guard
 rejection in this situation only disables the guard and sends the original view.
 
-
 ### 4.16 Sessions
 
 Continuation applies to agents with threshold compaction (4.17). Agents
@@ -1587,7 +1586,6 @@ specs with `ContextCompaction.KeepResultTools` and stamps the set. Later toolset
 registration does not change it. `Disable()` omits threshold configuration
 before K21's default transition, and is compatible only with recall settings.
 It does not override an explicit runtime compaction option.
-
 
 **Prompts.** The summary prompt is a prompt-registry prompt,
 `<agent>.context.summary`. K15 registers its embedded baseline, replaced by `Summary.Prompt`; K16 adds DSL configuration. Stored overrides scoped

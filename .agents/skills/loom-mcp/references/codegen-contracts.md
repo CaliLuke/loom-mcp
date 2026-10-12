@@ -64,6 +64,11 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   name. Do not generate a `Typed()` list. Registry specs remain untyped and
   emit no descriptors; their identifiers support `tools.Named`.
 
+- Method-backed value payloads (primitives including Any, arrays and maps) must
+  dereference decoded payload pointers before calling method transforms, including
+  example executor instructions. Cross-package transforms preserve service
+  qualifiers in collection allocations and import the Loom runtime for Any.
+
 ## Generator Editing Rules
 
 - Edit generators by section and guard early.
@@ -332,6 +337,12 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
 - `expr/`
 
 ## Context policy generation
+
+- Summary Prompt validation executes one probe: Previous, Evicted and Instructions
+  are nonempty strings and Budget is 100. Only executed branches are validated;
+  an `if .Previous` else branch is not checked. Test authored templates with empty
+  and nonempty previous summaries and representative runtime values. Diagnostics
+  name summary prompt data rather than the internal probe type.
 
 - ContextExpr is evaluated into RunPolicyData.Context; TriggerAt preserves the
   authored decimal fraction (0.85 becomes 85/100). Omitted fields use runtime defaults.

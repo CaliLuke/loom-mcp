@@ -89,7 +89,7 @@ func toolsetAdapterTransformsFile(genpkg string, ts *ToolsetData, specsCache *to
 			localArgAttr := toolPayload.PublicType
 			// Both the tool payload and service payload are service-level shapes.
 			srcCtx := codegen.NewAttributeContextForConversion(false, false, true, "", scope)
-			tgtCtx := codegen.NewAttributeContextForConversion(false, false, true, svcAlias, scope)
+			tgtCtx := codegen.NewAttributeContext(false, false, true, svcAlias, scope)
 			body, helpers, err := codegen.GoTransform(localArgAttr, t.MethodPayloadAttr, "in", "out", srcCtx, tgtCtx, "", false)
 			if err != nil {
 				return nil, transformBuildError(t, "payload", t.Args, t.MethodPayloadAttr, err)
@@ -146,7 +146,7 @@ func toolsetAdapterTransformsFile(genpkg string, ts *ToolsetData, specsCache *to
 				}
 			}
 
-			srcCtx := codegen.NewAttributeContextForConversion(false, false, true, svcAlias, scope)
+			srcCtx := codegen.NewAttributeContext(false, false, true, svcAlias, scope)
 			targetAttr := toolResult.PublicType
 			tgtCtx := codegen.NewAttributeContextForConversion(false, false, true, "", scope)
 			body, helpers, err := codegen.GoTransform(t.MethodResultAttr, targetAttr, "in", "out", srcCtx, tgtCtx, "", false)

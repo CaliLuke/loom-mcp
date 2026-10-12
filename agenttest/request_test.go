@@ -88,7 +88,8 @@ func TestRequestFixtureRejectsUnknownRequestMembers(t *testing.T) {
 			require.Contains(t, string(data), tc.member)
 			mutated := bytes.Replace(data, []byte(tc.member), []byte(tc.member+`"unknown":true,`), 1)
 			_, err := agenttest.UnmarshalRequest(mutated)
-			assert.Error(t, err, "unknown member must be rejected even when the request digest still matches")
+			require.ErrorContains(t, err, "unknown or non-canonical members")
+			assert.NotErrorIs(t, err, callrecord.ErrRequestMismatch)
 		})
 	}
 }

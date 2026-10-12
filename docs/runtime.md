@@ -1245,6 +1245,8 @@ The top-level `trajectory` package derives evaluation steps from a self-containe
 `RunRecord`. `Build(record, runID, options)` reads no stores and produces the same
 trajectory from `runrecord.Read` and `runrecord.FromExport`. The requested run and
 all linked children must be sealed; an unsealed run returns `ErrNotTerminal`.
+`AgentID` and `SessionID` come from the first canonical record event, including
+an empty session. Observer identity is used only when no record event exists.
 The compiled example below uses `r`, a harness Result from the assistant fixture,
 and `h`, its harness; later reference blocks reuse `tr`.
 

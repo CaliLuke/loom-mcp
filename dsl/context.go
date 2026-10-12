@@ -143,7 +143,10 @@ func Instructions(text string) {
 
 // Prompt replaces the summary prompt inside Summarize. The template must use
 // .Evicted and, when Instructions is declared, .Instructions. It also receives
-// .Previous and .Budget.
+// .Previous and .Budget. Design validation executes one probe with nonempty
+// strings and Budget 100; it checks only the branches taken by those values.
+// Test custom templates with representative runtime data, including an empty
+// .Previous for the first summary.
 func Prompt(text string) {
 	s, ok := eval.Current().(*expragents.SummarizeExpr)
 	if !ok {

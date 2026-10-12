@@ -746,10 +746,15 @@ func emitToolProviderHelpers(stmt *jen.Statement) {
 // toolProviderPayloadArgument adapts pointer-returning payload codecs to the
 // value parameters used by primitive and collection method transforms.
 func toolProviderPayloadArgument(tool *ToolData, arg *jen.Statement) *jen.Statement {
-	if expr.IsPrimitive(tool.Args.Type) || expr.IsArray(tool.Args.Type) || expr.IsMap(tool.Args.Type) {
+	if toolMethodPayloadIsValue(tool) {
 		return jen.Op("*").Add(arg)
 	}
 	return arg
+}
+
+// toolMethodPayloadIsValue reports whether a method transform takes a decoded payload by value.
+func toolMethodPayloadIsValue(tool *ToolData) bool {
+	return expr.IsPrimitive(tool.Args.Type) || expr.IsArray(tool.Args.Type) || expr.IsMap(tool.Args.Type)
 }
 
 func emitToolProviderCtor(stmt *jen.Statement, data toolProviderFileData) {

@@ -23,7 +23,7 @@ func JoinImportPath(genpkg, rel string) string {
 }
 
 // GatherAttributeImports collects import specifications for external user types
-// and meta-type imports referenced by the given attribute expression.
+// and meta-type imports, plus the runtime type used by Any attributes.
 func GatherAttributeImports(genpkg string, att *expr.AttributeExpr) []*codegen.ImportSpec {
 	uniq := make(map[string]*codegen.ImportSpec)
 	seenAttrs := make(map[*expr.AttributeExpr]struct{})
@@ -43,6 +43,10 @@ func GatherAttributeImports(genpkg string, att *expr.AttributeExpr) []*codegen.I
 			}
 		}
 		switch dt := a.Type.(type) {
+		case expr.Primitive:
+			if dt == expr.Any {
+				uniq["github.com/CaliLuke/loom/pkg"] = &codegen.ImportSpec{Name: "loom", Path: "github.com/CaliLuke/loom/pkg"}
+			}
 		case expr.UserType:
 			if loc := codegen.UserTypeLocation(dt); loc != nil && loc.RelImportPath != "" {
 				imp := &codegen.ImportSpec{

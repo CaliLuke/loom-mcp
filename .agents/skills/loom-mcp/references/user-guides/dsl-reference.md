@@ -154,7 +154,10 @@ History and Workflow. Each declaration is unique in its parent.
 Summarize requires non-empty Instructions or Prompt. Prompt is parsed and
 executed during design validation with the runtime summary prompt's empty custom
 function map and only .Previous, .Evicted, .Instructions and .Budget. It must
-reference .Evicted and, if Instructions is declared, .Instructions.
+reference .Evicted and, if Instructions is declared, .Instructions. The probe
+uses nonempty strings and Budget 100, so it validates only the branches taken
+with those values. In particular, the else branch of if .Previous is not checked.
+Test authored templates with empty and nonempty previous summaries.
 
 Enabled Context adds ContextModel *runtime.ContextModel to generated config;
 Validate requires it only for Summarize. Register its model ID before Seal.

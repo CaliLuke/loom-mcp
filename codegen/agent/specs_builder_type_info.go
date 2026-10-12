@@ -203,6 +203,10 @@ func (b *toolSpecBuilder) buildTypeInfo(tool *ToolData, att *goaexpr.AttributeEx
 
 	doc := fmt.Sprintf("%s defines the JSON %s for the %s tool.", typeName, usage, tool.QualifiedName)
 	transportDef := transportTypeName + " " + scope.GoTypeDef(schemaAttr, true, false)
+	if schemaAttr.Type == goaexpr.Any {
+		// Any must retain JSONValue's raw JSON methods at the transport boundary.
+		transportDef = transportTypeName + " = " + scope.GoTypeDef(schemaAttr, true, false)
+	}
 	transportImports := shared.GatherAttributeImports(b.genpkg, schemaAttr)
 	httpctx := codegen.NewAttributeContext(!goaexpr.IsPrimitive(schemaAttr.Type), false, false, "", scope)
 	transportValidation := validationCodeWithContext(schemaAttr, nil, httpctx, true, false, false, "body", tool, usage, "transport")

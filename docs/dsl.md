@@ -402,16 +402,16 @@ implements the corresponding transcript-local policy.
 
 ### Context Functions
 
-| Function | Context | Purpose |
-| --- | --- | --- |
-| `Context(dsl)` | Inside `RunPolicy` | Enables threshold compaction for a planner agent |
-| `TriggerAt(t)` | Inside `Context` | Sets an exact fraction, with `0 < t < 1` and at most four decimal places |
-| `KeepRecentTokens(n)` | Inside `Context` | Sets a positive token budget for the recent transcript |
-| `Summarize(dsl)` | Inside `Context` | Configures summaries; requires `ContextModel` in generated agent config |
-| `Instructions(text)` | Inside `Summarize` | Adds non-empty summary instructions |
-| `Prompt(text)` | Inside `Summarize` | Replaces the summary template |
-| `Recall(enabled)` | Inside `Context` | `Recall(false)` disables recall advertising |
-| `Disable()` | Inside `Context` | Omits generated threshold compaction configuration |
+| Function              | Context            | Purpose                                                                  |
+| --------------------- | ------------------ | ------------------------------------------------------------------------ |
+| `Context(dsl)`        | Inside `RunPolicy` | Enables threshold compaction for a planner agent                         |
+| `TriggerAt(t)`        | Inside `Context`   | Sets an exact fraction, with `0 < t < 1` and at most four decimal places |
+| `KeepRecentTokens(n)` | Inside `Context`   | Sets a positive token budget for the recent transcript                   |
+| `Summarize(dsl)`      | Inside `Context`   | Configures summaries; requires `ContextModel` in generated agent config  |
+| `Instructions(text)`  | Inside `Summarize` | Adds non-empty summary instructions                                      |
+| `Prompt(text)`        | Inside `Summarize` | Replaces the summary template                                            |
+| `Recall(enabled)`     | Inside `Context`   | `Recall(false)` disables recall advertising                              |
+| `Disable()`           | Inside `Context`   | Omits generated threshold compaction configuration                       |
 
 ```go
 RunPolicy(func() {
@@ -433,8 +433,13 @@ cannot use tools whose names contain `recall_context`.
 `.Previous`, `.Evicted`, `.Instructions`, and `.Budget`; they must reference
 `.Evicted` and, when instructions are declared, `.Instructions`. Design
 validation parses and executes the template with the summary prompt's function
-map (no custom functions) and missing keys treated as errors. The runtime
-registers it as `<agent>.context.summary`.
+map (no custom functions) and missing keys treated as errors. The probe uses
+`Previous = "previous"`, `Evicted = "evicted"`, `Instructions = "instructions"`,
+and `Budget = 100`. Only executed branches are checked: `if .Previous` takes
+its true branch, so errors or required references in its else branch are not
+checked. Test custom templates with empty and nonempty previous summaries and
+representative runtime values. The runtime registers the prompt as
+`<agent>.context.summary`.
 
 An enabled `Context` adds `ContextModel *runtime.ContextModel` to generated
 agent config. It is required by `Config.Validate` only when `Summarize` is
@@ -2099,11 +2104,12 @@ helper names are disambiguated while each helper retains its own method binding
 and payload, result, and server-data shapes. Authored tool IDs remain unchanged.
 
 Method-backed tools also support primitive payloads (`String`, `Boolean`, numeric
-types, and `Bytes`) and arrays or maps of primitives. Payload codecs return
+types, `Bytes`, and `Any`) and arrays or maps, including object elements. Payload codecs return
 pointers; `Init<Tool>MethodPayload` accepts a value for these shapes. Generated
 method dispatchers and registry providers dereference the decoded payload before
 calling the transform. Custom executors must likewise pass `*args` for these
-shapes; object payload transforms accept `args` directly.
+shapes; object payload transforms accept `args` directly. Generated example
+executor comments use the same argument form.
 
 Generated transforms in `gen/svc/toolsets/ts/transforms.go`:
 

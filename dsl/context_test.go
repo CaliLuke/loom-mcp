@@ -151,7 +151,7 @@ func TestContextDSLValidation(t *testing.T) {
 					Prompt("{{.Evicted}} {{.Foo}}")
 				})
 			})
-		}, `invalid context summary Prompt: template: context.summary:1:15: executing "context.summary" at <.Foo>: can't evaluate field Foo in type *agent.contextPromptProbe`},
+		}, `invalid context summary Prompt: template: context.summary:1:15: executing "context.summary" at <.Foo>: can't evaluate field Foo in type summary prompt data`},
 		{"missing evicted", func() {
 			Context(func() {
 				Summarize(func() {
