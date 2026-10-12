@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -187,4 +188,20 @@ func TestRequestTransforms(t *testing.T) {
 	require.Error(t, err)
 	_, err = r.WithToolSpecs(tools.ToolSpec{Name: "bad", Payload: tools.TypeSpec{Schema: []byte(`{`)}}).Request()
 	require.Error(t, err)
+}
+
+func TestSaveRequestConfinesSymlinks(t *testing.T) {
+	r, err := agenttest.NewRequest("model", &model.Request{Messages: agenttest.User("private")})
+	require.NoError(t, err)
+	outside := filepath.Join(t.TempDir(), "outside.json")
+	require.NoError(t, os.WriteFile(outside, []byte("unchanged"), 0o600))
+	path := filepath.Join(t.TempDir(), "request.json")
+	require.NoError(t, os.Symlink(outside, path))
+	require.Error(t, agenttest.SaveRequest(path, r))
+	root, err := os.OpenRoot(filepath.Dir(outside))
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, root.Close()) })
+	data, err := root.ReadFile("outside.json")
+	require.NoError(t, err)
+	assert.Equal(t, "unchanged", string(data))
 }

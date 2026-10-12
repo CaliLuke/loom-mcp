@@ -52,3 +52,14 @@ func TestDefaultRunIDReserved(t *testing.T) {
 	_, err := h.Run(t.Context(), "root", nil)
 	require.ErrorContains(t, err, "RunID is reserved")
 }
+
+func TestRunIDSentinelReserved(t *testing.T) {
+	for _, id := range []string{"agenttest-reserved", "", "custom"} {
+		t.Run(id, func(t *testing.T) {
+			h := agenttest.New(t, registerHarnessAgent("root", harnessPlanner{}))
+			result, err := h.Run(t.Context(), "root", nil, runtime.WithRunID(id))
+			assert.Nil(t, result)
+			assert.ErrorContains(t, err, "RunID is reserved")
+		})
+	}
+}

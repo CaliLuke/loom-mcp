@@ -67,6 +67,7 @@ type Harness struct {
 	stubs             stubTable
 	scripts           map[string]*Script
 	models            map[string]model.Client
+	gates             map[string]model.Client
 	capturing         map[string]*captureState
 	defaultRunOptions []RunOption
 	timeout           time.Duration
@@ -104,47 +105,7 @@ const cleanupTimeout = 5 * time.Second
 // NewHarness constructs owned stores, engine and bus, then registers application
 // components followed by scripted overrides. It never enables live clients itself.
 func NewHarness(ctx context.Context, register Register, opts ...Option) (*Harness, error) {
-	options, err := validatedHarnessOptions(opts)
-	if err != nil {
-		return nil, err
-	}
-	var probe runtime.Options
-	for _, option := range options.runtime {
-		option(&probe)
-	}
-	if err := validateOwnedOptions(probe); err != nil {
-		return nil, err
-	}
-	probe.Engine = engineinmem.New()
-	probe.RunStore = runstoreinmem.New()
-	probe.RunEventStore = runloginmem.New()
-	probe.SessionStore = sessioninmem.New()
-	probe.Hooks = hooks.NewBus()
-	probe.Tracer = configureTracer(&options)
-	h := &Harness{
-		defaultRunOptions: slices.Clone(options.defaultRunOptions), scripts: options.scripts, timeout: options.timeout, responder: options.responder, provider: options.provider,
-		runs: make(map[string]*harnessRun), models: make(map[string]model.Client), capturing: make(map[string]*captureState),
-		stubs: stubTable{
-			entries: make(map[tools.Ident]stubEntry), counts: make(map[tools.Ident]int),
-			passthrough: make(map[tools.Ident]bool), passthroughAll: options.passthroughAll,
-		},
-	}
-	probe.Interceptors = append([]runtime.Interceptor{runtime.ToolInterceptorFuncs{BeforeToolFunc: h.beforeStub}}, probe.Interceptors...)
-	rt := runtime.New(func(options *runtime.Options) {
-		*options = probe
-	})
-	if err := register(ctx, rt); err != nil {
-		return nil, fmt.Errorf("agenttest: register: %w", err)
-	}
-	h.rt = rt
-	if err := h.registerModels(options); err != nil {
-		return nil, err
-	}
-	if err := rt.Seal(ctx); err != nil {
-		return nil, fmt.Errorf("agenttest: seal registration after installing capture gates: %w", err)
-	}
-	h.eventsUnverified = rt.HasEventInterceptors()
-	return h, nil
+	return newHarness(ctx, register, nil, opts...)
 }
 
 // New constructs a harness using the test context and reports cleanup leaks to t.
@@ -275,6 +236,7 @@ func (h *Harness) Close() error {
 	slices.Sort(ids)
 	for _, id := range ids {
 		run := runs[id]
+		alive := run.worker.alive()
 		diagnostics = append(diagnostics, run.worker.leaks(id)...)
 		select {
 		case <-run.done:
@@ -284,12 +246,76 @@ func (h *Harness) Close() error {
 				diagnostics = append(diagnostics, fmt.Errorf("agenttest: run %s cleanup: %w", id, err))
 			}
 		}
-		if err := run.worker.close(context.Background()); err != nil {
-			diagnostics = append(diagnostics, err)
+		closeErr := run.worker.close(context.Background())
+		if closeErr != nil {
+			diagnostics = append(diagnostics, fmt.Errorf("agenttest: run %s cleanup: %w", id, closeErr))
+		}
+		if alive && !errors.Is(closeErr, errResponderAlive) {
+			diagnostics = append(diagnostics, fmt.Errorf("agenttest: run %s: %w", id, errResponderAlive))
 		}
 	}
 	diagnostics = append(diagnostics, h.stubDiagnostics(true))
 	return errors.Join(diagnostics...)
+}
+
+// newHarness exposes the gate-to-seal boundary to deterministic package tests.
+func newHarness(ctx context.Context, register Register, beforeSeal func(*runtime.Runtime), opts ...Option) (*Harness, error) {
+	options, err := validatedHarnessOptions(opts)
+	if err != nil {
+		return nil, err
+	}
+	probe, err := harnessRuntimeOptions(&options)
+	if err != nil {
+		return nil, err
+	}
+	h := &Harness{
+		defaultRunOptions: slices.Clone(options.defaultRunOptions), scripts: options.scripts, timeout: options.timeout, responder: options.responder, provider: options.provider,
+		runs: make(map[string]*harnessRun), models: make(map[string]model.Client), capturing: make(map[string]*captureState),
+		stubs: stubTable{
+			entries: make(map[tools.Ident]stubEntry), counts: make(map[tools.Ident]int),
+			passthrough: make(map[tools.Ident]bool), passthroughAll: options.passthroughAll,
+		},
+	}
+	probe.Interceptors = append([]runtime.Interceptor{runtime.ToolInterceptorFuncs{BeforeToolFunc: h.beforeStub}}, probe.Interceptors...)
+	rt := runtime.New(func(options *runtime.Options) {
+		*options = probe
+	})
+	if err := register(ctx, rt); err != nil {
+		return nil, fmt.Errorf("agenttest: register: %w", err)
+	}
+	h.rt = rt
+	if err := h.registerModels(options); err != nil {
+		return nil, err
+	}
+	if beforeSeal != nil {
+		beforeSeal(rt)
+	}
+	if err := rt.Seal(ctx); err != nil {
+		return nil, fmt.Errorf("agenttest: seal registration after installing capture gates: %w", err)
+	}
+	if err := h.verifyGates(); err != nil {
+		return nil, err
+	}
+	h.eventsUnverified = rt.HasEventInterceptors()
+	return h, nil
+}
+
+// harnessRuntimeOptions validates application options and creates harness-owned infrastructure.
+func harnessRuntimeOptions(options *harnessOptions) (runtime.Options, error) {
+	var probe runtime.Options
+	for _, option := range options.runtime {
+		option(&probe)
+	}
+	if err := validateOwnedOptions(probe); err != nil {
+		return runtime.Options{}, err
+	}
+	probe.Engine = engineinmem.New()
+	probe.RunStore = runstoreinmem.New()
+	probe.RunEventStore = runloginmem.New()
+	probe.SessionStore = sessioninmem.New()
+	probe.Hooks = hooks.NewBus()
+	probe.Tracer = configureTracer(options)
+	return probe, nil
 }
 
 // validatedHarnessOptions applies declarations and rejects live/script conflicts
@@ -481,12 +507,15 @@ func (h *Harness) registerModels(options harnessOptions) error {
 // prepareRunOptions applies defaults before callers and rejects every RunID override.
 func (h *Harness) prepareRunOptions(opts []RunOption) ([]RunOption, error) {
 	opts = append(slices.Clone(h.defaultRunOptions), opts...)
-	probe := runtime.RunInput{RunID: "agenttest-reserved"}
+	// Two distinct initial values detect even an override equal to a sentinel.
+	first := runtime.RunInput{RunID: "agenttest-reserved"}
+	second := runtime.RunInput{}
 	for _, option := range opts {
-		option(&probe)
-	}
-	if probe.RunID != "agenttest-reserved" {
-		return nil, errors.New("agenttest: RunID is reserved")
+		option(&first)
+		option(&second)
+		if first.RunID != "agenttest-reserved" || second.RunID != "" {
+			return nil, errors.New("agenttest: RunID is reserved")
+		}
 	}
 	return opts, nil
 }

@@ -704,9 +704,26 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 
 ## Agent Testing
 
-- Harness construction gates models and seals runtime registration. Register all
-  models, agents and toolsets in the callback; later registration and model
+- Harness construction gates models, seals runtime registration and verifies
+  every stored client equals the installed gate. Gate replacement or new ungated
+  models during construction fail setup. RegisterModelClient atomically returns
+  the stored client with runtime decoration so this check preserves context limits.
+  Register all models, agents and toolsets in the callback; later registration and model
   replacement return `runtime.ErrRegistrationClosed`.
+- Capture gates only model calls resolved from the runtime registry at call
+  time: planner context, summaries and child agents. Direct application-held
+  clients are not gated, including values obtained from rt.ModelClient inside
+  register before gate installation. Register callbacks and hooks (interceptors,
+  planners, executors and adapters) must not retain those references; resolve
+  clients through the registry at call time. This limit is documented in FA1;
+  gating at registration time is follow-up FA2.
+- Capture rejects every non-nil History policy across all registered agents,
+  including Compress, KeepRecentTurns and custom policies. CaptureHistoryError
+  names the agent and explains the ungated-client risk before any session,
+  policy invocation or model call. HistoryPolicy is a function whose captured
+  clients cannot be inspected. Never skip the policy to obtain a different
+  request. Ordinary Run still applies History; resolving Compress clients by ID
+  remains the separate FR2 runtime follow-up, not a change in FA1.
 - RawStub result-decoder failures are dispatch `StubError` values, recorded in
   stub and harness calls and reported by Run and Close.
 - Request fixtures reject unknown envelope and nested request members by
@@ -716,6 +733,16 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   failure skip the parent and stop. Attempt cleanup restores Setenv and Chdir
   (including PWD) and removes TempDir directories before the next attempt.
   Process-state changes retain the parent test's parallel-test restrictions.
+  Repeat obtains the parent ArtifactDir once on the caller goroutine before
+  starting attempts; parent-directory failure aborts Repeat. ArtifactDir lazily
+  creates stable, distinct attempt subdirectories under that base; files survive
+  attempt cleanup and subdirectory creation errors fail the attempt. Documentation snippets reject trailing blank lines; only compiled
+  source regions trim them.
+  OS and Attr failures remain attempt-local; Skipped reads local state, and
+  Output/Attr use attempt-prefixed logs. Fixture reads and writes are folder-confined.
+  Child awaits report ErrUnansweredAwait; child-first capture calls name the child
+  run and direct callers to capture that agent. Partial eval results retain unique
+  check and score names even when Assert fails.
 
 ## Eval Scenarios
 

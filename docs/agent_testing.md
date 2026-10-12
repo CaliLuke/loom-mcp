@@ -51,7 +51,6 @@ func guideQuery(p *projected.ProjectedLookupToolPayload) error {
     }
     return nil
 }
-
 ```
 
 Add `ScriptedModel`, then `Stub(h, tool).Return`. A typed `When(ArgsEqual)` routes
@@ -84,7 +83,6 @@ func TestGuideLookupWiring(t *testing.T) {
         expect.Completed(),
     )
 }
-
 ```
 
 Stubs are strict by default. An unstubbed activity call becomes a model-visible
@@ -129,14 +127,18 @@ func guideSelection(t testing.TB, register agenttest.Register) {
         expect.Require(at, expect.Calls(d.Calls), expect.Forbid(projected.ProjectedLookupToolTool))
     })
 }
-
 ```
 
 `Repeat` takes `func(testing.TB)`, runs all attempts, and reports failed attempts'
 diagnostics. An attempt that fails and then skips counts as failed; a skip
 without failure skips the parent and stops. Each attempt restores Setenv and
 Chdir (including PWD) and removes its TempDir directories during LIFO cleanup,
-before the next attempt starts. Process-state changes still require a
+before the next attempt starts. `Repeat` obtains the parent's ArtifactDir once
+on the calling test goroutine before starting attempts; a parent-directory
+failure aborts `Repeat`. Each attempt creates its own distinct, initially empty
+subdirectory on first ArtifactDir use. It stays stable within the attempt,
+preserves files after cleanup, and reports subdirectory creation errors to that
+attempt. Process-state changes still require a
 non-parallel parent test. `Decide` returns a `*Decision` with request, response,
 calls and latency, without recording a run. Result and completion expectations require a
 trajectory subject and cannot be checked against model calls alone.
@@ -168,8 +170,8 @@ func TestGuideFixtureReuse(t *testing.T) {
     assert.Equal(t, agenttest.Decide(t, first, r).Calls, agenttest.Decide(t, second, loaded).Calls)
     assert.Zero(t, firstScript.Remaining())
     assert.Zero(t, secondScript.Remaining())
+    assert.Equal(t, firstScript.Requests(), secondScript.Requests())
 }
-
 ```
 
 Private completion validators are not persisted. Do not replay provider thinking
@@ -206,7 +208,6 @@ func TestGuideDiagnoseStubError(t *testing.T) {
     require.NoError(t, r.RunErr) // The planner completed after seeing a tool error.
     t.Log(r.Trajectory.Render(trajectory.RenderOptions{Limits: trajectory.DefaultLimits()}))
 }
-
 ```
 
 `agenttest.New` registers cleanup automatically. The diagnostic example uses
@@ -244,7 +245,6 @@ func fixtureEvalCLI() evalcli.Config {
 		}},
 	}
 }
-
 ```
 
 In the application’s `main`, call `evalcli.Main` with a cancellation context,
@@ -297,9 +297,26 @@ The examples use no confirmation flows.
 
 - Inline and agent-as-tool tools cannot be stubbed. Test child agents through
   their own models and activity-tool stubs.
-- Models registered after `New` are not gated by capture. Register every model
-  inside `register` before constructing the harness.
-- Unanswered child-run awaits time out instead of reporting an unanswered await.
+- Harness construction seals registration and then verifies every registered
+  client is exactly the capture gate installed for it. Concurrent registration
+  that replaces or bypasses a gate fails construction. Register every model
+  inside `register`; later registrations return `runtime.ErrRegistrationClosed`.
+- Capture gates only model calls the runtime resolves from its registry at call
+  time, including planner context, summaries, and child agents. A client the
+  application holds directly is not gated, including any client obtained from
+  `rt.ModelClient` inside the register callback before gates are installed.
+  Register callbacks and hooks (interceptors, planners, executors, and adapters)
+  must not retain those references; resolve clients through the runtime registry
+  at call time. Gating at registration time is follow-up FA2.
+- Capture rejects the harness if any registered agent has a non-nil History
+  policy, including `Compress`, `KeepRecentTurns`, and custom policies. It returns
+  `*agenttest.CaptureHistoryError` naming the agent before creating a session or
+  calling any policy or model. History functions can retain clients outside the
+  capture gates, and their captured state cannot be inspected. Capture never
+  skips the policy to manufacture a different request. Ordinary `Run` remains
+  available with History policies.
+- Child-run awaits return `ErrUnansweredAwait`; test their responder flows
+  by running the child agent directly.
 - The harness has no Temporal mode.
 
 ## Runtime reference

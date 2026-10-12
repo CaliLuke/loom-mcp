@@ -17,17 +17,28 @@ import (
 // Scenario shares defaults, assertions and optional driving code across items.
 // Drive, Assert and expectation predicates must be safe for concurrent calls.
 type Scenario struct {
-	ID        string
-	Agent     agent.Ident
-	Task      string
+	// ID uniquely identifies the scenario in a suite.
+	ID string
+	// Agent names the registered agent used by the default driver.
+	Agent agent.Ident
+	// Task supplies the default task description when an item omits it.
+	Task string
+	// Reference supplies the default reference when an item omits it.
 	Reference string
-	Tags      []string
-	Timeout   time.Duration
-	Items     Dataset
-	Claims    []Claim
-	Expect    []expect.Expectation
-	Drive     func(ctx context.Context, h *agenttest.Harness, item Item) (*agenttest.SessionResult, error)
-	Assert    func(ctx context.Context, a *Attempt) (Assertions, error)
+	// Tags label the scenario for selection.
+	Tags []string
+	// Timeout bounds Drive and Assert; zero uses the caller's context.
+	Timeout time.Duration
+	// Items contains the immutable dataset executed for this scenario.
+	Items Dataset
+	// Claims declares judge criteria shared by all items.
+	Claims []Claim
+	// Expect contains deterministic expectations evaluated against each session.
+	Expect []expect.Expectation
+	// Drive replaces the default sequential RunSession driver when non-nil.
+	Drive func(ctx context.Context, h *agenttest.Harness, item Item) (*agenttest.SessionResult, error)
+	// Assert adds checks, scores and claims after the declared expectations.
+	Assert func(ctx context.Context, a *Attempt) (Assertions, error)
 }
 
 // Claim declares a criterion for a judge; Execute does not judge it.

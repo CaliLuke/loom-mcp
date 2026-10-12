@@ -286,6 +286,9 @@ func TestStubAfterCancellation(t *testing.T) {
 	wg.Wait()
 	require.Len(t, stub.Calls(), 1)
 	require.ErrorIs(t, stub.Calls()[0].Err, context.Canceled)
+	assert.Equal(t, 1, stub.Calls()[0].Response)
+	require.Len(t, h.ToolCalls(), 1)
+	assert.Equal(t, 1, h.ToolCalls()[0].Response)
 	// Consume the unrelated model turn so cleanup proves delay is not an unused stub.
 	result, runErr := h.Run(t.Context(), "root", nil)
 	require.NoError(t, runErr)

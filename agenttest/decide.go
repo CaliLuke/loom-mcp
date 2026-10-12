@@ -81,6 +81,9 @@ func decideStream(ctx context.Context, client model.Client, req *model.Request) 
 		err = nil
 	}
 	if finalErr := stream.Finalize(err); finalErr != nil {
+		if errors.Is(finalErr, err) {
+			return nil, finalErr
+		}
 		return nil, errors.Join(err, finalErr)
 	}
 	if err != nil {

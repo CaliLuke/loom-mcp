@@ -3,6 +3,7 @@ package eval_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -183,4 +184,25 @@ func customScenario(session *agenttest.SessionResult) eval.Scenario {
 		return session, nil
 	}
 	return s
+}
+
+func TestExecutePartialChecksHaveUniqueNames(t *testing.T) {
+	for _, panics := range []bool{false, true} {
+		t.Run(fmt.Sprint(panics), func(t *testing.T) {
+			sentinel := errors.New("assert failed")
+			s := customScenario(syntheticSession())
+			s.Expect = []expect.Expectation{expect.Func("runs_succeeded", func(expect.Subject) error { return nil })}
+			s.Assert = func(context.Context, *eval.Attempt) (eval.Assertions, error) {
+				if panics {
+					panic(sentinel)
+				}
+				return eval.Assertions{}, sentinel
+			}
+			out, err := eval.Execute(t.Context(), &agenttest.Harness{}, s, s.Items.Items()[0])
+			require.NoError(t, err)
+			require.ErrorContains(t, out.Err, "assert failed")
+			require.Len(t, out.Checks, 2)
+			assert.Equal(t, "runs_succeeded#2", out.Checks[1].Name)
+		})
+	}
 }

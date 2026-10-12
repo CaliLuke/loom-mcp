@@ -28,7 +28,9 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   and canonical JSON; captured want-encoding errors surface only at matching.
   Matchers are never invoked at declaration. Times defaults to one; Always is
   exempt from unused cleanup. Bounds is checked before Run and at Close for
-  bounded Return declarations. After respects cancellation.
+  bounded Return declarations. After respects cancellation. A reserved response
+  retains its one-based index and consumption on delay/decode failure; zero means
+  no response was selected. Missing toolset dispatch has its own setup diagnostic.
 - StubError records strict/exhausted/unmatched/decode failures. The model sees
   normal runtime tool errors and the run continues; after completion Run returns
   populated evidence plus joined per-run StubErrors. Close reports them all.
@@ -107,7 +109,8 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   trajectory's Final. Checks order runs_succeeded, Expect, ExpectedTools, Assert.
   Scores prepend model_calls (adopted), tool_calls, failed_tool_calls and
   repeated_tool_calls, summed recursively across the session. Expected tools add
-  tool_correctness; duplicate check/score names receive #n.
+  tool_correctness; duplicate check/score names receive #n, including partial
+  results retained after Assert errors or panics.
   Scenario claims precede Assert claims; duplicate claim IDs are errors.
 - RunErr is a quality failure in runs_succeeded, independent of event trust.
   Harness/Drive errors preserve session evidence, empty checks/scores and skip

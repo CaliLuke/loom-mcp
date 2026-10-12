@@ -2,6 +2,7 @@ package agenttest_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	goruntime "runtime"
 	"strings"
@@ -149,4 +150,14 @@ func (c *inspectClient) Stream(ctx context.Context, req *model.Request) (model.V
 
 func (c rawCompleteClient) Complete(ctx context.Context, req *model.Request) (*model.Response, error) {
 	return c.provider.Complete(ctx, req)
+}
+
+func TestDecideStreamFailureAppearsOnce(t *testing.T) {
+	failure := errors.New("stream failed")
+	client, _ := agenttest.ScriptClient(t, agenttest.Respond(agenttest.Text("text")).FailStreamAfter(0, failure))
+	r, err := agenttest.NewRequest("model", &model.Request{Stream: true, Messages: agenttest.User("hello")})
+	require.NoError(t, err)
+	_, err = agenttest.DecideContext(t.Context(), client, r)
+	require.ErrorIs(t, err, failure)
+	assert.Equal(t, 1, strings.Count(err.Error(), failure.Error()))
 }

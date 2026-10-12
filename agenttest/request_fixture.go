@@ -107,7 +107,11 @@ func SaveRequest(path string, r Request) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o600)
+	root, err := os.OpenRoot(filepath.Dir(path))
+	if err != nil {
+		return err
+	}
+	return errors.Join(root.WriteFile(filepath.Base(path), data, 0o600), root.Close())
 }
 
 // readRequestFixture confines the file access to the explicitly selected folder.

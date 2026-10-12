@@ -18,47 +18,48 @@ func TestScenarioValidation(t *testing.T) {
 	invalidUTF8 := string([]byte{0xff})
 	tests := []struct {
 		name   string
+		want   string
 		change func(*eval.Scenario)
 	}{
-		{"ID", func(s *eval.Scenario) {
+		{"ID", "invalid scenario ID", func(s *eval.Scenario) {
 			s.ID = "bad/id"
-		}}, {"agent", func(s *eval.Scenario) {
+		}}, {"agent", "Agent is required", func(s *eval.Scenario) {
 			s.Agent = ""
 		}},
-		{"negative timeout", func(s *eval.Scenario) {
+		{"negative timeout", "Timeout must be non-negative", func(s *eval.Scenario) {
 			s.Timeout = -time.Second
 		}},
-		{"dataset", func(s *eval.Scenario) {
+		{"dataset", "empty dataset", func(s *eval.Scenario) {
 			s.Items = eval.Items()
 		}},
-		{"file error", func(s *eval.Scenario) {
+		{"file error", "missing", func(s *eval.Scenario) {
 			s.Items = eval.JSONL(fstest.MapFS{}, "missing")
 		}},
-		{"tag", func(s *eval.Scenario) {
+		{"tag", "invalid tag", func(s *eval.Scenario) {
 			s.Tags = []string{"bad/tag"}
 		}},
-		{"duplicate tags", func(s *eval.Scenario) {
+		{"duplicate tags", "duplicate tag", func(s *eval.Scenario) {
 			s.Tags = []string{"tag", "tag"}
 		}},
-		{"claim ID", func(s *eval.Scenario) {
+		{"claim ID", "invalid claim ID", func(s *eval.Scenario) {
 			s.Claims[0].ID = "Upper"
 		}},
-		{"long claim ID", func(s *eval.Scenario) {
+		{"long claim ID", "invalid claim ID", func(s *eval.Scenario) {
 			s.Claims[0].ID = strings.Repeat("a", 65)
 		}},
-		{"claim text", func(s *eval.Scenario) {
+		{"claim text", "text must be non-empty", func(s *eval.Scenario) {
 			s.Claims[0].Text = ""
 		}},
-		{"claim UTF8", func(s *eval.Scenario) {
+		{"claim UTF8", "text must be non-empty", func(s *eval.Scenario) {
 			s.Claims[0].Text = invalidUTF8
 		}},
-		{"duplicate claims", func(s *eval.Scenario) {
+		{"duplicate claims", "duplicate claim ID", func(s *eval.Scenario) {
 			s.Claims = append(s.Claims, s.Claims[0])
 		}},
-		{"no assertions", func(s *eval.Scenario) {
+		{"no assertions", "no assertions", func(s *eval.Scenario) {
 			s.Claims = nil
 		}},
-		{"partial tools", func(s *eval.Scenario) {
+		{"partial tools", "no assertions", func(s *eval.Scenario) {
 			s.Claims = nil
 			s.Items = eval.Items(eval.Item{ID: "one", Input: "hi", ExpectedTools: &expect.ExpectedTools{}}, eval.Item{ID: "two", Input: "hi"})
 		}},
@@ -69,6 +70,7 @@ func TestScenarioValidation(t *testing.T) {
 			tc.change(&s)
 			err := eval.Validate(s)
 			require.ErrorContains(t, err, "scenario")
+			assert.ErrorContains(t, err, tc.want)
 		})
 	}
 	s := validScenario()

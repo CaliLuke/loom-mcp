@@ -37,7 +37,8 @@ type Response[P, R any] struct {
 	delay     time.Duration
 }
 
-// StubCall records one stub invocation. Response is one-based, or zero on failure.
+// StubCall records one stub invocation. Response is the one-based reserved
+// response index, even if delay or decoding fails; zero means none was selected.
 type StubCall[P, R any] struct {
 	RunID, ToolCallID, ParentToolCallID string
 	Payload                             P
@@ -48,7 +49,8 @@ type StubCall[P, R any] struct {
 }
 
 // RecordedCall records every activity call reaching the harness, in arrival order.
-// Call and Response are one-based; Response is zero when no stub response ran.
+// Call and Response are one-based; Response is zero when none was selected.
+// A selected response remains consumed when its delay or decoding fails.
 type RecordedCall struct {
 	Tool                                tools.Ident
 	Call                                int
@@ -106,7 +108,11 @@ func Stub[P, R any](h *Harness, tool tools.TypedTool[P, R]) *ToolStub[P, R] {
 		return stub
 	}
 	mode, ok := h.rt.ToolDispatchMode(tool.Name)
-	if !ok || mode != runtime.DispatchActivity {
+	if !ok {
+		h.stubSetupError(fmt.Errorf("agenttest: tool %q has no registered toolset", tool.Name))
+		return stub
+	}
+	if mode != runtime.DispatchActivity {
 		h.stubSetupError(fmt.Errorf("agenttest: tool %q: inline/agent-as-tool not stubbable; inline and agent-as-tool stubbing is a runtime follow-up", tool.Name))
 		return stub
 	}

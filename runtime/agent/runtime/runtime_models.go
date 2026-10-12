@@ -103,19 +103,39 @@ type VertexConfig struct {
 // Registration fails with ErrRegistrationClosed after the runtime is sealed or
 // its first run is submitted.
 func (r *Runtime) RegisterModel(id string, client model.Client) error {
+	_, err := r.RegisterModelClient(id, client)
+	return err
+}
+
+// RegisterModelClient registers client under id, replacing any existing client
+// with that identifier, and returns the exact stored client, including runtime
+// context-limit decoration. Storage and retrieval happen under one registry lock;
+// the returned value is not affected by a later registration replacing the entry.
+//
+// An empty id or nil client returns an error. After Seal or the first submitted
+// run closes registration, RegisterModelClient returns ErrRegistrationClosed,
+// including for otherwise invalid arguments. Every error returns a nil client
+// and leaves the registry unchanged.
+//
+// Bootstrap code can retain the returned value to verify its registration after
+// sealing without a separate, racy ModelClient lookup. As with model.Client
+// generally, callers must ensure its concrete value is comparable before using
+// ==; this method does not impose comparability on client implementations.
+func (r *Runtime) RegisterModelClient(id string, client model.Client) (model.Client, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.registrationClosed {
-		return ErrRegistrationClosed
+		return nil, ErrRegistrationClosed
 	}
 	if id == "" {
-		return errors.New("model id is required")
+		return nil, errors.New("model id is required")
 	}
 	if client == nil {
-		return errors.New("model client is required")
+		return nil, errors.New("model client is required")
 	}
-	r.models[id] = r.withContextLimits(id, client)
-	return nil
+	registered := r.withContextLimits(id, client)
+	r.models[id] = registered
+	return registered, nil
 }
 
 // ModelClient returns a registered model client by ID, if present.

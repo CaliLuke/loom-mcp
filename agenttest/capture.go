@@ -32,7 +32,12 @@ var (
 // recorded, then fails that model invocation without consuming its client.
 // Planners must return the sentinel error. Tools scheduled before that invocation
 // follow the normal strict stub rules; model interceptors may short-circuit it.
+// If any registered agent has a non-nil History policy, capture returns a
+// *CaptureHistoryError before creating a session or invoking any policy or model.
 func (h *Harness) CaptureFirstRequest(ctx context.Context, id agent.Ident, input Input, opts ...RunOption) (Request, error) {
+	if agents := h.rt.AgentsWithHistoryPolicy(); len(agents) > 0 {
+		return Request{}, &CaptureHistoryError{AgentID: agents[0]}
+	}
 	sessionID, err := h.newSession(ctx)
 	if err != nil {
 		return Request{}, err
@@ -44,6 +49,11 @@ func (h *Harness) CaptureFirstRequest(ctx context.Context, id agent.Ident, input
 	}
 	calls := result.Record.Runs[0].Calls
 	if len(calls) == 0 {
+		for _, child := range result.Record.Runs[1:] {
+			if len(child.Calls) > 0 {
+				return Request{}, fmt.Errorf("agenttest: capture recorded a model call in child run %s; capture the child agent directly", child.RunID)
+			}
+		}
 		return Request{}, ErrCaptureNoModelCall
 	}
 	h.mu.Lock()
@@ -79,25 +89,50 @@ func (g gate) Stream(ctx context.Context, req *model.Request) (model.ValidatedSt
 	return g.inner.Stream(ctx, req)
 }
 
+// captureGate preserves optional capabilities using comparable pointer adapters,
+// so exact gate identity checks also accept non-comparable provider values.
+func captureGate(inner model.Client, h *Harness) model.Client {
+	base := &gate{inner: inner, harness: h}
+	counter, _ := inner.(model.TokenCounter)
+	info, _ := inner.(model.ContextInfo)
+	// Let WithCapabilities remove typed nil capabilities before wrapping them.
+	capabilities := model.WithCapabilities(base, counter, info)
+	counter, _ = capabilities.(model.TokenCounter)
+	info, _ = capabilities.(model.ContextInfo)
+	if counter != nil {
+		counter = &struct{ model.TokenCounter }{counter}
+	}
+	if info != nil {
+		info = &struct{ model.ContextInfo }{info}
+	}
+	return model.WithCapabilities(base, counter, info)
+}
+
 // installGates retains direct clients and preserves their optional capabilities.
 func (h *Harness) installGates() error {
+	h.gates = make(map[string]model.Client)
 	for _, id := range h.rt.ModelIDs() {
 		inner, ok := h.rt.ModelClient(id)
 		if !ok {
 			return fmt.Errorf("agenttest: registered model %q disappeared", id)
 		}
 		h.models[id] = inner
-		counter, hasCounter := inner.(model.TokenCounter)
-		if !hasCounter {
-			counter = nil
-		}
-		info, hasInfo := inner.(model.ContextInfo)
-		if !hasInfo {
-			info = nil
-		}
-		wrapped := model.WithCapabilities(gate{inner: inner, harness: h}, counter, info)
-		if err := h.rt.RegisterModel(id, wrapped); err != nil {
+		wrapped := captureGate(inner, h)
+		installed, err := h.rt.RegisterModelClient(id, wrapped)
+		if err != nil {
 			return fmt.Errorf("agenttest: gate model %q: %w", id, err)
+		}
+		h.gates[id] = installed
+	}
+	return nil
+}
+
+// verifyGates must run after Seal succeeds, when registry identities are immutable.
+func (h *Harness) verifyGates() error {
+	for _, id := range h.rt.ModelIDs() {
+		client, ok := h.rt.ModelClient(id)
+		if !ok || client != h.gates[id] {
+			return fmt.Errorf("agenttest: model %q capture gate changed during registration", id)
 		}
 	}
 	return nil

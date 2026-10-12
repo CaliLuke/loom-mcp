@@ -30,6 +30,8 @@ func TestRepeatThresholds(t *testing.T) {
 			assert.Equal(t, 4, report.Failed[1].Index)
 			assert.Equal(t, minPass == 4, tb.failed)
 			output := strings.Join(append(tb.logs, tb.diagnostics...), "\n")
+			assert.Contains(t, output, "failure 2")
+			assert.Contains(t, output, "failure 4")
 			assert.Less(t, strings.Index(output, "failure 2"), strings.Index(output, "failure 4"))
 			assert.Contains(t, output, "attempt 1/5:")
 		})

@@ -76,6 +76,7 @@ func TestGuideFixtureReuse(t *testing.T) {
 	assert.Equal(t, agenttest.Decide(t, first, r).Calls, agenttest.Decide(t, second, loaded).Calls)
 	assert.Zero(t, firstScript.Remaining())
 	assert.Zero(t, secondScript.Remaining())
+	assert.Equal(t, firstScript.Requests(), secondScript.Requests())
 }
 
 // snippet:end fixture_reuse

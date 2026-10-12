@@ -5,10 +5,12 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
 
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,6 +19,8 @@ type snippetDocument struct {
 	text  string
 	allGo bool
 }
+
+var goFencePattern = regexp.MustCompile("^\\s*(`{3,}|~{3,})\\s*go(?:\\s.*)?$")
 
 func TestDocsSnippetsMatchCompiledFixture(t *testing.T) {
 	repo, err := os.OpenRoot(filepath.Clean("../../../.."))
@@ -55,6 +59,14 @@ func TestDocsSnippetsMatchCompiledFixture(t *testing.T) {
 	}
 }
 
+func TestDocumentedRegistrationClosed(t *testing.T) {
+	body, err := os.ReadFile("../../../../docs/runtime.md")
+	require.NoError(t, err)
+	match := regexp.MustCompile(`ErrRegistrationClosed\s*=\s*errors.New\("([^"]*)"\)`).FindSubmatch(body)
+	require.Len(t, match, 2)
+	assert.Equal(t, runtime.ErrRegistrationClosed.Error(), string(match[1]))
+}
+
 func TestDocsSnippetParser(t *testing.T) {
 	const source = "// snippet:start selection\n\tcall()\n\t\tmore()  \n// snippet:end selection\n"
 	const doc = "<!-- snippet: selection -->\n```go\ncall()\n    more()\n```\n"
@@ -63,6 +75,16 @@ func TestDocsSnippetParser(t *testing.T) {
 		allGo                   bool
 	}{
 		{"matching indentation", doc, source, "", true},
+		{"trailing source blank", doc, strings.Replace(source, "// snippet:end", "\n// snippet:end", 1), "", true},
+		{"trailing doc blank", strings.Replace(doc, "more()\n```", "more()\n\n```", 1), source, "drift", true},
+		{"multiple trailing doc blanks", strings.Replace(doc, "more()\n```", "more()\n\n\n```", 1), source, "drift", true},
+		{"trailing doc whitespace", strings.Replace(doc, "more()\n```", "more()\n \t\n```", 1), source, "drift", true},
+		{"missing selection", "", "", "selection snippet is required", true},
+		{"indented fence", doc + "  ```go\ncall()\n  ```", source, "unmarked go block", true},
+		{"decorated fence", doc + "```go title=example\ncall()\n```", source, "unmarked go block", true},
+		{"tilde fence", doc + "~~~go\ncall()\n~~~", source, "unmarked go block", true},
+		{"indented runtime fence", doc + "  ```go\nagenttest.New()\n  ```", source, "unmarked go block", false},
+		{"decorated runtime fence", doc + "```go title=example\nexpect.Calls()\n```", source, "unmarked go block", false},
 		{"drift", strings.ReplaceAll(doc, "call()", "wrong()"), source, "drift", true},
 		{"unknown name", strings.ReplaceAll(doc, "selection", "unknown"), source, "unknown snippet", true},
 		{"duplicate region", doc, source + source, "defined twice", true},
@@ -115,6 +137,9 @@ func checkDocsSnippets(documents map[string]snippetDocument, sources map[string]
 			return fmt.Errorf("unused snippet %q", name)
 		}
 	}
+	if _, ok := regions["selection"]; !ok {
+		return fmt.Errorf("selection snippet is required")
+	}
 	return nil
 }
 
@@ -139,7 +164,7 @@ func readSnippetRegions(source string, regions map[string]string) error {
 			if name == "selection" && i-start > 30 {
 				return fmt.Errorf("selection snippet exceeds 30 lines: %d", i-start)
 			}
-			regions[name] = normalizeSnippet(lines[start:i])
+			regions[name] = strings.TrimRight(normalizeSnippet(lines[start:i]), "\n")
 			name = ""
 		}
 	}
@@ -157,17 +182,18 @@ func checkSnippetDocument(doc snippetDocument, regions map[string]string, used m
 		if marker, ok := strings.CutPrefix(lines[i], "<!-- snippet: "); ok {
 			var closed bool
 			name, closed = strings.CutSuffix(marker, " -->")
-			if !closed || i+1 >= len(lines) || lines[i+1] != "```go" {
+			if !closed || i+1 >= len(lines) || goFence(lines[i+1]) == "" {
 				return fmt.Errorf("snippet marker must precede a go fence at line %d", i+1)
 			}
 			i++
 		}
-		if lines[i] != "```go" {
+		fence := goFence(lines[i])
+		if fence == "" {
 			continue
 		}
 		start := i + 1
 		i = start
-		for i < len(lines) && lines[i] != "```" {
+		for i < len(lines) && strings.TrimSpace(lines[i]) != fence {
 			i++
 		}
 		if i == len(lines) {
@@ -194,7 +220,7 @@ func checkSnippetDocument(doc snippetDocument, regions map[string]string, used m
 }
 
 // normalizeSnippet removes common leading tabs, expands remaining indentation,
-// and strips trailing whitespace without changing interior text.
+// and strips line-end whitespace while preserving blank lines.
 func normalizeSnippet(lines []string) string {
 	common := -1
 	for _, line := range lines {
@@ -226,4 +252,13 @@ func sortedSnippetPaths[T any](entries map[string]T) []string {
 	}
 	sort.Strings(paths)
 	return paths
+}
+
+// goFence recognizes Markdown indentation and optional info-string decorations.
+func goFence(line string) string {
+	match := goFencePattern.FindStringSubmatch(line)
+	if len(match) == 0 {
+		return ""
+	}
+	return match[1]
 }

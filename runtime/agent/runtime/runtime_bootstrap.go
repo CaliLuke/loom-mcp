@@ -43,7 +43,7 @@ var (
 	ErrMissingSessionID    = errors.New("session id is required")
 	ErrSessionNotAllowed   = errors.New("session id is not allowed")
 	ErrWorkflowStartFailed = errors.New("workflow start failed")
-	ErrRegistrationClosed  = errors.New("registration closed after first run")
+	ErrRegistrationClosed  = errors.New("registration closed: runtime is sealed")
 )
 
 // New constructs a Runtime using functional options.

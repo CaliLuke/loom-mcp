@@ -20,7 +20,9 @@ and run with `go -C integration_tests/fixtures/assistant ...`.
   with a model client and Decide, without constructing a harness.
 
 Register all models, agents and toolsets inside `register`. Harness construction
-installs capture gates and seals runtime registration. Later registrations,
+installs capture gates, seals runtime registration and verifies every stored
+client equals its installed gate. Concurrent registration that replaces or
+bypasses a gate fails construction. Later registrations,
 including model replacements, return `runtime.ErrRegistrationClosed`.
 `LOOM_LIVE_MODEL` gates only `LiveModel` and `SkipUnlessLive`. Unset or `0` disables,
 `1` enables and any other value fails. LiveModel creates no provider: the
@@ -60,7 +62,6 @@ func TestGuideLookupWiring(t *testing.T) {
         expect.Completed(),
     )
 }
-
 ```
 
 Activity tools are strict by default. Register the real toolset even when its
@@ -95,15 +96,33 @@ func guideSelection(t testing.TB, register agenttest.Register) {
         expect.Require(at, expect.Calls(d.Calls), expect.Forbid(projected.ProjectedLookupToolTool))
     })
 }
-
 ```
+
+Capture gates only model calls resolved from the runtime registry at call time,
+including planner context, summaries and child agents. A directly held application
+client is not gated. This includes clients obtained from `rt.ModelClient` inside
+register before gates are installed. Register callbacks and hooks (interceptors,
+planners, executors and adapters) must not retain those references; resolve clients
+through the registry at call time. Gating at registration time remains follow-up
+FA2; FA1 documents this limit.
+
+Capture rejects the harness when any registered agent has a non-nil History
+policy, including Compress, KeepRecentTurns and custom policies. It returns
+`*agenttest.CaptureHistoryError` naming the agent and the ungated-client risk
+before creating a session or invoking any policy or model. History functions can
+retain clients that capture gates cannot intercept, and their captured state is
+not inspectable. Do not skip History to obtain a different request. Ordinary
+Run still applies History policies.
 
 Capture returns `(Request, error)`; it propagates a sentinel rather than consuming
 the model. Decide returns `*Decision` and runs no tools. Repeat takes
 `func(testing.TB)`. An attempt that fails and then skips counts as failed; only
 a skip without failure skips the parent and stops. Attempt cleanup restores
 Setenv and Chdir (including PWD) and removes TempDir directories before the next
-attempt. Process-state changes still require a non-parallel parent test.
+attempt. Repeat obtains the parent ArtifactDir once on the calling test goroutine
+before starting attempts; a parent-directory Fatal aborts Repeat. ArtifactDir
+lazily creates a stable, distinct attempt subdirectory under that base; files
+survive attempt cleanup and subdirectory creation errors fail that attempt. Process-state changes still require a non-parallel parent test.
 Save/load full request fixtures only under a gitignored
 application path. Loading rejects unknown envelope and nested request members
 by comparing the full request to its canonical re-encoding before verifying the
@@ -175,6 +194,6 @@ Inspect Run's harness error before its populated Result. `RunErr` is the agent
 outcome, while a joined `*StubError` reports strict, exhausted, unmatched or decode
 failures and also appears at Close. Use `errors.As` and read the tool and arguments.
 `Trajectory.Render` provides causal evidence with explicit truncation limits.
-An unanswered root await returns `ErrUnansweredAwait`; child awaits time out
-instead. There is no Temporal harness mode. Consult
+Unanswered root awaits and child-run awaits return `ErrUnansweredAwait`.
+Run the child agent directly to test its responder flow. There is no Temporal harness mode. Consult
 [the runtime reference](../../../../docs/runtime.md#harness) for details.

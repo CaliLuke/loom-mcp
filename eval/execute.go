@@ -128,6 +128,7 @@ func drive(ctx context.Context, h *agenttest.Harness, s Scenario, item Item) (se
 // evaluate preserves declared ordering and separates broken assertions from failures.
 func evaluate(ctx context.Context, s Scenario, a *Attempt, out *Outcome) (err error) {
 	defer func() {
+		uniqueNames(out.Checks, out.Scores)
 		if value := recover(); value != nil {
 			err = fmt.Errorf("eval: assertion panic: %v\n%s", value, debug.Stack())
 		}
@@ -157,7 +158,6 @@ func evaluate(ctx context.Context, s Scenario, a *Attempt, out *Outcome) (err er
 	if err := validateResults(out); err != nil {
 		return err
 	}
-	uniqueNames(out.Checks, out.Scores)
 	return nil
 }
 

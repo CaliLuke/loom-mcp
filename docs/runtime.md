@@ -700,6 +700,13 @@ rt := runtime.New(
 )
 ```
 
+`RegisterModelClient(id, client)` has the same validation and sealing rules as
+`RegisterModel`, but atomically returns the exact stored client, including runtime
+context-limit decoration. Bootstrap code can retain that value to verify its
+registration after sealing without a separate, racy lookup. `RegisterModel`
+remains the error-only convenience method. Empty IDs and nil clients are rejected;
+errors return a nil client and leave registration unchanged.
+
 ### Seal semantics
 
 `rt.Seal(ctx)` is a real activation boundary, not a pure no-op. On worker-mode
@@ -1456,7 +1463,9 @@ answered `Awaits`. Agent failures populate `RunErr`; setup, timeout, unanswered
 await and reconstruction failures return an error. The default wall-clock run
 limit is 30 seconds; change it with `WithRunTimeout`. An unmatched await cancels
 the run and returns `ErrUnansweredAwait`. Responder rules use the first match;
-callbacks must return promptly and support concurrent runs.
+callbacks must return promptly and support concurrent runs. Child-run awaits
+return `ErrUnansweredAwait` with the child run and await identity; run the child
+agent directly to test its responder flow.
 
 `RunSession(ctx, agent, turns...)` returns ordered runs in one new session and
 stops on the first harness error. Earlier history comes only from the agent's
@@ -1479,14 +1488,38 @@ default, and the harness has no Temporal mode.
 
 `h.CaptureFirstRequest(ctx, agent, input, opts...)` returns an immutable
 `agenttest.Request` for the first fully decorated model call, with its registered
-`ModelID` and `Source` call key. The gate returns `ErrCaptureSentinel` before the
-underlying client runs. The planner must propagate that error: swallowing or
+`ModelID` and `Source` call key. Capture gates only model calls the runtime
+resolves from its registry at call time, including calls through planner context,
+summaries, and child agents. For those calls, the gate returns
+`ErrCaptureSentinel` before the underlying client runs. The planner must
+propagate that error: swallowing or
 retrying it returns `ErrCaptureHandled`, and no model call returns
-`ErrCaptureNoModelCall`. Tools scheduled before the model call follow the normal
+`ErrCaptureNoModelCall`. A child-first model call produces a child-run diagnostic;
+capture that child agent directly. Tools scheduled before the model call follow the normal
 strict stub rules. The capture can run concurrently with ordinary harness runs.
-Harness construction installs capture gates and then seals runtime registration.
+Harness construction installs capture gates, seals runtime registration, and then
+checks every registered client against the exact installed gate. Construction
+fails if concurrent registration replaced a gate or added an ungated model.
 Register all models, agents and toolsets in the construction callback; later
 registrations, including model replacements, return `runtime.ErrRegistrationClosed`.
+
+A client the application holds directly is not gated. This includes any client
+obtained from `rt.ModelClient` inside the register callback, before capture gates
+are installed. Register callbacks and hooks—including interceptors, planners,
+executors, and adapters—must not retain such client references; resolve clients
+through the runtime registry at call time. Gating at registration time remains
+follow-up work (FA2); the current harness does not close this path.
+
+Before creating a session, capture checks every registered agent for a non-nil
+`RunPolicy.History`. If one is present, capture returns
+`*agenttest.CaptureHistoryError`, which names the agent and explains that an
+ungated model client cannot be ruled out. This includes `Compress`, pure policies
+such as `KeepRecentTurns`, and custom policies, even on an agent other than the
+capture target. `HistoryPolicy` is a
+function type whose captured clients cannot be inspected. Capture neither invokes
+nor skips the policy; skipping it would change the captured request. Ordinary
+harness runs still apply History policies. `Runtime.AgentsWithHistoryPolicy()`
+provides a sorted snapshot of the affected agent IDs without invoking policies.
 
 `agenttest.Decide(t, h.Model(id), request)` performs one validated Complete or
 Stream call, returning `Decision` with the request, response, calls and latency.
@@ -1499,12 +1532,20 @@ contexts are cancelled before LIFO cleanup. A skip without a failure skips the
 parent and stops; an attempt that fails and then skips counts as failed and
 remaining attempts continue. Setenv and Chdir (including PWD) are restored, and
 TempDir directories are removed, during attempt cleanup before the next attempt.
+`Repeat` obtains the parent's ArtifactDir once on the caller goroutine before
+starting any attempt, so a parent-directory Fatal aborts `Repeat`. ArtifactDir
+lazily creates each attempt's distinct subdirectory under that base; repeated
+calls within an attempt return the same directory. Its files survive attempt
+cleanup, and subdirectory creation errors fail that attempt.
 Process-state changes retain the parent test's prohibition on parallel tests.
+Setenv, Chdir and Attr failures belong to the attempt. Skipped reads the attempt
+state; Output and Attr emit logs attributed to that attempt, not parent attributes.
 
 `WithUserMessage`, `WithSystem`, `WithToolSpecs`, `WithModel` and `WithRunID`
 return new requests with deferred errors surfaced by `Err`, `Request`, Marshal
 or Decide. `SaveRequest` and `LoadRequest` persist deterministic version-1 JSON
-fixtures with a verified request digest. Loading rejects unknown members in the
+fixtures with a verified request digest. Both reads and writes are confined to
+the selected folder, rejecting symlinks that escape it. Loading rejects unknown members in the
 envelope and inside the request, including typed messages, parts and tools. The
 request must match its canonical re-encoding; JSON whitespace and object member
 order do not affect that comparison. Fixtures contain full prompts; keep
@@ -1576,7 +1617,8 @@ Explicit stubs take precedence, including when exhausted. `stub.Calls()` records
 typed payloads, responses and outcomes; `h.ToolCalls()` records all activity calls
 reaching the interceptor in arrival order. Passthrough recordings contain raw
 arguments and correlation IDs; consult the trajectory for real execution results.
-Response indexes are one-based, or zero when no response ran. Snapshots copy raw
+Response indexes are one-based, or zero when no response was selected. A selected
+response stays consumed and retains its index if its delay or decoding fails. Snapshots copy raw
 bytes and slice slots; typed pointer/map/slice values remain shallow copies.
 
 `RawStub(h, toolID)` provides the same response API over `rawjson.Message` for
@@ -1686,7 +1728,8 @@ LF endings and a final newline, and preserves number tokens in `Data` and tool
 `Args`. Items require a unique ID and exactly one non-empty `Input` or non-empty
 `Turns` without empty turns. `ExpectedOutcome` requires `Turns`; `Persona` is
 reserved and rejected. `ExpectedTools: nil` supplies no tool assertion, while
-an empty list explicitly expects no calls (set `Exact` to reject extra calls).
+an empty list requires no particular calls. Set `Exact` to reject all calls
+when the list is empty.
 
 Call `eval.Execute(ctx, h, scenario, item)` to drive one attempt. Item `Task` and
 `Reference` override scenario defaults; `Attempt.Item` receives the resolved
@@ -5686,7 +5729,7 @@ var (
     ErrInvalidConfig       = errors.New("invalid configuration")
     ErrMissingSessionID    = errors.New("session id is required")
     ErrWorkflowStartFailed = errors.New("workflow start failed")
-    ErrRegistrationClosed  = errors.New("registration closed after first run")
+    ErrRegistrationClosed  = errors.New("registration closed: runtime is sealed")
 )
 ```
 

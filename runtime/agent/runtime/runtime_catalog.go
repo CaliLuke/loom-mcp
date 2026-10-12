@@ -57,6 +57,22 @@ func (r *Runtime) ListAgents() []agent.Ident {
 	return out
 }
 
+// AgentsWithHistoryPolicy returns the sorted IDs of registered agents with a
+// non-nil History policy. The result is a snapshot taken under the registry lock;
+// inspecting it does not invoke any policy or expose its captured state.
+func (r *Runtime) AgentsWithHistoryPolicy() []agent.Ident {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var ids []agent.Ident
+	for id, reg := range r.agents {
+		if reg.Policy.History != nil {
+			ids = append(ids, id)
+		}
+	}
+	slices.Sort(ids)
+	return ids
+}
+
 // ListToolsets returns the names of registered toolsets.
 func (r *Runtime) ListToolsets() []string {
 	r.mu.RLock()

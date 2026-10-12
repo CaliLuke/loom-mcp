@@ -38,6 +38,8 @@ type awaitWorker struct {
 // ErrUnansweredAwait indicates that no responder rule matched an observed await.
 var ErrUnansweredAwait = errors.New("agenttest: unanswered await")
 
+var errResponderAlive = errors.New("responder still alive")
+
 // WithResponder configures the rules used by every run, including session turns.
 func WithResponder(responder Responder) Option {
 	return func(options *harnessOptions) error {
@@ -194,19 +196,9 @@ func (h *Harness) subscribeAwaits(ctx context.Context, runID string) (*awaitWork
 	ctx, cancel := context.WithCancel(ctx)
 	worker := &awaitWorker{cancel: cancel, done: make(chan struct{}), failures: make(chan error, 1)}
 	events := make(chan hooks.Event, 64)
+	var children sync.Map
 	subscription, err := h.rt.Bus.Register(hooks.SubscriberFunc(func(_ context.Context, event hooks.Event) error {
-		if event.RunID() != runID {
-			return nil
-		}
-		if _, _, ok := awaitIdentity(event); !ok {
-			return nil
-		}
-		select {
-		case <-ctx.Done():
-		case events <- event:
-		default:
-			worker.fail(fmt.Errorf("agenttest: run %s: await buffer overflow", runID))
-		}
+		worker.observeAwait(ctx, runID, event, &children, events)
 		return nil
 	}))
 	if err != nil {
@@ -277,17 +269,12 @@ func (w *awaitWorker) close(ctx context.Context) error {
 	case <-w.done:
 		return err
 	case <-cleanup.Done():
-		return errors.Join(err, fmt.Errorf("agenttest: responder still alive: %w", cleanup.Err()))
+		return errors.Join(err, fmt.Errorf("%w: %w", errResponderAlive, cleanup.Err()))
 	}
 }
 
 func (w *awaitWorker) leaks(runID string) []error {
 	var diagnostics []error
-	select {
-	case <-w.done:
-	default:
-		diagnostics = append(diagnostics, fmt.Errorf("agenttest: run %s: responder still alive", runID))
-	}
 	w.mu.Lock()
 	if w.open {
 		diagnostics = append(diagnostics, fmt.Errorf("agenttest: run %s: bus subscription still open", runID))
@@ -300,4 +287,38 @@ func (w *awaitWorker) answered() []AnsweredAwait {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return slices.Clone(w.answers)
+}
+
+// alive reports whether the responder still owns its goroutine.
+func (w *awaitWorker) alive() bool {
+	select {
+	case <-w.done:
+		return false
+	default:
+		return true
+	}
+}
+
+// observeAwait routes root awaits and diagnoses descendants without invoking
+// responder callbacks on the synchronous hook bus.
+func (w *awaitWorker) observeAwait(ctx context.Context, runID string, event hooks.Event, children *sync.Map, events chan<- hooks.Event) {
+	if started, ok := event.(*hooks.RunStartedEvent); ok && started.RunContext.RootRunID == runID && event.RunID() != runID {
+		children.Store(event.RunID(), true)
+	}
+	id, prompt, isAwait := awaitIdentity(event)
+	if !isAwait {
+		return
+	}
+	if event.RunID() != runID {
+		if _, child := children.Load(event.RunID()); child {
+			w.fail(fmt.Errorf("%w: child run %s: %s %q (%s)", ErrUnansweredAwait, event.RunID(), event.Type(), id, prompt))
+		}
+		return
+	}
+	select {
+	case <-ctx.Done():
+	case events <- event:
+	default:
+		w.fail(fmt.Errorf("agenttest: run %s: await buffer overflow", runID))
+	}
 }

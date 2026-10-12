@@ -25,6 +25,12 @@ type AttemptReport struct {
 type attemptTB struct {
 	testing.TB
 	mu           sync.Mutex
+	artifactBase string
+	artifactOnce sync.Once
+	artifactDir  string
+	artifactErr  error
+	processState sync.Once
+	output       attemptOutput
 	ctx          context.Context
 	index, total int
 	failed       bool
@@ -36,15 +42,18 @@ type attemptTB struct {
 // Repeat runs all n attempts sequentially, accepting at least minPass successes.
 // Each attempt isolates failures, Fatal, panics and cleanup from the parent.
 // A skipped attempt with no failure skips the parent and stops further attempts.
+// The parent artifact directory is obtained on the caller goroutine before any
+// attempt starts; failure there terminates the caller, not an attempt.
 func Repeat(t testing.TB, n, minPass int, fn func(testing.TB)) RepeatReport {
 	t.Helper()
 	if minPass < 1 || minPass > n {
 		t.Fatalf("agenttest: Repeat: require 1 <= minPass <= n (n=%d, minPass=%d)", n, minPass)
 		return RepeatReport{}
 	}
+	artifactBase := t.ArtifactDir()
 	report := RepeatReport{}
 	for index := 1; index <= n; index++ {
-		at := runAttempt(t, index, n, fn)
+		at := runAttempt(t, index, n, artifactBase, fn)
 		report.Attempts++
 		if at.skipped && !at.failed {
 			t.Skipf("agenttest: Repeat: attempt %d skipped: %v", index, at.diagnostics)
@@ -71,23 +80,6 @@ func Repeat(t testing.TB, n, minPass int, fn func(testing.TB)) RepeatReport {
 		}
 	}
 	return report
-}
-
-func runAttempt(t testing.TB, index, total int, fn func(testing.TB)) *attemptTB {
-	ctx, cancel := context.WithCancel(t.Context())
-	at := &attemptTB{TB: t, ctx: ctx, index: index, total: total}
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		defer func() {
-			cancel()
-			at.runCleanups()
-		}()
-		defer at.recoverPanic()
-		fn(at)
-	}()
-	<-done
-	return at
 }
 
 func (t *attemptTB) Error(args ...any) {
@@ -147,6 +139,25 @@ func (t *attemptTB) Log(args ...any) {
 }
 func (t *attemptTB) Logf(format string, args ...any) {
 	t.Log(fmt.Sprintf(format, args...))
+}
+
+func runAttempt(t testing.TB, index, total int, artifactBase string, fn func(testing.TB)) *attemptTB {
+	ctx, cancel := context.WithCancel(t.Context())
+	at := &attemptTB{TB: t, ctx: ctx, index: index, total: total, artifactBase: artifactBase}
+	at.output.tb = at
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer at.output.flush()
+		defer func() {
+			cancel()
+			at.runCleanups()
+		}()
+		defer at.recoverPanic()
+		fn(at)
+	}()
+	<-done
+	return at
 }
 
 // recoverPanic must be deferred directly so recover sees the panicking frame.

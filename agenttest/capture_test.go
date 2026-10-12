@@ -3,7 +3,6 @@ package agenttest_test
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 	"testing"
 
@@ -148,29 +147,36 @@ func TestCaptureGateCapabilities(t *testing.T) {
 }
 
 func TestCaptureRejectsLateModelRegistration(t *testing.T) {
-	for _, replacement := range []bool{false, true} {
-		for _, stream := range []bool{false, true} {
-			t.Run(strings.Join([]string{map[bool]string{false: "new", true: "replacement"}[replacement], map[bool]string{false: "complete", true: "stream"}[stream]}, "/"), func(t *testing.T) {
-				script, err := agenttest.NewScript(agenttest.Respond(agenttest.Text("must not run")))
-				require.NoError(t, err)
-				h := agenttest.New(t, func(ctx context.Context, rt *runtime.Runtime) error {
-					if replacement {
-						if err := rt.RegisterModel("model", script.Client()); err != nil {
-							return err
-						}
-					}
-					return registerCaptureAgent(capturePlanner{stream: stream})(ctx, rt)
-				})
-				require.ErrorIs(t, h.Runtime().RegisterModel("model", script.Client()), runtime.ErrRegistrationClosed)
-				_, captureErr := h.CaptureFirstRequest(t.Context(), "root", nil)
+	for _, tc := range []struct {
+		name                string
+		replacement, stream bool
+	}{
+		{name: "new/complete"}, {name: "new/stream", stream: true},
+		{name: "replacement/complete", replacement: true}, {name: "replacement/stream", replacement: true, stream: true},
+	} {
+		replacement, stream := tc.replacement, tc.stream
+		t.Run(tc.name, func(t *testing.T) {
+			script, err := agenttest.NewScript(agenttest.Respond(agenttest.Text("must not run")))
+			require.NoError(t, err)
+			h := agenttest.New(t, func(ctx context.Context, rt *runtime.Runtime) error {
 				if replacement {
-					require.NoError(t, captureErr)
-				} else {
-					require.Error(t, captureErr)
+					if err := rt.RegisterModel("model", script.Client()); err != nil {
+						return err
+					}
 				}
-				assert.Equal(t, 1, script.Remaining(), "capture must not consume the late client")
+				return registerCaptureAgent(capturePlanner{stream: stream})(ctx, rt)
 			})
-		}
+			registrationErr := h.Runtime().RegisterModel("model", script.Client())
+			require.ErrorIs(t, registrationErr, runtime.ErrRegistrationClosed)
+			assert.NotContains(t, registrationErr.Error(), "after first run")
+			_, captureErr := h.CaptureFirstRequest(t.Context(), "root", nil)
+			if replacement {
+				require.NoError(t, captureErr)
+			} else {
+				require.ErrorIs(t, captureErr, agenttest.ErrCaptureNoModelCall)
+			}
+			assert.Equal(t, 1, script.Remaining(), "capture must not consume the late client")
+		})
 	}
 }
 
