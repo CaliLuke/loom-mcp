@@ -107,6 +107,12 @@ func (b *builtRequest) prepare(transport Transport) error {
 }
 
 func (c *Client) buildRequest(request *model.Request) (*builtRequest, error) { //nolint:maintidx // Validation and translation remain one atomic pre-I/O operation.
+	if request != nil {
+		if err := model.ValidateToolResultParts(request, model.ToolResultPartSupport{}, "codex", c.resolveModelID(request), ""); err != nil {
+			return nil, err
+		}
+	}
+
 	if request == nil {
 		return nil, errors.New("codex: request is required")
 	}

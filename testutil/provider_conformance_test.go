@@ -26,6 +26,7 @@ func TestRunProviderConformanceRunsRequiredCases(t *testing.T) {
 		UsageAccounting:               providerCase("usage"),
 		OutputLimited:                 providerCase("output_limited"),
 		ContextOverflow:               providerCase("context_overflow"),
+		MultimodalToolResults:         ProviderCapabilityConformance{Supported: providerCase("multimodal_results")},
 		MultimodalInput: ProviderCapabilityConformance{
 			Supported: providerCase("multimodal"),
 		},
@@ -65,6 +66,7 @@ func TestRunProviderConformanceRunsRequiredCases(t *testing.T) {
 		"output_limited":          true,
 		"context_overflow":        true,
 		"multimodal":              true,
+		"multimodal_results":      true,
 		"thinking_unsupported":    true,
 		"token_counting":          true,
 		"tool_name":               true,
@@ -96,6 +98,7 @@ func TestRunProviderConformanceRunsUnsupportedStreamingCase(t *testing.T) {
 		UsageAccounting:               providerCase,
 		OutputLimited:                 providerCase,
 		ContextOverflow:               providerCase,
+		MultimodalToolResults:         ProviderCapabilityConformance{Supported: providerCase},
 		MultimodalInput:               ProviderCapabilityConformance{Supported: providerCase},
 		TypedThinking:                 ProviderCapabilityConformance{Supported: providerCase},
 		ExactTokenCounting:            ProviderCapabilityConformance{Unsupported: providerCase},

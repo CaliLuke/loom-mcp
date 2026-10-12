@@ -1,0 +1,23 @@
+{
+  "max_tokens": 128,
+  "messages": [
+    {
+      "content": [
+        {
+          "citations": {
+            "enabled": true
+          },
+          "source": {
+            "data": "plain document",
+            "media_type": "text/plain",
+            "type": "text"
+          },
+          "title": "manual",
+          "type": "document"
+        }
+      ],
+      "role": "user"
+    }
+  ],
+  "model": "claude-sonnet-4-5"
+}

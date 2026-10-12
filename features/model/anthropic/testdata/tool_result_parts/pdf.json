@@ -1,0 +1,51 @@
+{
+  "max_tokens": 128,
+  "messages": [
+    {
+      "content": [
+        {
+          "id": "call",
+          "input": {},
+          "name": "read",
+          "type": "tool_use"
+        }
+      ],
+      "role": "assistant"
+    },
+    {
+      "content": [
+        {
+          "content": [
+            {
+              "text": "document",
+              "type": "text"
+            },
+            {
+              "source": {
+                "data": "JVBERi10ZXN0",
+                "media_type": "application/pdf",
+                "type": "base64"
+              },
+              "title": "manual.pdf",
+              "type": "document"
+            }
+          ],
+          "is_error": false,
+          "tool_use_id": "call",
+          "type": "tool_result"
+        }
+      ],
+      "role": "user"
+    }
+  ],
+  "model": "claude-sonnet-4-5",
+  "tools": [
+    {
+      "description": "Read a file",
+      "input_schema": {
+        "type": "object"
+      },
+      "name": "read"
+    }
+  ]
+}

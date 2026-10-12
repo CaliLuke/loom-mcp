@@ -99,6 +99,10 @@ func (w *schemaWalker) walk(typ reflect.Type, node map[string]any, part bool) {
 	if typ == reflect.TypeFor[time.Time]() {
 		return
 	}
+	if typ == reflect.TypeFor[model.ToolResultContentPart]() {
+		w.toolResultParts(node)
+		return
+	}
 	if typ == reflect.TypeFor[model.Part]() {
 		w.parts(node)
 		return
@@ -139,7 +143,11 @@ func (w *schemaWalker) fields(typ reflect.Type, node map[string]any, part bool) 
 		}
 		name := strings.Split(field.Tag.Get("json"), ",")[0]
 		if name == "-" {
-			continue
+			if typ == reflect.TypeFor[model.ToolResultPart]() && field.Name == "Parts" {
+				name = "Parts"
+			} else {
+				continue
+			}
 		}
 		if name == "" {
 			name = field.Name
@@ -208,4 +216,28 @@ func objectNode(value any) map[string]any {
 		return node
 	}
 	return map[string]any{}
+}
+
+func (w *schemaWalker) toolResultParts(node map[string]any) {
+	node = w.resolve(node)
+	variants, ok := node["oneOf"].([]any)
+	if !ok || len(variants) != 2 {
+		w.errors = append(w.errors, "model.ToolResultContentPart: requires two variants")
+		return
+	}
+	types := map[string]reflect.Type{"image": reflect.TypeFor[model.ImagePart](), "document": reflect.TypeFor[model.DocumentPart]()}
+	for _, variant := range variants {
+		shape := w.resolve(objectNode(variant))
+		kind, _ := objectNode(objectNode(shape["properties"])["Kind"])["const"].(string)
+		typ, ok := types[kind]
+		if !ok {
+			w.errors = append(w.errors, "model.ToolResultContentPart: invalid variant "+kind)
+			continue
+		}
+		delete(types, kind)
+		w.walk(typ, shape, true)
+	}
+	if len(types) > 0 {
+		w.errors = append(w.errors, "model.ToolResultContentPart: missing variants")
+	}
 }

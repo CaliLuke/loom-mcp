@@ -887,3 +887,12 @@ errors retain adopted usage for start/resume accounting. Record genuine v17 main
 budget, summary, child, child_run, confirmed_pause and continued histories; keep
 FR1's v16 files unchanged and reject protocol 16 before effects. K17 remains 15;
 FR1 remains 16. Structural templates remain 5.
+
+## K22a multimodal tool-result API
+
+Workflow protocol remains 17. Runtime-owned ToolResultPart.Parts accepts images
+and byte/URI documents with Cite false, never error results. Empty Parts retains
+existing JSON bytes. Anthropic and Bedrock Claude encode attachments; unsupported
+adapters fail before I/O with model.UnsupportedPartError. ToolResultPartsInfo is
+an optional capability forwarded by all client wrappers. Recall attachment reads
+and recorded support facts are K22b, not part of K22a. See runtime-contracts.md.

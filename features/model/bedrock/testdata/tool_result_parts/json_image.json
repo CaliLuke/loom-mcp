@@ -1,0 +1,59 @@
+{
+  "inferenceConfig": {
+    "maxTokens": 128
+  },
+  "messages": [
+    {
+      "content": [
+        {
+          "toolUse": {
+            "input": {},
+            "name": "read",
+            "toolUseId": "call"
+          }
+        }
+      ],
+      "role": "assistant"
+    },
+    {
+      "content": [
+        {
+          "toolResult": {
+            "content": [
+              {
+                "json": {
+                  "ok": true
+                }
+              },
+              {
+                "image": {
+                  "format": "png",
+                  "source": {
+                    "bytes": "AQID"
+                  }
+                }
+              }
+            ],
+            "toolUseId": "call"
+          }
+        }
+      ],
+      "role": "user"
+    }
+  ],
+  "toolConfig": {
+    "tools": [
+      {
+        "toolSpec": {
+          "description": "Read a file",
+          "inputSchema": {
+            "json": {
+              "type": "object"
+            }
+          },
+          "name": "read"
+        }
+      }
+    ]
+  }
+}

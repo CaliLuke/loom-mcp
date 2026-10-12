@@ -159,6 +159,10 @@ func (c *Client) Stream(ctx context.Context, req *model.Request) (model.Streamer
 }
 
 func (c *Client) prepareRequest(ctx context.Context, req *model.Request) (*sdk.MessageNewParams, map[string]string, *toolUseIDCodec, error) {
+	if err := model.ValidateToolResultParts(req, c.ToolResultParts(ctx, req), "anthropic", c.resolveModelID(req), ""); err != nil {
+		return nil, nil, nil, err
+	}
+
 	if req.StructuredOutput != nil {
 		return nil, nil, nil, fmt.Errorf("anthropic: structured output is not supported: %w", model.ErrStructuredOutputUnsupported)
 	}
@@ -423,6 +427,10 @@ func anthropicMessageBlock(role model.ConversationRole, part model.Part, nameMap
 		block, err := encodeToolResult(v, toolUseIDs)
 		return block, err == nil, err
 	}
+	if v, ok := part.(model.DocumentPart); ok {
+		block, err := anthropicDocumentBlock(role, v)
+		return block, err == nil, err
+	}
 	if v, ok := part.(model.ImagePart); ok {
 		block, err := anthropicImageBlock(role, v)
 		return block, err == nil, err
@@ -578,7 +586,11 @@ func encodeToolResult(v model.ToolResultPart, toolUseIDs *toolUseIDCodec) (sdk.C
 		}
 		content = string(data)
 	}
-	return sdk.NewToolResultBlock(toolUseIDs.encode(v.ToolUseID), content, v.IsError), nil
+	block := sdk.NewToolResultBlock(toolUseIDs.encode(v.ToolUseID), content, v.IsError)
+	if len(v.Parts) > 0 && content == "" {
+		block.OfToolResult.Content = nil
+	}
+	return appendToolResultParts(block, v.Parts)
 }
 
 func encodeTools(ctx context.Context, defs []*model.ToolDefinition) ([]sdk.ToolUnionParam, map[string]string, map[string]string, error) {

@@ -202,6 +202,7 @@ func TestClientConformance(t *testing.T) {
 			_, err = client.Complete(context.Background(), request())
 			requireOutputLimitedRejection(t, err)
 		},
+		MultimodalToolResults: testutil.ProviderCapabilityConformance{Supported: TestToolResultPartsBody},
 		MultimodalInput: testutil.ProviderCapabilityConformance{Supported: func(t *testing.T) {
 			runtime := &conformanceRuntimeClient{}
 			req := request()

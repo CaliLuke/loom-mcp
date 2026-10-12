@@ -249,11 +249,26 @@ func (c *Client) CountTokens(ctx context.Context, req *model.Request) (model.Tok
 }
 
 // Stream reports that Gemini streaming is not yet supported by this adapter.
-func (c *Client) Stream(context.Context, *model.Request) (model.Streamer, error) {
-	return nil, model.ErrStreamingUnsupported
+func (c *Client) Stream(_ context.Context, req *model.Request) (model.Streamer, error) {
+	return nil, c.streamingError(req)
+}
+
+func (c *Client) streamingError(req *model.Request) error {
+	if req != nil {
+		if err := model.ValidateToolResultParts(req, model.ToolResultPartSupport{}, "gemini", c.resolveModelID(req), ""); err != nil {
+			return err
+		}
+	}
+	return model.ErrStreamingUnsupported
 }
 
 func (c *Client) buildRequest(req *model.Request) (string, []*genai.Content, *genai.GenerateContentConfig, error) {
+	if req != nil {
+		if err := model.ValidateToolResultParts(req, model.ToolResultPartSupport{}, "gemini", c.resolveModelID(req), ""); err != nil {
+			return "", nil, nil, err
+		}
+	}
+
 	if len(req.Messages) == 0 {
 		return "", nil, nil, errors.New("gemini: messages are required")
 	}

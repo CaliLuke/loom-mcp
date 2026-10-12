@@ -6036,7 +6036,7 @@ ToolUseID, and original user text always comes from index entries. Full stored
 summaries page from their ck- IDs. Removed content returns recall_unavailable;
 unknown evidence returns recall_not_found; authorization denial returns
 recall_unauthorized. Images/documents return recall_unsupported_part with
-format/bytes and available text until K22.
+format/bytes and available text until K22b.
 
 Read pages use max(512, ProtectRecentToolTokens) bytes and snap offsets to UTF-8
 boundaries. Follow next_offset. Find scans hidden eligible entries and results
@@ -6076,6 +6076,43 @@ FromRecord preserves the canonical tool name in the stored record and marks
 lookup receipt items so rendered lines say context lookup. Runtime-generated
 lookup IDs also omit the reserved name. Compaction-enabled registration rejects
 application identifiers or provider names containing recall_context.
+
+### Multimodal tool-result API (K22a)
+
+`model.ToolResultPart.Parts` holds runtime-owned `ImagePart` and `DocumentPart`
+attachments. Ordinary tool implementations still return JSON in `Content`.
+Documents in a result require byte uploads or a URI and `Cite: false`; text and
+chunk documents belong in `Content`. Error results cannot contain attachments.
+Empty `Parts` preserves the existing JSON bytes and workflow protocol 17.
+
+Anthropic accepts PNG, JPEG, GIF and WebP images and PDF uploads in tool results.
+It also accepts PDF and plain-text documents in user messages. Bedrock reports
+support for recognized Claude models only, with the same image formats, its
+native document formats, and S3 document URIs. OpenAI, Gemini, Ollama and Codex
+reject result attachments with `*model.UnsupportedPartError`, matching
+`model.ErrUnsupportedPart`, before provider I/O. Planner activities classify this
+error as non-retryable. A switch to a model with narrower support therefore fails
+fast; automatic attachment degradation is not implemented.
+
+Bedrock system messages accept text and cache checkpoints. Other system parts
+return `*model.UnsupportedPartError` with `Placement: "system"` before provider
+I/O. Attachment-only tool results omit empty text or JSON content blocks.
+
+Use the optional `model.ToolResultPartsInfo` capability to inspect support for a
+request. `Accepts` checks formats, URI schemes and per-part byte ceilings;
+`Intersect` sorts common formats and schemes and uses the smaller byte ceilings.
+`WithCapabilitySet` preserves this interface through client decoration.
+`WithCapabilities` retains its existing two-capability API. The validated client,
+rate limiter, runtime limit overrides and capture gate forward attachment support.
+
+Attachment bytes contribute to `NonText` and `ViewNonText`, using the same costs
+as top-level attachments. Document names and context remain text. Calibration
+subtracts the non-text estimate before deriving the text rate. Provider byte
+sources and request-body goldens live under each adapter's
+`testdata/tool_result_parts/`. Whole-request limits still apply.
+
+K22a supplies the API and adapters only. Recall attachment selection, support
+folding, result blobs and continuation changes remain K22b work.
 
 ## Pure context summary helpers
 

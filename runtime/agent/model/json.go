@@ -116,7 +116,7 @@ func encodeMessagePart(p Part) (any, error) {
 		if err := validateToolResultPart(v); err != nil {
 			return nil, err
 		}
-		return encodeToolResultPart(v), nil
+		return encodeToolResultPart(v)
 	case CacheCheckpointPart:
 		return encodeCacheCheckpointPart(), nil
 	default:
@@ -196,11 +196,20 @@ func encodeToolUsePart(v ToolUsePart) any {
 	}{Kind: partKindToolUse, ToolUsePart: v}
 }
 
-func encodeToolResultPart(v ToolResultPart) any {
+func encodeToolResultPart(v ToolResultPart) (any, error) {
+	parts := make([]any, 0, len(v.Parts))
+	for _, p := range v.Parts {
+		encoded, err := encodeMessagePart(p)
+		if err != nil {
+			return nil, err
+		}
+		parts = append(parts, encoded)
+	}
 	return struct {
-		Kind string `json:"Kind"` //nolint:tagliatelle // Kind discriminator is intentionally upper-cased for compatibility.
+		Kind string `json:"Kind"` //nolint:tagliatelle // Existing wire discriminator.
 		ToolResultPart
-	}{Kind: partKindToolResult, ToolResultPart: v}
+		Parts []any `json:"Parts,omitempty"` //nolint:tagliatelle // Existing message wire convention.
+	}{Kind: partKindToolResult, ToolResultPart: v, Parts: parts}, nil
 }
 
 func encodeCacheCheckpointPart() any {
@@ -377,9 +386,24 @@ func decodeCitationsPart(raw jsontext.Value) (Part, error) {
 }
 
 func decodeToolResultPart(raw jsontext.Value) (Part, error) {
-	var result ToolResultPart
-	if err := json.Unmarshal(raw, &result); err != nil {
+	var wire struct {
+		ToolResultPart
+		Parts []jsontext.Value
+	}
+	if err := json.Unmarshal(raw, &wire); err != nil {
 		return nil, fmt.Errorf("decode ToolResultPart: %w", err)
+	}
+	result := wire.ToolResultPart
+	for _, rawPart := range wire.Parts {
+		part, err := decodeMessagePart(rawPart)
+		if err != nil {
+			return nil, err
+		}
+		nested, ok := part.(ToolResultContentPart)
+		if !ok {
+			return nil, fmt.Errorf("invalid tool result part %T", part)
+		}
+		result.Parts = append(result.Parts, nested)
 	}
 	if err := validateToolResultPart(result); err != nil {
 		return nil, err
@@ -390,6 +414,30 @@ func decodeToolResultPart(raw jsontext.Value) (Part, error) {
 func validateToolResultPart(result ToolResultPart) error {
 	if result.ToolUseID == "" {
 		return errors.New("ToolResultPart requires ToolUseID")
+	}
+	if result.IsError && len(result.Parts) > 0 {
+		return errors.New("error tool results cannot contain Parts")
+	}
+	for _, part := range result.Parts {
+		normalized, err := normalizeMessagePart(part)
+		if err != nil {
+			return err
+		}
+		switch p := normalized.(type) {
+		case ImagePart:
+			if err := validateImagePart(p); err != nil {
+				return err
+			}
+		case DocumentPart:
+			if err := validateDocumentPart(p); err != nil {
+				return err
+			}
+			if p.Cite || (len(p.Bytes) == 0 && p.URI == "") {
+				return errors.New("tool result documents require Bytes or URI and Cite=false")
+			}
+		default:
+			return fmt.Errorf("invalid tool result part %T", part)
+		}
 	}
 	return nil
 }

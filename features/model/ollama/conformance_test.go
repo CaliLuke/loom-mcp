@@ -152,6 +152,12 @@ func TestClientConformance(t *testing.T) {
 			_, err = client.Complete(context.Background(), request())
 			requireOutputLimitedRejection(t, err)
 		},
+		MultimodalToolResults: testutil.ProviderCapabilityConformance{Unsupported: func(t *testing.T) {
+			client := &ollamamodel.Client{}
+			req := &model.Request{Model: "test-model", Messages: []*model.Message{{Role: "user", Parts: []model.Part{model.ToolResultPart{ToolUseID: "call", Parts: []model.ToolResultContentPart{model.ImagePart{Format: "png", Bytes: []byte{1}}}}}}}}
+			_, err := client.Complete(t.Context(), req)
+			require.ErrorIs(t, err, model.ErrUnsupportedPart)
+		}},
 		MultimodalInput: testutil.ProviderCapabilityConformance{Supported: func(t *testing.T) {
 			var captured map[string]any
 			client := newClient(t, func(w http.ResponseWriter, r *http.Request) {

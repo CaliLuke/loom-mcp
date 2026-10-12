@@ -106,6 +106,7 @@ func TestClientConformance(t *testing.T) {
 			require.NoError(t, err)
 			require.True(t, response.OutputLimited)
 		},
+		MultimodalToolResults: testutil.ProviderCapabilityConformance{Unsupported: TestToolResultPartsUnsupported},
 		MultimodalInput: testutil.ProviderCapabilityConformance{Supported: func(t *testing.T) {
 			client := newSSETestClient(t, roundTripFunc(func(request *http.Request) (*http.Response, error) {
 				body, err := io.ReadAll(request.Body)

@@ -32,6 +32,8 @@ type toolUseIDCodec struct {
 	next                int
 }
 
+const systemDocumentKind = "document"
+
 func newMessageEncodeState(ctx context.Context, nameMap map[string]string, logger telemetry.Logger) *messageEncodeState {
 	return &messageEncodeState{
 		ctx:          ctx,
@@ -86,17 +88,35 @@ func (c *toolUseIDCodec) encode(canonical string) string {
 func (s *messageEncodeState) encodeSystemParts(parts []model.Part) ([]brtypes.SystemContentBlock, error) {
 	system := make([]brtypes.SystemContentBlock, 0, len(parts))
 	for _, p := range parts {
+		var kind, format string
 		switch v := p.(type) {
 		case model.TextPart:
 			if v.Text != "" {
 				system = append(system, &brtypes.SystemContentBlockMemberText{Value: v.Text})
 			}
+			continue
 		case model.CacheCheckpointPart:
 			system = append(system, &brtypes.SystemContentBlockMemberCachePoint{
 				Value: brtypes.CachePointBlock{Type: brtypes.CachePointTypeDefault},
 			})
+			continue
+		case model.ImagePart:
+			kind, format = "image", string(v.Format)
 		case model.DocumentPart:
-			return nil, errors.New("bedrock: document parts are not supported in system messages")
+			kind, format = systemDocumentKind, string(v.Format)
+		case model.ToolUsePart:
+			kind = "tool_use"
+		case model.ToolResultPart:
+			kind = "tool_result"
+		case model.ThinkingPart:
+			kind = "thinking"
+		case model.CitationsPart:
+			kind = "citations"
+		default:
+			kind = fmt.Sprintf("%T", p)
+		}
+		return nil, &model.UnsupportedPartError{
+			Provider: "bedrock", Placement: "system", Kind: kind, Format: format, Reason: "provider",
 		}
 	}
 	return system, nil
@@ -137,13 +157,13 @@ func (s *messageEncodeState) encodePart(role model.ConversationRole, part model.
 	case model.ToolUsePart:
 		return s.encodeToolUsePart(v)
 	case model.ToolResultPart:
-		return s.encodeToolResultPart(v), nil
+		return s.encodeToolResultPart(v)
 	case model.CacheCheckpointPart:
 		return &brtypes.ContentBlockMemberCachePoint{
 			Value: brtypes.CachePointBlock{Type: brtypes.CachePointTypeDefault},
 		}, nil
 	default:
-		return nil, nil
+		return nil, fmt.Errorf("bedrock: unsupported message part %T", part)
 	}
 }
 
@@ -278,22 +298,42 @@ func (s *messageEncodeState) encodeToolUsePart(v model.ToolUsePart) (brtypes.Con
 	return &brtypes.ContentBlockMemberToolUse{Value: tb}, nil
 }
 
-func (s *messageEncodeState) encodeToolResultPart(v model.ToolResultPart) brtypes.ContentBlock {
+func (s *messageEncodeState) encodeToolResultPart(v model.ToolResultPart) (brtypes.ContentBlock, error) {
 	tr := brtypes.ToolResultBlock{}
 	if id := s.toolUseIDs.encode(v.ToolUseID); id != "" {
 		tr.ToolUseId = aws.String(id)
 	}
 	if text, ok := v.Content.(string); ok {
-		tr.Content = []brtypes.ToolResultContentBlock{
-			&brtypes.ToolResultContentBlockMemberText{Value: text},
+		if text != "" || len(v.Parts) == 0 {
+			tr.Content = []brtypes.ToolResultContentBlock{
+				&brtypes.ToolResultContentBlockMemberText{Value: text},
+			}
 		}
-	} else {
+	} else if v.Content != nil || len(v.Parts) == 0 {
 		doc := toDocument(s.ctx, v.Content, s.logger)
 		tr.Content = []brtypes.ToolResultContentBlock{
 			&brtypes.ToolResultContentBlockMemberJson{Value: doc},
 		}
 	}
-	return &brtypes.ContentBlockMemberToolResult{Value: tr}
+	for _, part := range v.Parts {
+		switch p := part.(type) {
+		case *model.ImagePart:
+			part = *p
+		case *model.DocumentPart:
+			part = *p
+		}
+		block, err := s.encodePart(model.ConversationRoleUser, part)
+		if err != nil {
+			return nil, err
+		}
+		switch b := block.(type) {
+		case *brtypes.ContentBlockMemberImage:
+			tr.Content = append(tr.Content, &brtypes.ToolResultContentBlockMemberImage{Value: b.Value})
+		case *brtypes.ContentBlockMemberDocument:
+			tr.Content = append(tr.Content, &brtypes.ToolResultContentBlockMemberDocument{Value: b.Value})
+		}
+	}
+	return &brtypes.ContentBlockMemberToolResult{Value: tr}, nil
 }
 
 func conversationRole(role model.ConversationRole) brtypes.ConversationRole {

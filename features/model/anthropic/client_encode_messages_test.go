@@ -294,19 +294,19 @@ func TestEncodeMessages_SignedThinkingRoundTripsWithCheckpoint(t *testing.T) {
 	assert.Contains(t, got, `"signature":"sig"`)
 }
 
-func TestEncodeMessages_RejectsDocumentPart(t *testing.T) {
+func TestEncodeMessages_RejectsChunkDocumentPart(t *testing.T) {
 	_, _, err := encodeMessages([]*model.Message{
 		{
 			Role: model.ConversationRoleUser,
 			Parts: []model.Part{
-				model.DocumentPart{Name: "spec", Format: model.DocumentFormatTXT, Text: "hello"},
+				model.DocumentPart{Name: "spec", Format: model.DocumentFormatTXT, Chunks: []string{"hello"}},
 			},
 		},
 	}, nil, newToolUseIDCodec())
 	if err == nil {
 		t.Fatal("encodeMessages returned nil error")
 	}
-	if !strings.Contains(err.Error(), "anthropic: unsupported message part model.DocumentPart") {
+	if !strings.Contains(err.Error(), "anthropic: document requires PDF bytes or plain text") {
 		t.Fatalf("encodeMessages error = %q, want unsupported document part", err.Error())
 	}
 }

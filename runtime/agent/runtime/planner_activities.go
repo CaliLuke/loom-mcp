@@ -183,6 +183,10 @@ func resolvePlanActivityOverflow(ctx context.Context, events *runtimePlannerEven
 }
 
 func nonRetryableProviderError(err error) error {
+	if errors.Is(err, model.ErrUnsupportedPart) {
+		return engine.NewNonRetryableApplicationError(err.Error(), "model.unsupported_part", nil, err)
+	}
+
 	provider, ok := model.AsProviderError(err)
 	if ok && !provider.Retryable() {
 		return engine.NewNonRetryableApplicationError(err.Error(), "provider_error."+string(provider.Kind()), nil, err)

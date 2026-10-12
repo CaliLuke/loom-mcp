@@ -30,12 +30,53 @@ type ContextInfo interface {
 // capabilities supplied by the caller. Keeping method-set selection here avoids
 // duplicating capability-specific wrapper types in client middleware.
 func WithCapabilities(client Client, counter TokenCounter, info ContextInfo) Client {
+	return WithCapabilitySet(client, Capabilities{Counter: counter, Info: info})
+}
+
+// WithCapabilitySet preserves exactly the supplied optional capabilities.
+func WithCapabilitySet(client Client, caps Capabilities) Client {
+	counter, info, parts := caps.Counter, caps.Info, caps.ToolResultParts
 	if isNilModelValue(counter) {
 		counter = nil
 	}
 	if isNilModelValue(info) {
 		info = nil
 	}
+	if isNilModelValue(parts) {
+		parts = nil
+	}
+	switch {
+	case counter != nil && info != nil && parts != nil:
+		return struct {
+			Client
+			TokenCounter
+			ContextInfo
+			ToolResultPartsInfo
+		}{client, counter, info, parts}
+	case counter != nil && parts != nil:
+		return struct {
+			Client
+			TokenCounter
+			ToolResultPartsInfo
+		}{client, counter, parts}
+	case info != nil && parts != nil:
+		return struct {
+			Client
+			ContextInfo
+			ToolResultPartsInfo
+		}{client, info, parts}
+	case parts != nil:
+		return struct {
+			Client
+			ToolResultPartsInfo
+		}{client, parts}
+	default:
+		return withTextCapabilities(client, counter, info)
+	}
+}
+
+// withTextCapabilities selects the original counting/limits method sets.
+func withTextCapabilities(client Client, counter TokenCounter, info ContextInfo) Client {
 	switch {
 	case counter != nil && info != nil:
 		return struct {

@@ -102,6 +102,12 @@ func (c *Client) Complete(ctx context.Context, req *model.Request) (*model.Respo
 }
 
 func (c *Client) buildResponseRequest(req *model.Request) (responses.ResponseNewParams, *openAIToolCodec, error) {
+	if req != nil {
+		if err := model.ValidateToolResultParts(req, model.ToolResultPartSupport{}, "openai", c.resolveModelID(req), ""); err != nil {
+			return responses.ResponseNewParams{}, nil, err
+		}
+	}
+
 	if len(req.Messages) == 0 {
 		return responses.ResponseNewParams{}, nil, errors.New("messages are required")
 	}

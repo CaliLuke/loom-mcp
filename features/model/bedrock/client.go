@@ -238,6 +238,10 @@ func (c *Client) Stream(ctx context.Context, req *model.Request) (model.Streamer
 }
 
 func (c *Client) prepareRequest(ctx context.Context, req *model.Request) (*requestParts, error) {
+	if err := model.ValidateToolResultParts(req, c.ToolResultParts(ctx, req), "bedrock", c.resolveModelID(req), "model"); err != nil {
+		return nil, err
+	}
+
 	if err := validateBedrockRequestMessages(req.Messages); err != nil {
 		return nil, err
 	}

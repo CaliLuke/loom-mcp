@@ -28,7 +28,8 @@ func NewClient(provider Provider) (Client, error) {
 		counter = &validatedTokenCounter{counter: raw}
 	}
 	info, _ := provider.(ContextInfo)
-	return WithCapabilities(client, counter, info), nil
+	parts, _ := provider.(ToolResultPartsInfo)
+	return WithCapabilitySet(client, Capabilities{Counter: counter, Info: info, ToolResultParts: parts}), nil
 }
 
 // Complete validates the request before provider work and accepts only output

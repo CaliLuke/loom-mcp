@@ -190,7 +190,8 @@ func (l *AdaptiveRateLimiter) Middleware() func(model.Client) model.Client {
 		}
 		client.counter, _ = next.(model.TokenCounter)
 		info, _ := next.(model.ContextInfo)
-		return model.WithCapabilities(client, client.counter, info)
+		parts, _ := next.(model.ToolResultPartsInfo)
+		return model.WithCapabilitySet(client, model.Capabilities{Counter: client.counter, Info: info, ToolResultParts: parts})
 	}
 }
 

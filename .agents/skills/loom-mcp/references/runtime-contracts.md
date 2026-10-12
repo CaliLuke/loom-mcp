@@ -1552,3 +1552,40 @@ FR1 remains 16. Structural templates remain 5.
   torn tails. Live-disabled factories preserve verification without model calls.
 - Protocol remains 17: SummaryRate is a pure extraction with unchanged ordering
   and arithmetic. Cut-moving variants, probes and chained replay are K23 work.
+
+### Multimodal tool-result API (K22a)
+
+`model.ToolResultPart.Parts` holds runtime-owned `ImagePart` and `DocumentPart`
+attachments. Ordinary tool implementations still return JSON in `Content`.
+Documents in a result require byte uploads or a URI and `Cite: false`; text and
+chunk documents belong in `Content`. Error results cannot contain attachments.
+Empty `Parts` preserves the existing JSON bytes and workflow protocol 17.
+
+Anthropic accepts PNG, JPEG, GIF and WebP images and PDF uploads in tool results.
+It also accepts PDF and plain-text documents in user messages. Bedrock reports
+support for recognized Claude models only, with the same image formats, its
+native document formats, and S3 document URIs. OpenAI, Gemini, Ollama and Codex
+reject result attachments with `*model.UnsupportedPartError`, matching
+`model.ErrUnsupportedPart`, before provider I/O. Planner activities classify this
+error as non-retryable. A switch to a model with narrower support therefore fails
+fast; automatic attachment degradation is not implemented.
+
+Bedrock system messages accept text and cache checkpoints. Other system parts
+return `*model.UnsupportedPartError` with `Placement: "system"` before provider
+I/O. Attachment-only tool results omit empty text or JSON content blocks.
+
+Use the optional `model.ToolResultPartsInfo` capability to inspect support for a
+request. `Accepts` checks formats, URI schemes and per-part byte ceilings;
+`Intersect` sorts common formats and schemes and uses the smaller byte ceilings.
+`WithCapabilitySet` preserves this interface through client decoration.
+`WithCapabilities` retains its existing two-capability API. The validated client,
+rate limiter, runtime limit overrides and capture gate forward attachment support.
+
+Attachment bytes contribute to `NonText` and `ViewNonText`, using the same costs
+as top-level attachments. Document names and context remain text. Calibration
+subtracts the non-text estimate before deriving the text rate. Provider byte
+sources and request-body goldens live under each adapter's
+`testdata/tool_result_parts/`. Whole-request limits still apply.
+
+K22a supplies the API and adapters only. Recall attachment selection, support
+folding, result blobs and continuation changes remain K22b work.

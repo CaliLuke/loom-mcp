@@ -327,6 +327,20 @@ func cloneModelPart(part Part, budget *cloneBudget) (Part, error) { //nolint:mai
 			return nil, err
 		}
 		actual.Content = content
+		if actual.Parts != nil {
+			if err := budget.reserve(len(actual.Parts)); err != nil {
+				return nil, err
+			}
+			parts := make([]ToolResultContentPart, len(actual.Parts))
+			for i, part := range actual.Parts {
+				cloned, err := cloneModelPart(part, budget)
+				if err != nil {
+					return nil, err
+				}
+				parts[i] = cloned.(ToolResultContentPart)
+			}
+			actual.Parts = parts
+		}
 		return actual, budget.addBytes(len(actual.ToolUseID))
 	case CacheCheckpointPart:
 		return actual, nil

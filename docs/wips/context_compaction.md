@@ -953,12 +953,15 @@ checkpoint's text. Non-text parts in pins have their own allowance: at most
 checkpoint stays bounded in bytes of text, in number of parts, and in
 estimated tokens of parts.
 
-**Recall needs multimodal tool results.** Today `model.ToolResultPart`
-carries JSON only, and `ImagePart` and `DocumentPart` are user-message parts
-(`model/model.go`). Anthropic and Bedrock accept images and documents inside
-a tool result, so K22 adds non-text content to `ToolResultPart`, mapped by
-each adapter that supports it and rejected fast by the others. Tools still
-return JSON; K22 changes only what recall can return.
+**Recall needs multimodal tool results.** K22a adds runtime-owned image and
+document attachments to `model.ToolResultPart.Parts`. Anthropic and Bedrock
+Claude encode them; other adapters reject them before provider I/O. Capability
+forwarding, byte limits and non-text measurement are implemented under workflow
+protocol 17. Ordinary tools still return JSON in `Content`.
+
+The recall attachment reads, support fold, result blobs and continuation changes
+in section 4.18 remain K22b work. K22a does not produce attachments during recall
+or change recorded workflow payloads.
 
 **Default boundary.** A placeholder makes an evicted part discoverable, not
 usable. So the default is decided per provider configuration, not globally:

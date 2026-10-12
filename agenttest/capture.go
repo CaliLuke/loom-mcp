@@ -99,17 +99,22 @@ func captureGate(inner model.Client, h *Harness) model.Client {
 	base := &gate{inner: inner, harness: h}
 	counter, _ := inner.(model.TokenCounter)
 	info, _ := inner.(model.ContextInfo)
-	// Let WithCapabilities remove typed nil capabilities before wrapping them.
-	capabilities := model.WithCapabilities(base, counter, info)
+	parts, _ := inner.(model.ToolResultPartsInfo)
+	// Let WithCapabilitySet remove typed nil capabilities before wrapping them.
+	capabilities := model.WithCapabilitySet(base, model.Capabilities{Counter: counter, Info: info, ToolResultParts: parts})
 	counter, _ = capabilities.(model.TokenCounter)
 	info, _ = capabilities.(model.ContextInfo)
+	parts, _ = capabilities.(model.ToolResultPartsInfo)
 	if counter != nil {
 		counter = &struct{ model.TokenCounter }{counter}
 	}
 	if info != nil {
 		info = &struct{ model.ContextInfo }{info}
 	}
-	return model.WithCapabilities(base, counter, info)
+	if parts != nil {
+		parts = &struct{ model.ToolResultPartsInfo }{parts}
+	}
+	return model.WithCapabilitySet(base, model.Capabilities{Counter: counter, Info: info, ToolResultParts: parts})
 }
 
 // gateModel runs under the runtime registry lock, before clients are exposed.

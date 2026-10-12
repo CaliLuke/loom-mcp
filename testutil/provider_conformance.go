@@ -10,6 +10,12 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 )
 
+// conformanceReporter is the fatal-validation surface used by the suite.
+type conformanceReporter interface {
+	Helper()
+	Fatalf(string, ...any)
+}
+
 // ProviderConformanceCase proves one observable model-provider contract.
 type ProviderConformanceCase func(t *testing.T)
 
@@ -53,6 +59,7 @@ type ProviderConformanceSuite struct {
 	OutputLimited                 ProviderConformanceCase
 	ContextOverflow               ProviderConformanceCase
 	MultimodalInput               ProviderCapabilityConformance
+	MultimodalToolResults         ProviderCapabilityConformance
 	TypedThinking                 ProviderCapabilityConformance
 	ExactTokenCounting            ProviderCapabilityConformance
 	ContextLimits                 ProviderCapabilityConformance
@@ -95,6 +102,7 @@ func RunProviderConformance(t *testing.T, suite ProviderConformanceSuite) {
 		capability ProviderCapabilityConformance
 	}{
 		{name: "multimodal input", capability: suite.MultimodalInput},
+		{name: "multimodal tool results", capability: suite.MultimodalToolResults},
 		{name: "typed thinking", capability: suite.TypedThinking},
 		{name: "exact token counting", capability: suite.ExactTokenCounting},
 		{name: "context limits", capability: suite.ContextLimits},
@@ -195,7 +203,7 @@ func runStreamingConformance(t *testing.T, streaming ProviderStreamingConformanc
 	t.Run("stream context overflow", streaming.ContextOverflow)
 }
 
-func validateCapabilityConformance(t *testing.T, provider, name string, capability ProviderCapabilityConformance) {
+func validateCapabilityConformance(t conformanceReporter, provider, name string, capability ProviderCapabilityConformance) {
 	t.Helper()
 	if capability.Supported != nil && capability.Unsupported != nil {
 		t.Fatalf("provider conformance %s: %s cannot be both supported and unsupported", provider, name)

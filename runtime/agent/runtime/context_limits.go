@@ -76,5 +76,6 @@ func (r *Runtime) withContextLimits(id string, client model.Client) model.Client
 	counter, _ := client.(model.TokenCounter)
 	info, _ := client.(model.ContextInfo)
 	override := &contextLimitsOverride{inner: info, registeredID: id, overrides: r.contextLimits}
-	return model.WithCapabilities(client, counter, override)
+	parts, _ := client.(model.ToolResultPartsInfo)
+	return model.WithCapabilitySet(client, model.Capabilities{Counter: counter, Info: override, ToolResultParts: parts})
 }

@@ -1,6 +1,10 @@
 // Package model defines the provider-agnostic message and streaming types used
 // by planners, runtimes, and provider adapters. It models messages as typed
-// parts (thinking, text, tool use/results) plus conversation roles.
+// parts (thinking, text, tool use/results) plus conversation roles. Runtime-owned
+// ToolResultPart.Parts carries image/document attachments; ordinary tools return
+// JSON Content. ToolResultPartsInfo reports optional provider support. Unsupported
+// adapters return UnsupportedPartError before provider I/O. Empty Parts preserves
+// existing message JSON bytes.
 package model
 
 import (
@@ -22,6 +26,13 @@ type (
 	// tool call/result content in a strongly typed form.
 	Part interface {
 		isPart()
+	}
+
+	// ToolResultContentPart is a non-text attachment in a runtime-owned tool result.
+	// Only images and documents (including pointers) implement it.
+	ToolResultContentPart interface {
+		Part
+		isToolResultContent()
 	}
 
 	// ImageFormat identifies the on-wire format of an image part.
@@ -46,7 +57,7 @@ type (
 		Text string
 	}
 
-	// ImagePart carries image bytes attached to a user message.
+	// ImagePart carries image bytes in a user message or runtime-owned tool result.
 	//
 	// Image parts are intended for multimodal models. Provider adapters fail fast
 	// when images are used in unsupported roles or for unsupported model families.
@@ -58,7 +69,7 @@ type (
 		Bytes []byte
 	}
 
-	// DocumentPart carries document content attached to a user message.
+	// DocumentPart carries documents in user messages or runtime-owned tool results.
 	//
 	// Documents are intended for models that support document inputs and citation
 	// generation. Exactly one of Bytes, Text, Chunks, or URI must be provided.
@@ -212,6 +223,10 @@ type (
 
 		// IsError reports whether Content represents an error from the tool.
 		IsError bool
+
+		// Parts contains runtime-owned attachments; ordinary tools still return JSON.
+		// Message JSON encodes this as Parts only when non-empty.
+		Parts []ToolResultContentPart `json:"-"`
 	}
 
 	// CacheCheckpointPart marks a cache boundary in a message. Provider adapters
@@ -834,7 +849,11 @@ func messagePartCharacterCount(part Part) int {
 	case ToolUsePart:
 		return len(v.ID) + len(v.Name) + marshaledLength(v.Input)
 	case ToolResultPart:
-		return len(v.ToolUseID) + marshaledLength(v.Content)
+		total := len(v.ToolUseID) + marshaledLength(v.Content)
+		for _, nested := range v.Parts {
+			total += messagePartCharacterCount(nested)
+		}
+		return total
 	}
 	return 0
 }
@@ -886,3 +905,7 @@ func (ToolUsePart) isPart() {}
 func (ToolResultPart) isPart() {}
 
 func (CacheCheckpointPart) isPart() {}
+
+func (ImagePart) isToolResultContent() {}
+
+func (DocumentPart) isToolResultContent() {}

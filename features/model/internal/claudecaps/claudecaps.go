@@ -49,6 +49,22 @@ func IsFableGeneration(modelID string) bool {
 	return fable || mythos
 }
 
+// IsClaude recognizes Anthropic Claude IDs, including regional Bedrock prefixes.
+func IsClaude(modelID string) bool {
+	if i := strings.Index(modelID, "anthropic."); i >= 0 {
+		modelID = modelID[i+len("anthropic."):]
+	}
+	if !strings.HasPrefix(modelID, "claude-") {
+		return false
+	}
+	for _, family := range []string{"claude-opus-", "claude-sonnet-", "claude-haiku-", "claude-fable-", "claude-mythos-", "claude-"} {
+		if _, _, _, ok := familyVersion(modelID, family); ok {
+			return true
+		}
+	}
+	return modelID == "claude-mythos-preview"
+}
+
 func familyVersion(modelID string, marker string) (gen int, minor int, hasMinor bool, ok bool) {
 	start := strings.Index(modelID, marker)
 	if start < 0 {

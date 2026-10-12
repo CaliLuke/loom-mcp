@@ -125,6 +125,14 @@ func TestClientConformance(t *testing.T) {
 			_, err = client.Complete(context.Background(), request())
 			requireOutputLimitedRejection(t, err)
 		},
+		MultimodalToolResults: testutil.ProviderCapabilityConformance{Unsupported: func(t *testing.T) {
+			mock := &mockModelsClient{}
+			req := request()
+			req.Messages[0].Parts = []model.Part{model.ToolResultPart{ToolUseID: "call", Parts: []model.ToolResultContentPart{model.ImagePart{Format: "png", Bytes: []byte{1}}}}}
+			_, err := newClient(t, mock).Complete(t.Context(), req)
+			require.ErrorIs(t, err, model.ErrUnsupportedPart)
+			require.Empty(t, mock.contents)
+		}},
 		MultimodalInput: testutil.ProviderCapabilityConformance{Supported: func(t *testing.T) {
 			mock := &mockModelsClient{response: &genai.GenerateContentResponse{}}
 			req := request()

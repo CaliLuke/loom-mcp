@@ -167,6 +167,12 @@ func newDefaultHTTPClient(timeout time.Duration) *http.Client {
 }
 
 func (c *Client) buildChatRequest(req *model.Request, stream bool) (ollamaChatRequest, error) {
+	if req != nil {
+		if err := model.ValidateToolResultParts(req, model.ToolResultPartSupport{}, "ollama", c.resolveModelID(req), ""); err != nil {
+			return ollamaChatRequest{}, err
+		}
+	}
+
 	if req == nil {
 		return ollamaChatRequest{}, errors.New("ollama: request is required")
 	}

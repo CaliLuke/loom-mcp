@@ -90,8 +90,7 @@ func partSize(part model.Part, imageTokens int) (text, nontext int, err error) {
 		size, err := jsonSize(p.Input)
 		return addSize(addSize(len(p.ID), len(p.Name)), size), 0, err
 	case model.ToolResultPart:
-		size, err := jsonSize(p.Content)
-		return addSize(len(p.ToolUseID), size), 0, err
+		return toolResultSize(p, imageTokens)
 	case model.CacheCheckpointPart:
 		return 0, 0, nil
 	default:
@@ -121,4 +120,22 @@ func jsonSize(value any) (int, error) {
 		return 0, fmt.Errorf("contextmeasure: JSON payload: %w", err)
 	}
 	return len(data), nil
+}
+
+// toolResultSize measures attachments with the same costs as top-level parts.
+func toolResultSize(p model.ToolResultPart, imageTokens int) (text, nontext int, err error) {
+	size, err := jsonSize(p.Content)
+	if err != nil {
+		return 0, 0, err
+	}
+	text = addSize(len(p.ToolUseID), size)
+	for _, nested := range p.Parts {
+		partText, partNonText, err := partSize(nested, imageTokens)
+		if err != nil {
+			return 0, 0, err
+		}
+		text = addSize(text, partText)
+		nontext = addSize(nontext, partNonText)
+	}
+	return text, nontext, nil
 }
