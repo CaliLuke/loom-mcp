@@ -13,6 +13,7 @@ type RequestOutcome string
 
 // RequestFacts carries the measurements of one request and its eventual outcome.
 type RequestFacts struct {
+	ToolResultParts model.ToolResultPartSupport `json:"tool_result_parts,omitzero"`
 	// LimitsInvalid distinguishes an invalid merged override from absent limits.
 	LimitsInvalid bool             `json:"limits_invalid,omitzero"`
 	Call          runstore.CallKey `json:"call"`

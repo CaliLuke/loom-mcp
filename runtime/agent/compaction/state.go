@@ -6,6 +6,7 @@ import (
 	"maps"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextmeasure"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 )
 
@@ -42,11 +43,12 @@ type (
 	// ModelState holds the last view-bearing measurements for one model. Rate is
 	// replaced only by usage-bearing facts, independently of the latest overhead.
 	ModelState struct {
-		Rate       contextmeasure.Rate
-		Calibrated bool
-		Budget     int
-		Known      bool
-		FixedBytes int
+		ToolResultParts model.ToolResultPartSupport
+		Rate            contextmeasure.Rate
+		Calibrated      bool
+		Budget          int
+		Known           bool
+		FixedBytes      int
 	}
 	// Flags holds sticky observations for later workflow event emission.
 	Flags struct{ Unmeasured, LimitsUnknown, BudgetTooSmall bool }
@@ -123,7 +125,7 @@ func Observe(state State, facts []contextmeasure.RequestFacts) State {
 		if fact.LimitsInvalid && state.InvalidLimitsModel == "" {
 			state.InvalidLimitsModel = fact.Model
 		}
-		previous := state.Models[fact.Model]
+		previous := observedModel(state.Models, fact)
 		if fact.InputTokens > 0 {
 			previous.Rate, previous.Calibrated = contextmeasure.Calibrate(fact)
 		} else if previous.Rate.Bytes == 0 {
@@ -166,4 +168,12 @@ func (s Settings) resolved(budget int) Settings {
 		s.MinSavingTokens = min(budget/10, 20000)
 	}
 	return s
+}
+
+// observedModel fixes capability support on the model's first view-bearing fact.
+func observedModel(models map[string]ModelState, fact contextmeasure.RequestFacts) ModelState {
+	if previous, seen := models[fact.Model]; seen {
+		return previous
+	}
+	return ModelState{ToolResultParts: fact.ToolResultParts.Intersect(fact.ToolResultParts)}
 }

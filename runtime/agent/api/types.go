@@ -616,6 +616,8 @@ type (
 
 	// ToolOutput is returned by tool executors after invoking the tool implementation.
 	ToolOutput struct {
+		// NonText is the recalled attachment token estimate.
+		NonText int `json:"non_text,omitzero"`
 		// Preview is the planner-visible result summary.
 		Preview string
 		// ResultBytes is the stored eligible result size.

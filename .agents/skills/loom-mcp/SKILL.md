@@ -77,7 +77,7 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   runs before deployment. Preserve protocol 14 overflow source classification,
   retry definition accounting and the fixed-rate progress check.
 
-- Current workflow protocol is 17. Every agent observes adopted call facts,
+- Current workflow protocol is 18. Every agent observes adopted call facts,
   sends sorted Models and runs the advisory guard, bounded overflow recovery and
   recall advertising. Threshold compaction stays opt-in. The existing
   run.ContextRecovery adds GuardMargin (zero=10%) beside DisableRecall; RunInput
@@ -890,9 +890,54 @@ FR1 remains 16. Structural templates remain 5.
 
 ## K22a multimodal tool-result API
 
-Workflow protocol remains 17. Runtime-owned ToolResultPart.Parts accepts images
+K22a retained protocol 17; K22b advances to 18. Runtime-owned ToolResultPart.Parts accepts images
 and byte/URI documents with Cite false, never error results. Empty Parts retains
 existing JSON bytes. Anthropic and Bedrock Claude encode attachments; unsupported
 adapters fail before I/O with model.UnsupportedPartError. ToolResultPartsInfo is
 an optional capability forwarded by all client wrappers. Recall attachment reads
 and recorded support facts are K22b, not part of K22a. See runtime-contracts.md.
+
+### Multimodal recall (K22b, protocol 18)
+
+A result read pages text, including document Text and Chunks in original part
+order. At offset zero it lists every image and byte/URI document in
+`attachments`, with the original 1-based part index, kind, format, bytes and
+estimated tokens. Read one attachment with
+`{"read":{"id":"1","part":"attachment","index":2,"offset":0}}`.
+Only attachment reads accept `index`; their offset must be zero. Each spends one
+read allowance. Text parts and missing indices return `recall_not_found`.
+Malformed input returns `recall_invalid_input`.
+
+The activity selects only original user-message parts in the current run or an
+authorized earlier run reached through the recorded continuation chain. It
+never follows server-only Record/Output content or a tool result's attachments.
+Reading a recall result returns its JSON source descriptor without attachments.
+Successful reads clear document Cite, copy a canonical user-message part blob
+into the current scope, and return its hash; attachment bytes never cross the
+workflow boundary. The next model request includes that part in
+`ToolResultPart.Parts`. Clearing, hiding and eviction remove these parts from the
+rendered result. They are not checkpoint pins.
+
+`RequestFacts.tool_result_parts` records support from the registered client.
+The first view-bearing observation fixes each model's support. Compaction and
+RunRecord intersect all observed models in sorted order; support starts empty
+and can narrow only when another model appears. Recovery without threshold
+compaction uses the same facts. The workflow stamps this intersection and
+ProtectRecentToolTokens resolved at MinB into each recall activity.
+Image and byte-document uploads must fit the provider byte ceiling and the token
+allowance. Images cost 1,500 tokens; byte documents cost ceil(bytes/2). URI
+documents cost 1,500 tokens with no byte ceiling; their descriptor reports zero
+uploaded bytes. Unsupported reads return `recall_unsupported_part` with format,
+bytes and reason (provider, too_large or uri). Size rejections add `limit` and
+`limit_unit` (`bytes` or `tokens`); other rejections omit the unit. A switch
+to narrower support after recall fails with the typed non-retryable adapter error;
+automatic degradation remains follow-up work.
+
+`context_recalled.parts` counts returned attachments (omitted at zero). Carried
+tool results drop attachment blobs and NonText, retain their JSON descriptor,
+and become previews. Summary inputs and GenAI telemetry omit nested attachments.
+Request snapshots preserve them; `agenttest.LastToolResultParts` matches them.
+Protocol 18 includes main, budget, summary, child, child_run, confirmed_pause,
+continued and multimodal real Temporal histories. Protocol 17 rejects before
+workflow effects; its run-record exports remain readable. Drain v17 workflows
+before deployment. Structural TemplateProtocolVersion stays 5.

@@ -231,6 +231,8 @@ type ToolRequest struct {
 
 // ToolResult captures the outcome of a tool invocation.
 type ToolResult struct {
+	// NonText is the runtime-owned recalled attachment token estimate.
+	NonText int `json:"non_text,omitzero"`
 	// Preview is computed before result content leaves its producing activity.
 	Preview string
 

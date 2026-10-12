@@ -405,6 +405,7 @@ func (r *runReader) observeStepFacts(keys []runstore.CallKey) error {
 	} else {
 		r.state = compaction.Observe(r.state, facts)
 	}
+	r.run.ToolResultParts = compaction.ToolResultParts(r.state)
 	return nil
 }
 

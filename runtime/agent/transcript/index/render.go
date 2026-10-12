@@ -189,7 +189,24 @@ func (r *Renderer) appendResult(entry MessageEntry, inline []byte) error {
 	if err != nil {
 		return err
 	}
-	r.parts = append(r.parts, model.ToolResultPart{ToolUseID: id, Content: content, IsError: entry.Result != nil && entry.Result.Error != nil})
+	result := model.ToolResultPart{ToolUseID: id, Content: content, IsError: entry.Result != nil && entry.Result.Error != nil}
+	if entry.Result != nil && entry.Result.Parts != "" {
+		var message model.Message
+		if err := r.decode(entry.Result.Parts, &message); err != nil {
+			return err
+		}
+		if message.Role != model.ConversationRoleUser {
+			return fmt.Errorf("index: attachment blob requires user role")
+		}
+		for _, part := range message.Parts {
+			attachment, ok := part.(model.ToolResultContentPart)
+			if !ok {
+				return fmt.Errorf("index: invalid attachment %T", part)
+			}
+			result.Parts = append(result.Parts, attachment)
+		}
+	}
+	r.parts = append(r.parts, result)
 	return nil
 }
 

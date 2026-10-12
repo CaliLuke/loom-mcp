@@ -28,6 +28,9 @@ func validateToolResultContract(spec tools.ToolSpec, call planner.ToolRequest, t
 	if tr == nil {
 		return toolResultContractErrorf("nil tool result for %q (%s)", call.Name, call.ToolCallID)
 	}
+	if call.Name != tools.RecallContext && (tr.Refs.Parts != "" || tr.NonText != 0) {
+		return toolResultContractErrorf("tool %q returned runtime-owned attachments", call.Name)
+	}
 	if tr.Result != nil && tr.Error != nil {
 		return toolResultContractErrorf("tool %q result is invalid: error and result are both set (tool_call_id=%s)", call.Name, call.ToolCallID)
 	}

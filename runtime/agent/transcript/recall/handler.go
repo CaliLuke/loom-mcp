@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
@@ -20,6 +21,8 @@ type (
 	}
 	// Request is the trusted activity envelope, never caller-supplied tool arguments.
 	Request struct {
+		Parts                model.ToolResultPartSupport
+		PartTokens           int
 		RunID, Scope         string
 		View                 index.ViewRef
 		Head                 runstore.Hash
@@ -34,14 +37,20 @@ type (
 	}
 	// Response is the model-facing result. Cursor and NextOffset continue bounded pages.
 	Response struct {
-		Code       Code    `json:"code,omitzero"`
-		Text       string  `json:"text,omitzero"`
-		NextOffset *int    `json:"next_offset,omitzero"`
-		Entries    []Line  `json:"entries,omitzero"`
-		Matches    []Match `json:"matches,omitzero"`
-		Cursor     string  `json:"cursor,omitzero"`
-		Format     string  `json:"format,omitzero"`
-		Bytes      int     `json:"bytes,omitzero"`
+		Parts       []model.ToolResultContentPart `json:"-"`
+		Attachments []AttachmentInfo              `json:"attachments,omitzero"`
+		Attachment  *AttachmentInfo               `json:"attachment,omitzero"`
+		Reason      string                        `json:"reason,omitzero"`
+		LimitUnit   string                        `json:"limit_unit,omitzero"`
+		Limit       int                           `json:"limit,omitzero"`
+		Code        Code                          `json:"code,omitzero"`
+		Text        string                        `json:"text,omitzero"`
+		NextOffset  *int                          `json:"next_offset,omitzero"`
+		Entries     []Line                        `json:"entries,omitzero"`
+		Matches     []Match                       `json:"matches,omitzero"`
+		Cursor      string                        `json:"cursor,omitzero"`
+		Format      string                        `json:"format,omitzero"`
+		Bytes       int                           `json:"bytes,omitzero"`
 	}
 	// Line is a bounded model-visible receipt or message descriptor.
 	Line struct {

@@ -110,10 +110,22 @@ func Carry(entries []Entry, view index.ViewRef, capBytes, minPreview int) (Plan,
 
 // dropUncarriedParts removes reasoning and unsupported non-text content.
 func dropUncarriedParts(entry *Entry) {
+	entry.Entry.NonText = 0
+	if entry.Entry.Result != nil {
+		projection := *entry.Entry.Result
+		projection.Parts = ""
+		entry.Entry.Result = &projection
+	}
 	for _, message := range entry.Messages {
 		parts := make([]model.Part, 0, len(message.Parts))
 		for _, part := range message.Parts {
-			switch part.(type) {
+			switch part := part.(type) {
+			case model.ToolResultPart:
+				if len(part.Parts) > 0 {
+					part.Parts = nil
+					entry.Form = Preview
+				}
+				parts = append(parts, part)
 			case model.ThinkingPart:
 				continue
 			case model.ImagePart, model.DocumentPart:
@@ -202,6 +214,7 @@ func (p *Plan) clearNewestResults(capBytes int) error {
 						if entry.Entry.Origin != nil {
 							id = fmt.Sprintf("r%d", entry.Entry.Origin.Pos) + " " + id
 						}
+						result.Parts = nil
 						result.Content = checkpoint.ClearedResult(entry.Entry.ContentBytes(), id, "")
 						message.Parts[j] = result
 						if entry.Form != Preview {

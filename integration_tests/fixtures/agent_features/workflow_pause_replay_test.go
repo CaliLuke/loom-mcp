@@ -26,7 +26,7 @@ type pauseHistoryPlanner struct{}
 
 type pauseHistoryExecutor struct{ recordingWorkflowExecutor }
 
-const workflowPauseHistoryFile = "testdata/workflow_protocol_v17_confirmed_pause.json"
+const workflowPauseHistoryFile = "testdata/workflow_protocol_v18_confirmed_pause.json"
 
 // recordPauseWorkflowHistory answers a pause returned only after tool approval.
 func recordPauseWorkflowHistory(t *testing.T, c client.Client) {
@@ -45,10 +45,14 @@ func recordPauseWorkflowHistory(t *testing.T, c client.Client) {
 	require.NoError(t, err)
 	handle, err := coordinator.NewClient(fx.rt).Start(ctx, "sess-pause-history", []*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "draft then ask"}}}}, agentsruntime.WithRunID("run-pause-history"))
 	require.NoError(t, err)
-	require.Eventually(t, func() bool { return fx.recorder.count(hooks.AwaitConfirmation) == 1 }, 5*time.Second, 10*time.Millisecond)
+	require.Eventually(t, func() bool {
+		return fx.recorder.count(hooks.AwaitConfirmation) == 1
+	}, 5*time.Second, 10*time.Millisecond)
 	assert.Zero(t, fx.recorder.count(hooks.AwaitClarification))
 	require.NoError(t, fx.rt.ProvideConfirmation(ctx, &api.ConfirmationDecision{RunID: "run-pause-history", Approved: true, RequestedBy: "history-recorder"}))
-	require.Eventually(t, func() bool { return fx.recorder.count(hooks.AwaitClarification) == 1 }, 5*time.Second, 10*time.Millisecond)
+	require.Eventually(t, func() bool {
+		return fx.recorder.count(hooks.AwaitClarification) == 1
+	}, 5*time.Second, 10*time.Millisecond)
 	require.NoError(t, fx.rt.ProvideClarification(ctx, &api.ClarificationAnswer{RunID: "run-pause-history", ID: "confirmed-pause", Answer: workflowHistoryAnswer}))
 	out, err := handle.Wait(ctx)
 	require.NoError(t, err)

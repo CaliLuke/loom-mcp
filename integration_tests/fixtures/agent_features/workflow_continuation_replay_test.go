@@ -20,7 +20,7 @@ import (
 
 type continuationHistoryPlanner struct{}
 
-const workflowContinuationHistoryFile = "testdata/workflow_protocol_v17_continued.json"
+const workflowContinuationHistoryFile = "testdata/workflow_protocol_v18_continued.json"
 
 func TestGeneratedContinuationWorkflowReplay(t *testing.T) {
 	data, err := os.ReadFile(workflowContinuationHistoryFile)
@@ -30,7 +30,9 @@ func TestGeneratedContinuationWorkflowReplay(t *testing.T) {
 	assertWorkflowHistoryAnonymized(t, history)
 	eng, err := temporalengine.NewWorker(temporalengine.Options{ClientOptions: &client.Options{DataConverter: temporalengine.NewAgentDataConverter(nil)}, WorkerOptions: temporalengine.WorkerOptions{TaskQueue: "replay"}, Instrumentation: temporalengine.InstrumentationOptions{DisableTracing: true, DisableMetrics: true}})
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, eng.Close()) })
+	t.Cleanup(func() {
+		require.NoError(t, eng.Close())
+	})
 	fx := newFeatureRuntime(t, agentsruntime.WithEngine(eng))
 	registerContinuationHistoryAgent(t, fx)
 	require.NoError(t, eng.ReplayWorkflowHistory(silentTemporalLogger{}, history))

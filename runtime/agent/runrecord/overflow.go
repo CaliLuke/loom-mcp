@@ -35,7 +35,7 @@ func (r *runReader) readOverflow(event *runlog.Event) error {
 	if err != nil {
 		return err
 	}
-	if completion.Facts == nil || *completion.Facts != overflow.Failure.Failed || overflow.Source != overflow.Failure.Source {
+	if completion.Facts == nil || !reflect.DeepEqual(*completion.Facts, overflow.Failure.Failed) || overflow.Source != overflow.Failure.Source {
 		return fmt.Errorf("runrecord: overflow facts differ from recorded call")
 	}
 	for _, key := range overflow.CallKeys {

@@ -314,14 +314,17 @@ transaction (4.16; fault `advance_two_writes`).
   `TestSummaryZombieAttemptAbandoned`, `TestSummaryAdoptionRequiresRecordEvent`,
   `TestWorkflowSummaryAdoption` and `TestSummarizeActivityFailurePolicy` cover
   crash classification, late attempts, canonical adoption and fresh retry keys.
-  The three protocol-17 histories in `agent_features` exercise real Temporal
-  replay with recorded per-run settings and pinned prompts; protocol 16 is
+  The three protocol-18 histories in `agent_features` exercise real Temporal
+  replay with recorded per-run settings and pinned prompts; protocol 17 is
   rejected before effects. The main and summary histories enable overrides.
-  Two further protocol-17 histories record the parent's child-context preparation
+  Two further protocol-18 histories record the parent's child-context preparation
   and child-start command, and the independently configured child execution.
-  A sixth protocol-17 history covers a confirmed tool returning a clarification
+  A sixth protocol-18 history covers a confirmed tool returning a clarification
   pause, its answer and recording before one resume. The summary recording also
-  preserves the clarification-only turn's model text.
+  preserves the clarification-only turn's model text. The continued history proves
+  session seeding; the multimodal history proves image/PDF recall by scoped hash
+  and the following model request. Older histories are retained. Attachment reads
+  use the existing authorized chain walk; no TLA module changes are required.
 - Store writes succeed when they happen; a failed write is a crash at that
   point.
 

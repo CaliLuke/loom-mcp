@@ -27,6 +27,7 @@ type (
 		Run    string `json:"run,omitempty"`
 		Part   Part   `json:"part"`
 		Offset int    `json:"offset"`
+		Index  int    `json:"index,omitzero"`
 	}
 	// ListInput selects either a collapsed handle or an inclusive message range.
 	ListInput struct {
@@ -56,6 +57,8 @@ const (
 	Result Part = "result"
 	// Arguments selects a tool call's original arguments.
 	Arguments Part = "arguments"
+	// Attachment selects one non-text user-message part.
+	Attachment Part = "attachment"
 )
 
 // ParseInput validates the exactly-one operation envelope without resolving IDs
@@ -96,10 +99,18 @@ func ParseInput(data []byte) (Input, error) {
 }
 
 func parseRead(data []byte, in *ReadInput) error {
-	if _, err := decodeObject(data, in, "id", "part", "offset"); err != nil {
+	fields, err := decodeObject(data, in, "id", "part", "offset")
+	if err != nil {
 		return err
 	}
-	if in.ID == "" || (in.Part != Result && in.Part != Arguments) || in.Offset < 0 {
+	if in.ID == "" || (in.Part != Result && in.Part != Arguments && in.Part != Attachment) || in.Offset < 0 {
+		return invalidInput()
+	}
+	if in.Part == Attachment {
+		if in.Index <= 0 || in.Offset != 0 {
+			return invalidInput()
+		}
+	} else if _, present := fields["index"]; present {
 		return invalidInput()
 	}
 	return nil

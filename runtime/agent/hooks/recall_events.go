@@ -17,6 +17,7 @@ type (
 		Code               recall.Code `json:"code,omitzero"`
 		ToolUseID          string      `json:"tool_use_id"`
 		Bytes              int         `json:"bytes"`
+		Parts              int         `json:"parts,omitzero"`
 		RemainingDiscovery int         `json:"remaining_discovery"`
 		RemainingReads     int         `json:"remaining_reads"`
 		Step               int         `json:"step"`

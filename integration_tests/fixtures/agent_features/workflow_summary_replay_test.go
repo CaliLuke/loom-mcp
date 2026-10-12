@@ -26,7 +26,7 @@ import (
 
 type summaryHistoryPlanner struct{}
 
-const workflowSummaryHistoryFile = "testdata/workflow_protocol_v17_summary.json"
+const workflowSummaryHistoryFile = "testdata/workflow_protocol_v18_summary.json"
 const historyClarificationText = "I need a detail before continuing."
 
 const historySummaryText = "# Goal\nRemember the task [message 1].\n# Decisions\nUse evidence.\n# Facts\nHistory is recorded.\n# Progress\nRead it.\n# Open questions\nNone.\n# Next\nFinish."
@@ -47,7 +47,9 @@ func recordSummaryWorkflowHistory(t *testing.T, c client.Client) {
 	}
 	handle, err := coordinator.NewClient(fx.rt).Start(ctx, "sess-summary-history", messages, agentsruntime.WithRunID("run-summary-history"), agentsruntime.WithContextOverrides(agentsruntime.ContextOverrides{ContextWindow: new(5000), MaxSummaryChunks: new(2)}))
 	require.NoError(t, err)
-	require.Eventually(t, func() bool { return fx.recorder.count(hooks.AwaitClarification) == 1 }, 5*time.Second, 10*time.Millisecond)
+	require.Eventually(t, func() bool {
+		return fx.recorder.count(hooks.AwaitClarification) == 1
+	}, 5*time.Second, 10*time.Millisecond)
 	require.NoError(t, fx.rt.ProvideClarification(ctx, &api.ClarificationAnswer{RunID: "run-summary-history", ID: "summary-question", Answer: "yes"}))
 	out, err := handle.Wait(ctx)
 	require.NoError(t, err)

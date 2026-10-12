@@ -150,6 +150,9 @@ func popReadyActivityFuture(pending []futureInfo) (futureInfo, []futureInfo, boo
 }
 
 func (e *toolBatchExec) decodeActivityToolResult(info futureInfo, out *ToolOutput) (*planner.ToolResult, error) {
+	if info.call.Name != tools.RecallContext && (out.Refs.Parts != "" || out.NonText != 0) {
+		return nil, toolResultContractErrorf("tool %q returned runtime-owned attachments", info.call.Name)
+	}
 	spec, ok := e.r.toolSpec(info.call.Name)
 	if !ok {
 		return nil, fmt.Errorf("missing tool spec for %s", info.call.Name)
@@ -158,6 +161,7 @@ func (e *toolBatchExec) decodeActivityToolResult(info futureInfo, out *ToolOutpu
 		Name:        info.call.Name,
 		Preview:     out.Preview,
 		ResultBytes: out.ResultBytes,
+		NonText:     out.NonText,
 		Refs:        out.Refs,
 		Bounds:      out.Bounds,
 		ServerData:  out.ServerData,

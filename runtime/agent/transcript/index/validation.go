@@ -28,6 +28,9 @@ func validateEntry(entry MessageEntry) error {
 		return fmt.Errorf("index: unknown entry kind %q", entry.Kind)
 	}
 	if entry.Result != nil {
+		if entry.Result.Parts != "" && (entry.Kind != ToolResult || entry.Result.Error != nil) {
+			return fmt.Errorf("index: attachments require a successful tool result")
+		}
 		if err := validateText(entry.Result.Preview); err != nil {
 			return err
 		}

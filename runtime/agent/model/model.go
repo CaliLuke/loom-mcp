@@ -4,7 +4,10 @@
 // ToolResultPart.Parts carries image/document attachments; ordinary tools return
 // JSON Content. ToolResultPartsInfo reports optional provider support. Unsupported
 // adapters return UnsupportedPartError before provider I/O. Empty Parts preserves
-// existing message JSON bytes.
+// existing message JSON bytes. Protocol-18 recall copies authorized user parts
+// into scoped blobs and renders their references as tool-result attachments.
+// Recorded support is intersected across observed models; carry and summaries
+// omit recalled attachments.
 package model
 
 import (

@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/compaction"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
@@ -33,6 +34,9 @@ func (e *toolBatchExec) dispatchRecall(ctx context.Context, wf engine.WorkflowCo
 
 	event := hooks.NewContextRecalledEvent(e.runID, e.agentID, e.sessionID, call.ToolCallID, wf.Now())
 	event.Kind, event.Code, event.Bytes, event.Step = charge.kind, code, bytes, e.base.step
+	if result.Refs.Parts != "" {
+		event.Parts = 1
+	}
 	event.RemainingDiscovery, event.RemainingReads = charge.remaining.Discovery, charge.remaining.Reads
 	event.Outcome = "ok"
 	switch code {
@@ -67,7 +71,7 @@ func (e *toolBatchExec) executeRecall(ctx context.Context, wf engine.WorkflowCon
 	if e.base.compaction != nil {
 		pageBytes = e.base.contextSettings.RecallPageBytes(e.base.compactionState.MinB)
 	}
-	output, err := wf.ExecuteRecallActivity(ctx, engine.RecallActivityCall{Name: RecallActivityName(e.agentID), Input: &api.RecallActivityInput{RunID: e.runID, Scope: e.base.RunContext.RootRunID, ViewRef: e.base.view(), Head: e.base.IndexHead, Call: call, PageBytes: pageBytes, ScanBytes: e.base.contextSettings.RecallScanBytes}, Options: computeToolActivityOptions(wf, e.toolActOptions, e.finishBy)})
+	output, err := wf.ExecuteRecallActivity(ctx, engine.RecallActivityCall{Name: RecallActivityName(e.agentID), Input: &api.RecallActivityInput{Parts: compaction.ToolResultParts(e.base.compactionState), PartTokens: e.base.contextSettings.RecallPartTokens(e.base.compactionState.MinB), RunID: e.runID, Scope: e.base.RunContext.RootRunID, ViewRef: e.base.view(), Head: e.base.IndexHead, Call: call, PageBytes: pageBytes, ScanBytes: e.base.contextSettings.RecallScanBytes}, Options: computeToolActivityOptions(wf, e.toolActOptions, e.finishBy)})
 	if err != nil {
 		return recallExecution{}, err
 	}

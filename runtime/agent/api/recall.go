@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
@@ -14,18 +15,22 @@ type (
 	ContextRecovery = run.ContextRecovery
 	// RecallActivityInput carries trusted workflow evidence and untrusted tool arguments.
 	RecallActivityInput struct {
-		RunID     string
-		Scope     string
-		ViewRef   index.ViewRef
-		Head      runstore.Hash
-		Call      planner.ToolRequest
-		PageBytes int
-		ScanBytes int
+		Parts      model.ToolResultPartSupport
+		PartTokens int
+		RunID      string
+		Scope      string
+		ViewRef    index.ViewRef
+		Head       runstore.Hash
+		Call       planner.ToolRequest
+		PageBytes  int
+		ScanBytes  int
 	}
 	// RecallActivityOutput addresses the stored eligible result and its event classification.
 	RecallActivityOutput struct {
-		Result *ToolOutput
-		Code   recall.Code
-		Bytes  int
+		Parts   runstore.Hash `json:"parts,omitzero"`
+		NonText int           `json:"non_text,omitzero"`
+		Result  *ToolOutput
+		Code    recall.Code
+		Bytes   int
 	}
 )

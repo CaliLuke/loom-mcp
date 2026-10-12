@@ -1,0 +1,69 @@
+[
+  {
+    "toolResult": {
+      "content": [
+        {
+          "text": "tick"
+        }
+      ],
+      "toolUseId": "grow"
+    }
+  },
+  {
+    "toolResult": {
+      "content": [
+        {
+          "json": {
+            "attachment": {
+              "bytes": 3,
+              "format": "png",
+              "kind": "image",
+              "message": "1",
+              "part": 2,
+              "run": "multimodal-run",
+              "tokens": 1500
+            }
+          }
+        },
+        {
+          "image": {
+            "format": "png",
+            "source": {
+              "bytes": "AQID"
+            }
+          }
+        }
+      ],
+      "toolUseId": "image"
+    }
+  },
+  {
+    "toolResult": {
+      "content": [
+        {
+          "json": {
+            "attachment": {
+              "bytes": 9,
+              "format": "pdf",
+              "kind": "document",
+              "message": "3",
+              "part": 2,
+              "run": "multimodal-run",
+              "tokens": 5
+            }
+          }
+        },
+        {
+          "document": {
+            "format": "pdf",
+            "name": "manual",
+            "source": {
+              "bytes": "JVBERi10ZXN0"
+            }
+          }
+        }
+      ],
+      "toolUseId": "pdf"
+    }
+  }
+]

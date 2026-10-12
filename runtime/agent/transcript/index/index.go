@@ -34,6 +34,8 @@ type (
 	// ResultProjection contains only metadata needed by the existing transcript
 	// projection. A non-nil Error preserves IsError even for empty error text.
 	ResultProjection struct {
+		// Parts addresses a user-message blob containing runtime-owned attachments.
+		Parts runstore.Hash `json:"parts,omitzero"`
 		// ContentBytes retains the canonical result size independently of measured
 		// preview bytes, so omission and cleared placeholders preserve their meaning.
 		ContentBytes int            `json:"content_bytes,omitzero"`

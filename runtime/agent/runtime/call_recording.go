@@ -329,6 +329,9 @@ func (r *CallRecording) measureRequest(ctx context.Context, req *model.Request, 
 			return contextmeasure.RequestFacts{}, limits, fmt.Errorf("measure recovery tools: %w", err)
 		}
 	}
+	if info, ok := registered.(model.ToolResultPartsInfo); ok {
+		facts.ToolResultParts = info.ToolResultParts(ctx, req)
+	}
 	facts.Call = key
 	facts.Model = firstNonEmpty(resolved, req.Model, modelID)
 	return facts, limits, nil

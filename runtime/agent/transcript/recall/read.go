@@ -16,6 +16,8 @@ import (
 type eligibleText struct {
 	text, format string
 	bytes        int
+	attachments  []AttachmentInfo
+	parts        []model.ToolResultContentPart
 }
 
 func page(text string, offset, size int) Response {
@@ -47,7 +49,7 @@ func messageText(messages []*model.Message) eligibleText {
 		if message == nil {
 			continue
 		}
-		for _, part := range message.Parts {
+		for i, part := range message.Parts {
 			switch part := part.(type) {
 			case model.TextPart:
 				texts = append(texts, part.Text)
@@ -57,12 +59,21 @@ func messageText(messages []*model.Message) eligibleText {
 					panic(err) // model content was decoded from valid JSON.
 				}
 				texts = append(texts, string(data))
+			case model.CitationsPart:
+				texts = append(texts, part.Text)
 			case model.ImagePart:
-				result.format, result.bytes = string(part.Format), len(part.Bytes)
+				if message.Role == model.ConversationRoleUser {
+					result.addAttachment(i+1, part)
+				}
 			case model.DocumentPart:
-				result.format, result.bytes = string(part.Format), len(part.Bytes)+len(part.Text)
-				for _, chunk := range part.Chunks {
-					result.bytes += len(chunk)
+				if part.Text != "" {
+					texts = append(texts, part.Text)
+				} else if len(part.Chunks) > 0 {
+					texts = append(texts, strings.Join(part.Chunks, "\n"))
+				}
+				if message.Role == model.ConversationRoleUser && (len(part.Bytes) > 0 || part.URI != "") {
+					part.Cite = false
+					result.addAttachment(i+1, part)
 				}
 			}
 		}
@@ -100,15 +111,10 @@ func (r *callReader) read(ctx context.Context, in ReadInput) (Response, error) {
 			continue
 		}
 
-		text, err := r.text(ctx, scope, entry)
-		if err != nil {
-			return Response{}, err
-		}
-		response := page(text.text, in.Offset, r.req.PageBytes)
-		if text.format != "" {
-			response.Code, response.Format, response.Bytes = CodeUnsupportedPart, text.format, text.bytes
-		}
-		return response, nil
+		return r.readEntry(ctx, runID, scope, entry, in)
+	}
+	if in.Part == Attachment {
+		return Response{Code: CodeNotFound}, nil
 	}
 	return r.readSeededResult(ctx, scope, id, entries, in.Offset)
 }
@@ -229,4 +235,30 @@ func (r *callReader) readSeededResult(ctx context.Context, scope, id string, ent
 		}
 	}
 	return Response{}, &Error{Code: CodeNotFound}
+}
+
+// readEntry separates attachment retrieval from bounded text paging.
+func (r *callReader) readEntry(ctx context.Context, runID, scope string, entry index.MessageEntry, in ReadInput) (Response, error) {
+	if in.Part == Attachment {
+		return r.attachment(ctx, runID, scope, entry, in.Index)
+	}
+	text, err := r.text(ctx, scope, entry)
+	if err != nil {
+		return Response{}, err
+	}
+	response := page(text.text, in.Offset, r.req.PageBytes)
+	if in.Offset == 0 {
+		response.Attachments = text.attachments
+	}
+	if len(text.parts) > 0 {
+		accepted := false
+		for _, part := range text.parts {
+			ok, _ := r.req.Parts.Accepts(part)
+			accepted = accepted || ok
+		}
+		if !accepted {
+			response.Code, response.Format, response.Bytes = CodeUnsupportedPart, text.format, text.bytes
+		}
+	}
+	return response, nil
 }

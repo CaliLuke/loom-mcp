@@ -171,6 +171,9 @@
         },
         "count_latency": {
           "$ref": "#/$defs/Duration"
+        },
+        "tool_result_parts": {
+          "$ref": "#/$defs/ToolResultPartSupport"
         }
       },
       "required": [
@@ -761,8 +764,15 @@
     "Trajectory": {
       "type": "object",
       "properties": {
-        "pos": {"type": "integer"},
-        "prev": {"type": ["string", "null"]},
+        "pos": {
+          "type": "integer"
+        },
+        "prev": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "trace_id": {
           "type": "string"
         },
@@ -1255,6 +1265,52 @@
         "End"
       ],
       "additionalProperties": false
+    },
+    "ToolResultPartSupport": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ImageFormats": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "DocumentFormats": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "DocumentURISchemes": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "MaxImageBytes": {
+          "type": "integer"
+        },
+        "MaxDocumentBytes": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ImageFormats",
+        "DocumentFormats",
+        "DocumentURISchemes",
+        "MaxImageBytes",
+        "MaxDocumentBytes"
+      ]
     }
   }
 }

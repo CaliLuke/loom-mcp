@@ -14,10 +14,6 @@ import (
 
 	"example.com/agentfeatures/gen/features/agents/coordinator"
 	"example.com/agentfeatures/gen/features/toolsets/workflow"
-
-	"go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/testsuite"
-
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	temporalengine "github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine/temporal"
@@ -33,6 +29,8 @@ import (
 	sessioninmem "github.com/CaliLuke/loom-mcp/v2/runtime/agent/session/inmem"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/testsuite"
 )
 
 type retryIdempotencyPlanner struct {
@@ -91,10 +89,13 @@ func TestGeneratedFeatureRealTemporalContracts(t *testing.T) {
 		measurePlannerStepLatency(t, server.Client())
 	})
 
+	t.Run("multimodal planner fails once", func(t *testing.T) { testMultimodalPlannerRetry(t, server.Client()) })
+
 	t.Run("record workflow history", func(t *testing.T) {
 		if os.Getenv("LOOM_MCP_RECORD_WORKFLOW_HISTORY") != "1" {
 			t.Skip("set LOOM_MCP_RECORD_WORKFLOW_HISTORY=1 to re-record")
 		}
+		t.Run("multimodal", func(t *testing.T) { recordMultimodalWorkflowHistory(t, server.Client()) })
 		t.Run("continuation", func(t *testing.T) { recordContinuationWorkflowHistory(t, server.Client()) })
 		t.Run("child start", func(t *testing.T) { recordChildWorkflowHistory(t, server.Client()) })
 		t.Run("main", func(t *testing.T) {

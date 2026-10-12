@@ -1,0 +1,52 @@
+[
+  {
+    "content": [
+      {
+        "text": "tick",
+        "type": "text"
+      }
+    ],
+    "is_error": false,
+    "tool_use_id": "grow",
+    "type": "tool_result"
+  },
+  {
+    "content": [
+      {
+        "text": "{\"attachment\":{\"bytes\":3,\"format\":\"png\",\"kind\":\"image\",\"message\":\"1\",\"part\":2,\"run\":\"multimodal-run\",\"tokens\":1500}}",
+        "type": "text"
+      },
+      {
+        "source": {
+          "data": "AQID",
+          "media_type": "image/png",
+          "type": "base64"
+        },
+        "type": "image"
+      }
+    ],
+    "is_error": false,
+    "tool_use_id": "image",
+    "type": "tool_result"
+  },
+  {
+    "content": [
+      {
+        "text": "{\"attachment\":{\"bytes\":9,\"format\":\"pdf\",\"kind\":\"document\",\"message\":\"3\",\"part\":2,\"run\":\"multimodal-run\",\"tokens\":5}}",
+        "type": "text"
+      },
+      {
+        "source": {
+          "data": "JVBERi10ZXN0",
+          "media_type": "application/pdf",
+          "type": "base64"
+        },
+        "title": "manual",
+        "type": "document"
+      }
+    ],
+    "is_error": false,
+    "tool_use_id": "pdf",
+    "type": "tool_result"
+  }
+]

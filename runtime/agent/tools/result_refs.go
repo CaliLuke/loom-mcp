@@ -8,6 +8,8 @@ import "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 // no corresponding stored content. Error-only and structural results have no
 // eligible result reference; Payload is populated only by tool activities.
 type ResultRefs struct {
+	// Parts addresses runtime-owned recall attachments; ordinary tools must not set it.
+	Parts runstore.Hash `json:"parts,omitzero"`
 	// Result addresses the full canonical result JSON eligible for model access.
 	Result runstore.Hash
 	// ServerData addresses the server-only sidecar; never expose it to a model.

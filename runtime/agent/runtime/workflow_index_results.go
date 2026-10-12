@@ -114,7 +114,7 @@ func (r *Runtime) resultIndexEntry(ctx context.Context, base *workflowPlanInput,
 	if err != nil {
 		return index.MessageEntry{}, err
 	}
-	entry := index.MessageEntry{Kind: index.ToolResult, Hash: result.Refs.Result, Batch: batch, ToolUseIDs: []string{call.ToolCallID}, Bytes: result.ResultBytes, Role: model.ConversationRoleUser, Result: &index.ResultProjection{ContentBytes: result.ResultBytes, Preview: preview, Bounds: result.Bounds}}
+	entry := index.MessageEntry{Kind: index.ToolResult, Hash: result.Refs.Result, Batch: batch, ToolUseIDs: []string{call.ToolCallID}, Bytes: result.ResultBytes, NonText: result.NonText, Role: model.ConversationRoleUser, Result: &index.ResultProjection{Parts: result.Refs.Parts, ContentBytes: result.ResultBytes, Preview: preview, Bounds: result.Bounds}}
 	entry.Keep = keepCompactionResult(base.compaction, call.Name)
 	entry, err = projectResultEntry(ctx, entry, result, denial)
 	if err != nil {

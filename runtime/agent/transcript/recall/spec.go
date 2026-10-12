@@ -10,13 +10,12 @@ import (
 
 const (
 	// Description contains all model-facing discovery and paging guidance.
-	Description = `Retrieve hidden conversation evidence. Choose one: read, list or find.
-Use IDs shown in placeholders, pins, index lines, receipts and summaries. Tool use IDs address results or original arguments; message IDs address original text; ck- IDs address full summaries. Use run labels or rN:-qualified IDs only when shown.
-read: give id, part (result or arguments), and byte offset (start at 0). Follow next_offset until complete. Offsets snap to UTF-8 boundaries. Pages use max(512, ProtectRecentToolTokens) bytes. Images/documents report recall_unsupported_part with format and bytes until supported.
-list: give a collapsed rc- handle, or inclusive from/through message range and optional run. Receipt handles list calls and assistant text; earlier handles list earlier-run records; users handles list original user first lines. Ranges list every model-visible message. Follow cursor with the same selector.
-find: nonempty literal, case-sensitive UTF-8 text. Scans hidden content newest first, current then earlier runs, up to 8 MB/10 matches. Read using each match's id/run/part/offset. Continue with cursor and same text across compaction; omit cursor for newly hidden content or after recall_invalid_input.
-Handles/cursors are opaque and re-resolved within the checkpoint chain; they grant no access outside the session. Removed content returns recall_unavailable; unknown IDs/handles recall_not_found; denied access recall_unauthorized; malformed input recall_invalid_input.
-Discovery (list/find) and reads each start with 20 calls. Rejected/malformed calls spend their allowance; an unrecognized kind spends discovery. Compaction refills both by half their initial allowance rounded up, capped at three times initial. recall_budget_exhausted gives allowance, other_remaining and refills_at: next compaction. Listings never spend reads.`
+	Description = `Choose read/list/find for hidden evidence. IDs: placeholders/pins/index/receipts/summaries: tool use=result/arguments; message=original; ck-=summary. Only shown run/rN: labels.
+read: id, part result|arguments, byte offset (0 first); follow next_offset. UTF-8-snapped pages: max(512, ProtectRecentToolTokens) bytes, including document Text/Chunks. Offset 0 lists attachments by original 1-based index. Attachment: part attachment, index, offset 0; index forbidden otherwise. Must fit all observed models, upload byte caps and ProtectRecentToolTokens (image/URI:1500; byte document:ceil(bytes/2)). recall_unsupported_part reports format, bytes, reason, limit, limit_unit (bytes|tokens).
+list: rc- handle or inclusive from/through, optional run. Handles: receipts=calls/assistant text, earlier=prior records, users=original first lines. Ranges list visible messages. Continue cursor with same selector.
+find: nonempty case-sensitive UTF-8 literal; hidden evidence newest first, current then earlier runs; max 8 MB/10 matches. Read match id/run/part/offset. Keep text with cursor across compaction; restart for new evidence or recall_invalid_input.
+Opaque handles/cursors resolve within the session checkpoint chain. Errors: removed=recall_unavailable; unknown=recall_not_found; denied=recall_unauthorized; malformed=recall_invalid_input.
+Start:20 reads,20 list/find. One read/attachment; rejections spend allowance; unknown kind spends discovery. Compaction refills ceil(initial/2), cap 3*initial. recall_budget_exhausted gives allowance, other_remaining, refills_at: next compaction. Listings spend no reads.`
 	inputSchema = `{
   "type": "object",
   "additionalProperties": false,
@@ -29,6 +28,11 @@ Discovery (list/find) and reads each start with 20 calls. Rejected/malformed cal
         "part",
         "offset"
       ],
+      "allOf": [{
+        "if": {"properties": {"part": {"const": "attachment"}}},
+        "then": {"required": ["index"], "properties": {"offset": {"const": 0}}},
+        "else": {"not": {"required": ["index"]}}
+      }],
       "properties": {
         "id": {
           "type": "string",
@@ -40,9 +44,11 @@ Discovery (list/find) and reads each start with 20 calls. Rejected/malformed cal
         "part": {
           "enum": [
             "result",
-            "arguments"
+            "arguments",
+            "attachment"
           ]
         },
+        "index": {"type":"integer","minimum":1},
         "offset": {
           "type": "integer",
           "minimum": 0
@@ -142,7 +148,7 @@ func Spec() tools.ToolSpec {
 				return json.Marshal(value)
 			},
 		}},
-		Result: tools.TypeSpec{Name: "RecallResult", Schema: []byte(`{"type":"object","additionalProperties":true}`), Codec: tools.AnyJSONCodec},
+		Result: tools.TypeSpec{Name: "RecallResult", Schema: []byte(`{"type":"object","additionalProperties":true,"properties":{"limit_unit":{"enum":["bytes","tokens"]}},"if":{"required":["code","reason"],"properties":{"code":{"const":"recall_unsupported_part"},"reason":{"const":"too_large"}}},"then":{"required":["limit_unit"]}}`), Codec: tools.AnyJSONCodec},
 	}
 }
 

@@ -19,8 +19,8 @@ import (
 )
 
 const (
-	workflowChildHistoryFile    = "testdata/workflow_protocol_v17_child.json"
-	workflowChildRunHistoryFile = "testdata/workflow_protocol_v17_child_run.json"
+	workflowChildHistoryFile    = "testdata/workflow_protocol_v18_child.json"
+	workflowChildRunHistoryFile = "testdata/workflow_protocol_v18_child_run.json"
 )
 
 func TestGeneratedFeatureChildWorkflowReplay(t *testing.T) {
@@ -48,7 +48,9 @@ func TestGeneratedFeatureChildWorkflowReplay(t *testing.T) {
 			}
 			eng, err := temporalengine.NewWorker(temporalengine.Options{ClientOptions: &client.Options{DataConverter: temporalengine.NewAgentDataConverter(nil)}, WorkerOptions: temporalengine.WorkerOptions{TaskQueue: "replay"}, Instrumentation: temporalengine.InstrumentationOptions{DisableTracing: true, DisableMetrics: true}})
 			require.NoError(t, err)
-			t.Cleanup(func() { require.NoError(t, eng.Close()) })
+			t.Cleanup(func() {
+				require.NoError(t, eng.Close())
+			})
 			fx := newFeatureRuntime(t, agentsruntime.WithEngine(eng))
 			require.NoError(t, specialist.RegisterSpecialistAgent(t.Context(), fx.rt, specialist.SpecialistAgentConfig{Planner: &specialistFinalResultPlanner{}}))
 			registerCoordinatorToolsets(t, t.Context(), fx.rt, newRecordingWorkflowExecutor())

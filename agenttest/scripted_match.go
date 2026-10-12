@@ -4,6 +4,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
@@ -57,23 +58,7 @@ func LacksTool(tool tools.Named) Match {
 func LastToolResult(tool tools.Named, contains string) Match {
 	name := tool.Ident()
 	return func(request *model.Request) error {
-		calls := make(map[string]string)
-		var result *model.ToolResultPart
-		for _, message := range request.Messages {
-			if message == nil {
-				continue
-			}
-			for _, part := range message.Parts {
-				switch value := part.(type) {
-				case model.ToolUsePart:
-					calls[value.ID] = value.Name
-				case model.ToolResultPart:
-					if calls[value.ToolUseID] == string(name) {
-						result = &value
-					}
-				}
-			}
-		}
+		result := lastToolResult(request, name)
 		if result == nil {
 			return fmt.Errorf("no result for tool %q", name)
 		}
@@ -87,6 +72,21 @@ func LastToolResult(tool tools.Named, contains string) Match {
 		}
 		if !strings.Contains(text, contains) {
 			return fmt.Errorf("last result for tool %q does not contain %q", name, contains)
+		}
+		return nil
+	}
+}
+
+// LastToolResultParts matches the latest named result's attachments in order.
+func LastToolResultParts(tool tools.Named, parts ...model.ToolResultContentPart) Match {
+	name := tool.Ident()
+	return func(request *model.Request) error {
+		result := lastToolResult(request, name)
+		if result == nil {
+			return fmt.Errorf("no result for tool %q", name)
+		}
+		if !reflect.DeepEqual(result.Parts, parts) {
+			return fmt.Errorf("last result attachments for tool %q differ", name)
 		}
 		return nil
 	}
@@ -157,4 +157,27 @@ func messageText(message *model.Message) string {
 		}
 	}
 	return text.String()
+}
+
+// lastToolResult correlates results with the preceding canonical tool use.
+func lastToolResult(request *model.Request, name tools.Ident) *model.ToolResultPart {
+	calls := make(map[string]string)
+	var result *model.ToolResultPart
+	for _, message := range request.Messages {
+		if message == nil {
+			continue
+		}
+		for _, part := range message.Parts {
+			switch value := part.(type) {
+			case model.ToolUsePart:
+				calls[value.ID] = value.Name
+			case model.ToolResultPart:
+				if calls[value.ToolUseID] == string(name) {
+					result = &value
+				}
+			}
+		}
+	}
+
+	return result
 }

@@ -4,10 +4,9 @@ import (
 	"encoding/json/v2"
 	"testing"
 
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 )
 
 func TestGenAIInputMessagesAttrSerializesEveryPartAndRedactsReasoning(t *testing.T) {
@@ -159,4 +158,12 @@ func partType(t *testing.T, part any) string {
 		require.Failf(t, "unknown part", "type %T", part)
 		return ""
 	}
+}
+
+func TestMultimodalRecallTelemetryOmitsParts(t *testing.T) {
+	attr, ok, err := GenAIInputMessagesAttr([]*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.ToolResultPart{ToolUseID: "call", Content: "descriptor", Parts: []model.ToolResultContentPart{model.ImagePart{Format: model.ImageFormatPNG, Bytes: []byte{1, 2, 3}}}}}}})
+	require.NoError(t, err)
+	require.True(t, ok)
+	assert.NotContains(t, attr.Value.AsString(), "AQID")
+	assert.Contains(t, attr.Value.AsString(), "descriptor")
 }
