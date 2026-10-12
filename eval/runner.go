@@ -57,11 +57,12 @@ func Run(ctx context.Context, cfg Config) (*Report, error) {
 	jobs := make(chan runnerJob)
 	completed := make(chan *AttemptRecord, concurrency)
 	owners := &harnessOwners{seen: make(map[*agenttest.Harness]bool)}
+	factory := cfg.Harness
 	var workers sync.WaitGroup
 	for range concurrency {
 		workers.Go(func() {
 			for job := range jobs {
-				record := runAttempt(ctx, cfg.Harness, owners, job)
+				record := runAttempt(ctx, factory, owners, job)
 				judgeAttempt(ctx, cfg.Judge, cfg.JudgeTimeout, record)
 				completed <- record
 			}
@@ -157,7 +158,9 @@ func notifyAttempt(cfg *Config, report *Report, a *AttemptRecord, runErr error) 
 		if value := recover(); value != nil {
 			cfg.OnAttempt = nil
 			report.stop(StopCallbackPanic)
-			err = errors.Join(runErr, fmt.Errorf("eval: OnAttempt panic: %v\n%s", value, debug.Stack()))
+			panicErr := fmt.Errorf("eval: OnAttempt panic: %v\n%s", value, debug.Stack())
+			a.HarnessErr = errors.Join(a.HarnessErr, panicErr)
+			err = errors.Join(runErr, panicErr)
 		}
 	}()
 	cfg.OnAttempt(a)

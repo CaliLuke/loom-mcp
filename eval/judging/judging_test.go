@@ -10,6 +10,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/eval"
 	"github.com/CaliLuke/loom-mcp/v2/eval/judge"
 	"github.com/CaliLuke/loom-mcp/v2/eval/judging"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/callrecord"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
@@ -23,6 +24,7 @@ func TestSubjectBatchesAndOrder(t *testing.T) {
 	client, script := agenttest.ScriptClient(t, turn("answer"), turn("trajectory"), turn("session"), turn("step"), turn("step"))
 	j := adapter(t, client)
 	out := outcome()
+	out.Session.Trajectory[1].Steps[1].Tool.Bounds = &agent.Bounds{Returned: 7, RefinementHint: "secret bounds"}
 	out.Claims = []eval.Claim{{ID: "step", Text: "step", Subject: eval.SubjectStep, Tool: "search"}, {ID: "session", Text: "session", Subject: eval.SubjectSession}, {ID: "answer", Text: "answer", Subject: eval.SubjectAnswer}, {ID: "trajectory", Text: "trajectory", Subject: eval.SubjectTrajectory}}
 	before, err := out.Session.Trajectory.Marshal()
 	require.NoError(t, err)
@@ -40,9 +42,9 @@ func TestSubjectBatchesAndOrder(t *testing.T) {
 	for i, req := range reqs {
 		text := requestText(req)
 		assert.Contains(t, text, "Subject kind: "+subjects[i])
-		assert.Contains(t, text, "Task:\nhelp")
-		assert.Contains(t, text, "Reference:\nfacts")
-		assert.Contains(t, text, "Claims:\n"+subjects[i]+": "+subjects[i]+"\n")
+		assert.Contains(t, text, "Task:\n\"help\"")
+		assert.Contains(t, text, "Reference:\n\"facts\"")
+		assert.Contains(t, text, "Claims:\n"+subjects[i]+": \""+subjects[i]+"\"\n")
 		if i < 3 {
 			assert.Contains(t, text, "Subject:\n`\n"+texts[i]+"\n`")
 		}
@@ -52,6 +54,8 @@ func TestSubjectBatchesAndOrder(t *testing.T) {
 	assert.Contains(t, first, "Judged call: run 2 step 1 search one")
 	assert.Contains(t, first, "Result: null")
 	assert.NotContains(t, first, "secret result")
+	assert.NotContains(t, first, "secret bounds")
+	assert.Contains(t, requestText(reqs[4]), "secret bounds", "prior result bounds remain evidence")
 	assert.NotContains(t, first, "later arguments")
 	assert.NotContains(t, first, "Final answer:\n  first")
 	after, err := out.Session.Trajectory.Marshal()
@@ -112,6 +116,7 @@ func TestStepSelectorsAndMissingUnits(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"model_a", "model_a", "tool", "tool", "model_b", "model_b", "missing"}, claimIDs(result.Judgments))
 	require.Len(t, script.Requests(), 4)
+	assert.Contains(t, requestText(script.Requests()[0]), "Judged call: run 2 step 0\n")
 	assert.Equal(t, 0, result.Judgments[0].Step.Index)
 	assert.Equal(t, 2, result.Judgments[1].Step.Index)
 	missing := result.Judgments[6]

@@ -1764,16 +1764,21 @@ order, then once for each skipped record in declaration order. Callback order
 under concurrency is nondeterministic. If `OnAttempt` panics, Run stops new
 attempts, disables further callbacks and drains already running attempts before
 returning the partial report and an error containing the panic and stack. Its stop
-reason is `callback_panic` unless an earlier stop already took effect.
+reason is `callback_panic` unless an earlier stop already took effect. The triggering
+record retains the panic in `HarnessErr`; completed attempts have an `error` verdict.
 
 `MaxTokens` zero is unlimited. Usage sums every completed recorded model call,
 including abandoned attempts and descendants, once per returned session run.
-Tokens use positive TotalTokens, otherwise input + output + both cache counts.
+`Usage` preserves the recorded field sums, including zero `TotalTokens` values.
+`Tokens` uses positive `TotalTokens` per call, otherwise input + output + both
+cache counts; it can therefore exceed `Usage.TotalTokens` when totals are missing.
 Direct Decide calls in Assert and runs omitted by custom Drive are not counted.
 At `Tokens >= MaxTokens`, new attempts stop; running attempts finish normally,
 so up to `Concurrency-1` additional attempts may finish beyond the crossing one.
-Skipped records have nil Outcome and `NotRun: token_limit`; this stop is not an
-error. Concurrent completion order can change which keys are skipped.
+Skipped records have nil Outcome and `NotRun: token_limit`; reaching the token
+limit alone does not return an error. A later cancellation, disabled live factory
+or callback panic still returns its error while preserving `token_limit`.
+Concurrent completion order can change which keys are skipped.
 
 Cancellation keeps finished evidence, cancels running work and marks unstarted
 records `canceled` when cancellation is the first stop; Run returns the partial
@@ -1836,8 +1841,12 @@ Git status disables optional locks so detection does not refresh the index.
 Missing provenance does not stop the run.
 
 `Append` writes and syncs each attempt once. `Finish` checks the report against the
-planned keys and appends missing records, including not-run records. It atomically
-replaces the summary with status `complete` or `stopped`. Cancellation retains the
+planned keys and atomically replaces the attempt log from the final report,
+including not-run records and callback panic errors added after progress. Existing
+records retain their append order; missing records follow in report order. It then
+atomically replaces the summary with status `complete` or `stopped`. `OnAttempt`
+still persists before invoking progress. Finish streams the replacement one record
+at a time, using the same size limit as Append; it adds one final write pass. Cancellation retains the
 partial report. A crash leaves status `running` and preserves earlier complete lines.
 `Load` accepts a torn final line and sets `TruncatedTail`. It rejects corrupt middle
 lines, unknown or duplicate members, unsupported versions, and invalid exports.
@@ -2092,6 +2101,11 @@ kind. Other provider errors return immediately. `ErrInvalidOutput` marks exhaust
 corrections. Usage and latency include corrections and exclude calibration; errors
 may carry a partial result. Judgments are never cached.
 
+Task, reference and claim text are quoted with escaped control characters, so
+embedded newlines cannot forge prompt headings or claim lines. Subject text uses
+a fence longer than any backtick sequence it contains. The prompt hash includes
+the quoting contract, so older calibration cache entries are not reused.
+
 The complete canonical request is capped at `MaxInputBytes` (default 512 KiB),
 including correction history. The claim schema has a separate 1 MiB limit. Either
 limit fails without sending the oversized request; input validation and initial
@@ -2103,12 +2117,15 @@ as `not_addressed`, with `NoCall: true`, no usage and no calibration.
 The first non-empty judgment runs calibration once per Judge, shared by concurrent
 calls. Four built-in examples cover all labels, followed by `Config.Examples`.
 Non-empty examples get one call with no corrections, under a shared two-minute
-default `CalibrationTimeout`. Blank examples make no call and label every claim
+default `CalibrationTimeout`. Blank examples must expect `not_addressed` for
+every claim; `New` rejects any other expectation with `ErrInvalidInput` before
+model calls. Accepted blank examples make no call and label every claim
 `not_addressed`. The first caller's context owns calibration; other callers can
 cancel their wait. If that caller's context cancels or expires during calibration,
-a later call retries calibration on the same Judge. Existing waiters retain the
-interrupted attempt's outcome. Exact label agreement passes. A completed failure is
-cached too, and later judgments have `Calibrated: false`. Infrastructure failures
+a later call retries calibration on the same Judge, including when the provider
+returns a different error during cancellation. Active waiters retry under their
+own contexts; canceled waiters receive their own context error. Exact label agreement
+passes. A completed failure is cached too, and later judgments have `Calibrated: false`. Infrastructure failures
 are not cached and do not block judging. Other infrastructure failures, including
 the judge's own calibration timeout, remain retained by that Judge; create a new
 Judge to retry those failures. `Recalibrate` bypasses a completed cache entry.
@@ -2162,8 +2179,9 @@ Plan quality and plan adherence can be custom claims when the agent records a pl
 `{expected_outcome}` from the item, then stores the resolved text. Missing values
 fail validation; unresolved Assert claims become `Outcome.Err`. A step judge sees
 prior runs and the current run's prefix, including the call but excluding its
-result, error, children, duration, final message and later steps. Child runs are
-context, not separate step units. A selector with no units gets `not_addressed`
+result, bounds, error, children, duration, final message and later steps. Bounds
+from earlier completed calls remain visible. Child runs are context, not separate
+step units. A selector with no units gets `not_addressed`
 with rationale `no matching step` without a provider call. Empty final answers
 also get `not_addressed` without a call or an uncalibrated flag.
 

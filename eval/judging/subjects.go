@@ -40,7 +40,11 @@ func render(out *eval.Outcome, b batch, limits trajectory.Limits) (text string, 
 	case eval.SubjectStep:
 		prefix := stepPrefix(session, *b.step)
 		renderWith = func(opts trajectory.RenderOptions) string {
-			return prefix.Render(opts) + fmt.Sprintf("Judged call: run %d step %d %s %s\n", b.step.Run+1, b.step.Index, b.step.Tool, b.step.CallID)
+			locator := fmt.Sprintf("Judged call: run %d step %d", b.step.Run+1, b.step.Index)
+			if b.step.Tool != "" {
+				locator += fmt.Sprintf(" %s %s", b.step.Tool, b.step.CallID)
+			}
+			return prefix.Render(opts) + locator + "\n"
 		}
 	default:
 		return "", false, fmt.Errorf("judging: unknown subject %q", b.subject)

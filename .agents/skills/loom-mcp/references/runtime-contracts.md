@@ -139,18 +139,22 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   Groups counts verdicts without gating. OnAttempt is serial, once per record,
   including not-run records last in declaration order. A panic disables further
   callbacks, stops dispatch and returns the panic with its stack after workers
-  drain. The stop reason is callback_panic unless already stopped.
+  drain. The triggering record retains the panic in HarnessErr. The stop reason
+  is callback_panic unless already stopped.
 - MaxTokens uses >= and counts all completed calls in returned records, including
   descendants and abandoned attempts; positive TotalTokens wins over the sum of
-  token components. Decide calls inside Assert and unreturned Drive runs are not
-  counted. Running attempts finish after a token stop, allowing Concurrency-1
+  token components. Usage preserves raw field sums; missing totals can make
+  Usage.TotalTokens lower than Tokens. Decide calls inside Assert and unreturned
+  Drive runs are not counted. Running attempts finish after a token stop, allowing Concurrency-1
   additional attempts beyond the crossing attempt; skipped keys may vary.
 - Attempts recheck cancellation before constructing a harness; canceled
   dispatches remain not_run. The first stop reason wins for Report.Stop and
   skipped records; later cancellation joins existing errors, preserving the
   ErrLiveModelDisabled match.
 - Cancellation and disabled live factories return partial reports with an error;
-  token stops and recorded failures do not. Run never enables live models. Every
+  token stops alone and other recorded failures do not. Later cancellation,
+  disabled live use or callback panic still returns an error after a token stop.
+  Run never enables live models. Every
   planned key retains a record, with nil Outcome iff NotRun is set. Runs exports
   each completed session run and descendants with session/trace IDs; exports stay
   in memory. AttemptKey identifies attempts because run/session IDs may repeat.
@@ -163,7 +167,8 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   {task} and {expected_outcome}, including Assert claims, before persistence.
 - ArgumentCorrectness uses adopted root model calls with chosen tools;
   ToolArgumentCorrectness uses root tool calls. Prefixes hide the current tool's
-  result/error/children/duration, final answer and later steps. Empty selectors
+  result/bounds/error/children/duration, final answer and later steps. Earlier
+  completed results retain their bounds. Empty selectors
   receive not_addressed without a call. Child runs are never separate units.
 - Batches run sequentially: answer, trajectory, session, then selectors in first
   claim order and units in run/index order. Results preserve claim/unit order.
@@ -187,6 +192,8 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   non-empty UTF-8 claim text. Schemas are capped at 1 MiB. Complete canonical
   requests, including corrections, are capped at MaxInputBytes (default 512 KiB).
   Initial validation/size failures make zero calls, including calibration.
+  Task, reference and claim text use quoted strings with escaped control
+  characters; subject text is fenced. PromptHash includes this quoting contract.
 - Complete uses ModelID, MaxOutputTokens > 0, temperature zero, Thinking nil and
   forced record_judgments. Codex rejects MaxTokens and cannot serve as the judge.
   Properties and judgments retain input order. Only entailed is a passing label;
@@ -204,14 +211,16 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   calibration. Errors can return partial results.
 - Calibration is singleflight per Judge under the initiating context and a
   two-minute default CalibrationTimeout. Four built-ins precede user Examples;
-  each non-empty example gets one call without correction. Blank examples make no
-  call and label every claim not_addressed. All labels must match. PromptHash hashes
+  each non-empty example gets one call without correction. New rejects blank
+  examples unless every expected label is not_addressed. Accepted blank examples
+  make no call and label every claim not_addressed. All labels must match. PromptHash hashes
   the versioned prompt contract; CalibrationKey adds model, output cap and examples.
 - Cache completed passes and failures until Recalibrate; infrastructure failures
   are not cached and keep Result.Calibrated false without blocking judging. A Judge
   retains its outcome except when the initiating caller's context cancels or
-  expires: a later call retries on the same Judge, while existing waiters retain
-  the interrupted attempt's outcome. Other infrastructure errors, including the
+  expires, even if the provider returns another error: later calls and active
+  waiters retry under their own contexts. Canceled waiters get their own ctx error.
+  Other infrastructure errors, including the
   judge's own calibration timeout, require a new Judge to retry. Default cache is process-wide;
   NewMemoryCache isolates suites and NewDirCache atomically replaces <hex>.json.
   Corrupt files miss. The CLI can use the store's _calibration directory. Judgment
@@ -228,8 +237,11 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - Begin validates the plan, label and parent. It stages and syncs both headers
   before publishing the UUID directory with a rename and root fsync. Readers ignore
   hidden staging directories left by failures. Writer.OnAttempt appends and syncs
-  one line per index. Finish checks every planned key, appends missing records,
-  and commits complete or stopped status. A crash leaves running status.
+  one line per index before progress. Finish checks every planned key, atomically
+  replaces the attempt log from the final report (including callback panic errors),
+  then commits complete or stopped status. Existing append order is preserved;
+  missing records follow in report order. It streams records with the same size
+  policy as Append and adds one final write pass. A crash leaves running status.
 - Write errors stay in Writer.Err. WithOnError fires once, outside the writer
   lock. Validation errors do not poison the writer. Size overflow omits exports
   and records storage_error. The default threshold is 128 MiB, on writes only.

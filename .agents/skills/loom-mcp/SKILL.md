@@ -731,9 +731,12 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   preserves earlier run defaults. OnAttempt panics stop dispatch, disable later
   callbacks and return a partial report with the panic stack after workers drain;
   the stop reason is callback_panic unless an earlier stop already took effect.
+  The triggering record retains the panic in HarnessErr. Raw Usage field sums
+  can differ from fallback-based Tokens when recorded TotalTokens are zero.
 
 - Embed eval/evalcli.Main(ctx, args, cfg) in the application command. Keep
-  signal handling in the caller. Persist each attempt before stderr progress,
+  signal handling in the caller. Persist each attempt before stderr progress;
+  Finish atomically replaces the attempt log from the final report so callback panic errors survive persistence,
   cancel on sticky store errors, and read the final summary from the store.
   Exit 0 includes quality failures and token stops; 1 is operational failure;
   2 is usage error. Never enable live models in the CLI. See
@@ -746,7 +749,9 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 ## Eval Judge
 
 - `eval/judging` implements eval.OutcomeJudge and renders answer, last-run
-  trajectory, session and root-run step prefixes. Execute resolves placeholders;
+  trajectory, session and root-run step prefixes. Current result bounds are
+  excluded from step prefixes; earlier completed results retain their bounds.
+  Execute resolves placeholders;
   Run prepares calibration before dispatch, judges after Close under a separate
   five-minute default timeout, and counts judge tokens toward the budget.
   Gating judgment errors are errors, non-entailed units fail, absent judgments
@@ -755,13 +760,18 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - `eval/judge` judges rendered text with a forced `record_judgments` tool through
   Complete, temperature zero, no thinking and a required positive output cap.
   It imports neither eval nor trajectory. Codex rejects the required MaxTokens.
+- Task, reference and claim text are quoted with escaped control characters;
+  subject text is fenced. PromptHash includes the quoting contract.
 - Validate claims and complete request size before calibration. Renderer elision
   sets Input.Truncated; the judge never cuts input. Default request cap is 512 KiB
   and schemas are capped at 1 MiB. Corrections also obey the request cap.
 - Calibration runs once per Judge, with four built-ins plus user examples and
-  one call per non-empty example. Blank examples make no call and label every
+  one call per non-empty example. New rejects blank examples unless every expected
+  label is not_addressed. Accepted blank examples make no call and label every
   claim not_addressed. Caller cancellation or deadline expiry permits a later
-  calibration retry on the same Judge; other infrastructure failures remain
+  calibration retry on the same Judge even if the provider returns another error.
+  Active waiters retry with their own contexts; canceled waiters receive their
+  own context error. Other infrastructure failures remain
   retained by that Judge. Cache completed passes and failures, never infrastructure
   failures or judgments. Raw corrections echo only declared tools with JSON object
   inputs; malformed inputs and wrong tools receive user-message diagnostics.

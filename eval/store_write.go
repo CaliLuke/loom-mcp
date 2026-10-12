@@ -15,6 +15,7 @@ type Writer struct {
 	header   ExperimentHeader
 	keys     []AttemptKey
 	written  map[int]Fingerprint
+	order    []int
 	err      error
 	finished bool
 }
@@ -70,7 +71,7 @@ func (w *Writer) SetJudge(j JudgeInfo) {
 	w.header.Judge = &j
 }
 
-// Finish fills missing records and atomically commits the terminal summary.
+// Finish atomically replaces attempts from the final report, then commits the summary.
 func (w *Writer) Finish(report *Report, runErr error) error {
 	w.mu.Lock()
 	if err := w.validateReport(report); err != nil {
@@ -87,13 +88,27 @@ func (w *Writer) Finish(report *Report, runErr error) error {
 }
 
 func (w *Writer) append(r *AttemptRecord) error {
-	a, err := storedAttempt(r)
+	data, fingerprint, err := w.encodeAttempt(r)
 	if err != nil {
 		return err
 	}
+	if err := appendFile(filepath.Join(w.dir, "attempts.jsonl"), append(data, '\n'), false); err != nil {
+		return err
+	}
+	w.written[r.Index] = fingerprint
+	w.order = append(w.order, r.Index)
+	return nil
+}
+
+// encodeAttempt applies the same record-size policy to streaming and final writes.
+func (w *Writer) encodeAttempt(r *AttemptRecord) ([]byte, Fingerprint, error) {
+	a, err := storedAttempt(r)
+	if err != nil {
+		return nil, Fingerprint{}, err
+	}
 	data, err := encodeStore(a)
 	if err != nil {
-		return err
+		return nil, Fingerprint{}, err
 	}
 	if len(data) > w.store.options.maxRecordBytes {
 		for i := range a.Runs {
@@ -102,23 +117,15 @@ func (w *Writer) append(r *AttemptRecord) error {
 		a.StorageError = fmt.Sprintf("record exceeds %d bytes; exports omitted", w.store.options.maxRecordBytes)
 		data, err = encodeStore(a)
 		if err != nil {
-			return err
+			return nil, Fingerprint{}, err
 		}
 	}
-	if err := appendFile(filepath.Join(w.dir, "attempts.jsonl"), append(data, '\n'), false); err != nil {
-		return err
-	}
-	w.written[r.Index] = a.Fingerprint
-	return nil
+	return data, a.Fingerprint, nil
 }
 
 func (w *Writer) finish(report *Report, runErr error) error {
-	for _, a := range report.Attempts {
-		if _, exists := w.written[a.Index]; !exists {
-			if err := w.append(a); err != nil {
-				return err
-			}
-		}
+	if err := w.replaceAttempts(report); err != nil {
+		return err
 	}
 	h := w.header
 	h.Finished, h.Stop, h.Tokens, h.RunError = report.Finished, report.Stop, report.Tokens, errorText(runErr)

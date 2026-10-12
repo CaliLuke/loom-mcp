@@ -33,15 +33,19 @@
 // skipped by cancellation, token limits, disabled live models or an OnAttempt
 // panic; the first stop reason wins. Run returns a partial report and an error
 // for caller cancellation, disabled live use or an OnAttempt panic (with its
-// stack); token limits and recorded failures are not Run errors. Run never
-// enables live models. OnAttempt is serial, at most once per record, with
+// stack). A token limit alone is not a Run error; later cancellation, disabled
+// live use or callback panic still returns an error without replacing that stop.
+// Other recorded failures are not Run errors. Run never enables live models. OnAttempt is serial, at most once per record, with
 // skipped records delivered last in declaration order; a panic disables later
-// callbacks. Groups reports counts without a pass threshold.
+// callbacks and records the panic in the triggering record's HarnessErr.
+// Groups reports counts without a pass threshold.
 //
 // Tokens come from all completed calls in each returned run record, including
 // descendants and abandoned calls. TotalTokens is used when positive, otherwise
-// input, output and both cache fields are summed. Decide calls inside Assert and
-// runs omitted from a custom Drive's returned session are not counted. A token
+// input, output and both cache fields are summed. Usage preserves the raw field
+// sums, so Usage.TotalTokens can be lower than Tokens when recorded totals are
+// missing. Decide calls inside Assert and runs omitted from a custom Drive's
+// returned session are not counted. A token
 // limit stops new attempts at >= MaxTokens; running attempts finish, allowing up
 // to Concurrency-1 additional attempts beyond the crossing attempt. Callback
 // order and skipped keys are nondeterministic under concurrency; record order is
@@ -52,7 +56,8 @@
 // Open creates a self-gitignored experiment store. Begin validates the plan,
 // stages both headers, and atomically publishes the experiment directory.
 // Readers ignore hidden staging directories. Writer.OnAttempt streams complete
-// attempt lines. Finish fills missing records and atomically writes the terminal summary.
+// attempt lines before progress. Finish atomically replaces the attempt log from
+// the final report, including callback panic errors, then writes the terminal summary.
 // Write failures are sticky and WithOnError reports the first failure once.
 // Oversized records omit exports and retain a StorageError diagnostic.
 // Schema version 1 reserves StoredClaim subjects and tool selectors, judgment

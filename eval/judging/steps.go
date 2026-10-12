@@ -45,6 +45,7 @@ func stepPrefix(session trajectory.Session, unit eval.JudgedStep) trajectory.Ses
 	if last.Tool != nil {
 		tool := *last.Tool
 		tool.Result = nil
+		tool.Bounds = nil
 		tool.Error = nil
 		tool.Children = nil
 		tool.Duration = 0

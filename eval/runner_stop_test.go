@@ -65,7 +65,9 @@ func TestRunnerOnAttemptPanicDrainsWorkers(t *testing.T) {
 			return syntheticSession(), nil
 		}
 		var callbacks int
-		cfg.OnAttempt = func(*eval.AttemptRecord) {
+		var panicked *eval.AttemptRecord
+		cfg.OnAttempt = func(a *eval.AttemptRecord) {
+			panicked = a
 			callbacks++
 			panic("observer broke")
 		}
@@ -98,6 +100,8 @@ func TestRunnerOnAttemptPanicDrainsWorkers(t *testing.T) {
 		require.ErrorContains(t, runErr, "TestRunnerOnAttemptPanicDrainsWorkers")
 		assert.Equal(t, eval.StopCallbackPanic, report.Stop)
 		assert.Equal(t, 1, callbacks)
+		assert.Equal(t, eval.VerdictError, panicked.Verdict())
+		require.ErrorContains(t, panicked.HarnessErr, "observer broke")
 		assert.Len(t, started, 2)
 		assert.NotNil(t, report.Attempts[0].Outcome)
 		assert.NotNil(t, report.Attempts[1].Outcome)
@@ -131,4 +135,33 @@ func TestRunnerOnAttemptPanicForSkippedRecord(t *testing.T) {
 		assert.Nil(t, a.Outcome)
 		assert.Equal(t, eval.StopCanceled, a.NotRun)
 	}
+}
+
+func TestRunnerCancellationThenLiveDisabledJoinsErrors(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancelCause(t.Context())
+		defer cancel(nil)
+		cause := errors.New("caller canceled before factory returned")
+		release := make(chan struct{})
+		cfg := eval.Config{Repeats: 2, Scenarios: []eval.Scenario{customScenario(syntheticSession())}}
+		cfg.Harness = func(context.Context, eval.Variant, ...agenttest.Option) (*agenttest.Harness, error) {
+			<-release
+			return nil, agenttest.ErrLiveModelDisabled
+		}
+		var report *eval.Report
+		var runErr error
+		go func() {
+			report, runErr = eval.Run(ctx, cfg)
+		}()
+		synctest.Wait()
+		cancel(cause)
+		synctest.Wait()
+		close(release)
+		synctest.Wait()
+		require.ErrorIs(t, runErr, cause)
+		require.ErrorIs(t, runErr, agenttest.ErrLiveModelDisabled)
+		require.NotNil(t, report)
+		assert.Equal(t, eval.StopCanceled, report.Stop)
+		assert.Equal(t, eval.StopCanceled, report.Attempts[1].NotRun)
+	})
 }

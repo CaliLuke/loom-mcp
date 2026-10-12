@@ -117,7 +117,7 @@ func TestRawCorrections(t *testing.T) {
 		{"missing claim", `{"a":{"label":"entailed","rationale":"ok"}}`, toolName, "missing claim"},
 		{"bad label", `{"a":{"label":"yes","rationale":"ok"},"b":{"label":"entailed","rationale":"ok"}}`, toolName, "invalid label"},
 		{"empty rationale", `{"a":{"label":"entailed","rationale":""},"b":{"label":"entailed","rationale":"ok"}}`, toolName, "requires a non-empty UTF-8 rationale"},
-		{"UTF8 rationale", "{\"a\":{\"label\":\"entailed\",\"rationale\":\"\xff\"},\"b\":{}}", toolName, "UTF-8"},
+		{"UTF8 rationale", "{\"a\":{\"label\":\"entailed\",\"rationale\":\"\xff\"},\"b\":{}}", toolName, `jsontext: invalid UTF-8 within \"/a/rationale\" after offset 38`},
 		{"null rationale", `{"a":{"label":"entailed","rationale":null},"b":{}}`, toolName, "requires a non-empty UTF-8 rationale"},
 		{"unknown member", `{"a":{"label":"entailed","rationale":"ok","extra":1},"b":{}}`, toolName, "unknown"},
 		{"wrong tool", validPayload, "wrong_tool", "expected exactly one record_judgments tool call"},

@@ -12,6 +12,7 @@ import (
 )
 
 // Example supplies a labeled calibration input. User examples follow the built-ins.
+// Blank inputs require NotAddressed as the expected label for every claim.
 type Example struct {
 	ID    string
 	Input Input
@@ -36,9 +37,10 @@ type ExampleResult struct {
 
 // calibrationAttempt publishes an immutable outcome to its own waiters on close.
 type calibrationAttempt struct {
-	done   chan struct{}
-	result *Calibration
-	err    error
+	done        chan struct{}
+	result      *Calibration
+	err         error
+	interrupted bool
 }
 
 // CalibrationKey returns the canonical model, prompt, output-cap and examples digest.
@@ -48,30 +50,42 @@ func (j *Judge) CalibrationKey() string {
 
 // Calibrate shares one attempt's outcome with concurrent callers.
 // The first caller's context controls the run; other waiters can cancel their wait.
-// Caller cancellation permits a later retry. Other infrastructure errors are
-// retained only by this Judge; completed passes and failures are cached.
+// Active waiters retry an interrupted attempt under their own contexts. Other
+// infrastructure errors are retained by this Judge; completed outcomes are cached.
 func (j *Judge) Calibrate(ctx context.Context) (*Calibration, error) {
-	j.calibrationMu.Lock()
-	first := j.calibration == nil
-	if first {
-		j.calibration = &calibrationAttempt{done: make(chan struct{})}
-	}
-	attempt := j.calibration
-	j.calibrationMu.Unlock()
-	if first {
-		attempt.result, attempt.err = j.runCalibration(ctx)
-		j.calibrationMu.Lock()
-		if ctx.Err() != nil && errors.Is(attempt.err, ctx.Err()) {
-			j.calibration = nil
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
 		}
-		close(attempt.done)
+		j.calibrationMu.Lock()
+		first := j.calibration == nil
+		if first {
+			j.calibration = &calibrationAttempt{done: make(chan struct{})}
+		}
+		attempt := j.calibration
 		j.calibrationMu.Unlock()
-	}
-	select {
-	case <-attempt.done:
-		return cloneCalibration(attempt.result), attempt.err
-	case <-ctx.Done():
-		return nil, ctx.Err()
+		if first {
+			attempt.result, attempt.err = j.runCalibration(ctx)
+			j.calibrationMu.Lock()
+			attempt.interrupted = ctx.Err() != nil && attempt.err != nil
+			if attempt.interrupted {
+				j.calibration = nil
+			}
+			close(attempt.done)
+			j.calibrationMu.Unlock()
+		}
+		select {
+		case <-attempt.done:
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			if attempt.interrupted {
+				continue
+			}
+			return cloneCalibration(attempt.result), attempt.err
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 	}
 }
 
@@ -103,6 +117,9 @@ func prepareExamples(extra []Example) ([]Example, error) {
 		for _, claim := range example.Input.Claims {
 			if !example.Want[claim.ID].Valid() {
 				return nil, fmt.Errorf("%w: example %q has a missing or invalid label", ErrInvalidInput, example.ID)
+			}
+			if strings.TrimSpace(example.Input.Text) == "" && example.Want[claim.ID] != NotAddressed {
+				return nil, fmt.Errorf("%w: blank example %q requires not_addressed for every claim", ErrInvalidInput, example.ID)
 			}
 		}
 		examples[i].Input.Claims = slices.Clone(example.Input.Claims)

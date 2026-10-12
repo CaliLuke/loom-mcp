@@ -32,7 +32,11 @@ func TestRunnerJudgingLifecycle(t *testing.T) {
 		return eval.JudgeResult{Judgments: []eval.Judgment{{ClaimID: "correct", Subject: eval.SubjectAnswer, Label: eval.Entailed}}, Usage: model.TokenUsage{InputTokens: 2, OutputTokens: 1, TotalTokens: 3}, Tokens: 3}, nil
 	}
 	s := customScenario(syntheticSession())
-	cfg := eval.Config{Harness: emptyFactory(), Scenarios: []eval.Scenario{s}, Concurrency: 4, Repeats: 8, Judge: j}
+	factory := emptyFactory()
+	cfg := eval.Config{Harness: func(ctx context.Context, v eval.Variant, opts ...agenttest.Option) (*agenttest.Harness, error) {
+		assert.Equal(t, int32(1), j.prepared.Load(), "Prepare must finish before factory entry")
+		return factory(ctx, v, opts...)
+	}, Scenarios: []eval.Scenario{s}, Concurrency: 4, Repeats: 8, Judge: j}
 	observed := 0
 	cfg.OnAttempt = func(a *eval.AttemptRecord) {
 		observed++
@@ -47,6 +51,7 @@ func TestRunnerJudgingLifecycle(t *testing.T) {
 	assert.Equal(t, 24, r.Tokens)
 	require.NotNil(t, r.Judge)
 	assert.Equal(t, "test", r.Judge.ModelID)
+	assert.False(t, r.Judge.Calibrated, "Prepare failure overrides optimistic Info")
 	assert.Equal(t, 0, r.Groups()[0].Pending)
 	assert.Equal(t, 8, r.Groups()[0].Passed)
 	assert.Equal(t, model.TokenUsage{InputTokens: 2, OutputTokens: 1, TotalTokens: 3}, r.Attempts[0].JudgeUsage)
@@ -111,5 +116,5 @@ func (j *outcomeJudge) JudgeOutcome(ctx context.Context, out *eval.Outcome) (eva
 	return j.judge(ctx, out)
 }
 func (j *outcomeJudge) Info() eval.JudgeInfo {
-	return eval.JudgeInfo{ModelID: "test"}
+	return eval.JudgeInfo{ModelID: "test", Calibrated: true}
 }

@@ -105,29 +105,32 @@ func TestCalibrationRetriesCallerInterruption(t *testing.T) {
 }
 
 func TestCalibrationBlankExamples(t *testing.T) {
-	for _, want := range []Label{NotAddressed, Entailed} {
-		t.Run(string(want), func(t *testing.T) {
-			// Extra turns expose unexpected blank-input calls through the request count.
-			script, err := agenttest.NewScript(append(calibrationTurns(), validTurn(), validTurn())...)
-			require.NoError(t, err)
-			examples := make([]Example, 0, 2)
-			for i, text := range []string{"", " \t\n\u2003"} {
+	for _, text := range []string{"", " \t\n\u2003"} {
+		for _, want := range []Label{NotAddressed, Entailed, Contradicted, Indeterminate} {
+			t.Run(fmt.Sprintf("%q/%s", text, want), func(t *testing.T) {
+				// Extra turns expose accidental calls for accepted blank examples.
+				script, err := agenttest.NewScript(append(calibrationTurns(), validTurn())...)
+				require.NoError(t, err)
 				in := testInput()
 				in.Text = text
-				examples = append(examples, Example{ID: fmt.Sprintf("blank-%d", i), Input: in, Want: map[string]Label{"a": want, "b": want}})
-			}
-			j, err := New(Config{Client: rawClient{script: script}, ModelID: "judge-model", MaxOutputTokens: 512, Cache: NewMemoryCache(), Examples: examples})
-			require.NoError(t, err)
-			calibration, err := j.Calibrate(t.Context())
-			require.NoError(t, err)
-			assert.Equal(t, want == NotAddressed, calibration.Passed)
-			require.Len(t, calibration.Examples, 6)
-			for _, example := range calibration.Examples[4:] {
-				assert.Empty(t, example.Err)
-				assert.Equal(t, map[string]Label{"a": NotAddressed, "b": NotAddressed}, example.Got)
-			}
-			assert.Len(t, script.Requests(), 4)
-		})
+				example := Example{ID: "blank", Input: in, Want: map[string]Label{"a": NotAddressed, "b": want}}
+				j, err := New(Config{Client: rawClient{script: script}, ModelID: "judge-model", MaxOutputTokens: 512, Cache: NewMemoryCache(), Examples: []Example{example}})
+				assert.Empty(t, script.Requests(), "construction must not call the model")
+				if want != NotAddressed {
+					require.ErrorIs(t, err, ErrInvalidInput)
+					assert.Nil(t, j)
+					return
+				}
+				require.NoError(t, err)
+				calibration, err := j.Calibrate(t.Context())
+				require.NoError(t, err)
+				assert.True(t, calibration.Passed)
+				require.Len(t, calibration.Examples, 5)
+				assert.Empty(t, calibration.Examples[4].Err)
+				assert.Equal(t, map[string]Label{"a": NotAddressed, "b": NotAddressed}, calibration.Examples[4].Got)
+				assert.Len(t, script.Requests(), 4)
+			})
+		}
 	}
 }
 
