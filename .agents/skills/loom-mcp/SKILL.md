@@ -53,6 +53,9 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   coverage likewise matches the Mongo infrastructure, Pulse client, and root
   registry packages exactly. Use `make test-stress` for concurrency and
   lifecycle changes.
+- `TestRecallScript1000Steps` skips under `-short` (`make test`). `make itest`
+  runs exactly this test with race detection, `-count=1`, and a 30-minute timeout.
+  Keep its 1,000-step workload and recall call-count golden unchanged.
 - Ordinary `go test` runs the seed corpora at dynamic JSON boundaries. Use
   `make test-fuzz` for bounded mutation of those corpora; change `FUZZ_TIME`
   only when a longer scheduled or focused run is intentional.

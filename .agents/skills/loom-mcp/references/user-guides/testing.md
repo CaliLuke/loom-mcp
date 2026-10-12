@@ -161,6 +161,9 @@ CI use the same target.
 `make test` applies the global coverage floor and the critical package-group
 floors. The group floors omit generated, mock, and design packages. It forces
 Docker-backed tests off so focused and full unit runs never start containers.
+The 1,000-step recall acceptance test skips under `make test` (`-short`).
+`make itest` runs exactly `TestRecallScript1000Steps` with race detection,
+`-count=1`, and a 30-minute timeout.
 `make test-docker` is the explicit fail-closed Mongo, Pulse, registry, and
 generated Temporal/Mongo replacement gate. It writes `docker-cover.out` and
 enforces a floor for each root-module Docker owner.

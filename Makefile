@@ -204,11 +204,12 @@ test-fuzz:
 	$(GO) test -C ./integration_tests/fixtures/assistant -race -run '^$$' \
 		-fuzz '^FuzzGeneratedUnionJSONCodecs$$' -fuzztime=$(FUZZ_TIME) .
 
-# Run generated quickstart acceptance plus every generated fixture and MCP
-# framework contract. Nested fixture modules must be invoked explicitly.
+# Run engine, payload, recall, and generated quickstart acceptance plus every
+# generated fixture and MCP framework contract. Invoke nested modules explicitly.
 itest: tools
 	$(MAKE) test-engine-conformance
 	$(MAKE) test-payload-growth
+	$(GO) test -race -count=1 -timeout=30m ./runtime/agent/transcript/recall/ -run '^TestRecallScript1000Steps$$'
 	$(GO) test -race -count=1 ./codegen/agent/tests -run '^TestQuickstartGeneratesAndRuns$$'
 	$(MAKE) verify-mcp-local
 

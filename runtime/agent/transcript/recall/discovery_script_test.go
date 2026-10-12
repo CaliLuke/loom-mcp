@@ -48,6 +48,10 @@ type evidenceAgent struct {
 // TestRecallScript1000Steps gives the controller only rendered text and lookup
 // responses. The oracle is held by the test, never passed to the controller.
 func TestRecallScript1000Steps(t *testing.T) {
+	if testing.Short() {
+		t.Skip("1,000-step recall acceptance runs in make itest")
+	}
+
 	logs := map[string]map[string]int{}
 	for _, window := range []int{200_000, 8_000} {
 		t.Run(strconv.Itoa(window), func(t *testing.T) {

@@ -5897,6 +5897,11 @@ Golden checkpoints are in
 
 ## Pure recall contracts
 
+`TestRecallScript1000Steps` checks recall across 1,000 steps against
+`runtime/agent/transcript/recall/testdata/recall_script_calls.json`.
+It skips under `-short`, including `make test`. `make itest` runs exactly this
+test without `-short`, with race detection, `-count=1`, and a 30-minute timeout.
+
 `runtime/agent/transcript/recall` defines the spec for
 `tools.RecallContext` (`runtime.recall_context`), with all usage guidance in
 `Description`. `ParseInput` accepts exactly one operation: `read` with `id`,

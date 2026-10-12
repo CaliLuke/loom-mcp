@@ -15,10 +15,15 @@ make itest
 
 The target runs, in order:
 
-1. the generated quickstart acceptance test;
-2. every assistant fixture test with the race detector;
-3. every agent-feature fixture test with the race detector;
-4. every integration framework test with the race detector.
+1. engine conformance tests;
+2. full payload and cache-growth acceptance;
+3. `TestRecallScript1000Steps` with the race detector, `-count=1`, and a
+   30-minute timeout (skipped by `make test` under `-short`);
+4. the generated quickstart acceptance test;
+5. every assistant fixture test with the race detector;
+6. every agent-feature fixture test with the race detector;
+7. the frozen SDK bridge consumer tests with the race detector;
+8. every integration framework test with the race detector.
 
 Run the MCP fixture and framework ladder without the quickstart acceptance
 test:

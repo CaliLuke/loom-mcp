@@ -96,6 +96,8 @@ The Makefile pins `protoc` and both Go protobuf plugins. Run
 `make test` enforces global and critical package-group coverage floors without
 starting containers. It also pins exact floors for the agent runtime, Bedrock,
 and Gemini so broader package groups cannot hide regressions in those owners.
+The 1,000-step recall acceptance test skips under `make test` (`-short`).
+`make itest` runs it with race detection and a 30-minute timeout.
 `make test-docker` runs the Mongo, Pulse, and registry contracts once under
 race detection and enforces an exact floor for each package.
 The scheduled stress workflow repeats race-enabled lifecycle tests and requires
