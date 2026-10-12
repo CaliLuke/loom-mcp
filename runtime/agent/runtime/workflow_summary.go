@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/compaction"
-	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextmeasure"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/prompt"
@@ -41,7 +40,7 @@ func (r *Runtime) prepareWorkflowSummary(wf engine.WorkflowContext, base *workfl
 		return err
 	}
 	original := base.view()
-	in := &SummarizeContextInput{AgentID: input.AgentID, RunID: input.RunID, Scope: input.RunContext.RootRunID, SessionID: input.RunContext.SessionID, TurnID: input.RunContext.TurnID, Labels: input.RunContext.Labels, Step: input.Step, ViewRef: original, From: max(original.TailFrom, 1), To: input.View.TailFrom, Budget: input.View.Budget, Rate: summaryEstimateRate(base.compactionState), ContextSettings: base.contextSettings, ContextFingerprint: base.contextFingerprint, ContextModel: base.contextSettings.Summary.Model, PromptID: prompt.Ident(string(input.AgentID) + ".context.summary"), Settings: base.contextSettings.Summary.Settings}
+	in := &SummarizeContextInput{AgentID: input.AgentID, RunID: input.RunID, Scope: input.RunContext.RootRunID, SessionID: input.RunContext.SessionID, TurnID: input.RunContext.TurnID, Labels: input.RunContext.Labels, Step: input.Step, ViewRef: original, From: max(original.TailFrom, 1), To: input.View.TailFrom, Budget: input.View.Budget, Rate: compaction.SummaryRate(base.compactionState), ContextSettings: base.contextSettings, ContextFingerprint: base.contextFingerprint, ContextModel: base.contextSettings.Summary.Model, PromptID: prompt.Ident(string(input.AgentID) + ".context.summary"), Settings: base.contextSettings.Summary.Settings}
 	out, err := wf.ExecuteSummarizeContextActivity(wf.Context(), engine.SummarizeContextActivityCall{Name: SummarizeContextActivityName(input.AgentID), Input: in, Options: options})
 	if err != nil {
 		return fmt.Errorf("summarize context: %w", err)
@@ -79,22 +78,6 @@ func (r *Runtime) adoptWorkflowSummary(wf engine.WorkflowContext, base *workflow
 	base.compactionDecision.State.Summary = next
 	base.applySummaryView(input, out, kind, view)
 	return nil
-}
-
-// summaryEstimateRate selects the largest recorded text rate without map-order influence.
-func summaryEstimateRate(state compaction.State) contextmeasure.Rate {
-	rate := contextmeasure.Rate{Tokens: 1, Bytes: 3}
-	found := false
-	for _, name := range compactionModels(state) {
-		if !state.Models[name.Model].Known || name.Rate.Bytes <= 0 {
-			continue
-		}
-		if !found || int64(name.Rate.Tokens)*int64(rate.Bytes) > int64(rate.Tokens)*int64(name.Rate.Bytes) {
-			rate = name.Rate
-			found = true
-		}
-	}
-	return rate
 }
 
 // summaryAdoptionEvent constructs an immutable canonical record at the requested cut.

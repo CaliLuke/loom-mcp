@@ -2203,6 +2203,80 @@ Scripted clients use the default `Live: false`. A positive output cap is require
 so the Codex adapter, which rejects `MaxTokens`, cannot serve as this judge.
 The opt-in Anthropic calibration smoke test is excluded from short-test gates.
 
+### Offline compaction evaluation
+
+Embed `evalcli.Main` in your application and set `Config.Compaction` to an
+`*summaryeval.Config`. This command does not require `Harness` or `Scenarios`.
+Supply named `Prompts` and `Instructions`, a `NewModels` factory returning model
+clients, and optionally `Facts(ctx, cut)` for application retention claims.
+Clients must expose `model.ContextInfo`; `summaryeval.Model.Limits` can supply
+limits for a client without that capability. Factories own live-model gating.
+
+```sh
+<app> compaction run --from last --variant prompt=v2 --dry-run
+<app> compaction run --from last --variant prompt=v2 --repeat 3
+<app> compaction run --export run.json --variant prompt=recorded
+<app> compaction show last --full
+<app> compaction list --limit 20
+```
+
+`--from` accepts a stored experiment ID, unique prefix or `last`. Repeatable
+`--attempt` uses T13 references such as `#0`; `--run`, `--step` and `--max-cuts`
+restrict selection. `--export` instead reads a raw `runrecord.Export` JSON file.
+Each source must have K17 fingerprints and pinned summary templates.
+
+The default cuts are accepted threshold summaries and rejected summary attempts
+followed by eviction. `--cuts all` includes receipt-only evictions and requires
+an explicit `model=` variant. Overflow recovery, clear-only compaction, stale
+attempts, unknown summarizer limits and continuation seed records are excluded.
+
+Each cut first replays recorded responses in a fresh scratch runtime. Verification
+checks exact request digests, rejection kind and accepted checkpoint hash. The
+summary estimate rate includes adopted planner and overflow facts from earlier
+steps. Only the summarizer runs for a variant; planners, tools and recall do not run. Every
+variant uses the recorded previous summary and evicted interval independently.
+Unverified cuts remain visible but do not enter aggregates. Cross-run citations
+are reported as `continued_run_citations`; offline resolution is deferred.
+
+Repeat `--variant key=value[,key=value]` to compare templates. Supported keys are
+`prompt` (configured name, `@path`, or `recorded`), `instructions` (configured name),
+`model`, `max_summary_chunks`, and `max_summarised_result_tokens`. Templates use
+`.Previous`, `.Evicted`, `.Instructions` and `.Budget`, with the same quoting and
+validation as production. The unchanged `prompt=recorded` control preserves the
+recorded prompt identity so it can reproduce its checkpoint hash. Cut-moving
+settings, chained replay and probe answers are deferred to K23.
+
+Preflight prints cut count, provider-call upper bound and estimated input tokens
+before replay. A summary can use up to three attempts per planned chunk;
+`--dry-run` performs verification and planning without provider calls.
+`--max-tokens` stops new work after recorded summary and judge usage reaches the
+limit. `--concurrency` defaults to one; already started work can exceed the limit.
+`--fresh` skips summary-cache reads but updates the cache. Cache identity includes
+cut, template, instructions, model capabilities, chunk settings and repeat index.
+Cached results retain their original usage for comparison and token accounting.
+Judgments are never cached.
+
+`Config.NewJudge` uses the existing judge and `<store>/_calibration`. Old summary
+text is judged once per cut and shared across variants; new text is judged once
+per variant/repeat against identical reference and claims. Six rubric categories
+cover identifiers, numbers, decisions, user constraints, progress and faithfulness.
+Application facts add precise claims. Retention is the entailed fraction, also
+reported per category; there are no confidence intervals. References default to
+384 KiB and visibly elide large evidence units, preserving truncation flags.
+Empty receipt-only old summaries produce no-call `not_addressed` judgments.
+`--no-judge` skips judging. Disabled live factories print a notice; disabled
+summarizers still preserve baseline verification and mark variants `live_disabled`.
+
+Replays live under `<store>/_compaction/<uuidv7>/`: `replay.json` is an atomic
+manifest and `cuts.jsonl` is an append-only, fsynced log. Directories are private
+(0700), files are 0600, and readers reject unknown schema members and corrupt
+complete lines while retaining data before a torn tail. The tool never deletes
+replays. `show` reports verification, old/new text and cost metrics; `--full`
+removes the twenty-line summary limit. `--json` emits
+`loom-mcp.eval.compaction.show` version 1. `--out` selects the store. Exit codes
+are 0 for completed/token-stopped/live-disabled runs, 1 for operational failures,
+and 2 for invalid arguments.
+
 ### Eval judging
 
 `eval/judging` connects `eval.Run` to `eval/judge` through `eval.OutcomeJudge`.

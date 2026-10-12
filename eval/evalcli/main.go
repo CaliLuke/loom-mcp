@@ -10,6 +10,7 @@ import (
 
 	"github.com/CaliLuke/loom-mcp/v2/eval"
 	"github.com/CaliLuke/loom-mcp/v2/eval/judge"
+	"github.com/CaliLuke/loom-mcp/v2/eval/summaryeval"
 )
 
 // Config supplies application scenarios, isolated harnesses and CLI destinations.
@@ -17,10 +18,12 @@ import (
 // Empty StoreDir uses eval.DefaultStoreDir(Dir); empty Dir uses os.Getwd.
 // Nil output writers use os.Stdout and os.Stderr.
 type Config struct {
-	Name      string
-	Harness   eval.HarnessFunc
-	Scenarios []eval.Scenario
-	Variants  []eval.Variant
+	// Compaction enables offline summary evaluation independently of Harness and Scenarios.
+	Compaction *summaryeval.Config
+	Name       string
+	Harness    eval.HarnessFunc
+	Scenarios  []eval.Scenario
+	Variants   []eval.Variant
 	// NewJudge optionally constructs the judge using the store's calibration cache.
 	// --no-judge skips the factory; ErrLiveModelDisabled runs without judging.
 	NewJudge       func(cache judge.Cache) (*judge.Judge, error)
@@ -35,6 +38,7 @@ type commandError struct {
 }
 
 const (
+	commandHelp    = "help"
 	commandRun     = "run"
 	commandShow    = "show"
 	commandCompare = "compare"
@@ -70,6 +74,17 @@ func Main(ctx context.Context, args []string, cfg Config) int {
 }
 
 func dispatch(ctx context.Context, args []string, cfg Config) error {
+	var common flags
+	root := newFlags(cfg.Name, &common)
+	if root.Parse(args) == nil {
+		rest := root.Args()
+		if len(rest) > 0 && rest[0] == "compaction" {
+			return compactionCommand(ctx, rest[1:], cfg, common)
+		}
+		if len(rest) == 2 && rest[0] == commandHelp && rest[1] == "compaction" {
+			return compactionCommand(ctx, nil, cfg, common)
+		}
+	}
 	invocation, err := parseCommand(cfg.Name, args)
 	if err != nil {
 		return err

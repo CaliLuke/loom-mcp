@@ -1879,29 +1879,29 @@ turn compaction on by default (7.4).
 
 ### 7.1 Offline: replay compaction on recorded runs
 
-The record contains every cut point: the previous summary, the evicted units
-and the settings. Re-running only the summariser on them, with another prompt
-or settings, costs one small model call per cut point and needs no agent run.
+K20 replays fixed recorded cut points independently, using the recorded previous
+summary and evicted evidence. Only the summarizer runs again, with up to
+`MaxSummaryChunks × 3` provider calls per cut, plus optional judging. Baseline
+verification reuses recorded responses and makes no provider calls.
 
-Per cut point and variant:
+- **Retention:** built-in rubric claims cover identifiers, numbers, decisions,
+  user constraints, progress and faithfulness. Applications can supply facts.
+  The existing eval judge evaluates old and new summary text separately against
+  identical evidence. Retention is the entailed fraction, also per category.
+- **Cost:** summary bytes, compression ratio, rendered checkpoint bytes,
+  summarizer tokens, chunks and latency.
+- **Scope:** cut-moving variants, recomputed cuts, chained drift replay and
+  probe answers are deferred to K23. No model extracts facts. Unverified cuts
+  remain visible but are excluded from aggregates.
 
-- **Retention:** facts extracted once from the evicted units (identifiers,
-  numbers, decisions, user constraints) are judged against the new summary
-  with the eval plan's labels; retention is the `entailed` fraction, also per
-  category.
-- **Probe answers:** questions only the evicted content answers are answered
-  from the summary plus the kept tail and judged against the answer from the
-  full record.
-- **Cost:** summary size, compression ratio, summariser tokens, latency.
-- **Drift:** runs with several checkpoints are replayed down the chain. With a
-  different cut setting, cuts are recomputed by the same pure functions from
-  the request facts in the call records (4.8), but
-  the agent's later behaviour is the recorded run's, so drift results are
-  approximate and labelled so.
-
+```sh
+<app> compaction run --from <experiment> --variant prompt=v2
 ```
-go run ./cmd/evals compaction --from <experiment> --variant prompt=v2 --variant keep=10k
-```
+
+The application's command embeds `evalcli.Main` with `Config.Compaction`.
+Templates, instructions, model and chunk limits are fixed-cut variant options.
+See `docs/runtime.md`, "Offline compaction evaluation", for storage, verification,
+caching, live gating and cost controls.
 
 ### 7.2 End-to-end: variants on long-running scenarios
 

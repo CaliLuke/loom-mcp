@@ -964,6 +964,9 @@ The CLI installs no signal handlers.
 - `compare <base> <candidate>`: `--merge-parent`.
 - `compare <experiment> --variants a,b[,c]`: compare each variant to the first.
 - `list`: `--limit n`, default 20, with 0 for all.
+- `compaction run|show|list`: K20 offline fixed-cut summary evaluation via
+  `Config.Compaction`; supports recorded experiments or raw exports, prompt/model
+  variants, preflight, cache, cost limits and optional judged comparison.
 - `help [command]`, `-h`.
 
 `--out` and `--json` apply to every data command. Flags work before or after
@@ -1080,7 +1083,7 @@ T3 and request-fixture encoding to T9.
 
 | ID | Decision | Proposal | Blocks |
 |---|---|---|---|
-| D1 | Package names and homes | Decided: `runtime/agent/model` (`CallInfo`, done); `runtime/agent/tools` (`TypedTool`, `Named`); top-level `trajectory`, `expect`, `agenttest`, `eval`, `eval/judge`, `eval/judging` (the eval-to-judge adapter; added by T17), `eval/evalcli`. K8 call records provide capture (5.3). | — |
+| D1 | Package names and homes | Decided: `runtime/agent/model` (`CallInfo`, done); `runtime/agent/tools` (`TypedTool`, `Named`); top-level `trajectory`, `expect`, `agenttest`, `eval`, `eval/judge`, `eval/judging` (the eval-to-judge adapter; added by T17), `eval/evalcli`, `eval/summaryeval` (K20 offline compaction replay; imports eval and judge, with no reverse eval dependency). K8 call records provide capture (5.3). | — |
 | D2 | Local store format and path | Decided: JSON files under the application module, gitignored; each run stored as `runrecord.Export`, trajectories derived from it | — |
 | D3 | Judge mechanism and truncation | Decided: forced `record_judgments` tool only; renderer elision is visible and flagged, while the assembled request fails over its byte cap. Schemas are capped at 1 MiB. | — |
 | D4 | Trajectory source | Decided: transcript index and `RunRecord`, including K8 call records; observed fields optional; stream adapter only for remote clients | — |

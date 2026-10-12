@@ -45,7 +45,7 @@ func parseCommand(name string, args []string) (*invocation, error) {
 	if len(args) == 0 {
 		return nil, usage(errors.New("expected run, show, compare, list or help"))
 	}
-	if args[0] == "help" {
+	if args[0] == commandHelp {
 		if len(args) > 2 {
 			return nil, usage(errors.New("help accepts at most one command"))
 		}
@@ -142,7 +142,7 @@ func parseAnywhere(fs *flag.FlagSet, args []string) ([]string, error) {
 
 func help(cfg Config, command string) error {
 	if command == "" {
-		_, err := fmt.Fprintf(cfg.Stdout, "Usage: %s <run|show|compare|list|help> [flags]\nUse %s help <command> for flags. --out and --json apply to every command.\n", cfg.Name, cfg.Name)
+		_, err := fmt.Fprintf(cfg.Stdout, "Usage: %s <run|show|compare|list|compaction|help> [flags]\nUse %s help <command> for flags. --out and --json apply to every command.\n", cfg.Name, cfg.Name)
 		return err
 	}
 	var f flags

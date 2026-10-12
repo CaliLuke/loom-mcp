@@ -1533,3 +1533,22 @@ errors retain adopted usage for start/resume accounting. Record genuine v17 main
 budget, summary, child, child_run, confirmed_pause and continued histories; keep
 FR1's v16 files unchanged and reject protocol 16 before effects. K17 remains 15;
 FR1 remains 16. Structural templates remain 5.
+
+## K20 offline compaction evaluation
+
+- `eval/summaryeval` imports eval, judge and production summary activity APIs;
+  eval never imports summaryeval. `evalcli.Config.Compaction` enables
+  `compaction run|show|list` independently of Harness/Scenarios.
+- Replay recorded threshold cuts independently against recorded previous
+  summaries, pinned templates, settings, budgets and evidence. Verify original
+  request digests, kind and checkpoint hashes using recorded responses before
+  variant calls. Use fresh scratch stores; never run planners, tools or recall.
+  Reconstruct the summary rate from adopted planner_step and context_overflow
+  facts strictly before the cut step, matching production observation.
+- Summarizer cache identity includes cut, model capabilities, template and repeat.
+  Judge old once per cut and new per variant/repeat; never cache judgments.
+  Bound references visibly and exclude unverified cuts from retention aggregates.
+- Store private, strict version-1 manifests/logs in `_compaction/`; tolerate only
+  torn tails. Live-disabled factories preserve verification without model calls.
+- Protocol remains 17: SummaryRate is a pure extraction with unchanged ordering
+  and arithmetic. Cut-moving variants, probes and chained replay are K23 work.
