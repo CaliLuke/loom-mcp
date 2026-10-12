@@ -77,9 +77,10 @@ func testWorkflowLifecycle(t *testing.T, f Fixture, conflict bool) error {
 		return err
 	}
 	if conflict {
-		_, err = f.Engine.StartWorkflow(ctx, request(f))
-		if err == nil {
-			return &GapError{Err: errors.New("active workflow IDs must conflict")}
+		duplicate, startErr := f.Engine.StartWorkflow(ctx, request(f))
+		err = startErr
+		if duplicate != nil || !errors.Is(err, engine.ErrWorkflowAlreadyStarted) {
+			return &GapError{Err: errors.New("active workflow IDs must return ErrWorkflowAlreadyStarted and no handle")}
 		}
 		if errors.Is(err, engine.ErrWorkflowStartRejected) {
 			return &GapError{Err: errors.New("ID conflict must not claim definite start rejection")}

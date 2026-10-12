@@ -18,8 +18,8 @@ import (
 
 // Factory describes an adapter's capabilities and builds an isolated fixture for
 // each scenario. New must arrange cleanup through t.Cleanup. KnownGaps keys are
-// exact scenario names; executable gaps must return GapError, while unexpressible
-// scenarios are skipped. Values explain the semantic defect and follow-up.
+// exact scenario names; gaps must return GapError. Values explain the semantic
+// defect and follow-up.
 type Factory struct {
 	New       func(t *testing.T) Fixture
 	Durable   bool
@@ -46,10 +46,9 @@ type Fixture struct {
 }
 
 type scenario struct {
-	name          string
-	run           func(*testing.T, Fixture) error
-	capability    string
-	unexpressible bool
+	name       string
+	run        func(*testing.T, Fixture) error
+	capability string
 }
 
 const (
@@ -69,7 +68,7 @@ const (
 )
 
 // RunConformance checks the Engine and WorkflowContext behavioral contract.
-// Unsupported capabilities and unexpressible API gaps are visible skips.
+// Unsupported capabilities are visible skips.
 // Executable known gaps must reproduce a behavioral failure; a fixed gap fails
 // the test until it is removed from Factory.KnownGaps. Missing lifecycle or
 // inspection hooks fail rather than silently passing a test.
@@ -115,9 +114,6 @@ func runScenario(t *testing.T, ctx context.Context, factory Factory, tc scenario
 	reason, knownGap := factory.KnownGaps[tc.name]
 	if knownGap {
 		require.NotEmpty(t, reason)
-		if tc.unexpressible {
-			t.Skipf("KNOWN_API_GAP[%s]: %s", tc.name, reason)
-		}
 	}
 	fixture := factory.New(t)
 	require.NotNil(t, fixture.Engine)

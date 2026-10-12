@@ -42,6 +42,10 @@ type (
 		// statuses tracks workflow status by run ID (inmem uses workflow ID as run ID).
 		statuses map[string]engine.RunStatus
 		handles  map[string]*handle
+
+		// observeActivity records effective dispatch options for conformance tests.
+		// Set before starting workflows; the observer must be concurrency-safe.
+		observeActivity func(workflowID, name string, options engine.ActivityOptions)
 	}
 
 	// wfCtx adapts context.Context plus in-memory signal channels into engine.WorkflowContext.
@@ -660,11 +664,7 @@ func (w *wfCtx) PublishHook(ctx context.Context, call engine.HookActivityCall) e
 	if !ok {
 		return fmt.Errorf("hook activity %q not registered", call.Name)
 	}
-	timeout := call.Options.StartToCloseTimeout
-	if timeout == 0 {
-		timeout = def.opts.StartToCloseTimeout
-	}
-	actCtx, cancel := withOptionalTimeout(ctx, timeout)
+	actCtx, cancel := w.activityContext(ctx, call.Name, def.opts, call.Options)
 	defer cancel()
 	return normalizeError(def.handler(actCtx, call.Input))
 }
@@ -682,11 +682,7 @@ func (w *wfCtx) ExecutePlannerActivity(ctx context.Context, call engine.PlannerA
 	if !ok {
 		return nil, fmt.Errorf("planner activity %q not registered", call.Name)
 	}
-	timeout := call.Options.StartToCloseTimeout
-	if timeout == 0 {
-		timeout = def.opts.StartToCloseTimeout
-	}
-	actCtx, cancel := withOptionalTimeout(ctx, timeout)
+	actCtx, cancel := w.activityContext(ctx, call.Name, def.opts, call.Options)
 	defer cancel()
 	out, err := def.handler(actCtx, call.Input)
 	return out, normalizeError(err)
@@ -705,11 +701,7 @@ func (w *wfCtx) ExecuteFinishRunActivity(ctx context.Context, call engine.Finish
 	if !ok {
 		return nil, fmt.Errorf("finish activity %q not registered", call.Name)
 	}
-	timeout := call.Options.StartToCloseTimeout
-	if timeout == 0 {
-		timeout = def.opts.StartToCloseTimeout
-	}
-	actCtx, cancel := withOptionalTimeout(ctx, timeout)
+	actCtx, cancel := w.activityContext(ctx, call.Name, def.opts, call.Options)
 	defer cancel()
 	out, err := def.handler(actCtx, call.Input)
 	return out, normalizeError(err)
@@ -729,11 +721,7 @@ func (w *wfCtx) ExecuteRecordContentActivity(ctx context.Context, call engine.Re
 	if !ok {
 		return nil, fmt.Errorf("record content activity %q not registered", call.Name)
 	}
-	timeout := call.Options.StartToCloseTimeout
-	if timeout == 0 {
-		timeout = def.opts.StartToCloseTimeout
-	}
-	actCtx, cancel := withOptionalTimeout(ctx, timeout)
+	actCtx, cancel := w.activityContext(ctx, call.Name, def.opts, call.Options)
 	defer cancel()
 	out, err := def.handler(actCtx, call.Input)
 	return out, normalizeError(err)
@@ -753,11 +741,7 @@ func (w *wfCtx) ExecuteChildDispatchActivity(ctx context.Context, call engine.Ch
 	if !ok {
 		return nil, fmt.Errorf("child dispatch activity %q not registered", call.Name)
 	}
-	timeout := call.Options.StartToCloseTimeout
-	if timeout == 0 {
-		timeout = def.opts.StartToCloseTimeout
-	}
-	actCtx, cancel := withOptionalTimeout(ctx, timeout)
+	actCtx, cancel := w.activityContext(ctx, call.Name, def.opts, call.Options)
 	defer cancel()
 	out, err := def.handler(actCtx, call.Input)
 	return out, normalizeError(err)
@@ -785,14 +769,10 @@ func (w *wfCtx) ExecuteToolActivityAsync(ctx context.Context, call engine.ToolAc
 		return nil, fmt.Errorf("tool activity %q not registered", call.Name)
 	}
 
+	actCtx, cancel := w.activityContext(ctx, call.Name, def.opts, call.Options)
 	fut := &future[*api.ToolOutput]{ready: make(chan struct{})}
 	go func() {
 		defer close(fut.ready)
-		timeout := call.Options.StartToCloseTimeout
-		if timeout == 0 {
-			timeout = def.opts.StartToCloseTimeout
-		}
-		actCtx, cancel := withOptionalTimeout(ctx, timeout)
 		defer cancel()
 		fut.result, fut.err = def.handler(actCtx, call.Input)
 		fut.err = normalizeError(fut.err)
@@ -998,11 +978,7 @@ func (w *wfCtx) ExecuteRecallActivity(ctx context.Context, call engine.RecallAct
 	if !ok {
 		return nil, fmt.Errorf("recall activity %q not registered", call.Name)
 	}
-	timeout := call.Options.StartToCloseTimeout
-	if timeout == 0 {
-		timeout = def.opts.StartToCloseTimeout
-	}
-	actCtx, cancel := withOptionalTimeout(ctx, timeout)
+	actCtx, cancel := w.activityContext(ctx, call.Name, def.opts, call.Options)
 	defer cancel()
 	out, err := def.handler(actCtx, call.Input)
 	return out, normalizeError(err)

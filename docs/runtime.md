@@ -6029,13 +6029,17 @@ produce explicit skips. `KnownGaps` uses exact scenario names with a defect and
 follow-up explanation. Executable gaps must return a typed `enginetest.GapError`
 wrapping an observed behavioral difference. Unexpected success requires removal
 of the obsolete entry. Deadlines, cancellations, expired scenario contexts and
-untyped errors fail the test; they cannot count as expected failures. Unexpressible
-API gaps remain explicit skips.
+untyped errors fail the test; they cannot count as expected failures.
 
 Run `go test -race ./runtime/agent/engine/inmem -run '^TestConformance$'` for the
 in-memory suite, or `make test-engine-conformance` for both adapters. The latter
 starts a real Temporal dev server using the SDK's CLI download mechanism, has a
 five-minute timeout, and runs under `make itest`. Temporal is skipped with
-`-short`. Current known gaps are in-memory queue/schedule/heartbeat options.
+`-short`. In-memory conformance records effective options at activity dispatch,
+including registration defaults and per-call overrides. Handlers receive the
+effective heartbeat timeout as context metadata. Queue, schedule-to-start,
+heartbeat enforcement and retry timing remain unsupported; activities run once.
+The shared ID-conflict scenario requires `engine.ErrWorkflowAlreadyStarted`,
+a nil handle and no `engine.ErrWorkflowStartRejected` classification.
 Conformance workers use one-second workflow-task and sticky timeouts
 to bound restart recovery independently of the old worker taking its next task.

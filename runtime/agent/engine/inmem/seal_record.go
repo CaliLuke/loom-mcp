@@ -48,11 +48,7 @@ func (w *wfCtx) ExecuteSealRecordActivity(ctx context.Context, call engine.SealR
 	if !ok {
 		return nil, fmt.Errorf("seal activity %q not registered", call.Name)
 	}
-	timeout := call.Options.StartToCloseTimeout
-	if timeout == 0 {
-		timeout = def.opts.StartToCloseTimeout
-	}
-	actCtx, cancel := withOptionalTimeout(ctx, timeout)
+	actCtx, cancel := w.activityContext(ctx, call.Name, def.opts, call.Options)
 	defer cancel()
 	out, err := def.handler(actCtx, call.Input)
 	return out, normalizeError(err)

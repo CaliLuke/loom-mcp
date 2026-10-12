@@ -48,11 +48,7 @@ func (w *wfCtx) ExecuteSummarizeContextActivity(ctx context.Context, call engine
 	if !ok {
 		return nil, fmt.Errorf("summary activity %q not registered", call.Name)
 	}
-	timeout := call.Options.StartToCloseTimeout
-	if timeout == 0 {
-		timeout = def.opts.StartToCloseTimeout
-	}
-	actCtx, cancel := withOptionalTimeout(ctx, timeout)
+	actCtx, cancel := w.activityContext(ctx, call.Name, def.opts, call.Options)
 	defer cancel()
 	out, err := def.handler(engine.WithActivityAttempt(actCtx, 1), call.Input)
 	return out, normalizeError(err)

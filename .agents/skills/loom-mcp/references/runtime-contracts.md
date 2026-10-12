@@ -1180,8 +1180,12 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - Receiver.Pending counts buffered, unreceived signals without side effects,
   reflects workflow delivery in history order under replay, and is safe inside
   an Await predicate. Conformance awaits Pending() > 0 and then receives the signal.
-- Current executable gaps: inmem omits the activity heartbeat timeout and
-  ignores scheduling mechanics.
+- In-memory conformance records effective activity options at dispatch, including
+  registration defaults and per-call overrides. Handlers receive heartbeat timeout
+  metadata. Queueing, schedule-to-start/heartbeat enforcement and retries remain
+  unsupported; activities execute once. No known activity-option gaps remain.
+- The shared ID-conflict scenario requires engine.ErrWorkflowAlreadyStarted,
+  a nil handle and no engine.ErrWorkflowStartRejected classification.
 
 ## Engine errors
 

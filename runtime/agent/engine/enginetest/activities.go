@@ -84,13 +84,17 @@ func testActivityOptions(t *testing.T, f Fixture, a activityCase) error {
 	override.ScheduleToStartTimeout = 9 * time.Second
 	override.HeartbeatTimeout = 4 * time.Second
 	override.RetryPolicy = engine.RetryPolicy{MaxAttempts: 2, InitialInterval: 2 * time.Millisecond, BackoffCoefficient: 2}
-	heartbeats := make(chan time.Duration, 2)
+	partial := engine.ActivityOptions{RetryPolicy: engine.RetryPolicy{MaxAttempts: 3}}
+	merged := defaults
+	merged.RetryPolicy.MaxAttempts = 3
+	want := []engine.ActivityOptions{defaults, override, merged}
+	heartbeats := make(chan time.Duration, len(want))
 	require.NoError(t, a.register(ctx, f.Engine, defaults, func(actx context.Context, input any) (any, error) {
 		heartbeats <- engine.ActivityHeartbeatTimeout(actx)
 		return a.output, checkEqual(a.input, input)
 	}))
 	registerWorkflow(t, f, workflowName, func(w engine.WorkflowContext, _ *api.RunInput) (*api.RunOutput, error) {
-		for _, opts := range []engine.ActivityOptions{{}, override} {
+		for _, opts := range []engine.ActivityOptions{{}, override, partial} {
 			got, err := a.invoke(w, a.input, opts)
 			if err != nil {
 				return nil, err
@@ -104,7 +108,7 @@ func testActivityOptions(t *testing.T, f Fixture, a activityCase) error {
 	if err := waitSuccess(ctx, start(t, f, ctx)); err != nil {
 		return err
 	}
-	for _, opts := range []engine.ActivityOptions{defaults, override} {
+	for _, opts := range want {
 		observed := receive(t, ctx, heartbeats)
 		if observed != opts.HeartbeatTimeout {
 			return &GapError{Err: fmt.Errorf("activity heartbeat option: want %s, got %s", opts.HeartbeatTimeout, observed)}
@@ -112,7 +116,7 @@ func testActivityOptions(t *testing.T, f Fixture, a activityCase) error {
 	}
 	// Missing inspection is a fixture failure, never an expected semantic failure.
 	require.NotNil(t, f.VerifyActivityOptions, "factory must observe actual backend options")
-	return f.VerifyActivityOptions(t, request(f).ID, activityName, []engine.ActivityOptions{defaults, override})
+	return f.VerifyActivityOptions(t, request(f).ID, activityName, want)
 }
 
 func testAttempt(t *testing.T, f Fixture, a activityCase, retry bool) error {
