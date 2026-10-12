@@ -59,6 +59,10 @@ type (
 	}
 	// EarlierReceipt summarizes history preceding a continued run's checkpoint.
 	EarlierReceipt struct {
+		// Calls and Assistants count collapsed receipt lines across earlier runs.
+		Calls      int `json:"calls,omitzero"`
+		Assistants int `json:"assistants,omitzero"`
+
 		// Runs counts earlier runs.
 		Runs int `json:"runs"`
 		// Messages counts earlier messages.
@@ -83,6 +87,8 @@ type (
 		Summary *runstore.Hash `json:"summary"`
 		// SummaryRun is the run against which bare summary citations resolve.
 		SummaryRun string `json:"summary_run"`
+		// SummaryPos binds copied bare citations to their original chain position.
+		SummaryPos int `json:"summary_pos,omitzero"`
 		// CitedUsers are the user index lines cited by the summary.
 		CitedUsers []IndexLine `json:"cited_users"`
 		// Receipt contains only the receipt lines added by this record.

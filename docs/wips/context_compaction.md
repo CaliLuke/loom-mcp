@@ -393,7 +393,9 @@ leaves a state the reader classifies the same way.
 decide the index head and which calls were adopted, so they skip `BeforeEvent`
 interceptors, as the presentation commit already does
 (`hook_activity.go:49`). An interceptor that dropped or rewrote one would
-change what `RunRecord` reports as the transcript.
+change what `RunRecord` reports as the transcript. The continuation events
+`continuation_started`, `continuation_published` and `continuation_superseded`
+also skip `BeforeEvent`: they record predecessor selection and head publication.
 
 **Adopted, abandoned, incomplete.** Adoption is per activity attempt, not
 per call. Every activity that calls models (planner, `SummarizeContext`)
@@ -477,6 +479,7 @@ type CheckpointRecord struct {
     Earlier     EarlierReceipt    // behind From: counts, the first and last run positions, and the carried user index lines; bounded, and rendered from this run's scope
     Summary     *Hash             // latest summary text, nil if only receipts so far
     SummaryRun  string            // the run the summary was written in: bare citations refer to it
+    SummaryPos  int               // recorded chain position of SummaryRun; copied with the summary
     CitedUsers  []IndexLine       // index lines of the user messages the summary cites, each with its Origin; within KeepUserTokens
     Receipt     []ReceiptLine     // evicted tool calls (tool, bounded argument preview, unsummarised ranges) and assistant messages with text (first line) added by this record, each with its Origin; the full receipt is the chain through Prev
     Through     MessageID         // last entry behind the checkpoint
@@ -501,7 +504,7 @@ type ReceiptLine struct {
 }
 ```
 
-Receipt-only records preserve `Summary`, `SummaryRun` and `CitedUsers`; their
+Receipt-only records preserve `Summary`, `SummaryRun`, `SummaryPos` and `CitedUsers`; their
 `Prev`, `Through` and `Chain` name the exact newly evicted interval. Deterministic
 JSON v2 is stored before the returned hash can enter a planner-step record.
 
@@ -1311,7 +1314,7 @@ rejection in this situation only disables the guard and sends the original view.
 
 ### 4.16 Sessions
 
-Continuation applies to agents with threshold compaction (4.17). Agents
+Continuation applies to session-backed roots of agents with threshold compaction (4.17). Sessionless OneShotRun calls keep their existing path. Agents
 without it keep today's behaviour: the next run's history is the caller's
 messages. Otherwise the continuation would carry every tool result of an
 uncompacted run into the next one.
@@ -1323,7 +1326,7 @@ and is retrievable by a run-qualified reference (4.18) while retention keeps
 it. The handoff therefore never loses evidence, and it reproduces the final
 view exactly only when that view fits the cap.
 
-**Continuation record.** At run end, `SealRecord` builds the final view in a
+**Continuation record.** Only a root that completed with a final response publishes. Failed and canceled roots append `run_sealed` with outcome `skipped` and do not advance the head. At successful run end, `SealRecord` builds the final view in a
 bounded *carried* form, stores it, and publishes it as the session's head
 (below):
 
@@ -1425,10 +1428,11 @@ started from the same head, the first to seal advances it; the other's update
 fails, it records `continuation_superseded`, and its view is not carried. A
 late-finishing older run fails the same way.
 
-**Next run.** The run start activity reads the session's head continuation
+**Next run.** The existing `RecordContent` activity, extended with `Continue`, reads the session's head continuation
 and records its ID as the run's `Prev`, whether or not the run then continues
 from it; in an empty session `Prev` is nil. A run that starts fresh because
 its messages do not match can therefore still advance the head.
+`Visible` hashes canonical roles and parts, excluding Meta and cache hints. The recorded decision is `continued` or `fresh` with reason `no_head`, `no_match` or `missing_content`. The start output records ContextLimits and the derived render budget: the smallest known registered model window, with deterministic model-name ordering, or the predecessor budget when unknown.
 When a prefix of the incoming `RunInput.Messages` matches `Visible`, it copies
 those bytes into the new root scope and seeds the index with new IDs, in this
 order:
@@ -1441,7 +1445,7 @@ order:
 
 If the previous run had a checkpoint, the activity stores a
 `CheckpointRecord` with `From` naming the previous run's latest record,
-`Summary` the copied summary, `SummaryRun` and `CitedUsers` copied
+`Summary` the copied summary, `SummaryRun`, `SummaryPos` and `CitedUsers` copied
 unchanged (so bare citations still mean the run that wrote the summary), no
 receipt lines of its own, `Earlier` the counts and the first and last run
 positions behind `From`, and the carried user index lines
@@ -1718,7 +1722,10 @@ all adopted call keys, outcome `recovered`, `guard_off` or `failed:<reason>`;
 head, actual view, step, facts, stamped settings and pure recomputation), `context_recalled`, `context_unmeasured`,
 `context_limits_unknown`, `context_budget_too_small`, `context_recall_disabled`,
 `context_request_growth`,
-`recall_budget_exhausted` (which allowance), `continuation_superseded`,
+`recall_budget_exhausted` (which allowance),
+`continuation_started` (prev, pos, outcome continued|fresh, reason, seeded),
+`continuation_published` (id, prev, pos, outcome published|already),
+`continuation_superseded` (prev, head),
 `context_nontext_resident`.
 Each newly inserted compacted or skipped record produces one `context.compact`
 internal span. Duplicate event keys produce no additional span. It ends at the
@@ -1783,6 +1790,13 @@ record and replay child context preparation followed by the child start and run.
 `workflow_protocol_v16_confirmed_pause.json` proves approval, tool-returned
 clarification, answer, recording and one resume; the summary fixture also proves
 clarification-only text retention. Protocol 15 is rejected before workflow effects; drain older runs before deployment.
+
+K18 advances the workflow to protocol 17 for session continuation, compact optional
+seal projection fields, cross-run identity, and overflow-retry usage accounting.
+Genuine v17 main, budget, summary, child, child_run, confirmed_pause and continued
+histories preserve FR1 behavior. Keep FR1's v16 recordings unchanged and reject
+protocol 16 before effects. Argument previews use one wrapper; every shrink pass
+reads the original rendered part and re-carry preserves omitted-byte counts.
 
 K12 uses protocol 7, including entry-size metadata, `PlanActivityOutput.View`
 and `Facts`, sorted `PlanActivityInput.Models`, and run settings. K12 applies
@@ -2064,7 +2078,7 @@ module's states, invariants, faults, assumptions and limits.
 | Module | Checks |
 |---|---|
 | `ContextCompaction.tla` (one run) | Nothing refers to unstored content; cuts never split a call from its result; every position before the view is carried by summary or receipt, including a large result the view renders as an omission; trigger decisions replay from the recorded facts and ViewRef; the retried request is strictly smaller than the failed one and renders under the failed model's recorded budget; recovery ends even when the provider keeps rejecting; the checkpoint stays within the current budget; no planner request, rejected request or summariser input carries server-only data. |
-| `SessionContinuation.tla` | A retry after a lost acknowledgement is never reported superseded, and "already published" is returned only for the stored body; published continuations come from sealed runs and form one chain with unambiguous positions; child runs never publish; ordering by origin is chronological across runs that reuse message numbers; citations resolve to the intended message after copying and after re-summarising; sealed runs learn their outcome; publishing is one atomic step, without which a second run publishes from the same head. |
+| `SessionContinuation.tla` | A retry after a lost acknowledgement is never reported superseded, and "already published" is returned only for the stored body; published continuations come from sealed runs and form one chain with unambiguous positions; child runs never publish; ordering by origin is chronological across runs that reuse message numbers; citations resolve to the intended message after copying and after re-summarising; completed sealed roots learn their publication outcome; unsuccessful roots record skipped without advancing; publishing is one atomic step, without which a second run publishes from the same head. |
 | `CallCommit.tla` | Under crashes, zombies that write into the next step, lost returns and step failure, reconstruction classifies every call (adopted, abandoned, incomplete) and every presentation as what happened; the index references the adopted attempt's output, which needs step events that no interceptor can drop; sequence numbers are unique; no request is sent unrecorded; every step ends. |
 | `RequestRecord.tla` | The segment encoding rebuilds every request exactly, own messages distinct, view messages sent with a changed `Meta`, and the view moved on, and the in-place case costs one span. |
 | `ContinuationCarry.tla` | The carried tail fits the cap or is minimal (and the minimal case is reached); every part of runs 1 and 2 is carried or in the receipt chain; what the next run renders whole was copied whole; no reasoning crosses runs; placeholders stick. |

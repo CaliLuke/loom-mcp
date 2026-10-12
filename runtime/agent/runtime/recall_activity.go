@@ -26,7 +26,13 @@ func (r *Runtime) RecallActivity(ctx context.Context, input *api.RecallActivityI
 	response := recall.Response{Code: recall.CodeInvalidInput}
 	if parseErr == nil && input.Call.Error == nil {
 		handler := recall.Handler{Store: r.RunStore, Sessions: r.SessionStore, Authorize: r.recallAuthorizer}
-		var err error
+		chain, err := r.continuationChain(ctx, input.Scope, input.RunID)
+		if err != nil {
+			return nil, err
+		}
+		if chain != nil {
+			handler.Chain = chain
+		}
 		response, err = handler.Handle(ctx, recall.Request{RunID: input.RunID, Scope: input.Scope, Head: input.Head, View: input.ViewRef, PageBytes: input.PageBytes, ScanBytes: input.ScanBytes}, parsed)
 		if err != nil {
 			return nil, err

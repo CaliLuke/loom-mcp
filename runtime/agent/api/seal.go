@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/compaction"
-
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 )
@@ -12,6 +11,24 @@ import (
 // SealRecordInput fixes the terminal index and event identity before scheduling.
 // Retries must receive the same pending entries, key and workflow timestamp.
 type SealRecordInput struct {
+	// Continuation projection excludes the separately carried index head and pending entries.
+	Checkpoint        *runstore.Hash     `json:"checkpoint,omitzero"`
+	TailFrom          index.MessageID    `json:"tail_from,omitzero"`
+	ClearedThrough    index.MessageID    `json:"cleared_through,omitzero"`
+	PreviewThrough    index.MessageID    `json:"preview_through,omitzero"`
+	ForceClearThrough index.MessageID    `json:"force_clear_through,omitzero"`
+	Pinned            []index.MessageID  `json:"pinned,omitzero"`
+	Budget            index.RenderBudget `json:"budget,omitzero"`
+	// MinB is the smallest adopted usable context budget.
+	MinB int `json:"min_b,omitzero"`
+	// SessionID, Expected and Pos bind publication to the recorded start.
+	SessionID string  `json:"session_id,omitzero"`
+	Expected  *string `json:"expected,omitzero"`
+	Pos       int     `json:"pos,omitzero"`
+	// FinalHash addresses the final response. Publish excludes children and failures.
+	FinalHash runstore.Hash `json:"final_hash,omitzero"`
+	Publish   bool          `json:"publish,omitzero"`
+
 	// ContextFingerprint identifies the stored canonical effective settings.
 	ContextFingerprint string `json:"context_fingerprint,omitzero"`
 	// ContextSettings snapshots resolved settings even before a first plan.

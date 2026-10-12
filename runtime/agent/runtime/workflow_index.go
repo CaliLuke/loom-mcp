@@ -18,6 +18,12 @@ import (
 // workflowPlanInput keeps transcript history as references. Loaded planner messages
 // never become workflow state; content holds only the current uncommitted step.
 type workflowPlanInput struct {
+	Prev                *string
+	Pos                 int
+	ContinuedFrom       *index.RunCheckpoint
+	FinalHash           runstore.Hash
+	PublishContinuation bool
+
 	AgentID                 agent.Ident
 	RunContext              run.Context
 	Entries                 []index.MessageEntry

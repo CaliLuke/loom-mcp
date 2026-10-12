@@ -77,7 +77,7 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   runs before deployment. Preserve protocol 14 overflow source classification,
   retry definition accounting and the fixed-rate progress check.
 
-- Current workflow protocol is 16. Every agent observes adopted call facts,
+- Current workflow protocol is 17. Every agent observes adopted call facts,
   sends sorted Models and runs the advisory guard, bounded overflow recovery and
   recall advertising. Threshold compaction stays opt-in. The existing
   run.ContextRecovery adds GuardMargin (zero=10%) beside DisableRecall; RunInput
@@ -865,3 +865,21 @@ loom example <module-import-path>/design
 - Use `references/repo-map.md` to jump into the right repo docs or packages.
 - Use the `references/user-guides/*.md` files only when the contract files and repo docs are not enough.
 - When docs and code disagree, trust the current repo code and update the skill/reference files accordingly.
+
+## K18 session continuation (protocol 17)
+
+Only successful compaction roots with a final response publish; failed/canceled
+roots record a skipped outcome, and children/default-only agents do not publish.
+RecordContent fixes predecessor, position and limits. Copy only rendered bytes
+from Origin.Scope, preserving origins and SummaryPos. ContinuationStore requires
+ID-first body comparison and atomic head advancement after run_sealed. Minimal
+carry means bounded text/argument parts and placeholder results, independently
+of the implementation flag. Preview each shrink from the original rendered part;
+re-carry keeps one argument wrapper and the original omitted-byte count.
+Seal payloads omit continuation fields for ordinary agents and never duplicate
+head/pending state. Recall and citations walk recorded Prev, never the live head.
+Optional Pos/Prev exports and schemas remain backward compatible. Overflow retry
+errors retain adopted usage for start/resume accounting. Record genuine v17 main,
+budget, summary, child, child_run, confirmed_pause and continued histories; keep
+FR1's v16 files unchanged and reject protocol 16 before effects. K17 remains 15;
+FR1 remains 16. Structural templates remain 5.

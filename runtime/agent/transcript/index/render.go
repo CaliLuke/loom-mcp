@@ -88,7 +88,14 @@ func (r *Renderer) appendEntry(entry MessageEntry) error {
 		if err := r.decode(entry.Hash, &message); err != nil {
 			return err
 		}
-		r.messages = append(r.messages, message)
+		if entry.Origin != nil && entry.Batch != 0 {
+			// Carried result bytes are already projected model parts. Preserve the
+			// original batch without interpreting them as raw result bodies again.
+			r.batch = entry.Batch
+			r.parts = append(r.parts, message.Parts...)
+		} else {
+			r.messages = append(r.messages, message)
+		}
 	case Assistant:
 		return r.appendAssistant(entry)
 	case ToolResult:

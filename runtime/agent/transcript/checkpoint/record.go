@@ -14,45 +14,40 @@ import (
 
 // FromRecord reads a checkpoint and its Prev chain without writes. Receipts are
 // repeatable and newest-first. It loads only eligible users and summary text,
-// never entry.Record. currentPos is reserved; CurrentPos is zero until K18.
-func FromRecord(ctx context.Context, source index.Source, hash runstore.Hash, entries []index.MessageEntry, _ int) (Input, error) {
+// never entry.Record. currentPos qualifies recorded origins without walking earlier scopes.
+func FromRecord(ctx context.Context, source index.Source, hash runstore.Hash, entries []index.MessageEntry, currentPos int) (Input, error) {
 	records, hashes, err := readRecords(ctx, source, hash, entries)
 	if err != nil {
 		return Input{}, err
 	}
 	latest := records[0]
-	in := Input{ID: CheckpointID(string(hash)), Through: latest.Through, RunPos: map[string]int{latest.SummaryRun: 0}}
+	in := Input{ID: CheckpointID(string(hash)), Through: latest.Through, CurrentPos: currentPos, RunPos: map[string]int{latest.SummaryRun: latest.SummaryPos}}
 	summary, err := recordSummary(ctx, source, records, hashes)
 	if err != nil {
 		return Input{}, err
 	}
+	if summary != nil && currentPos > 0 {
+		summary.RecordPos = new(currentPos)
+	}
 	in.Summary = summary
+	for _, record := range records {
+		if record.From != nil {
+			in.ContinuedFrom = record.Earlier.Last
+			in.Earlier = EarlierCounts{Calls: record.Earlier.Calls, Assistants: record.Earlier.Assistants, FirstPos: record.Earlier.First, LastPos: record.Earlier.Last}
+			for _, line := range record.Earlier.Users {
+				in.CitedUsers = append(in.CitedUsers, UserLine{ID: line.ID, Origin: line.Origin, Text: line.Text, Bytes: len(line.Text)})
+			}
+			break
+		}
+	}
 	users, err := recordUsers(ctx, source, entries, latest.Through)
 	if err != nil {
 		return Input{}, err
 	}
 	in.Users = users
-	in.CitedUsers = recordCitedUsers(latest.CitedUsers, entries)
-	in.Receipt = func(yield func(ReceiptItem) bool) {
-		for _, record := range records {
-			for i := len(record.Receipt) - 1; i >= 0; i-- {
-				line := record.Receipt[i]
-				item := ReceiptItem{Origin: line.Origin, Unsummarised: line.Unsummarised}
-				switch line.Kind {
-				case "part":
-					item.PartID, item.Part, item.Format, item.Bytes, item.PartText = line.MessageID, line.Part, line.Format, line.Bytes, line.Text
-				case "call":
-					item.ToolUseID, item.Tool, item.Args = line.ToolUseID, line.Tool, line.Text
-					item.Lookup = tools.Ident(line.Tool) == tools.RecallContext
-				default:
-					item.AssistantID, item.Text = line.From, line.Text
-				}
-				if !yield(item) {
-					return
-				}
-			}
-		}
-	}
+	appendEarlierUsers(&in, records, currentPos)
+	in.CitedUsers = append(in.CitedUsers, recordCitedUsers(latest.CitedUsers, entries)...)
+	in.Receipt = recordReceipts(records)
 	return in, nil
 }
 
@@ -197,4 +192,46 @@ func sameHash(a, b *runstore.Hash) bool {
 		return a == b
 	}
 	return *a == *b
+}
+
+func appendEarlierUsers(in *Input, records []index.CheckpointRecord, currentPos int) {
+	for _, record := range records {
+		if record.From == nil {
+			continue
+		}
+		seen := map[OrderKey]bool{}
+		for _, user := range in.Users {
+			seen[Key(user.ID, user.Origin, currentPos)] = true
+		}
+		for _, line := range record.Earlier.Users {
+			if seen[Key(line.ID, line.Origin, currentPos)] {
+				continue
+			}
+			in.Users = append(in.Users, UserMessage{IndexOnly: true, ID: line.ID, Origin: line.Origin, Message: &model.Message{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: line.Text}}}})
+		}
+		break
+	}
+}
+
+func recordReceipts(records []index.CheckpointRecord) func(func(ReceiptItem) bool) {
+	return func(yield func(ReceiptItem) bool) {
+		for _, record := range records {
+			for i := len(record.Receipt) - 1; i >= 0; i-- {
+				line := record.Receipt[i]
+				item := ReceiptItem{Origin: line.Origin, Unsummarised: line.Unsummarised}
+				switch line.Kind {
+				case "part":
+					item.PartID, item.Part, item.Format, item.Bytes, item.PartText = line.MessageID, line.Part, line.Format, line.Bytes, line.Text
+				case "call":
+					item.ToolUseID, item.Tool, item.Args = line.ToolUseID, line.Tool, line.Text
+					item.Lookup = tools.Ident(line.Tool) == tools.RecallContext
+				default:
+					item.AssistantID, item.Text = line.From, line.Text
+				}
+				if !yield(item) {
+					return
+				}
+			}
+		}
+	}
 }

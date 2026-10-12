@@ -105,6 +105,10 @@ type (
 	// ViewRef names the committed index and one step's pending entries. All
 	// fields after Pending are reserved and must remain zero during K7.
 	ViewRef struct {
+		// ChainPos identifies the current run without walking earlier runs.
+		ChainPos int `json:"chain_pos,omitzero"`
+		// CarriedPartial keeps recall available for carried previews/placeholders.
+		CarriedPartial bool `json:"carried_partial,omitzero"`
 		// ContextFingerprint binds checkpoint production to the run settings.
 		ContextFingerprint string         `json:"context_fingerprint,omitzero"`
 		IndexHead          runstore.Hash  `json:"index_head,omitzero"`
@@ -140,6 +144,9 @@ const (
 	TypedInput EntryKind = "typed_input"
 	// Structural applies a versioned workflow-authored rendering operation.
 	Structural EntryKind = "structural"
+
+	// CarriedResult is a permanent continuation placeholder, including Keep results.
+	CarriedResult StructuralKind = "carried_result"
 
 	// UnknownTool produces an unknown-tool error from one tool-name parameter.
 	UnknownTool StructuralKind = "unknown_tool"

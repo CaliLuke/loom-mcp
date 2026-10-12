@@ -39,15 +39,7 @@ func (r *Runtime) SealRecordActivity(ctx context.Context, input *api.SealRecordI
 	if err != nil {
 		return nil, fmt.Errorf("seal record index: %w", err)
 	}
-	sealed := hooks.NewRunSealedEvent(input.RunID, head, input.ProtocolVersion, input.Timestamp)
-	sealed.ContextFingerprint = input.ContextFingerprint
-	sealed.ContextSettings = new(input.ContextSettings)
-	sealed.RecoverySettings = new(input.ContextRecovery)
-	if input.ContextCompaction != nil {
-		settings := pureCompactionSettings(input.ContextCompaction)
-		sealed.CompactionSettings = &settings
-		sealed.KeepResultTools = cloneToolIdents(input.ContextCompaction.KeepResultTools)
-	}
+	sealed := sealedEvent(input, head)
 	event, err := hooks.EncodeToHookInput(sealed, "")
 	if err != nil {
 		return nil, fmt.Errorf("encode run sealed: %w", err)
@@ -56,6 +48,9 @@ func (r *Runtime) SealRecordActivity(ctx context.Context, input *api.SealRecordI
 		RunID: input.RunID, EventKey: input.EventKey, Type: hooks.RunSealed, Payload: event.Payload, Timestamp: input.Timestamp.UTC(),
 	}); err != nil {
 		return nil, fmt.Errorf("append run sealed: %w", err)
+	}
+	if err := r.publishContinuation(ctx, input, head); err != nil {
+		return nil, err
 	}
 	return &api.SealRecordOutput{IndexHead: head}, nil
 }
@@ -68,10 +63,13 @@ func (r *Runtime) sealWorkflowRecord(wfCtx engine.WorkflowContext, input *RunInp
 		return fmt.Errorf("index terminal tool results: %w", err)
 	}
 	view := base.view()
-	out, err := detached.ExecuteSealRecordActivity(detached.Context(), engine.SealRecordActivityCall{
-		Name:  SealRecordActivityName(input.AgentID),
-		Input: &api.SealRecordInput{RootRunID: input.RootRunID, RunID: input.RunID, ContextCompaction: cloneCompaction(base.compaction), ContextRecovery: base.recovery, ContextSettings: base.contextSettings, ContextFingerprint: base.contextFingerprint, ProtocolVersion: base.protocolVersion, IndexHead: view.IndexHead, Pending: view.Pending, EventKey: "run_sealed:" + input.RunID, Timestamp: wfCtx.Now()},
-	})
+	seal := &api.SealRecordInput{RootRunID: input.RootRunID, RunID: input.RunID, ContextCompaction: cloneCompaction(base.compaction), ContextRecovery: base.recovery, ContextSettings: base.contextSettings, ContextFingerprint: base.contextFingerprint, ProtocolVersion: base.protocolVersion, IndexHead: view.IndexHead, Pending: view.Pending, EventKey: "run_sealed:" + input.RunID, Timestamp: wfCtx.Now()}
+	if base.Pos > 0 {
+		setContinuationSealView(seal, view)
+		seal.MinB, seal.SessionID, seal.Expected, seal.Pos = base.compactionState.MinB, input.SessionID, base.Prev, base.Pos
+		seal.FinalHash, seal.Publish = base.FinalHash, base.PublishContinuation
+	}
+	out, err := detached.ExecuteSealRecordActivity(detached.Context(), engine.SealRecordActivityCall{Name: SealRecordActivityName(input.AgentID), Input: seal})
 	if err != nil {
 		return fmt.Errorf("seal workflow record: %w", err)
 	}
@@ -93,4 +91,34 @@ func validateSealRecordInput(input *api.SealRecordInput) error {
 		return fmt.Errorf("seal record: protocol version is required")
 	}
 	return nil
+}
+
+func sealedEvent(input *api.SealRecordInput, head runstore.Hash) *hooks.RunSealedEvent {
+	sealed := hooks.NewRunSealedEvent(input.RunID, head, input.ProtocolVersion, input.Timestamp)
+	if input.Pos > 0 {
+		sealed.FinalView = new(continuationSealView(input))
+		if !input.Publish {
+			sealed.ContinuationOutcome = "skipped"
+		}
+	}
+	sealed.ContextFingerprint = input.ContextFingerprint
+	sealed.ContextSettings = new(input.ContextSettings)
+	sealed.RecoverySettings = new(input.ContextRecovery)
+	if input.ContextCompaction != nil {
+		settings := pureCompactionSettings(input.ContextCompaction)
+		sealed.CompactionSettings = &settings
+		sealed.KeepResultTools = cloneToolIdents(input.ContextCompaction.KeepResultTools)
+	}
+	return sealed
+}
+
+// continuationSealView reconstructs the final projection without duplicating index state.
+func continuationSealView(input *api.SealRecordInput) index.ViewRef {
+	return index.ViewRef{Checkpoint: input.Checkpoint, TailFrom: input.TailFrom, ClearedThrough: input.ClearedThrough, PreviewThrough: input.PreviewThrough, ForceClearThrough: input.ForceClearThrough, Pinned: input.Pinned, Budget: input.Budget, ChainPos: input.Pos, ContextFingerprint: input.ContextFingerprint}
+}
+
+func setContinuationSealView(input *api.SealRecordInput, view index.ViewRef) {
+	input.Checkpoint, input.TailFrom, input.ClearedThrough = view.Checkpoint, view.TailFrom, view.ClearedThrough
+	input.PreviewThrough, input.ForceClearThrough = view.PreviewThrough, view.ForceClearThrough
+	input.Pinned, input.Budget = view.Pinned, view.Budget
 }

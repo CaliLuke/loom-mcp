@@ -12,9 +12,11 @@ import (
 type (
 	// UserMessage supplies record-authored content and its original provenance.
 	UserMessage struct {
-		ID      index.MessageID
-		Origin  *index.Origin
-		Message *model.Message
+		// IndexOnly marks a carried first line that cannot become a full pin.
+		IndexOnly bool
+		ID        index.MessageID
+		Origin    *index.Origin
+		Message   *model.Message
 	}
 	// UserLine identifies a record-authored user index line, never summary prose.
 	UserLine struct {
@@ -61,7 +63,13 @@ func SelectPins(users []UserMessage, budget index.RenderBudget, limits Limits) [
 			currentPos = max(currentPos, user.Origin.Pos+1)
 		}
 	}
-	ordered := orderedUsers(users, currentPos)
+	eligible := make([]UserMessage, 0, len(users))
+	for _, user := range users {
+		if !user.IndexOnly {
+			eligible = append(eligible, user)
+		}
+	}
+	ordered := orderedUsers(eligible, currentPos)
 	if len(ordered) == 0 || limits.MaxPins <= 0 {
 		return nil
 	}
@@ -89,9 +97,21 @@ func SelectPins(users []UserMessage, budget index.RenderBudget, limits Limits) [
 	return pins
 }
 func renderUsers(in userInput) userSection {
+	rows := selectedUserRows(in)
+	var section userSection
+	var text strings.Builder
+	for _, row := range rows {
+		text.WriteString(row.text)
+		section.parts = append(section.parts, row.parts...)
+	}
+	section.text = text.String()
+	return section
+}
+
+func selectedUserRows(in userInput) []userRow {
 	ordered := orderedUsers(in.users, in.currentPos)
 	if len(ordered) == 0 {
-		return userSection{}
+		return nil
 	}
 	remaining := max(compactUsersBytes, in.budget.KeepUserTokens*BytesPerToken)
 	rows, selected := pinnedRows(in, ordered)
@@ -109,14 +129,7 @@ func renderUsers(in userInput) userSection {
 	slices.SortStableFunc(rows, func(a, b userRow) int {
 		return Compare(a.key, b.key)
 	})
-	var section userSection
-	var text strings.Builder
-	for _, row := range rows {
-		text.WriteString(row.text)
-		section.parts = append(section.parts, row.parts...)
-	}
-	section.text = text.String()
-	return section
+	return rows
 }
 
 // orderedUsers copies before sorting: rendering never changes input order.
@@ -151,6 +164,17 @@ func onlyToolResults(message *model.Message) bool {
 
 // pinnedRows rechecks the first stored pin, then newest pins until one cannot fit.
 func pinnedRows(in userInput, ordered []UserMessage) ([]userRow, map[OrderKey]bool) {
+	eligible := make([]UserMessage, 0, len(ordered))
+	for _, user := range ordered {
+		if !user.IndexOnly {
+			eligible = append(eligible, user)
+		}
+	}
+	ordered = eligible
+	if len(ordered) == 0 {
+		return nil, map[OrderKey]bool{}
+	}
+
 	wanted := make(map[index.MessageID]bool, len(in.pinned))
 	for _, id := range in.pinned {
 		wanted[id] = true

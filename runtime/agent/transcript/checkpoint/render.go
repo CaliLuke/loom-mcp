@@ -143,9 +143,13 @@ func renderSummary(in Input, maxBytes int) (string, error) {
 	}
 	text := Qualify(in.Summary.Text, pos, in.CurrentPos)
 	tokens := (len(in.Summary.Text) + BytesPerToken - 1) / BytesPerToken
-	closing := fmt.Sprintf("[summary shortened from %s tokens; full text: checkpoint r%d:%s]", thousands(tokens), pos, CheckpointID(in.Summary.ID))
+	recordPos := pos
+	if in.Summary.RecordPos != nil {
+		recordPos = *in.Summary.RecordPos
+	}
+	closing := fmt.Sprintf("[summary shortened from %s tokens; full text: checkpoint r%d:%s]", thousands(tokens), recordPos, CheckpointID(in.Summary.ID))
 	if len(text) > maxBytes && len(closing) > maxBytes {
-		closing = compactSummaryClosing(pos, in.Summary.ID)
+		closing = compactSummaryClosing(recordPos, in.Summary.ID)
 	}
 	if len(text) > maxBytes && len(closing) > maxBytes {
 		return "", fmt.Errorf("%w: summary handle needs %d bytes", ErrCheckpointBudget, len(closing))

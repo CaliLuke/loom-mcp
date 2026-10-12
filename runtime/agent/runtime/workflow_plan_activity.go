@@ -324,7 +324,7 @@ func (r *Runtime) runPlanActivityRecovering(
 		publication := followingPlanPublication(recoveryUsage, following)
 		out, err := r.runPlanActivity(wfCtx, base, activityName, options, input, hardDeadline, publication)
 		if err != nil {
-			return nil, err
+			return recoveryUsageOutput(recoveryUsage), err
 		}
 		recoveryUsage, err = checkedAddTokenUsage(recoveryUsage, out.Usage)
 		if err != nil {
@@ -332,7 +332,7 @@ func (r *Runtime) runPlanActivityRecovering(
 		}
 		if out.ContextOverflow != nil {
 			if err := r.recoverOverflow(wfCtx, base, &input, out, &step, rejectedCalls, nextAttempt); err != nil {
-				return nil, err
+				return recoveryUsageOutput(recoveryUsage), err
 			}
 			continue
 		}
@@ -347,7 +347,7 @@ func (r *Runtime) runPlanActivityRecovering(
 		advanceRecoveryPlanInput(&input, out, *caps, nextAttempt)
 		input.View = base.view()
 		if err := enforcePlanActivityInputBudget(input); err != nil {
-			return nil, err
+			return recoveryUsageOutput(recoveryUsage), err
 		}
 	}
 }
@@ -489,4 +489,13 @@ func (r *Runtime) publishPlanAdoption(wfCtx engine.WorkflowContext, base *workfl
 		return fmt.Errorf("commit planner step: %w", err)
 	}
 	return nil
+}
+
+// recoveryUsageOutput preserves adopted attempt usage when a later retry cannot
+// execute. Empty usage keeps the existing nil-output error contract.
+func recoveryUsageOutput(usage model.TokenUsage) *PlanActivityOutput {
+	if usage == (model.TokenUsage{}) {
+		return nil
+	}
+	return &PlanActivityOutput{Usage: usage}
 }

@@ -40,7 +40,7 @@ func (c *runViewCache) renderView(ctx context.Context, store runstore.Store, sco
 		return messages, nil, err
 	}
 	from := max(index.MessageID(1), view.TailFrom)
-	if view.Checkpoint != nil && from <= 1 {
+	if view.Checkpoint != nil && from <= 1 && view.ChainPos == 0 {
 		return nil, nil, fmt.Errorf("checkpoint requires a tail cut point")
 	}
 	if from > 1 {
@@ -49,7 +49,7 @@ func (c *runViewCache) renderView(ctx context.Context, store runstore.Store, sco
 		}
 	}
 	var update *api.ViewUpdate
-	if from > 1 {
+	if from > 1 || view.Checkpoint != nil {
 		var err error
 		update, err = c.renderCheckpoint(ctx, store, scope, source, view, from)
 		if err != nil {
@@ -61,7 +61,7 @@ func (c *runViewCache) renderView(ctx context.Context, store runstore.Store, sco
 		return nil, nil, err
 	}
 
-	messages, err := c.assembleView(from, purpose)
+	messages, err := c.assembleView(purpose)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -72,9 +72,9 @@ func (c *runViewCache) renderView(ctx context.Context, store runstore.Store, sco
 // assembleView validates checkpoint projections against both provider grammars.
 // Child admission permits only the trailing unanswered assistant tool turn.
 // Clear-only and full projections retain the existing resume-time validator.
-func (c *runViewCache) assembleView(from index.MessageID, purpose viewLoadPurpose) ([]*model.Message, error) {
+func (c *runViewCache) assembleView(purpose viewLoadPurpose) ([]*model.Message, error) {
 	var message *model.Message
-	if from > 1 {
+	if c.checkpointMessage != nil {
 		message = c.checkpointMessage
 	}
 	messages := transcript.AssembleView(c.systemMessages, message, c.tailMessages)
@@ -112,7 +112,7 @@ func (c *runViewCache) renderCheckpoint(ctx context.Context, store runstore.Stor
 	changed := hash != c.checkpointHash
 	budgetChanged := c.checkpointHash != "" && c.pinBudget != view.Budget
 	if changed {
-		input, err := checkpoint.FromRecord(ctx, source, hash, c.entries, 0)
+		input, err := checkpoint.FromRecord(ctx, source, hash, c.entries, view.ChainPos)
 		if err != nil {
 			return nil, err
 		}

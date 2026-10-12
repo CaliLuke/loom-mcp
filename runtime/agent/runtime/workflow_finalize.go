@@ -187,6 +187,13 @@ func (r *Runtime) runFinalizationPlan(
 	}
 	output, err := r.runPlanActivityRecovering(wfCtx, base, reg.ResumeActivityName, resumeOpts, req, hardDeadline, &caps, &nextAttempt)
 	if err != nil {
+		if output != nil {
+			combinedUsage, usageErr := checkedAddTokenUsage(aggUsage, output.Usage)
+			if usageErr != nil {
+				return nil, aggUsage, errors.Join(fmt.Errorf("%s: %w", reasonText, err), fmt.Errorf("aggregate finalizer model usage: %w", usageErr))
+			}
+			aggUsage = combinedUsage
+		}
 		return nil, aggUsage, fmt.Errorf("%s: %w", reasonText, err)
 	}
 	base.adopt(output)

@@ -52,6 +52,10 @@ type (
 
 	// RunSealedEvent names the terminal transcript after pending entries commit.
 	RunSealedEvent struct {
+		// FinalView and ContinuationOutcome are optional protocol-17 seal evidence.
+		FinalView           *index.ViewRef `json:"final_view,omitzero"`
+		ContinuationOutcome string         `json:"continuation_outcome,omitzero"`
+
 		// ContextFingerprint identifies the stored canonical effective settings.
 		ContextFingerprint string                      `json:"context_fingerprint,omitzero"`
 		ContextSettings    *compaction.ContextSettings `json:"context_settings,omitzero"`
@@ -81,6 +85,13 @@ type (
 )
 
 const (
+	// ContinuationStarted records the frozen predecessor and seeding outcome.
+	ContinuationStarted EventType = "continuation_started"
+	// ContinuationPublished records completed-root publication.
+	ContinuationPublished EventType = "continuation_published"
+	// ContinuationSuperseded records a root that lost the head comparison.
+	ContinuationSuperseded EventType = "continuation_superseded"
+
 	// PlannerStep is the canonical planner activity adoption boundary.
 	PlannerStep EventType = "planner_step"
 	// RunSealed identifies the canonical terminal index boundary.
@@ -98,7 +109,7 @@ const (
 // IsRecordEvent reports whether kind belongs to the runtime's uninterceptable
 // commit protocol. The reserved kinds acquire producers in later phases.
 func IsRecordEvent(kind EventType) bool {
-	return kind == PlannerStep || kind == RunSealed || kind == ContextCompacted ||
+	return kind == ContinuationStarted || kind == ContinuationPublished || kind == ContinuationSuperseded || kind == PlannerStep || kind == RunSealed || kind == ContextCompacted ||
 		kind == ContextCompactionSkipped || kind == ContextOverflow || kind == ChildRunLinked || kind == ContextRecalled
 }
 

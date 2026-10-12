@@ -27,7 +27,7 @@ CONSTANTS
 Faults == {"none", "non_idempotent_publish", "publish_before_seal",
            "unconditional_head", "child_publishes", "order_by_local_id",
            "bare_cites_current_run", "raw_previous_summary",
-           "already_without_compare", "advance_two_writes"}
+           "already_without_compare", "advance_two_writes", "publish_failed"}
 
 ASSUME Roots \cap Children = {}
 ASSUME Fault \in Faults
@@ -50,6 +50,7 @@ VARIABLES
     phase,      \* run -> "idle" | "running" | "sealed" | "done" | "terminated"
     prev,       \* run -> the head it read at start, or None
     pos,        \* run -> its position in the continuation chain
+    completed,  \* run -> completed with a final response
     sealed,     \* run -> run_sealed was appended
     outcome,    \* run -> the AdvanceContinuation result it received
     msgs,       \* run -> user messages in its view: [origin, t]
@@ -60,7 +61,7 @@ VARIABLES
     now         \* global time, to state chronological order
 
 vars == <<head, pubs, phase, prev, pos, sealed, outcome, msgs, added, summ,
-          sums, presented, now>>
+          sums, presented, now, completed>>
 
 PubIds == {b.id : b \in pubs}
 
@@ -78,6 +79,7 @@ Init ==
     /\ phase = [r \in Runs |-> "idle"]
     /\ prev = [r \in Runs |-> None]
     /\ pos = [r \in Runs |-> 0]
+    /\ completed = [r \in Runs |-> FALSE]
     /\ sealed = [r \in Runs |-> FALSE]
     /\ outcome = [r \in Runs |-> "none"]
     /\ msgs = [r \in Runs |-> <<>>]
@@ -103,7 +105,7 @@ Start(r) ==
           /\ pos' = [pos EXCEPT ![r] = PosOf(head) + 1]
           /\ msgs' = [msgs EXCEPT ![r] = IF continue THEN msgs[head] ELSE <<>>]
           /\ summ' = [summ EXCEPT ![r] = IF continue THEN summ[head] ELSE NoSummary]
-    /\ UNCHANGED <<head, pubs, sealed, outcome, added, sums, presented, now>>
+    /\ UNCHANGED <<head, pubs, sealed, outcome, added, sums, presented, now, completed>>
 
 \* The user sends a message. Its ID is local to the run.
 AddUser(r) ==
@@ -112,7 +114,7 @@ AddUser(r) ==
     /\ msgs' = [msgs EXCEPT ![r] = Append(@, [origin |-> <<pos[r], added[r] + 1>>, t |-> now])]
     /\ added' = [added EXCEPT ![r] = @ + 1]
     /\ now' = now + 1
-    /\ UNCHANGED <<head, pubs, phase, prev, pos, sealed, outcome, summ, sums, presented>>
+    /\ UNCHANGED <<head, pubs, phase, prev, pos, sealed, outcome, summ, sums, presented, completed>>
 
 \* How the view labels a message of origin o in run r.
 Label(o, r) ==
@@ -141,15 +143,18 @@ Summarize(r) ==
                                           intended |-> summ[r].intended,
                                           src |-> IF summ[r].run # r THEN "copy" ELSE "own"]]
     /\ sums' = [sums EXCEPT ![r] = @ + 1]
-    /\ UNCHANGED <<head, pubs, phase, prev, pos, sealed, outcome, msgs, added, presented, now>>
+    /\ UNCHANGED <<head, pubs, phase, prev, pos, sealed, outcome, msgs, added, presented, now, completed>>
 
 \* SealRecord appends run_sealed first. A child run's SealRecord publishes
 \* nothing, so a child is done once sealed.
 Seal(r) ==
     /\ phase[r] = "running"
+    /\ \E success \in BOOLEAN :
+          /\ completed' = [completed EXCEPT ![r] = success]
+          /\ phase' = [phase EXCEPT ![r] = IF (success \/ Fault = "publish_failed") /\ (r \in Roots \/ Fault = "child_publishes") THEN "sealed" ELSE "done"]
+          /\ outcome' = [outcome EXCEPT ![r] = IF success THEN @ ELSE "skipped"]
     /\ sealed' = [sealed EXCEPT ![r] = TRUE]
-    /\ phase' = [phase EXCEPT ![r] = IF r \in Roots \/ Fault = "child_publishes" THEN "sealed" ELSE "done"]
-    /\ UNCHANGED <<head, pubs, prev, pos, outcome, msgs, added, summ, sums, presented, now>>
+    /\ UNCHANGED <<head, pubs, prev, pos, msgs, added, summ, sums, presented, now>>
 
 \* AdvanceContinuation(session, expected = Prev, next): one atomic store step
 \* (one transaction in Mongo) that checks the ID before the head and returns
@@ -183,7 +188,7 @@ PublishWith(r, ack) ==
                    THEN /\ outcome' = [outcome EXCEPT ![r] = res]
                         /\ phase' = [phase EXCEPT ![r] = "done"]
                    ELSE UNCHANGED <<outcome, phase>>
-    /\ UNCHANGED <<prev, pos, sealed, msgs, added, summ, sums, now>>
+    /\ UNCHANGED <<prev, pos, sealed, msgs, added, summ, sums, now, completed>>
 
 Publish(r) == PublishWith(r, TRUE)
 PublishLost(r) == PublishWith(r, FALSE)
@@ -198,13 +203,13 @@ PublishInsertOnly(r) ==
     /\ head = prev[r]
     /\ pubs' = pubs \cup {Body(r, 1)}
     /\ presented' = [presented EXCEPT ![r] = Body(r, 1)]
-    /\ UNCHANGED <<head, phase, prev, pos, sealed, outcome, msgs, added, summ, sums, now>>
+    /\ UNCHANGED <<head, phase, prev, pos, sealed, outcome, msgs, added, summ, sums, now, completed>>
 
 \* The workflow is terminated outside workflow code.
 Terminate(r) ==
     /\ phase[r] \in {"running", "sealed"}
     /\ phase' = [phase EXCEPT ![r] = "terminated"]
-    /\ UNCHANGED <<head, pubs, prev, pos, sealed, outcome, msgs, added, summ, sums, presented, now>>
+    /\ UNCHANGED <<head, pubs, prev, pos, sealed, outcome, msgs, added, summ, sums, presented, now, completed>>
 
 \* Every run has finished: the only legitimate end state.
 Finished == \A r \in Runs : phase[r] \in {"done", "terminated"}
@@ -228,7 +233,7 @@ Spec == Init /\ [][Next]_vars /\ \A r \in Roots : WF_vars(Publish(r))
 NoFalseSupersede == \A r \in Runs : outcome[r] = "superseded" => r \notin PubIds
 
 \* A published continuation always comes from a sealed run.
-PublishedImpliesSealed == \A r \in PubIds : sealed[r]
+PublishedImpliesSealed == \A r \in PubIds : sealed[r] /\ completed[r]
 
 \* Continuations form one chain: no continuation has two successors.
 OneSuccessor == \A a, b \in pubs : a.prev = b.prev => a = b
@@ -283,4 +288,6 @@ WitnessAlreadyAfterAdvance == ~(\E r \in Roots : outcome[r] = "already" /\ head 
 \* earlier run.
 WitnessResummarizedCopy ==
     ~(\E r \in Roots : summ[r].src = "copy" /\ summ[r].intended[1] < pos[r])
+\* Witness: an unsuccessful root seals and records an outcome without publishing.
+WitnessUnsuccessful == ~(\E r \in Roots : sealed[r] /\ outcome[r] = "skipped" /\ r \notin PubIds)
 =============================================================================

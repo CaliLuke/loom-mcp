@@ -68,7 +68,7 @@ func (b *builder) buildRun(runID string, opts Options) (*Trajectory, error) {
 	defer delete(b.active, runID)
 	r := &runBuilder{
 		owner: b, run: run, opts: opts,
-		out:    &Trajectory{RunID: runID, Totals: Totals{TokensByModel: make(map[string]model.TokenUsage), ModelCallsByClass: make(map[runrecord.CallClass]int)}},
+		out:    &Trajectory{RunID: runID, Pos: run.Pos, Prev: run.Prev, Totals: Totals{TokensByModel: make(map[string]model.TokenUsage), ModelCallsByClass: make(map[runrecord.CallClass]int)}},
 		groups: make(map[int]*stepGroup), tools: make(map[string]*ToolStep), results: make(map[string]bool), adopted: make(map[runstore.CallKey]bool), callSteps: make(map[runstore.CallKey]int),
 	}
 	if err := r.readModels(); err != nil {

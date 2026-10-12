@@ -37,7 +37,7 @@ func (r *Runtime) prepareSummary(ctx context.Context, in *SummarizeContextInput)
 	if err := loadSummaryContents(ctx, source, entries, in.From, in.To); err != nil {
 		return nil, err
 	}
-	evidence, err := summarize.RenderInput(summarize.Input{Entries: entries, Contents: contents, From: in.From, To: in.To, Previous: prior, CurrentPos: 0, SummaryPos: 0, AcceptsImages: in.ContextModel.AcceptsImages, AcceptsDocuments: in.ContextModel.AcceptsDocuments})
+	evidence, err := summarize.RenderInput(summarize.Input{Entries: entries, Contents: contents, From: in.From, To: in.To, Previous: prior, CurrentPos: in.ViewRef.ChainPos, SummaryPos: previous.SummaryPos, AcceptsImages: in.ContextModel.AcceptsImages, AcceptsDocuments: in.ContextModel.AcceptsDocuments})
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +45,7 @@ func (r *Runtime) prepareSummary(ctx context.Context, in *SummarizeContextInput)
 	if err != nil {
 		return nil, err
 	}
-	record := index.CheckpointRecord{Fingerprint: index.Fingerprint(in.ContextFingerprint), Prev: in.ViewRef.Checkpoint, Through: in.To - 1, Chain: entries[in.To-2].Chain, SummaryRun: in.RunID, Receipt: lines}
+	record := index.CheckpointRecord{Fingerprint: index.Fingerprint(in.ContextFingerprint), Prev: in.ViewRef.Checkpoint, Through: in.To - 1, Chain: entries[in.To-2].Chain, SummaryRun: in.RunID, SummaryPos: in.ViewRef.ChainPos, Receipt: lines}
 	allowance, err := checkpoint.SummaryBytes(checkpoint.Input{Through: record.Through, Summary: &checkpoint.Summary{}}, in.Budget)
 	if err != nil {
 		return nil, err
@@ -103,7 +103,7 @@ func loadSummaryContents(ctx context.Context, source index.Source, entries []ind
 func (p *summaryPreparation) replacedEstimate(ctx context.Context, in *SummarizeContextInput) (int, error) {
 	var messages []*model.Message
 	if in.ViewRef.Checkpoint != nil {
-		previous, err := checkpoint.FromRecord(ctx, p.source, *in.ViewRef.Checkpoint, p.entries, 0)
+		previous, err := checkpoint.FromRecord(ctx, p.source, *in.ViewRef.Checkpoint, p.entries, in.ViewRef.ChainPos)
 		if err != nil {
 			return 0, err
 		}
@@ -187,8 +187,8 @@ func summaryPredecessor(ctx context.Context, in *SummarizeContextInput, source i
 	}
 	prior := ""
 	if previous.Summary != nil {
-		if previous.SummaryRun != in.RunID {
-			return previous, "", fmt.Errorf("summary predecessor run requires K18 chain resolution")
+		if previous.SummaryRun != in.RunID && (previous.SummaryPos <= 0 || previous.SummaryPos >= in.ViewRef.ChainPos) {
+			return previous, "", fmt.Errorf("summary predecessor has no recorded earlier chain position")
 		}
 		data, err := source(ctx, *previous.Summary)
 		if err != nil {

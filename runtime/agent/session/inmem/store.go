@@ -21,10 +21,12 @@ type (
 	// Store is an in-memory implementation of session.Store.
 	// It is safe for concurrent use.
 	Store struct {
-		mu            sync.RWMutex
-		sessions      map[string]session.Session
-		runs          map[string]session.RunMeta
-		startAttempts map[string]runStartAttempt
+		mu                sync.RWMutex
+		continuations     map[string]map[string][]byte
+		continuationHeads map[string]string
+		sessions          map[string]session.Session
+		runs              map[string]session.RunMeta
+		startAttempts     map[string]runStartAttempt
 	}
 
 	runStartAttempt struct {
@@ -36,9 +38,11 @@ type (
 // New returns an empty Store.
 func New() *Store {
 	return &Store{
-		sessions:      make(map[string]session.Session),
-		runs:          make(map[string]session.RunMeta),
-		startAttempts: make(map[string]runStartAttempt),
+		sessions:          make(map[string]session.Session),
+		continuations:     make(map[string]map[string][]byte),
+		continuationHeads: make(map[string]string),
+		runs:              make(map[string]session.RunMeta),
+		startAttempts:     make(map[string]runStartAttempt),
 	}
 }
 

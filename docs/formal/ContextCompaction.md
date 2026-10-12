@@ -314,12 +314,12 @@ transaction (4.16; fault `advance_two_writes`).
   `TestSummaryZombieAttemptAbandoned`, `TestSummaryAdoptionRequiresRecordEvent`,
   `TestWorkflowSummaryAdoption` and `TestSummarizeActivityFailurePolicy` cover
   crash classification, late attempts, canonical adoption and fresh retry keys.
-  The three protocol-16 histories in `agent_features` exercise real Temporal
-  replay with recorded per-run settings and pinned prompts; protocol 15 is
+  The three protocol-17 histories in `agent_features` exercise real Temporal
+  replay with recorded per-run settings and pinned prompts; protocol 16 is
   rejected before effects. The main and summary histories enable overrides.
-  Two further protocol-16 histories record the parent's child-context preparation
+  Two further protocol-17 histories record the parent's child-context preparation
   and child-start command, and the independently configured child execution.
-  A sixth protocol-16 history covers a confirmed tool returning a clarification
+  A sixth protocol-17 history covers a confirmed tool returning a clarification
   pause, its answer and recording before one resume. The summary recording also
   preserves the clarification-only turn's model text.
 - Store writes succeed when they happen; a failed write is a crash at that
@@ -493,3 +493,21 @@ Reconstruction walks the stored segments back from the head.
 | `WitnessCrashRetry` | A run whose attempt crashed after storing completes every step | its witness |
 
 Limits: sizes count entries, not bytes; P2's byte figures are K7's test.
+
+
+K18 model and implementation limits: SessionContinuation now distinguishes a
+completed root with a final response from an unsuccessful sealed run. The latter
+records `skipped` without advancing; WitnessUnsuccessful makes this branch
+non-vacuous. ContinuationCarry measures abstract part sizes. Go tests use encoded
+bytes, valid JSON preview arguments, actual copied scopes, and the 256-byte
+minimum. Store conformance tests exercise ID-first retry/body comparison and
+atomic head changes; the Mongo crash scenario requires a replica set. The model
+does not establish Mongo transaction durability, caller SDK encoding stability,
+or provider-specific grammar acceptance; those require executable tests.
+
+K18's `SessionContinuationUnsafePublishFailed.cfg` deliberately permits a sealed
+unsuccessful root to publish. `PublishedImpliesSealed` must reject that trace
+because published roots must both be sealed and have completed successfully.
+The executable carry properties derive minimal form from rendered text/argument
+lengths and placeholder results rather than trusting `Plan.Minimal`. Removing
+forced result clearing must violate `CarryBounded`.

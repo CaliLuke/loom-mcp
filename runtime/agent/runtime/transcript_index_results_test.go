@@ -114,6 +114,8 @@ func TestIndexOracleStructuralResults(t *testing.T) {
 			result := &planner.ToolResult{Name: call.Name, ToolCallID: call.ToolCallID}
 			s := &index.StructuralEntry{Kind: tc.kind, ProtocolVersion: 5, Text: []index.TextParameter{o.text(tc.text)}}
 			switch tc.kind {
+			case index.CarriedResult:
+				t.Fatal("carried results are tested by continuation scenarios")
 			case index.UnknownTool:
 				call.Name = tools.Ident(tc.text)
 				exec := &toolBatchExec{r: o.rt}

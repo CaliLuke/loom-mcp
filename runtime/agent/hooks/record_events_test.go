@@ -13,7 +13,7 @@ import (
 const recordEventProtocolVersion = 17
 
 func TestRecordEvents(t *testing.T) {
-	for _, kind := range []EventType{PlannerStep, RunSealed, ContextCompacted, ContextCompactionSkipped, ContextOverflow, ChildRunLinked} {
+	for _, kind := range []EventType{PlannerStep, RunSealed, ContextCompacted, ContextCompactionSkipped, ContextOverflow, ChildRunLinked, ContextRecalled, ContinuationStarted, ContinuationPublished, ContinuationSuperseded} {
 		assert.True(t, IsRecordEvent(kind), kind)
 	}
 	assert.False(t, IsRecordEvent(Usage))

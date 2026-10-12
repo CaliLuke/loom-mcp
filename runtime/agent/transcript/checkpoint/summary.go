@@ -6,6 +6,8 @@ type (
 	// Summary preserves the source run and record of immutable stored summary text.
 	Summary struct {
 		Text, Run, ID string
+		// RecordPos identifies the checkpoint scope holding this copy, when recorded.
+		RecordPos *int
 	}
 	summarySection struct {
 		heading, body string

@@ -30,6 +30,7 @@ func compactionModels(state compaction.State) []api.ModelContext {
 
 // prepareCompaction decides from adopted evidence before every schedule, including finalize.
 func prepareCompaction(base *workflowPlanInput, input *PlanActivityInput) {
+	input.ChainPos, input.ContinuedFrom = base.Pos, base.ContinuedFrom
 	base.summaryApplied = false
 	base.compactionDecision = compaction.Decision{}
 	input.View.ContextFingerprint = base.contextFingerprint

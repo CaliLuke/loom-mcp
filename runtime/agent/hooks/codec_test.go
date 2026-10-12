@@ -88,6 +88,8 @@ func isSupportedHookEventType(eventType EventType) bool {
 		ContextRequestGrowth,
 		ContextRecalled, ContextRecallDisabled, RecallBudgetExhausted, ContextUnmeasured, ContextLimitsUnknown, ContextBudgetTooSmall, ContextCompacted, ContextCompactionSkipped:
 		return true
+	case ContinuationStarted, ContinuationPublished, ContinuationSuperseded:
+		return false
 	case ContextOverflow:
 		return true
 	default:

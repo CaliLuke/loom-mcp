@@ -36,6 +36,7 @@ const (
 // Client exposes Mongo-backed operations for session metadata.
 type Client interface {
 	health.Pinger
+	session.ContinuationStore
 
 	CreateSession(ctx context.Context, sessionID string, createdAt time.Time) (session.Session, error)
 	LoadSession(ctx context.Context, sessionID string) (session.Session, error)
@@ -59,10 +60,11 @@ type Options struct {
 }
 
 type client struct {
-	mongo    *mongodriver.Client
-	sessions collection
-	runs     collection
-	timeout  time.Duration
+	continuations collection
+	mongo         *mongodriver.Client
+	sessions      collection
+	runs          collection
+	timeout       time.Duration
 }
 
 // New returns a Client backed by MongoDB.
@@ -87,7 +89,19 @@ func New(opts Options) (Client, error) {
 	}); err != nil {
 		return nil, err
 	}
-	return newClientWithCollections(opts.Client, sessWrapper, runWrapper, timeout)
+	continuations := clientinfra.NewCollection(opts.Client, opts.Database, "continuations")
+	if err := clientinfra.EnsureIndexes(timeout, func(ctx context.Context) error {
+		_, err := continuations.Indexes().CreateOne(ctx, mongodriver.IndexModel{Keys: bson.D{{Key: fieldSessionID, Value: 1}, {Key: "id", Value: 1}}, Options: options.Index().SetUnique(true)})
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	out, err := newClientWithCollections(opts.Client, sessWrapper, runWrapper, timeout)
+	if err != nil {
+		return nil, err
+	}
+	out.continuations = continuations
+	return out, nil
 }
 
 func (c *client) Name() string {
@@ -567,11 +581,12 @@ type runDocument struct {
 }
 
 type sessionDocument struct {
-	SessionID string                `bson:"session_id"`
-	Status    session.SessionStatus `bson:"status"`
-	CreatedAt time.Time             `bson:"created_at"`
-	EndedAt   *time.Time            `bson:"ended_at,omitempty"`
-	UpdatedAt time.Time             `bson:"updated_at"`
+	ContinuationHead *string               `bson:"continuation_head,omitempty"`
+	SessionID        string                `bson:"session_id"`
+	Status           session.SessionStatus `bson:"status"`
+	CreatedAt        time.Time             `bson:"created_at"`
+	EndedAt          *time.Time            `bson:"ended_at,omitempty"`
+	UpdatedAt        time.Time             `bson:"updated_at"`
 }
 
 func fromRunMeta(run session.RunMeta) runDocument {

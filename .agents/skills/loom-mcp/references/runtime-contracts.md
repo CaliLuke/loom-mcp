@@ -892,8 +892,9 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   completions. Streaming calls do not synthesize a `model.Streamer` from that
   response; returning one from `BeforeModel` on `Stream` fails the call.
 - Record events (planner_step, run_sealed, child_run_linked and reserved
-  context_compacted, context_compaction_skipped, context_overflow) and canonical
-  presentation commits bypass event interceptors. Hook publication appends first,
+  context_compacted, context_compaction_skipped, context_overflow,
+  continuation_started, continuation_published, continuation_superseded) and
+  canonical presentation commits bypass event interceptors. Hook publication appends first,
   then publishes best-effort projections. SealRecord appends directly without
   projections.
 - Ordinary event interceptors run in `runtime.publish_hook` before `appendHookRunEvent`,
@@ -1514,3 +1515,21 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   recording validates retained clarification-only text; the confirmed-pause
   recording proves approval, prompt, answer, content recording and one resume.
   Keep v15 fixtures and reject protocol 15 before effects.
+
+## K18 session continuation (protocol 17)
+
+Only successful compaction roots with a final response publish; failed/canceled
+roots record a skipped outcome, and children/default-only agents do not publish.
+RecordContent fixes predecessor, position and limits. Copy only rendered bytes
+from Origin.Scope, preserving origins and SummaryPos. ContinuationStore requires
+ID-first body comparison and atomic head advancement after run_sealed. Minimal
+carry means bounded text/argument parts and placeholder results, independently
+of the implementation flag. Preview each shrink from the original rendered part;
+re-carry keeps one argument wrapper and the original omitted-byte count.
+Seal payloads omit continuation fields for ordinary agents and never duplicate
+head/pending state. Recall and citations walk recorded Prev, never the live head.
+Optional Pos/Prev exports and schemas remain backward compatible. Overflow retry
+errors retain adopted usage for start/resume accounting. Record genuine v17 main,
+budget, summary, child, child_run, confirmed_pause and continued histories; keep
+FR1's v16 files unchanged and reject protocol 16 before effects. K17 remains 15;
+FR1 remains 16. Structural templates remain 5.

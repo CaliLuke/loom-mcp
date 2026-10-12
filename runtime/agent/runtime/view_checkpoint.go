@@ -41,7 +41,7 @@ func receiptRecord(ctx context.Context, store runstore.Store, scope string, sour
 	if err != nil {
 		return "", err
 	}
-	record := index.CheckpointRecord{Fingerprint: index.Fingerprint(view.ContextFingerprint), Prev: view.Checkpoint, Summary: previous.Summary, SummaryRun: previous.SummaryRun, CitedUsers: previous.CitedUsers, Receipt: lines, Through: view.TailFrom - 1, Chain: entries[view.TailFrom-2].Chain}
+	record := index.CheckpointRecord{Fingerprint: index.Fingerprint(view.ContextFingerprint), Prev: view.Checkpoint, Summary: previous.Summary, SummaryRun: previous.SummaryRun, SummaryPos: previous.SummaryPos, CitedUsers: previous.CitedUsers, Receipt: lines, Through: view.TailFrom - 1, Chain: entries[view.TailFrom-2].Chain}
 	data, err := json.Marshal(record, json.Deterministic(true))
 	if err != nil {
 		return "", err
@@ -79,12 +79,12 @@ func receiptLines(ctx context.Context, source index.Source, entries []index.Mess
 		}
 		for _, call := range calls {
 			if !hidden[call.ToolCallID] {
-				lines = append(lines, index.ReceiptLine{Kind: "call", From: entry.ID, Through: entry.ID, ToolUseID: call.ToolCallID, Tool: call.Name, Text: receiptPrefix(call.Payload, checkpoint.ReceiptArgsBytes)})
+				lines = append(lines, index.ReceiptLine{Kind: "call", Origin: entry.Origin, From: entry.ID, Through: entry.ID, ToolUseID: call.ToolCallID, Tool: call.Name, Text: receiptPrefix(call.Payload, checkpoint.ReceiptArgsBytes)})
 			}
 		}
 		text := transcriptText(messages)
 		if text != "" {
-			lines = append(lines, index.ReceiptLine{Kind: "assistant", From: entry.ID, Through: entry.ID, Text: receiptPrefix(firstReceiptLine(text), checkpoint.MaxReceiptLineBytes)})
+			lines = append(lines, index.ReceiptLine{Kind: "assistant", Origin: entry.Origin, From: entry.ID, Through: entry.ID, Text: receiptPrefix(firstReceiptLine(text), checkpoint.MaxReceiptLineBytes)})
 		}
 	}
 	return lines, nil

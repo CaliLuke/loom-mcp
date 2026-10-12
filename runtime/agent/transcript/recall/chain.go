@@ -122,7 +122,7 @@ func (r *callReader) target(ctx context.Context, id, label string) (string, stri
 			label, id = before, after
 		}
 	}
-	if label == "" || label == r.req.RunID {
+	if label == "" || label == r.req.RunID || (r.req.View.ChainPos > 0 && label == fmt.Sprintf("r%d", r.req.View.ChainPos)) {
 		return r.req.RunID, r.req.Scope, id, nil
 	}
 	if r.handler.Chain == nil {
@@ -131,6 +131,10 @@ func (r *callReader) target(ctx context.Context, id, label string) (string, stri
 	target, err := r.handler.Chain.Resolve(ctx, r.req.RunID, label)
 	if err != nil {
 		return "", "", "", err
+	}
+	if target.Hash == "" {
+		// Chain membership authorizes an earlier history even when it never compacted.
+		return target.Run, target.Scope, id, nil
 	}
 	nodes, err := r.records(ctx)
 	if err != nil {

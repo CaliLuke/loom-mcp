@@ -118,8 +118,20 @@ func (r *runReader) checkpoint(scope string, hash runstore.Hash, active map[stri
 	if err := json.Unmarshal(data, &record, json.RejectUnknownMembers(true)); err != nil {
 		return fmt.Errorf("decode checkpoint: %w", err)
 	}
-	if err := r.checkContextFingerprint(string(record.Fingerprint)); err != nil {
+	if err := r.checkpointReferences(scope, record, active); err != nil {
 		return err
+	}
+
+	r.run.Checkpoints = append(r.run.Checkpoints, Checkpoint{Scope: scope, Hash: hash, Record: record})
+	r.checkpoints[key] = true
+	return nil
+}
+
+func (r *runReader) checkpointReferences(scope string, record index.CheckpointRecord, active map[string]bool) error {
+	if scope == r.owner.record.RootRunID {
+		if err := r.checkContextFingerprint(string(record.Fingerprint)); err != nil {
+			return err
+		}
 	}
 	if record.Prev != nil {
 		if err := r.checkpoint(scope, *record.Prev, active); err != nil {
@@ -139,7 +151,5 @@ func (r *runReader) checkpoint(scope string, hash runstore.Hash, active map[stri
 			return err
 		}
 	}
-	r.run.Checkpoints = append(r.run.Checkpoints, Checkpoint{Scope: scope, Hash: hash, Record: record})
-	r.checkpoints[key] = true
 	return nil
 }

@@ -12,6 +12,8 @@ import (
 
 // RecordContentInput carries ordered content to store before workflow adoption.
 type RecordContentInput struct {
+	// Continue requests recorded session seeding for a compaction root.
+	Continue *ContinuationStartInput `json:"continue,omitzero"`
 	// ContextStart pins child context settings outside workflow execution.
 	ContextStart *ContextStartInput `json:"context_start,omitzero"`
 	// RootRunID is the shared storage scope of the run tree.
@@ -56,6 +58,8 @@ type ProvidedContent struct {
 
 // RecordContentOutput is returned only after every input item has been stored.
 type RecordContentOutput struct {
+	// Continuation records start lineage and the selected view.
+	Continuation *ContinuationStartOutput `json:"continuation,omitzero"`
 	// ContextStart is the recorded result of child prompt and settings pinning.
 	ContextStart *ContextStartOutput `json:"context_start,omitzero"`
 	// Refs addresses Items in the same order and with the same length.

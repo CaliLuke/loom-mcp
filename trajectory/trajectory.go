@@ -34,6 +34,10 @@ type (
 
 	// Trajectory contains one sealed run's causal steps and run-local totals.
 	Trajectory struct {
+		// Pos and Prev preserve optional session continuation identity.
+		Pos  int     `json:"pos,omitzero"`
+		Prev *string `json:"prev,omitzero"`
+
 		// TraceID optionally correlates the run with caller-owned distributed tracing.
 		TraceID        string         `json:"trace_id,omitempty"`
 		RunID          string         `json:"run_id"`

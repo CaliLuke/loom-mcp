@@ -56,7 +56,12 @@ func (r *Runtime) prepareSummaryExecution(ctx context.Context, in *SummarizeCont
 		out.UnsummarisedBytes += span.End - span.Start
 	}
 	client := &callInfoClientWrapper{store: r.RunStore, info: model.CallInfo{AgentID: string(in.AgentID), RunID: in.RunID, RootRunID: in.Scope, SessionID: in.SessionID, TurnID: in.TurnID, ModelID: in.ContextModel.ID, Attempt: engine.ActivityAttemptFromContext(ctx)}, inner: &modelInterceptedClient{inner: &callRecordingClient{inner: registered, recording: recording}}}
-	return &summaryExecution{runtime: r, input: in, output: out, recording: recording, prepared: prepared, spec: spec, plan: plan, limits: limits, client: client, resolver: recall.NewCitationResolver(ctx, prepared.source, prepared.entries, in.To-1)}, nil
+	resolver, err := r.summaryResolver(ctx, in, prepared)
+	if err != nil {
+		return nil, err
+	}
+
+	return &summaryExecution{runtime: r, input: in, output: out, recording: recording, prepared: prepared, spec: spec, plan: plan, limits: limits, client: client, resolver: resolver}, nil
 }
 
 // fold validates each recorded response before it becomes the next running summary.
@@ -107,7 +112,7 @@ func (e *summaryExecution) validateResponse(ctx context.Context, response *model
 	candidate := e.prepared.record
 	candidate.Calls = append(candidate.Calls, keys[len(keys)-1])
 	candidate.Prompt = e.output.Prompt
-	validation, err := summarize.Validate(summarize.ValidationInput{Text: text, StopReason: response.StopReason, Unfinished: response.OutputLimited, DefaultPrompt: e.spec.Template == defaultContextSummaryPrompt, SummaryBytes: e.prepared.allowance, ReplacedTokens: e.prepared.replaced, CurrentPos: 0, To: in.To, Resolver: e.resolver, RenderedCheckpoint: func(text string) (int, error) {
+	validation, err := summarize.Validate(summarize.ValidationInput{Text: text, StopReason: response.StopReason, Unfinished: response.OutputLimited, DefaultPrompt: e.spec.Template == defaultContextSummaryPrompt, SummaryBytes: e.prepared.allowance, ReplacedTokens: e.prepared.replaced, CurrentPos: in.ViewRef.ChainPos, To: in.To, Resolver: e.resolver, RenderedCheckpoint: func(text string) (int, error) {
 		return e.prepared.estimate(ctx, in, candidate, text, e.resolver)
 	}})
 	return candidate, validation, err
@@ -132,4 +137,18 @@ func (e *summaryExecution) run(ctx context.Context) error {
 	}
 	e.output.Checkpoint, e.output.Pinned = &hash, pins
 	return nil
+}
+
+func (r *Runtime) summaryResolver(ctx context.Context, in *SummarizeContextInput, prepared *summaryPreparation) (checkpoint.CitationResolver, error) {
+	resolver := recall.NewCitationResolver(ctx, prepared.source, prepared.entries, in.To-1)
+	if in.ViewRef.ChainPos > 0 {
+		chain, err := r.continuationChain(ctx, in.Scope, in.RunID)
+		if err != nil {
+			return nil, err
+		}
+		if chain != nil {
+			resolver = chain.Citations(ctx, prepared.source, prepared.entries, in.To-1, prepared.record.CitedUsers)
+		}
+	}
+	return resolver, nil
 }

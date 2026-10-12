@@ -146,7 +146,7 @@ func ConsumesHiddenResult(entry index.MessageEntry) bool {
 		return false
 	}
 	switch entry.Structural.Kind {
-	case index.UnknownTool, index.PolicyDenial, index.ConfirmationDenial, index.SynthesizedError, index.Cancellation:
+	case index.CarriedResult, index.UnknownTool, index.PolicyDenial, index.ConfirmationDenial, index.SynthesizedError, index.Cancellation:
 		return true
 	case index.FinalizeResults, index.FinalizeHint, index.Reminders, index.HideBookkeeping:
 		return false
@@ -171,7 +171,7 @@ func ValidTail(entries []index.MessageEntry, tail index.MessageID) error {
 func projectCheckpoint(ctx context.Context, source index.Source, entries []index.MessageEntry, view index.ViewRef, from index.MessageID) (*model.Message, error) {
 	var message *model.Message
 	if view.Checkpoint != nil {
-		input, err := FromRecord(ctx, source, *view.Checkpoint, entries, 0)
+		input, err := FromRecord(ctx, source, *view.Checkpoint, entries, view.ChainPos)
 		if err != nil {
 			return nil, err
 		}

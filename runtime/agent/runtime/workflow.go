@@ -221,6 +221,12 @@ func seedWorkflowPlan(wfCtx engine.WorkflowContext, input *RunInput, planInput *
 	}
 	planInput.Entries, planInput.IndexHead = seed.Entries, seed.IndexHead
 	planInput.Committed = len(seed.Entries)
+	if seed.Continuation != nil {
+		start := seed.Continuation
+		planInput.Prev, planInput.Pos, planInput.ContinuedFrom = start.Prev, start.Pos, start.ContinuedFrom
+		planInput.compactionView = start.View
+		startReq.ChainPos, startReq.ContinuedFrom = start.Pos, start.ContinuedFrom
+	}
 	startReq.View = planInput.view()
 	return nil
 }
@@ -263,6 +269,10 @@ func (r *Runtime) finishWorkflowExecution(
 		*finalStatus = terminalRunStatusForError(*finalErr)
 	} else if *finalStatus != runStatusSuccess {
 		*finalStatus = runStatusSuccess
+	}
+	if *out != nil && *finalErr == nil && (*out).FinalRef != "" && input.ParentRunID == "" && input.SessionID != "" && input.ContextCompaction != nil {
+		planInput.FinalHash = (*out).FinalRef
+		planInput.PublishContinuation = true
 	}
 	if err := r.sealWorkflowRecord(wfCtx, input, planInput); err != nil {
 		*finalErr = errors.Join(*finalErr, err)

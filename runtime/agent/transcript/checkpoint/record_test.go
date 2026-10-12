@@ -24,7 +24,7 @@ func TestFromRecordCoverageAndSummary(t *testing.T) {
 	source := recordSource(t, map[runstore.Hash]any{"latest": newest, previous: old, "user": &model.Message{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "task"}}}}, map[runstore.Hash][]byte{summary: []byte("summary [message 1]"), "answer": []byte("answer")})
 	in, err := FromRecord(t.Context(), source, "latest", entries, 99)
 	require.NoError(t, err)
-	assert.Equal(t, 0, in.CurrentPos)
+	assert.Equal(t, 99, in.CurrentPos, "K18 retains the recorded continuation position")
 	assert.Equal(t, CheckpointID("latest"), in.ID)
 	require.NotNil(t, in.Summary)
 	assert.Equal(t, "summary [message 1]", in.Summary.Text)

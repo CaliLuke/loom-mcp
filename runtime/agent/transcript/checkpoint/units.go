@@ -117,7 +117,7 @@ func isStructuralResult(entry *index.StructuralEntry) bool {
 		return false
 	}
 	switch entry.Kind {
-	case index.UnknownTool, index.PolicyDenial, index.ConfirmationDenial, index.SynthesizedError, index.Cancellation, index.FinalizeResults:
+	case index.CarriedResult, index.UnknownTool, index.PolicyDenial, index.ConfirmationDenial, index.SynthesizedError, index.Cancellation, index.FinalizeResults:
 		return true
 	case index.FinalizeHint, index.Reminders, index.HideBookkeeping:
 		return false

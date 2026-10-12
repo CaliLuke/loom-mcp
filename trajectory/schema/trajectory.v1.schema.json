@@ -761,6 +761,8 @@
     "Trajectory": {
       "type": "object",
       "properties": {
+        "pos": {"type": "integer"},
+        "prev": {"type": ["string", "null"]},
         "trace_id": {
           "type": "string"
         },

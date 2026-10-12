@@ -133,6 +133,17 @@ func (r *runReader) readEvents() ([]string, error) {
 }
 
 func (r *runReader) readEvent(event *runlog.Event) (string, error) {
+	if event.Type == hooks.ContinuationStarted {
+		var start struct {
+			Pos  int     `json:"pos"`
+			Prev *string `json:"prev"`
+		}
+		if err := json.Unmarshal(event.Payload, &start); err != nil {
+			return "", err
+		}
+		r.run.Pos, r.run.Prev = start.Pos, start.Prev
+		return "", nil
+	}
 	if event.Type == hooks.ChildRunLinked {
 		var link hooks.ChildRunLinkedEvent
 		if err := json.Unmarshal(event.Payload, &link); err != nil {

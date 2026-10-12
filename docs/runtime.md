@@ -183,7 +183,7 @@ Typed consumers can call
 eligible bytes and decode them with the generated result codec. Empty or missing
 hashes fail. Tool activities return references; terminal completion decoding runs in the finish activity.
 
-### Transcript index and planner views (protocol 16)
+### Transcript index and planner views (protocol 17)
 
 The workflow keeps immutable `index.MessageEntry` values and a committed
 `IndexHead`, rather than accumulated messages, tool outputs, typed answers, or a
@@ -1329,7 +1329,8 @@ Totals are local to each run. They include all model attempts, counts by adoptio
 class, adopted model calls, tokens per model, tool calls, failed tool calls and
 repeated calls with the same name and key-sorted JSON arguments. Wall time spans
 the first and last **record-event** timestamps (`planner_step`, `run_sealed`,
-`child_run_linked` and compaction record events). Observer events never feed
+`child_run_linked`, compaction record events, `continuation_started`,
+`continuation_published` and `continuation_superseded`). Observer events never feed
 totals, so dropping them leaves totals unchanged. Each child has its own totals.
 
 `trajectory.Session` is a caller-ordered list of trajectories. Both trajectory
@@ -4881,25 +4882,26 @@ external `Client`, also supply `ClientOptions` with that client's converter
 external client whose converter configuration was not supplied.
 
 The generated fixture keeps a completed history under
-`integration_tests/fixtures/agent_features/testdata/workflow_protocol_v16.json`.
+`integration_tests/fixtures/agent_features/testdata/workflow_protocol_v17.json`.
 The main and summary recordings use per-run pretend windows and record pinned
 settings fingerprints. The scrubbed main recording includes overflow recovery, a
 confirmation-gated tool turn with clarification, its recorded assistant question and user answer, one resume
 that selects child validation and context lookup, seed/result/question content
 batches, planner-step commits and terminal finish activity. A second recording,
-`workflow_protocol_v16_budget.json`, exercises an external-await resume whose
+`workflow_protocol_v17_budget.json`, exercises an external-await resume whose
 terminal answer arrives within budget, but whose adoption crosses the budget.
-It completes without a finalizer call. `workflow_protocol_v16_summary.json` records
+It completes without a finalizer call. `workflow_protocol_v17_summary.json` records
 a validated summary and its canonical adoption before the single post-await resume.
 Its clarification-only turn retains the original model text with the question.
-`workflow_protocol_v16_confirmed_pause.json` records tool approval, a tool-returned
+`workflow_protocol_v17_confirmed_pause.json` records tool approval, a tool-returned
 clarification prompt, its answer, content recording and one planner resume.
-`workflow_protocol_v16_child.json` records child context preparation completing
-before `StartChildWorkflow`; `workflow_protocol_v16_child_run.json` records that
+`workflow_protocol_v17_child.json` records child context preparation completing
+before `StartChildWorkflow`; `workflow_protocol_v17_child_run.json` records that
 child execution. The child uses its own settings and fingerprint despite the
 parent's pretend-window override. Both histories have offline replay coverage.
-The unchanged protocol 5–15 fixtures verify rejection before workflow effects;
-protocol versions must match, so workers running protocol 16 cannot replay them
+FR1’s protocol-16 recordings remain unchanged.
+The unchanged protocol 5–16 fixtures verify rejection before workflow effects;
+protocol versions must match, so workers running protocol 17 cannot replay them
 as successful runs. Run
 `go test -C integration_tests/fixtures/agent_features ./... -run '^TestGeneratedFeatureWorkflowReplay$'`
 for offline replay. To re-record it against the pinned Temporal development
@@ -5980,9 +5982,9 @@ Each invocation records one keyed context_recalled event with kind, outcome
 and step. Exhaustion emits recall_budget_exhausted once per allowance episode,
 reset by refill. RunRecord rebuilds and validates recorded charges and settings.
 Workflow protocol 9 adds overflow recovery to these lookup contracts. The recorded
-v16 fixture exercises bounded recovery, lookup and a single resume after
+v17 fixture exercises bounded recovery, lookup and a single resume after
 confirmation and clarification, including the recorded question/answer pair.
-The v16 budget fixture covers terminal adoption across the active budget without a finalizer call; v5–v15 fail
+The v17 budget fixture covers terminal adoption across the active budget without a finalizer call; v5–v16 fail
 before effects.
 Structural templates remain version 5.
 
@@ -6161,3 +6163,57 @@ The shared ID-conflict scenario requires `engine.ErrWorkflowAlreadyStarted`,
 a nil handle and no `engine.ErrWorkflowStartRejected` classification.
 Conformance workers use one-second workflow-task and sticky timeouts
 to bound restart recovery independently of the old worker taking its next task.
+
+
+### Session continuation
+
+Workflow protocol 17 carries the final view of a successful root run into the
+next run of an agent with threshold compaction. Children, sessionless OneShotRun calls, and agents without
+threshold compaction do not read or publish continuations. Failed and canceled
+roots seal their records with a skipped outcome and leave the session head alone.
+The v17 replay fixtures include `workflow_protocol_v17_continued.json`, recorded
+from an actual second run in the same session.
+
+The existing RecordContent activity reads the session head and records Prev,
+Pos, the start decision, and the selected context limits. Matching compares the
+canonical role and parts of the caller-visible prefix, ignoring metadata and
+cache hints. A mismatch or missing carried content starts fresh and records
+`no_match` or `missing_content`; `no_head` identifies the first run. A fresh
+start still retains its predecessor and can advance the session head.
+
+The start activity copies rendered pins, user index lines, tail bytes and summary
+into the new root scope. Cleared results remain structural placeholders even
+when KeepResultInContext applies. Preview arguments are valid JSON objects with
+a `preview` string. Original results stay in their original scope for recall.
+Origin positions and SummaryPos preserve the meaning of copied citations.
+Recall is available immediately when the initial view has a checkpoint or
+carried previews or placeholders. References such as `[r1 message 3]` resolve
+through the current run's recorded predecessor chain, never the live session head.
+
+The start activity uses the smallest known usable window among registered model
+clients, in model-name order, because planners may choose a model dynamically.
+It records those ContextLimits and derives the initial render budget. Without
+known limits it uses the predecessor's sealed budget, then the unknown-window
+budget. Every planner request still records its actual model limits.
+
+Custom session stores used by threshold-compaction agents must also implement
+`session.ContinuationStore`. Registration fails if that capability is absent.
+AdvanceContinuation first compares an existing ID's deterministic JSON body:
+an exact retry returns AlreadyPublished even after the head moves; a different
+body returns Conflict. Only then does it compare the expected head. Publishing
+the immutable body and updating the head must be atomic. Mongo uses a majority
+transaction and a unique `(session_id, id)` index; memory uses one mutex.
+`sessiontest.CheckContinuation` is reusable store conformance coverage.
+
+SealRecord appends run_sealed before storing the bounded carry and advancing the
+head. Overlapping roots produce one successor; losers record
+continuation_superseded. Canonical continuation_started, continuation_published,
+and continuation_superseded events use `<type>:<run>` keys. RunRecord and
+trajectory exports expose optional Pos and Prev; older exports remain decodable.
+
+Continuation previews always shrink the original rendered part for that carry;
+re-carry preserves the original omitted-byte count and a single argument preview
+wrapper. Seal inputs carry only the optional continuation projection, with no
+duplicate index head or pending entries. Ordinary agents retain their prior seal
+payload. Overflow attempts retain adopted usage when an expired retry cannot
+schedule, including start and resume time-budget finalization.

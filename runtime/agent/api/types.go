@@ -402,6 +402,10 @@ type (
 
 	// PlanActivityInput carries the planner input for PlanStart and PlanResume activities.
 	PlanActivityInput struct {
+		// ChainPos and ContinuedFrom carry recorded continuation identity.
+		ChainPos      int                  `json:"chain_pos,omitzero"`
+		ContinuedFrom *index.RunCheckpoint `json:"continued_from,omitzero"`
+
 		// Overflow carries the current planner step after an overflow recovery.
 		Overflow        *overflow.Step             `json:"overflow,omitzero"`
 		ContextSettings compaction.ContextSettings `json:"context_settings,omitzero"`
@@ -443,7 +447,7 @@ type (
 		// PolicyCaps carries the cap state used to derive AllowedTools.
 		PolicyCaps policy.CapsState
 		// FinalizeMaxToolCalls preserves the per-turn cap while preparing terminal calls.
-		FinalizeMaxToolCalls int
+		FinalizeMaxToolCalls int `json:"finalize_max_tool_calls,omitzero"`
 
 		// Recovery carries bounded correction guidance from the rejected activity
 		// this planner invocation replaces. It never contains rejected model output.

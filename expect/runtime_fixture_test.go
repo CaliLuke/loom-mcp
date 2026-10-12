@@ -68,6 +68,7 @@ func recordedRun(t *testing.T, scenario runtimeScenario) *runrecord.RunRecord {
 			hooks.MemoryAppended, hooks.PolicyDecision, hooks.Usage,
 			hooks.HardProtectionTriggered, hooks.RunPhaseChanged, hooks.ChildRunLinked,
 			hooks.PromptRendered, hooks.PlannerStep, hooks.RunSealed,
+			hooks.ContinuationStarted, hooks.ContinuationPublished, hooks.ContinuationSuperseded,
 			hooks.ContextCompacted, hooks.ContextCompactionSkipped,
 			hooks.ContextOverflow, hooks.ContextRequestGrowth,
 			hooks.ContextUnmeasured, hooks.ContextLimitsUnknown, hooks.ContextBudgetTooSmall,

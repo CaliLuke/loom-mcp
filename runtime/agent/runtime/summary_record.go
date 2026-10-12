@@ -32,7 +32,7 @@ func (p *summaryPreparation) renderCandidate(ctx context.Context, in *SummarizeC
 		}
 		return p.source(ctx, h)
 	}
-	candidate, err := checkpoint.FromRecord(ctx, source, hash, p.entries, 0)
+	candidate, err := checkpoint.FromRecord(ctx, source, hash, p.entries, in.ViewRef.ChainPos)
 	if err != nil {
 		return nil, nil, err
 	}

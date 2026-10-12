@@ -9,8 +9,8 @@ func validateEntry(entry MessageEntry) error {
 	if entry.ID == 0 {
 		return fmt.Errorf("index: entry ID must be positive")
 	}
-	if entry.Origin != nil {
-		return fmt.Errorf("index: later-ticket fields must be zero")
+	if o := entry.Origin; o != nil && (o.Scope == "" || o.Run == "" || o.Pos < 1 || o.ID == 0 || (o.Form != "full" && o.Form != "preview" && o.Form != "placeholder")) {
+		return fmt.Errorf("index: invalid continuation origin")
 	}
 	switch entry.Kind {
 	case Message, Assistant, ToolResult, Clarification, TypedInput:
@@ -47,7 +47,7 @@ func validateStructural(s StructuralEntry) error {
 		return fmt.Errorf("index: unsupported template protocol %d", s.ProtocolVersion)
 	}
 	switch s.Kind {
-	case UnknownTool, ConfirmationDenial, SynthesizedError:
+	case UnknownTool, ConfirmationDenial, SynthesizedError, CarriedResult:
 		if len(s.Text) != 1 {
 			return fmt.Errorf("index: %s requires one text parameter", s.Kind)
 		}

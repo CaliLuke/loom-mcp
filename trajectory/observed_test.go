@@ -38,7 +38,7 @@ func TestBuildObservedPayloadsAndVerification(t *testing.T) {
 }
 
 func TestBuildWallTimeUsesOnlyRecordEvents(t *testing.T) {
-	for _, kind := range []hooks.EventType{hooks.PlannerStep, hooks.RunSealed, hooks.ChildRunLinked, hooks.ContextCompacted, hooks.ContextCompactionSkipped, hooks.ContextOverflow} {
+	for _, kind := range []hooks.EventType{hooks.PlannerStep, hooks.RunSealed, hooks.ChildRunLinked, hooks.ContextCompacted, hooks.ContextCompactionSkipped, hooks.ContextOverflow, hooks.ContextRecalled, hooks.ContinuationStarted, hooks.ContinuationPublished, hooks.ContinuationSuperseded} {
 		t.Run(string(kind), func(t *testing.T) {
 			rec := &runrecord.RunRecord{Runs: []runrecord.Run{{RunID: "run", Sealed: true, Events: []*runlog.Event{
 				{Type: hooks.RunStarted, Timestamp: time.Unix(1, 0)},

@@ -24,7 +24,7 @@ var (
 
 // Validate checks first-failure order before a checkpoint can be stored. Size
 // estimation and citation-resolution infrastructure errors are returned intact.
-// Only current-run citations are resolvable until K18 supplies prior-run support.
+// Earlier-run citations delegate to the recorded continuation resolver.
 func Validate(in ValidationInput) (Validation, error) {
 	result := Validation{LooseRefs: countLoose(in.Text)}
 	if err := validateText(in); err != nil {
@@ -146,7 +146,7 @@ func hasHeadings(text string) bool {
 }
 
 func (r cutResolver) Resolve(key checkpoint.OrderKey) (checkpoint.CitationTarget, bool, error) {
-	if key.Pos != r.pos {
+	if key.Pos != r.pos && (key.Pos <= 0 || key.Pos >= r.pos) {
 		return checkpoint.CitationTarget{}, false, nil
 	}
 	if r.source == nil {
@@ -156,5 +156,5 @@ func (r cutResolver) Resolve(key checkpoint.OrderKey) (checkpoint.CitationTarget
 }
 
 func (r cutResolver) Behind(key checkpoint.OrderKey) bool {
-	return key.Pos == r.pos && key.ID < r.to && r.source.Behind(key)
+	return r.source != nil && (key.Pos != r.pos || key.ID < r.to) && r.source.Behind(key)
 }

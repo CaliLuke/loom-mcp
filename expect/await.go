@@ -71,15 +71,7 @@ func decodeAwait(event *trajectory.ObservedEvent) (planner.AwaitItem, error) {
 		item = planner.AwaitTypedInputItem(&planner.AwaitTypedInput{})
 		target = item.TypedInput
 	case hooks.AwaitExternalTools:
-		var external hooks.AwaitExternalToolsEvent
-		if err := json.Unmarshal(event.Payload, &external); err != nil {
-			return item, fmt.Errorf("decode await: %q", err.Error())
-		}
-		items := make([]planner.AwaitToolItem, len(external.Items))
-		for i, call := range external.Items {
-			items[i] = planner.AwaitToolItem{Name: call.ToolName, ToolCallID: call.ToolCallID, Payload: call.Payload}
-		}
-		return planner.AwaitExternalToolsItem(&planner.AwaitExternalTools{ID: external.ID, Items: items}), nil
+		return decodeExternalToolsAwait(event)
 	case hooks.RunStarted, hooks.RunCompleted, hooks.RunPaused,
 		hooks.AwaitConfirmation, hooks.ToolAuthorization, hooks.RunResumed,
 		hooks.ToolCallScheduled, hooks.ToolCallArgsDelta, hooks.ToolResultReceived,
@@ -88,6 +80,7 @@ func decodeAwait(event *trajectory.ObservedEvent) (planner.AwaitItem, error) {
 		hooks.MemoryAppended, hooks.PolicyDecision, hooks.Usage,
 		hooks.HardProtectionTriggered, hooks.RunPhaseChanged, hooks.ChildRunLinked,
 		hooks.PromptRendered, hooks.PlannerStep, hooks.RunSealed,
+		hooks.ContinuationStarted, hooks.ContinuationPublished, hooks.ContinuationSuperseded,
 		hooks.ContextCompacted, hooks.ContextCompactionSkipped,
 		hooks.ContextOverflow, hooks.ContextRequestGrowth,
 		hooks.ContextUnmeasured, hooks.ContextLimitsUnknown, hooks.ContextBudgetTooSmall,
@@ -101,4 +94,17 @@ func decodeAwait(event *trajectory.ObservedEvent) (planner.AwaitItem, error) {
 		return item, fmt.Errorf("decode await: %q", err.Error())
 	}
 	return item, nil
+}
+
+// decodeExternalToolsAwait maps the hook's ToolName field to the planner's Name.
+func decodeExternalToolsAwait(event *trajectory.ObservedEvent) (planner.AwaitItem, error) {
+	var external hooks.AwaitExternalToolsEvent
+	if err := json.Unmarshal(event.Payload, &external); err != nil {
+		return planner.AwaitItem{}, fmt.Errorf("decode await: %q", err.Error())
+	}
+	items := make([]planner.AwaitToolItem, len(external.Items))
+	for i, call := range external.Items {
+		items[i] = planner.AwaitToolItem{Name: call.ToolName, ToolCallID: call.ToolCallID, Payload: call.Payload}
+	}
+	return planner.AwaitExternalToolsItem(&planner.AwaitExternalTools{ID: external.ID, Items: items}), nil
 }

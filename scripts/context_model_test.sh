@@ -114,10 +114,12 @@ m=SessionContinuation
 expect_pass ${m} ${m} 68700000
 expect_pass ${m} ${m}Children 3340000
 expect_pass ${m} ${m}Liveness 50000
+expect_violation ${m} ${m}WitnessUnsuccessful WitnessUnsuccessful
 expect_violation ${m} ${m}WitnessAlreadyAfterAdvance WitnessAlreadyAfterAdvance
 expect_violation ${m} ${m}WitnessResummarizedCopy WitnessResummarizedCopy
 expect_violation ${m} ${m}UnsafeNonIdempotentPublish NoFalseSupersede
 expect_violation ${m} ${m}UnsafePublishBeforeSeal PublishedImpliesSealed
+expect_violation ${m} ${m}UnsafePublishFailed PublishedImpliesSealed
 expect_violation ${m} ${m}UnsafeUnconditionalHead OneSuccessor
 expect_violation ${m} ${m}UnsafeChildPublishes ChildNeverPublishes
 expect_violation ${m} ${m}UnsafeOrderByLocalId OrderIsChronological

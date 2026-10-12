@@ -447,8 +447,10 @@ Package `trajectory` (home per D1) builds a `Trajectory` for one run from the
    calls, usage, latency, and adopted, abandoned, or incomplete classification;
 3. record events and the recorded transcript: child links, final answer, and
    record-derived timing. Compaction events (`context_compacted`,
-   `context_compaction_skipped`, `context_overflow`) are record events that skip
-   `BeforeEvent` (compaction design 4.5), added by their compaction tickets;
+   `context_compaction_skipped`, `context_overflow`) and continuation events
+   (`continuation_started`, `continuation_published`, `continuation_superseded`)
+   are record events that skip `BeforeEvent` (compaction design 4.5), added by
+   their compaction tickets;
 4. optional observed event fields: thinking, planner notes, retry hints, policy
    decisions, awaits, phase changes, and prompt-render metadata. These may be
    absent or rewritten by `BeforeEvent`; `EventsUnverified` marks them when an
@@ -491,7 +493,8 @@ Rules:
   Record-derived steps remain verified; observed fields are optional and
   marked unverified. Observed events never feed totals. Wall time uses only
   record-event timestamps (`planner_step`, `run_sealed`, `child_run_linked`,
-  and compaction record events).
+  compaction record events, `continuation_started`, `continuation_published`,
+  and `continuation_superseded`).
 
 A **session trajectory** is the ordered list of trajectories of the runs a case
 started in one session.

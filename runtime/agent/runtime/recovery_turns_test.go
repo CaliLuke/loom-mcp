@@ -972,7 +972,8 @@ func TestRunFinalizationPlanStopsWhenToolFreeAnswerIsRejectedAtCap(t *testing.T)
 	wfCtx.finishRuntime = rt
 	output, usage, err := rt.runFinalizationPlan(wfCtx, AgentRegistration{ResumeActivityName: "resume"}, &RunInput{AgentID: "svc.agent", RunID: "run-finalizer-cap"}, base, model.TokenUsage{InputTokens: 1}, policy.CapsState{MaxRecoveryTurns: 1, RemainingRecoveryTurns: 0}, 4, "turn-1", planner.TerminationReasonFailureCap, time.Time{})
 	require.Nil(t, output)
-	require.Equal(t, model.TokenUsage{InputTokens: 1}, usage)
+	// The rejected attempt was billed even though the recovery cap prevents a retry.
+	require.Equal(t, model.TokenUsage{InputTokens: 3, OutputTokens: 1}, usage)
 	require.ErrorIs(t, err, errRecoveryTurnCapExceeded)
 	require.Len(t, wfCtx.plannerCalls, 1)
 }

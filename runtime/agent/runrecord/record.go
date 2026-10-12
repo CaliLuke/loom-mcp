@@ -28,6 +28,10 @@ type (
 	}
 	// Run holds one run's transcript and evidence in canonical order.
 	Run struct {
+		// Pos and Prev are recorded session-chain identity, absent on older exports.
+		Pos  int     `json:"pos,omitzero"`
+		Prev *string `json:"prev,omitzero"`
+
 		// Summary rebuilds rejection disablement from canonical summary records.
 		Summary compaction.SummaryState `json:"summary,omitzero"`
 		// ContextFingerprint identifies the stored canonical effective settings.

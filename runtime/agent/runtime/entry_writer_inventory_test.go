@@ -67,6 +67,9 @@ func TestEntryWriterInventory(t *testing.T) {
 	}
 	assert.ElementsMatch(t, []string{
 		"record_content.go:recordContentItems",
+		"continuation_seal.go:storeCarried",
+		"continuation_seal.go:storeCarriedUsers",
+		"continuation_seed.go:appendContinuationInput",
 		"workflow_index.go:recordAssistant",
 		"workflow_index.go:structural",
 		"workflow_index_results.go:structuralIndexEntry",

@@ -19,8 +19,8 @@ import (
 )
 
 const (
-	workflowChildHistoryFile    = "testdata/workflow_protocol_v16_child.json"
-	workflowChildRunHistoryFile = "testdata/workflow_protocol_v16_child_run.json"
+	workflowChildHistoryFile    = "testdata/workflow_protocol_v17_child.json"
+	workflowChildRunHistoryFile = "testdata/workflow_protocol_v17_child_run.json"
 )
 
 func TestGeneratedFeatureChildWorkflowReplay(t *testing.T) {

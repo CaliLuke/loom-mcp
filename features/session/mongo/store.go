@@ -66,3 +66,18 @@ func (s *Store) LoadRun(ctx context.Context, runID string) (session.RunMeta, err
 func (s *Store) ListRunsBySession(ctx context.Context, sessionID string, statuses []session.RunStatus) ([]session.RunMeta, error) {
 	return s.client.ListRunsBySession(ctx, sessionID, statuses)
 }
+
+// AdvanceContinuation implements session.ContinuationStore.
+func (s *Store) AdvanceContinuation(ctx context.Context, id string, expected *string, next session.Continuation) (session.AdvanceOutcome, error) {
+	return s.client.AdvanceContinuation(ctx, id, expected, next)
+}
+
+// LoadContinuationHead implements session.ContinuationStore.
+func (s *Store) LoadContinuationHead(ctx context.Context, id string) (*session.Continuation, error) {
+	return s.client.LoadContinuationHead(ctx, id)
+}
+
+// LoadContinuation implements session.ContinuationStore.
+func (s *Store) LoadContinuation(ctx context.Context, id, run string) (session.Continuation, error) {
+	return s.client.LoadContinuation(ctx, id, run)
+}

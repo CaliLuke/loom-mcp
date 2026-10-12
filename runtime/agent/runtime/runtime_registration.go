@@ -9,6 +9,7 @@ import (
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	rthints "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime/hints"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 )
 
@@ -582,6 +583,9 @@ func validateAgentToolsetRoute(ts ToolsetRegistration) error {
 func (r *Runtime) validateRecallRegistration(reg AgentRegistration) error {
 	if reg.Policy.ContextCompaction == nil {
 		return nil
+	}
+	if _, ok := r.SessionStore.(session.ContinuationStore); !ok {
+		return fmt.Errorf("%w: context compaction requires session.ContinuationStore", ErrInvalidConfig)
 	}
 	if err := validateRecallNames(reg.Specs); err != nil {
 		return fmt.Errorf("%w: %w", ErrInvalidConfig, err)

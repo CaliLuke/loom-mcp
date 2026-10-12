@@ -12,6 +12,16 @@ import (
 func (r *Renderer) appendStructural(entry MessageEntry) error {
 	s := entry.Structural
 	switch s.Kind {
+	case CarriedResult:
+		text, err := r.text(s.Text[0])
+		if err != nil {
+			return err
+		}
+		if len(entry.ToolUseIDs) != 1 || entry.Batch == 0 {
+			return fmt.Errorf("carried result requires one tool use ID and a batch")
+		}
+		r.batch = entry.Batch
+		r.parts = append(r.parts, model.ToolResultPart{ToolUseID: entry.ToolUseIDs[0], Content: text, IsError: entry.Result != nil && entry.Result.Error != nil})
 	case HideBookkeeping:
 		r.hideCalls(entry.ToolUseIDs)
 	case Reminders:
