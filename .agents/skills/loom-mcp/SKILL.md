@@ -357,6 +357,15 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   `Delivery.Ack` only after the commit. Malformed manual deliveries expose the
   raw payload and decode error, remain pending by default, and may be acked only
   after an application-owned dead-letter commit.
+- Available engine adapters are `inmem`, `temporal`, and `selvedge`.
+  Selvedge workers own an unstarted App and activate during runtime sealing;
+  an optional started client App stays caller-owned across worker replacement.
+  Root-run/tool-await queries and `ProvideToolResults` require worker mode.
+  The initial adapter disables retries and uses registration StartToClose only;
+  per-call activity options, heartbeat wiring and replay are a later adapter phase.
+  SQLite conformance runs under `-short`; PostgreSQL conformance is opt-in via
+  `make test-engine-conformance-postgres`. Commit only remote dependency mode,
+  verified by `make selvedge-status`.
 - Temporal persists workflow history, not the runtime's store defaults.
   Production worker and client runtimes must explicitly share persistent
   `runlog.Store`, `runstore.Store`, and `session.Store` implementations when run introspection and

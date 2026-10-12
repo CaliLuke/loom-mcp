@@ -341,4 +341,18 @@ verify-agent-feature-fixture:
 # Real backend conformance includes Temporal worker replacement and retries.
 .PHONY: test-engine-conformance
 test-engine-conformance:
-	$(GO) test -race -count=1 -timeout=5m -v ./runtime/agent/engine/inmem ./runtime/agent/engine/temporal -run '^TestConformance$$'
+	$(GO) test -race -count=1 -timeout=5m -v ./runtime/agent/engine/inmem ./runtime/agent/engine/temporal ./runtime/agent/engine/selvedge -run '^TestConformance$$'
+
+.PHONY: selvedge-local selvedge-remote selvedge-status test-engine-conformance-postgres
+selvedge-local:
+	./scripts/selvedge_mode.sh local
+
+selvedge-remote:
+	./scripts/selvedge_mode.sh remote
+
+selvedge-status:
+	./scripts/selvedge_mode.sh status
+
+# PostgreSQL conformance is opt-in until the integration matrix includes it.
+test-engine-conformance-postgres:
+	LOOM_MCP_RUN_DOCKER_TESTS=1 LOOM_MCP_REQUIRE_DOCKER_TESTS=1 $(GO) test -race -count=1 -timeout=5m -v ./runtime/agent/engine/selvedge -run '^TestConformancePostgres$$'

@@ -4900,7 +4900,11 @@ run. Native context deadlines are timeout failures. The Temporal adapter owns SD
 failure conversion and preserves backend error text in ToolResult and hook
 payloads. Conversion restores only root engine errors or adapter-owned wrappers;
 caller joins and reason wrappers retain their text and retryability. The in-memory engine passes
-application errors through, marks execution deadlines, and never retries.
+application errors through, marks execution deadlines, and never retries. The
+Selvedge adapter likewise exposes portable application metadata, typed provider
+details, cancellation and execution deadlines while retaining backend diagnostics.
+It converts only root application failures on the outbound path and rejects
+invalid activity error graphs as non-retryable failures.
 
 Run the shared `enginetest.RunConformance` suite for custom adapters. Its
 `application_errors` scenarios check type/details preservation and one attempt
@@ -4908,6 +4912,53 @@ for a non-retryable failure with a retry policy allowing three attempts.
 `runtime/temporaltrace` is an opt-in Temporal-specific tracing package.
 
 ### Available Engines
+
+**Selvedge worker and client** — Durable execution on SQLite or PostgreSQL:
+
+```go
+import (
+    sv "github.com/CaliLuke/selvedge"
+    selvedge "github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine/selvedge"
+)
+
+app := sv.NewApp(sv.WithDatabase("file:agent.db"))
+eng, err := selvedge.NewWorker(selvedge.Options{App: app})
+if err != nil {
+    return err
+}
+// Supply eng to the runtime, register agents, then seal the runtime.
+// Close eng during process shutdown and check the returned error.
+```
+
+`NewWorker` requires an unstarted App and owns its startup and shutdown. Sealing
+closes registration, waits for activation, and honors the activation context.
+Once accepted, the worker outlives that context. A timed-out start is cleaned up
+before retry; incomplete shutdown prevents reuse. An optional started `Client`
+App stays caller-owned. `NewClient(Options{Client: client})` rejects registration;
+it can start by name, signal, cancel, describe and wait. A shared client keeps old
+handles usable when replacing a worker. Configure observability with `sv.WithHooks`.
+
+The initial adapter has these limits:
+
+- Workflow task queues, start/child run timeouts and retry policies, memo, search
+  attributes and termination are not supported. Workflow/run IDs are the same
+  instance ID; closed IDs cannot be reused. Status never reports pending, paused
+  or timed out.
+- Root-run and tool-await queries require the workflow registered on a worker App.
+  Client mode returns `selvedge.ErrQueriesNeedWorker`; `ProvideToolResults` must
+  run in a worker process. Activity definitions must also be registered locally.
+- Activity execution uses registration `StartToCloseTimeout`, defaulting to two
+  minutes. Retries are disabled. Per-call options, activity queues,
+  schedule-to-start timeouts, heartbeat enforcement and heartbeat recorders are
+  not wired yet. Heartbeat details are not retained. Activity contexts report the
+  claim attempt, a zero heartbeat timeout and no workflow context; retry-based
+  unique attempt guarantees and the replay harness arrive in the next adapter phase.
+
+For local backend development, use `make selvedge-local` with optional
+`SELVEDGE_DIR`. Return to `make selvedge-remote` before committing; it restores the
+pinned public pseudo-version in both root and agent_features modules.
+`make selvedge-status` fails unless both select that remote version.
+
 
 **Temporal worker** — Production-grade durable execution:
 
@@ -6316,7 +6367,7 @@ of the obsolete entry. Deadlines, cancellations, expired scenario contexts and
 untyped errors fail the test; they cannot count as expected failures.
 
 Run `go test -race ./runtime/agent/engine/inmem -run '^TestConformance$'` for the
-in-memory suite, or `make test-engine-conformance` for both adapters. The latter
+in-memory suite, or `make test-engine-conformance` for all three adapters. The latter
 starts a real Temporal dev server using the SDK's CLI download mechanism, has a
 five-minute timeout, and runs under `make itest`. Temporal is skipped with
 `-short`. In-memory conformance records effective options at activity dispatch,
@@ -6325,8 +6376,19 @@ effective heartbeat timeout as context metadata. Queue, schedule-to-start,
 heartbeat enforcement and retry timing remain unsupported; activities run once.
 The shared ID-conflict scenario requires `engine.ErrWorkflowAlreadyStarted`,
 a nil handle and no `engine.ErrWorkflowStartRejected` classification.
-Conformance workers use one-second workflow-task and sticky timeouts
+Temporal conformance workers use one-second workflow-task and sticky timeouts
 to bound restart recovery independently of the old worker taking its next task.
+
+
+Selvedge SQLite conformance also runs under `-short`. Its factory uses a fresh
+file database per scenario, a separate live client, and replacement worker Apps.
+PostgreSQL uses a fresh database per scenario on one test container; run
+`make test-engine-conformance-postgres` with Docker available. This opt-in target
+is not yet part of `make itest`. The initial adapter declares `Durable: true` and
+`Retries: false`: retry scenarios visibly skip. The nine `activity_options` cases
+are executable known gaps that observe zero heartbeat metadata; all other
+scenarios must pass. Recorded option inspection and these gaps are replaced in
+the next adapter phase.
 
 
 ### Session continuation
