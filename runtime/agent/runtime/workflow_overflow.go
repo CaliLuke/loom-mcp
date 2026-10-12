@@ -67,6 +67,8 @@ func decideOverflow(state compaction.State, entries []index.MessageEntry, view i
 		step.GuardUsed = true
 	}
 	switch {
+	case failure.Source == contextmeasure.OverflowNoProgress:
+		d.reason = contextmeasure.OverflowNoProgress
 	case d.unavailableRecovery(failure, view):
 		if failure.Source == contextmeasure.OverflowGuard {
 			step.GuardOff = true
@@ -75,8 +77,6 @@ func decideOverflow(state compaction.State, entries []index.MessageEntry, view i
 		step.GuardOff, d.outcome = true, overflowOutcomeGuardOff
 	case !fact.ViewBearing:
 		d.reason = "not_view_bearing"
-	case failure.Source == contextmeasure.OverflowNoProgress:
-		d.reason = contextmeasure.OverflowNoProgress
 	default:
 		d.decideViewRecovery(state, entries, view, failure, settings, step, rejected)
 	}

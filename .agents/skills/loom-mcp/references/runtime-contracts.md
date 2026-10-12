@@ -1327,13 +1327,24 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - RunInput stamps ContextSettings for every agent, including Threshold and
   GuardMargin. Recall activates on shortened views even without threshold options;
   ContextRecovery.DisableRecall and per-episode refill rules still apply.
-  HistoryPolicy receives the recovered loaded view. Compress planners that build
-  unrelated requests fail not_view_bearing at the observed provider overflow.
-- Protocol 13 records overflow recovery, a confirmation-gated tool turn with
+  HistoryPolicy receives the recovered loaded view. Requests unrelated to that
+  view fail not_view_bearing at the observed provider overflow. Compress alone
+  does not imply immediate failure because its retained tail can match the view.
+  Agents without threshold compaction gain recall_context after the first
+  shortened recovery view, subject to the same disable/finalization rules.
+  RequestFacts.RecoveryToolBytes records only missing, enabled retry definitions;
+  Recover includes those bytes in its estimate and fixed-rate progress check.
+  Previews render within two bytes per token. Estimates retain the sixfold
+  worst-case JSON-escape bound plus framing because measurement charges the
+  encoded string, including control characters. A no_progress source takes precedence over a
+  checkpoint budget shortfall. Find includes retained-tail results under
+  PreviewThrough and ForceClearThrough as well as ClearedThrough.
+- Protocol 14 changes deterministic overflow classification and retry sizing;
+  drain v13 runs before upgrading. It records overflow recovery, a confirmation-gated tool turn with
   a clarification question/answer pair, one resume, lookup and finalization in
-  workflow_protocol_v13.json. The separate workflow_protocol_v13_budget.json
+  workflow_protocol_v14.json. The separate workflow_protocol_v14_budget.json
   records terminal adoption across the active budget without a finalizer call;
-  v5-v12 fixtures reject before effects. Structural templates stay version 5.
+  v5-v13 fixtures reject before effects. Structural templates stay version 5.
   Anthropic/Bedrock Claude recognize older input-length/max_tokens overflow text;
   OpenAI recognizes nested response.failed/error.code mid-stream and Anthropic
   handles status-200 SSE error events. Tests cite documented recorded-body shapes.
@@ -1389,6 +1400,6 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   Summary.Prompt replacement. Resolve scoped overrides once per activity; render
   Previous/Evicted (quoted), Instructions and integer Budget per fold. Preserve
   PromptRef on every call and checkpoint. Legacy Compress stays unrecorded.
-- Three real v13 fixtures cover recovery/confirmation/clarification/lookup,
+- Three real v14 fixtures cover recovery/confirmation/clarification/lookup,
   terminal adoption across the budget, and summary adoption before resume.
-  v12 and older histories reject before effects. Structural templates stay at 5.
+  v13 and older histories reject before effects. Structural templates stay at 5.

@@ -63,28 +63,12 @@ func (r *callReader) find(ctx context.Context, in FindInput) (Response, error) {
 	scan := findScan{selector: selector, position: selector.Position, seeking: selector.Anchor != nil, limit: limit}
 
 	for _, node := range runs {
-		entries, err := r.loadEntries(ctx, node.run, node.scope)
+		complete, err := r.scanRun(ctx, node, &scan)
 		if err != nil {
 			return Response{}, err
 		}
-		for i := len(entries) - 1; i >= 0; i-- {
-			entry := entries[i]
-			if node.run == r.req.RunID && !(entry.ID < r.req.View.TailFrom || entry.Kind == index.ToolResult && entry.ID <= r.req.View.ClearedThrough) {
-				continue
-			}
-			if entry.Kind == index.TypedInput {
-				continue
-			}
-			if scan.seeking && (node.run != selector.Anchor.Run || entry.ID != selector.Anchor.Entry) {
-				continue
-			}
-			complete, err := r.scanEntry(ctx, node, entry, &scan)
-			if err != nil {
-				return Response{}, err
-			}
-			if complete {
-				return findContinuation(scan.response, scan.selector, scan.position)
-			}
+		if complete {
+			return findContinuation(scan.response, scan.selector, scan.position)
 		}
 	}
 	if scan.seeking {
@@ -107,6 +91,42 @@ func (r *callReader) scanRuns(ctx context.Context) ([]recordNode, error) {
 		}
 	}
 	return runs, nil
+}
+
+// scanRun scans eligible entries newest first, seeking the continuation anchor.
+func (r *callReader) scanRun(ctx context.Context, node recordNode, scan *findScan) (bool, error) {
+	entries, err := r.loadEntries(ctx, node.run, node.scope)
+	if err != nil {
+		return false, err
+	}
+	for i := len(entries) - 1; i >= 0; i-- {
+		entry := entries[i]
+		if !r.findEligible(node, entry) {
+			continue
+		}
+		if scan.seeking && (node.run != scan.selector.Anchor.Run || entry.ID != scan.selector.Anchor.Entry) {
+			continue
+		}
+		complete, err := r.scanEntry(ctx, node, entry, scan)
+		if err != nil {
+			return false, err
+		}
+		if complete {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// findEligible excludes typed inputs and limits current-run entries to hidden content.
+func (r *callReader) findEligible(node recordNode, entry index.MessageEntry) bool {
+	if entry.Kind == index.TypedInput {
+		return false
+	}
+	if node.run != r.req.RunID {
+		return true
+	}
+	return entry.ID < r.req.View.TailFrom || entry.Kind == index.ToolResult && entry.ID <= max(r.req.View.ClearedThrough, r.req.View.PreviewThrough, r.req.View.ForceClearThrough)
 }
 
 // scanEntry resumes at the anchored chunk before scanning the rest of an entry.

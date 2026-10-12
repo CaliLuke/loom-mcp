@@ -69,7 +69,11 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   recorded-history replay test. Drain running workflows before deploying the
   new version; mismatched and unstamped inputs fail before workflow effects.
 
-- Current workflow protocol is 13. Every agent observes adopted call facts,
+- Protocol 14 changes deterministic overflow classification and retry sizing.
+  Drain v13 runs before deployment; selected v13 histories replaying successfully
+  does not establish compatibility for all in-flight decisions.
+
+- Current workflow protocol is 14. Every agent observes adopted call facts,
   sends sorted Models and runs the advisory guard, bounded overflow recovery and
   recall advertising. Threshold compaction stays opt-in. The existing
   run.ContextRecovery adds GuardMargin (zero=10%) beside DisableRecall; RunInput
@@ -81,10 +85,19 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   the observed provider overflow with its typed byte shortfall, emits
   context_budget_too_small and spends no retry. Views carry monotone
   PreviewThrough/ForceClearThrough and shared preview limits, including forced
-  Keep placeholders. The real v13 history covers recovery, a confirmation-gated
+  Keep placeholders. Recovery records newly added recall definition bytes in
+  RequestFacts.RecoveryToolBytes, includes them in retry sizing and the fixed-rate
+  progress check. Previews render within two bytes per token; estimates retain
+  the sixfold worst-case JSON-escape bound plus result framing. A no_progress
+  source takes precedence over checkpoint shortfalls.
+  Recall find includes retained-tail results under preview/forced-clear watermarks.
+  Agents without threshold compaction gain recall_context after the first
+  shortened recovery view unless recall/tools are disabled; finalization omits it.
+  Unrelated requests fail not_view_bearing; Compress alone does not imply failure.
+  The real v14 history covers recovery, a confirmation-gated
   tool turn with a recorded clarification question/answer pair, one resume, lookup
-  and finalization. A second v13 budget history covers terminal adoption across
-  the active budget without a finalizer call; v5-v12 reject before effects. A third v13 history records summary adoption before a single post-await resume.
+  and finalization. A second v14 budget history covers terminal adoption across
+  the active budget without a finalizer call; v5-v13 reject before effects. A third v14 history records summary adoption before a single post-await resume.
   K15 adds explicit ContextModel configuration and synchronous summary folding at
   threshold eviction. Stale outputs adopt keys without changing the view; three
   non-stale rejections disable summaries. Summary adoption is a canonical record

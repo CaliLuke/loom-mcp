@@ -198,7 +198,14 @@ func recoverClosed(r *Recovery, state State, entries []index.MessageEntry, view 
 // enough conservatively charges every checkpoint at its recomputed byte cap.
 func (m recoveryMeasure) enough(r *Recovery) bool {
 	text, nontext := viewSizes(State{}, m.entries, r.View)
-	r.After = contextmeasure.Estimate(m.rate, max(0, m.failed.TextBytes-m.failed.ViewTextBytes), text, add(max(0, m.failed.NonText-m.failed.ViewNonText), nontext))
+	fixed := add(max(0, m.failed.TextBytes-m.failed.ViewTextBytes), m.failed.RecoveryToolBytes)
+	parts := add(max(0, m.failed.NonText-m.failed.ViewNonText), nontext)
+	r.After = contextmeasure.Estimate(m.rate, fixed, text, parts)
+	// The retry must also pass the fixed-rate provider progress check, even
+	// when new tool definitions outweigh a reduction in view bytes.
+	if contextmeasure.Estimate(contextmeasure.Rate{}, fixed, text, parts) >= contextmeasure.Estimate(contextmeasure.Rate{}, 0, m.failed.TextBytes, m.failed.NonText) {
+		return false
+	}
 	if m.budget > 0 && m.calibrated {
 		return above(m.budget, r.After, contextmeasure.Rate{Tokens: m.target.Bytes, Bytes: m.target.Tokens})
 	}

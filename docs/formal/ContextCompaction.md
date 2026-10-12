@@ -314,8 +314,8 @@ transaction (4.16; fault `advance_two_writes`).
   `TestSummaryZombieAttemptAbandoned`, `TestSummaryAdoptionRequiresRecordEvent`,
   `TestWorkflowSummaryAdoption` and `TestSummarizeActivityFailurePolicy` cover
   crash classification, late attempts, canonical adoption and fresh retry keys.
-  The three protocol-13 histories in `agent_features` exercise real Temporal
-  replay; protocol 12 is rejected before effects.
+  The three protocol-14 histories in `agent_features` exercise real Temporal
+  replay; protocol 13 is rejected before effects.
 - Store writes succeed when they happen; a failed write is a crash at that
   point.
 

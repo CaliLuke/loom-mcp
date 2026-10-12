@@ -26,19 +26,28 @@ func prepareRecall(base *workflowPlanInput, input *PlanActivityInput) {
 	base.recallAdvertised = base.recallAdvertised || shortened
 	base.recallAvailable = false
 	input.ExtraTools = nil
-	if input.ToolsDisabled || base.recovery.DisableRecall || !base.recallAdvertised || input.Finalize != nil || (input.Recovery != nil && input.Recovery.DisableTools) {
+	if !base.recallAdvertised || !recallEnabled(input, base.recovery.DisableRecall) {
 		return
 	}
+	input.ExtraTools = []*model.ToolDefinition{recallDefinition()}
+	if input.ToolPolicyActive && !slices.Contains(input.AllowedTools, tools.RecallContext) {
+		input.AllowedTools = append(input.AllowedTools, tools.RecallContext)
+	}
+	base.recallAvailable = true
+}
+
+// recallEnabled is shared by advertisement and prospective recovery sizing.
+func recallEnabled(input *PlanActivityInput, disabled bool) bool {
+	return !disabled && !input.ToolsDisabled && input.Finalize == nil && (input.Recovery == nil || !input.Recovery.DisableTools)
+}
+
+func recallDefinition() *model.ToolDefinition {
 	spec := recall.Spec()
 	var schema any
 	if err := json.Unmarshal(spec.Payload.Schema, &schema); err != nil {
 		panic(err)
 	}
-	input.ExtraTools = []*model.ToolDefinition{{Name: spec.Name.String(), Description: spec.Description, InputSchema: schema}}
-	if input.ToolPolicyActive && !slices.Contains(input.AllowedTools, tools.RecallContext) {
-		input.AllowedTools = append(input.AllowedTools, tools.RecallContext)
-	}
-	base.recallAvailable = true
+	return &model.ToolDefinition{Name: spec.Name.String(), Description: spec.Description, InputSchema: schema}
 }
 
 // chargeRecallCalls runs before timeout grouping, preserving planner call order.

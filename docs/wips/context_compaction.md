@@ -729,6 +729,7 @@ type RequestFacts struct {
     FixedBytes    int     // system prompt and tool definitions
     NonText       int     // estimated tokens of image and document parts (4.10)
     Outcome       RequestOutcome // ok, overflow, pre-send rejected, other error
+    RecoveryToolBytes int `json:"recovery_tool_bytes,omitzero"` // tool definitions added only after view shortening; excluded from failed TextBytes/FixedBytes
 }
 ```
 

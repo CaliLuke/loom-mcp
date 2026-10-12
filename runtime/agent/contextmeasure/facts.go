@@ -26,6 +26,9 @@ type RequestFacts struct {
 	NonText       int              `json:"non_text"`
 	CountLatency  time.Duration    `json:"count_latency"`
 	Outcome       RequestOutcome   `json:"outcome"`
+	// RecoveryToolBytes measures definitions added only after shortening the view.
+	// It is excluded from the failed request's TextBytes and FixedBytes.
+	RecoveryToolBytes int `json:"recovery_tool_bytes,omitzero"`
 }
 
 // ContextOverflow identifies the durable call that stopped a planner attempt.

@@ -18,7 +18,7 @@ import (
 
 const (
 	historyTimeBudget         = 10 * time.Second
-	workflowBudgetHistoryFile = "testdata/workflow_protocol_v13_budget.json"
+	workflowBudgetHistoryFile = "testdata/workflow_protocol_v14_budget.json"
 )
 
 // recordBudgetWorkflowHistory uses the existing external-await scenario to

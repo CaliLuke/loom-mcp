@@ -44,6 +44,7 @@ type (
 		models       []api.ModelContext
 		guardMargin  contextmeasure.Rate
 		triggerAt    contextmeasure.Rate
+		retryTools   []*model.ToolDefinition
 		marked       *contextmeasure.ContextOverflow
 	}
 
@@ -92,6 +93,9 @@ func (r *CallRecording) configureOverflow(input *PlanActivityInput) {
 	r.models = input.Models
 	r.guardMargin = input.ContextSettings.GuardMargin
 	r.triggerAt = input.ContextSettings.TriggerAt
+	if recallEnabled(input, input.ContextSettings.DisableRecall) {
+		r.retryTools = []*model.ToolDefinition{recallDefinition()}
+	}
 }
 
 func (c *callRecordingClient) Complete(ctx context.Context, req *model.Request) (*model.Response, error) {
@@ -316,6 +320,12 @@ func (r *CallRecording) measureRequest(ctx context.Context, req *model.Request, 
 	facts, err := contextmeasure.Measure(req, limits, r.view)
 	if err != nil {
 		return contextmeasure.RequestFacts{}, limits, fmt.Errorf("measure model request: %w", err)
+	}
+	if facts.ViewBearing {
+		facts.RecoveryToolBytes, err = recoveryToolBytes(req, r.retryTools)
+		if err != nil {
+			return contextmeasure.RequestFacts{}, limits, fmt.Errorf("measure recovery tools: %w", err)
+		}
 	}
 	facts.Call = key
 	facts.Model = firstNonEmpty(resolved, req.Model, modelID)

@@ -183,7 +183,7 @@ Typed consumers can call
 eligible bytes and decode them with the generated result codec. Empty or missing
 hashes fail. Tool activities return references; terminal completion decoding runs in the finish activity.
 
-### Transcript index and planner views (protocol 13)
+### Transcript index and planner views (protocol 14)
 
 The workflow keeps immutable `index.MessageEntry` values and a committed
 `IndexHead`, rather than accumulated messages, tool outputs, typed answers, or a
@@ -234,8 +234,9 @@ Anthropic and Bedrock view grammars; views without checkpoints retain the existi
 resume-time Bedrock validation. Successful activity outputs may return `ViewUpdate`;
 output-validation recovery outputs never adopt it. Protocol 7 introduced these view updates, recorded
 request facts and model rates, entry size metadata and stamped run settings.
-The current protocol is 13 (summary scheduling and adoption, including resume
-budget enforcement). Drain older workflows before upgrading; v5–v12
+The current protocol is 14 (overflow source classification and retry sizing that
+includes newly advertised recall tools). These change deterministic workflow
+decisions. Drain older workflows before upgrading; v5–v13
 fixtures retain mismatch rejection before effects. Structural templates remain version 5.
 
 ### Opt-in context compaction
@@ -393,17 +394,30 @@ both watermarks and the preview budget; cold and warm loads produce identical
 bytes. The stored entries and full results remain available to recall.
 
 Recovery estimates the whole retried request: outside-view text and non-text,
-retained entries, and `checkpoint.MaxBytes` under the recomputed budget. With
+newly added recall tool definitions, retained entries, and `checkpoint.MaxBytes`
+under the recomputed budget. Recorded `RecoveryToolBytes` measures only definitions
+absent from the failed request and enabled on retry; it does not change the failed
+request's measured size. Previews render within two bytes per preview token;
+estimates allow six JSON-encoded bytes per rendered byte plus result framing.
+This bounds JSON escaping, including control characters encoded as `\u00XX`.
+With
 known limits and a calibrated rate the target is strictly below `B × TriggerAt`;
 otherwise it halves the failed request's view text bytes. The workflow immediately
 reschedules without a threshold transformation, append or summary between recovery
 and retry. A HistoryPolicy runs on the loaded recovered view; a request unrelated
-to that view cannot be recovered.
+to that view cannot be recovered (`not_view_bearing`). Using `Compress` alone does
+not imply immediate failure: it retains recent messages that can still match the
+loaded view. After the first recovery shortens a view, agents gain `recall_context`
+even without threshold compaction, unless recall or tools are disabled. Recall is
+omitted during finalization.
 
 Every call to a model in that step must be smaller than the smallest whole-request
 size that model's provider rejected. Progress uses the fixed default rate plus
 non-text and reserve, so calibration and call ordinal cannot change the baseline.
-A failed check names both call keys and the planner. Provider overflows permit
+A failed check names both call keys and the planner. Recovery checks progress with
+the added tool definitions included; a `no_progress` source retains that failure
+classification even when its facts also imply a checkpoint budget shortfall.
+Provider overflows permit
 two recoveries; the third fails. `ContextOverflowError` preserves facts and call
 keys and unwraps distinct `ErrContextOverflowNoProgress`,
 `ErrContextBudgetExceeded` (minimal view), or `ErrContextOverflowBudget` sentinels.
@@ -1352,7 +1366,7 @@ when preserving the evidence.
 | `Step` | `kind`: `model`, `tool`, `await`, `answer` or `event`; `step`: planner schedule number; optional `entry_id`: index entry identity; `verified`: evidence trust; exactly one populated `model`, `tool`, `event` or `answer` member. |
 | `ModelStep` | `key`: `RunID`, `Seq`, `Attempt`; `class`: `adopted`, `abandoned` or `incomplete`; `activity`: `planner` or `summarize`; `step`: recorded planner number; `model`, `model_id`: provider and registration identity; `usage`: token counts; `latency`: duration; optional `error`: `kind`, `message`; optional `facts`: request measurements; `chosen`: tool calls; `system_hash`, `tools_hash`, `request_digest`: full request provenance; `prompts`: prompt refs. |
 | `TokenUsage` | `Model`, `ModelClass`: attribution; `InputTokens`, `OutputTokens`, `TotalTokens`, `CacheReadTokens`, `CacheWriteTokens`: disjoint normalized token counts. |
-| `RequestFacts` | `call`: call key; `model`: resolved identity; `context_window`, `output_reserve`, `input_tokens`, `text_bytes`, `fixed_bytes`, `non_text`: measurements; `view_bearing`: transcript-view inclusion; `view_text_bytes`, `view_non_text`: the matched view's text bytes and non-text parts (optional); `count_latency`: counting duration; `outcome`: measurement outcome. |
+| `RequestFacts` | `call`: call key; `model`: resolved identity; `context_window`, `output_reserve`, `input_tokens`, `text_bytes`, `fixed_bytes`, `non_text`: measurements; `view_bearing`: transcript-view inclusion; `view_text_bytes`, `view_non_text`: the matched view's text bytes and non-text parts (optional); `recovery_tool_bytes`: tool definition bytes added only after view shortening, excluded from the failed request's `text_bytes` and `fixed_bytes` (optional); `count_latency`: counting duration; `outcome`: measurement outcome. |
 | Chosen tool call / prompt ref | Tool call: `Name`, `ID`, `Payload` (raw JSON). Prompt ref: `ID`, `Version`. |
 | `ToolStep` | `name`, `tool_call_id`, optional `parent_tool_call_id`: call identity; `arguments`: original JSON before injection; `result`: complete JSON or null if absent; optional `bounds`, `error`: stored metadata; `duration`: execution duration; `children`: linked trajectories in canonical link order. |
 | Bounds / structured tool error | Bounds: `Returned`, nullable `Total`, `Truncated`, nullable `NextCursor`, `RefinementHint`. Error: `Message`, optional `kind`, nullable recursive `Cause`. |
@@ -4432,6 +4446,11 @@ snapshot, in text bytes and non-text tokens respectively. Each matching request
 occurrence counts once; duplicate snapshot entries do not multiply the counts.
 Both fields use `omitzero`; older records without them decode as zero.
 
+`RecoveryToolBytes` (`recovery_tool_bytes`) measures tool definition bytes added
+only after view shortening. These bytes are excluded from the failed request's
+`TextBytes` and `FixedBytes`. The field uses `omitzero`, so older records without
+it decode as zero.
+
 Every terminal call has facts: unary success/failure, stream setup failure,
 `Finalize`, `Close`, and `stream_abandoned`. Only started records have no facts.
 `InputTokens` sums input, cache reads and cache writes; missing usage gives zero.
@@ -4700,17 +4719,17 @@ external `Client`, also supply `ClientOptions` with that client's converter
 external client whose converter configuration was not supplied.
 
 The generated fixture keeps a completed history under
-`integration_tests/fixtures/agent_features/testdata/workflow_protocol_v13.json`.
+`integration_tests/fixtures/agent_features/testdata/workflow_protocol_v14.json`.
 The scrubbed recording includes overflow recovery, a confirmation-gated tool turn
 with clarification, its recorded assistant question and user answer, one resume
 that selects child validation and context lookup, seed/result/question content
 batches, planner-step commits and terminal finish activity. A second recording,
-`workflow_protocol_v13_budget.json`, exercises an external-await resume whose
+`workflow_protocol_v14_budget.json`, exercises an external-await resume whose
 terminal answer arrives within budget, but whose adoption crosses the budget.
-It completes without a finalizer call. `workflow_protocol_v13_summary.json` records
+It completes without a finalizer call. `workflow_protocol_v14_summary.json` records
 a validated summary and its canonical adoption before the single post-await resume.
-The unchanged protocol 5–12 fixtures verify rejection before workflow effects;
-protocol versions must match, so workers running protocol 13 cannot replay them
+The unchanged protocol 5–13 fixtures verify rejection before workflow effects;
+protocol versions must match, so workers running protocol 14 cannot replay them
 as successful runs. Run
 `go test -C integration_tests/fixtures/agent_features ./... -run '^TestGeneratedFeatureWorkflowReplay$'`
 for offline replay. To re-record it against the pinned Temporal development
@@ -5759,12 +5778,14 @@ recall_unauthorized. Images/documents return recall_unsupported_part with
 format/bytes and available text until K22.
 
 Read pages use max(512, ProtectRecentToolTokens) bytes and snap offsets to UTF-8
-boundaries. Follow next_offset. Find scans hidden eligible entries and cleared
-results, current run then From runs, newest first, up to 8 MB or ten matches;
-each match contains id, run, part (`result` or `arguments`), original byte offset
-and a snippet of at most 160 bytes. Read using the returned id, run, part and
-offset so argument matches retrieve arguments, while message and result matches
-retrieve their original text.
+boundaries. Follow next_offset. Find scans hidden eligible entries and results
+covered by `ClearedThrough`, `PreviewThrough` or `ForceClearThrough`, including
+recovery-projected results in the retained tail. It scans the current run then
+From runs, newest first, up to 8 MB or ten matches; each match contains id, run,
+part (`result` or `arguments`), original byte offset and a snippet of at most 160
+bytes. Read using the returned id, run, part and offset so argument matches
+retrieve arguments, while message and result matches retrieve their original
+text.
 
 Follow the same literal selector with its cursor. Find cursors anchor to a run,
 immutable entry, text/call chunk and byte offset within that chunk. Compaction
@@ -5784,9 +5805,9 @@ Each invocation records one keyed context_recalled event with kind, outcome
 and step. Exhaustion emits recall_budget_exhausted once per allowance episode,
 reset by refill. RunRecord rebuilds and validates recorded charges and settings.
 Workflow protocol 9 adds overflow recovery to these lookup contracts. The recorded
-v13 fixture exercises bounded recovery, lookup and a single resume after
+v14 fixture exercises bounded recovery, lookup and a single resume after
 confirmation and clarification, including the recorded question/answer pair.
-The v13 budget fixture covers terminal adoption across the active budget without a finalizer call; v5–v12 fail
+The v14 budget fixture covers terminal adoption across the active budget without a finalizer call; v5–v13 fail
 before effects.
 Structural templates remain version 5.
 

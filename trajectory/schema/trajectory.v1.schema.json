@@ -151,6 +151,9 @@
         "fixed_bytes": {
           "type": "integer"
         },
+        "recovery_tool_bytes": {
+          "type": "integer"
+        },
         "non_text": {
           "type": "integer"
         },

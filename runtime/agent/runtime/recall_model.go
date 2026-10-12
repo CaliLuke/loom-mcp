@@ -1,12 +1,27 @@
 package runtime
 
 import (
+	"slices"
 	"strings"
 
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextmeasure"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/recall"
 )
+
+// recoveryToolBytes measures only definitions missing from the failed request,
+// using the same insertion rules and measurement as the retried request.
+func recoveryToolBytes(req *model.Request, defs []*model.ToolDefinition) (int, error) {
+	retry := &model.Request{Tools: slices.Clone(req.Tools), ToolChoice: req.ToolChoice}
+	applyExtraTools(retry, defs)
+	added := retry.Tools[len(req.Tools):]
+	if len(added) == 0 {
+		return 0, nil
+	}
+	facts, err := contextmeasure.Measure(&model.Request{Tools: added}, model.ContextLimits{}, nil)
+	return facts.TextBytes, err
+}
 
 func applyExtraTools(req *model.Request, defs []*model.ToolDefinition) {
 	if req == nil || req.ToolChoice != nil && req.ToolChoice.Mode == model.ToolChoiceModeNone {

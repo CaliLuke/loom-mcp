@@ -22,7 +22,7 @@ import (
 
 type summaryHistoryPlanner struct{}
 
-const workflowSummaryHistoryFile = "testdata/workflow_protocol_v13_summary.json"
+const workflowSummaryHistoryFile = "testdata/workflow_protocol_v14_summary.json"
 const historySummaryText = "# Goal\nRemember the task [message 1].\n# Decisions\nUse evidence.\n# Facts\nHistory is recorded.\n# Progress\nRead it.\n# Open questions\nNone.\n# Next\nFinish."
 
 func recordSummaryWorkflowHistory(t *testing.T, c client.Client) {
