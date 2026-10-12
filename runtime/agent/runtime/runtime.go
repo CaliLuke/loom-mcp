@@ -133,6 +133,7 @@ type (
 		// parsed tool payload schemas cached by tool name for hint building
 		toolSchemas       map[string]map[string]any
 		models            map[string]model.Client
+		modelHook         func(string, model.Client) model.Client
 		contextLimits     map[string]model.ContextLimits
 		contextCompaction map[agent.Ident]ContextCompaction
 		contextRecovery   map[agent.Ident]ContextRecovery
@@ -206,6 +207,7 @@ type (
 	// for production deployments. Noop implementations are substituted for nil Logger,
 	// Metrics, and Tracer. A default in-memory event bus is created if Hooks is nil.
 	Options struct {
+		modelHook func(string, model.Client) model.Client
 		// ContextLimits overrides adapter limits by resolved model, with registered-ID fallback.
 		// Positive fields win; negative values or max output above the window panic.
 		ContextLimits map[string]model.ContextLimits

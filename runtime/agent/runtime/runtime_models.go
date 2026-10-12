@@ -109,8 +109,9 @@ func (r *Runtime) RegisterModel(id string, client model.Client) error {
 
 // RegisterModelClient registers client under id, replacing any existing client
 // with that identifier, and returns the exact stored client, including runtime
-// context-limit decoration. Storage and retrieval happen under one registry lock;
-// the returned value is not affected by a later registration replacing the entry.
+// context-limit decoration and any harness-owned capture gate. Storage and retrieval
+// happen under one registry lock; the returned value is not affected by a later
+// registration replacing the entry.
 //
 // An empty id or nil client returns an error. After Seal or the first submitted
 // run closes registration, RegisterModelClient returns ErrRegistrationClosed,
@@ -134,6 +135,12 @@ func (r *Runtime) RegisterModelClient(id string, client model.Client) (model.Cli
 		return nil, errors.New("model client is required")
 	}
 	registered := r.withContextLimits(id, client)
+	if r.modelHook != nil {
+		registered = r.modelHook(id, registered)
+		if registered == nil {
+			return nil, errors.New("model registration hook returned nil client")
+		}
+	}
 	r.models[id] = registered
 	return registered, nil
 }

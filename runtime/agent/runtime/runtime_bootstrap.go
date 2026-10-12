@@ -221,6 +221,7 @@ func newFromOptions(opts Options) *Runtime {
 		toolSpecs:            make(map[tools.Ident]tools.ToolSpec),
 		toolSchemas:          make(map[string]map[string]any),
 		models:               make(map[string]model.Client),
+		modelHook:            opts.modelHook,
 		contextLimits:        opts.ContextLimits,
 		recallAuthorizer:     opts.RecallAuthorizer,
 		runHandles:           make(map[string]engine.WorkflowHandle),

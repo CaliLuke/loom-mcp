@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/CaliLuke/loom-mcp/v2/internal/agenttesthook"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
@@ -270,13 +272,14 @@ func newHarness(ctx context.Context, register Register, beforeSeal func(*runtime
 	}
 	h := &Harness{
 		defaultRunOptions: slices.Clone(options.defaultRunOptions), scripts: options.scripts, timeout: options.timeout, responder: options.responder, provider: options.provider,
-		runs: make(map[string]*harnessRun), models: make(map[string]model.Client), capturing: make(map[string]*captureState),
+		runs: make(map[string]*harnessRun), models: make(map[string]model.Client), gates: make(map[string]model.Client), capturing: make(map[string]*captureState),
 		stubs: stubTable{
 			entries: make(map[tools.Ident]stubEntry), counts: make(map[tools.Ident]int),
 			passthrough: make(map[tools.Ident]bool), passthroughAll: options.passthroughAll,
 		},
 	}
 	probe.Interceptors = append([]runtime.Interceptor{runtime.ToolInterceptorFuncs{BeforeToolFunc: h.beforeStub}}, probe.Interceptors...)
+	agenttesthook.SetModelWrapper(&probe, h.gateModel)
 	rt := runtime.New(func(options *runtime.Options) {
 		*options = probe
 	})
@@ -287,13 +290,16 @@ func newHarness(ctx context.Context, register Register, beforeSeal func(*runtime
 	if err := h.registerModels(options); err != nil {
 		return nil, err
 	}
+	h.mu.Lock()
+	expectedGates := maps.Clone(h.gates)
+	h.mu.Unlock()
 	if beforeSeal != nil {
 		beforeSeal(rt)
 	}
 	if err := rt.Seal(ctx); err != nil {
 		return nil, fmt.Errorf("agenttest: seal registration after installing capture gates: %w", err)
 	}
-	if err := h.verifyGates(); err != nil {
+	if err := h.verifyGates(expectedGates); err != nil {
 		return nil, err
 	}
 	h.eventsUnverified = rt.HasEventInterceptors()
@@ -392,6 +398,9 @@ func (h *Harness) run(ctx context.Context, id agent.Ident, sessionID string, inp
 }
 
 func (h *Harness) runCapture(ctx context.Context, id agent.Ident, sessionID string, input Input, capture *captureState, opts ...RunOption) (*Result, error) {
+	if capture != nil {
+		ctx = context.WithValue(ctx, captureContextKey{harness: h}, capture)
+	}
 	if err := h.stubDiagnostics(false); err != nil {
 		return nil, err
 	}
@@ -489,7 +498,7 @@ func (h *Harness) startRun(ctx context.Context, client runtime.AgentClient, sess
 }
 
 // registerModels checks explicit live declarations before scripted overrides and
-// installs the capture layer once, before construction closes registration.
+// registers overrides through the same capture hook as application clients.
 func (h *Harness) registerModels(options harnessOptions) error {
 	for _, id := range options.live {
 		if _, ok := h.rt.ModelClient(id); !ok {
@@ -501,7 +510,7 @@ func (h *Harness) registerModels(options harnessOptions) error {
 			return fmt.Errorf("agenttest: model %q: %w", id, err)
 		}
 	}
-	return h.installGates()
+	return nil
 }
 
 // prepareRunOptions applies defaults before callers and rejects every RunID override.

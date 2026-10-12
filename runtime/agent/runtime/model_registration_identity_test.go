@@ -28,3 +28,22 @@ func TestRegisterModelClientReturnsInstalledIdentity(t *testing.T) {
 	require.ErrorIs(t, err, ErrRegistrationClosed)
 	assert.Nil(t, rejected)
 }
+
+func TestOrdinaryRuntimeModelRegistrationIdentity(t *testing.T) {
+	for _, returned := range []bool{false, true} {
+		t.Run(map[bool]string{false: "RegisterModel", true: "RegisterModelClient"}[returned], func(t *testing.T) {
+			rt := New()
+			live := &contractModelClient{}
+			if returned {
+				installed, err := rt.RegisterModelClient("model", live)
+				require.NoError(t, err)
+				assert.Same(t, live, installed)
+			} else {
+				require.NoError(t, rt.RegisterModel("model", live))
+			}
+			current, ok := rt.ModelClient("model")
+			require.True(t, ok)
+			assert.Same(t, live, current)
+		})
+	}
+}

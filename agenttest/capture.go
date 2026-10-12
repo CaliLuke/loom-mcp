@@ -11,7 +11,11 @@ import (
 )
 
 type captureState struct {
-	hits int
+	calls map[model.CallInfo]struct{}
+}
+
+type captureContextKey struct {
+	harness *Harness
 }
 
 type gate struct {
@@ -42,7 +46,7 @@ func (h *Harness) CaptureFirstRequest(ctx context.Context, id agent.Ident, input
 	if err != nil {
 		return Request{}, err
 	}
-	state := &captureState{}
+	state := &captureState{calls: make(map[model.CallInfo]struct{})}
 	result, err := h.runCapture(ctx, id, sessionID, input, state, opts...)
 	if err != nil {
 		return Request{}, err
@@ -57,7 +61,7 @@ func (h *Harness) CaptureFirstRequest(ctx context.Context, id agent.Ident, input
 		return Request{}, ErrCaptureNoModelCall
 	}
 	h.mu.Lock()
-	hits := state.hits
+	hits := len(state.calls)
 	h.mu.Unlock()
 	if result.RunErr == nil || hits != 1 || len(calls) != 1 {
 		return Request{}, fmt.Errorf("%w (gate hits=%d, recorded calls=%d, run failed=%t)", ErrCaptureHandled, hits, len(calls), result.RunErr != nil)
@@ -108,46 +112,42 @@ func captureGate(inner model.Client, h *Harness) model.Client {
 	return model.WithCapabilities(base, counter, info)
 }
 
-// installGates retains direct clients and preserves their optional capabilities.
-func (h *Harness) installGates() error {
-	h.gates = make(map[string]model.Client)
-	for _, id := range h.rt.ModelIDs() {
-		inner, ok := h.rt.ModelClient(id)
-		if !ok {
-			return fmt.Errorf("agenttest: registered model %q disappeared", id)
-		}
-		h.models[id] = inner
-		wrapped := captureGate(inner, h)
-		installed, err := h.rt.RegisterModelClient(id, wrapped)
-		if err != nil {
-			return fmt.Errorf("agenttest: gate model %q: %w", id, err)
-		}
-		h.gates[id] = installed
-	}
-	return nil
+// gateModel runs under the runtime registry lock, before clients are exposed.
+func (h *Harness) gateModel(id string, inner model.Client) model.Client {
+	wrapped := captureGate(inner, h)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.models[id] = inner
+	h.gates[id] = wrapped
+	return wrapped
 }
 
 // verifyGates must run after Seal succeeds, when registry identities are immutable.
-func (h *Harness) verifyGates() error {
+func (h *Harness) verifyGates(expected map[string]model.Client) error {
 	for _, id := range h.rt.ModelIDs() {
 		client, ok := h.rt.ModelClient(id)
-		if !ok || client != h.gates[id] {
+		if !ok || client != expected[id] {
 			return fmt.Errorf("agenttest: model %q capture gate changed during registration", id)
 		}
 	}
 	return nil
 }
 
+// capture uses the harness run context for retained clients without CallInfo.
+// Interceptor side calls share their outer call identity and count only once.
 func (g gate) capture(ctx context.Context) bool {
-	info, ok := model.CallInfoFrom(ctx)
-	if !ok {
-		return false
-	}
+	info, hasInfo := model.CallInfoFrom(ctx)
 	g.harness.mu.Lock()
 	defer g.harness.mu.Unlock()
-	state, ok := g.harness.capturing[info.RootRunID]
-	if ok {
-		state.hits++
+	state, _ := ctx.Value(captureContextKey{harness: g.harness}).(*captureState)
+	if state == nil && hasInfo {
+		state = g.harness.capturing[info.RootRunID]
 	}
-	return ok
+	if state == nil {
+		return false
+	}
+	if hasInfo {
+		state.calls[info] = struct{}{}
+	}
+	return true
 }

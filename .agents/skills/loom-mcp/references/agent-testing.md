@@ -20,10 +20,10 @@ and run with `go -C integration_tests/fixtures/assistant ...`.
   with a model client and Decide, without constructing a harness.
 
 Register all models, agents and toolsets inside `register`. Harness construction
-installs capture gates, seals runtime registration and verifies every stored
-client equals its installed gate. Concurrent registration that replaces or
-bypasses a gate fails construction. Later registrations,
-including model replacements, return `runtime.ErrRegistrationClosed`.
+installs its model registration hook before calling register, freezes gate
+identities, seals registration and verifies every stored client against the
+snapshot. Registration changes after the snapshot fail construction. Later
+registrations, including model replacements, return `runtime.ErrRegistrationClosed`.
 `LOOM_LIVE_MODEL` gates only `LiveModel` and `SkipUnlessLive`. Unset or `0` disables,
 `1` enables and any other value fails. LiveModel creates no provider: the
 application registers the named client. Undeclared application clients are not
@@ -98,13 +98,22 @@ func guideSelection(t testing.TB, register agenttest.Register) {
 }
 ```
 
-Capture gates only model calls resolved from the runtime registry at call time,
-including planner context, summaries and child agents. A directly held application
-client is not gated. This includes clients obtained from `rt.ModelClient` inside
-register before gates are installed. Register callbacks and hooks (interceptors,
-planners, executors and adapters) must not retain those references; resolve clients
-through the registry at call time. Gating at registration time remains follow-up
-FA2; FA1 documents this limit.
+Capture gates both registration APIs before the register callback runs. Clients
+retained from rt.ModelClient or RegisterModelClient stay gated in interceptors,
+planners, executors and adapters using the supplied run context. Runtime initializes
+a setter for private Options.modelHook through internal/agenttesthook; agenttest
+sets it before construction. Applications cannot install a wrapper. The hook runs
+after context-limit decoration under the registry lock and must return a non-nil
+client without calling runtime methods. Ordinary runtimes have no hook. Gate
+identities are frozen before Seal and verified afterward.
+
+Interceptor side calls and their outer recorded call share one capture identity.
+Direct runtime clients do not record requests: stopping before a recorded call
+returns ErrCaptureNoModelCall without provider execution. Use planner-context
+clients for recorded requests. Original application-held clients (even if also
+registered), unregistered clients and h.Model clients for Decide remain outside
+the gate. Preserve supplied contexts; detached contexts without run or call
+identity cannot be associated with capture.
 
 Capture rejects the harness when any registered agent has a non-nil History
 policy, including Compress, KeepRecentTurns and custom policies. It returns

@@ -702,10 +702,14 @@ rt := runtime.New(
 
 `RegisterModelClient(id, client)` has the same validation and sealing rules as
 `RegisterModel`, but atomically returns the exact stored client, including runtime
-context-limit decoration. Bootstrap code can retain that value to verify its
-registration after sealing without a separate, racy lookup. `RegisterModel`
-remains the error-only convenience method. Empty IDs and nil clients are rejected;
+context-limit decoration and any harness-owned capture gate. Bootstrap code can
+retain that value to verify its registration after sealing without a separate,
+racy lookup. `RegisterModel` remains the error-only convenience method. Empty IDs and nil clients are rejected;
 errors return a nil client and leave registration unchanged.
+
+The `agenttest` harness wraps registrations through a module-internal hook before
+registration or `ModelClient` exposes them. Applications cannot configure this
+hook; ordinary runtimes preserve their registered clients.
 
 ### Seal semantics
 
@@ -1489,27 +1493,33 @@ default, and the harness has no Temporal mode.
 
 `h.CaptureFirstRequest(ctx, agent, input, opts...)` returns an immutable
 `agenttest.Request` for the first fully decorated model call, with its registered
-`ModelID` and `Source` call key. Capture gates only model calls the runtime
-resolves from its registry at call time, including calls through planner context,
-summaries, and child agents. For those calls, the gate returns
+`ModelID` and `Source` call key. The harness gates every model at registration,
+including clients retained from `rt.ModelClient` or `RegisterModelClient` inside
+the register callback. During capture, the gate returns
 `ErrCaptureSentinel` before the underlying client runs. The planner must
 propagate that error: swallowing or
 retrying it returns `ErrCaptureHandled`, and no model call returns
 `ErrCaptureNoModelCall`. A child-first model call produces a child-run diagnostic;
 capture that child agent directly. Tools scheduled before the model call follow the normal
 strict stub rules. The capture can run concurrently with ordinary harness runs.
-Harness construction installs capture gates, seals runtime registration, and then
-checks every registered client against the exact installed gate. Construction
-fails if concurrent registration replaced a gate or added an ungated model.
-Register all models, agents and toolsets in the construction callback; later
-registrations, including model replacements, return `runtime.ErrRegistrationClosed`.
+Harness construction installs its registration hook before calling `register`,
+then snapshots gate identities, seals registration, and checks every stored client
+against that snapshot. Construction fails if registration changes after the
+snapshot. Register all models, agents and toolsets in the construction callback;
+later registrations, including replacements, return `runtime.ErrRegistrationClosed`.
 
-A client the application holds directly is not gated. This includes any client
-obtained from `rt.ModelClient` inside the register callback, before capture gates
-are installed. Register callbacks and hooks—including interceptors, planners,
-executors, and adapters—must not retain such client references; resolve clients
-through the runtime registry at call time. Gating at registration time remains
-follow-up work (FA2); the current harness does not close this path.
+Retained clients in interceptors, planners, executors and adapters stay gated
+when called with the supplied run context. An interceptor side call and its outer
+recorded call share one capture identity. Direct `Runtime.ModelClient` calls do
+not record requests: if such a call stops the run before a recorded call, capture
+returns `ErrCaptureNoModelCall` with no provider invocation. Use planner-context
+clients to obtain recorded requests. Hooks must preserve the supplied context;
+a detached context without run or call identity cannot be associated with capture.
+
+Original clients held by the application remain outside the gate, even if the
+application also registers them. Retain the registration return value or look up
+`rt.ModelClient` instead. Clients never registered and `h.Model` clients used for
+direct `Decide` calls also remain outside capture.
 
 Before creating a session, capture checks every registered agent for a non-nil
 `RunPolicy.History`. If one is present, capture returns

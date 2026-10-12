@@ -297,17 +297,21 @@ The examples use no confirmation flows.
 
 - Inline and agent-as-tool tools cannot be stubbed. Test child agents through
   their own models and activity-tool stubs.
-- Harness construction seals registration and then verifies every registered
-  client is exactly the capture gate installed for it. Concurrent registration
-  that replaces or bypasses a gate fails construction. Register every model
-  inside `register`; later registrations return `runtime.ErrRegistrationClosed`.
-- Capture gates only model calls the runtime resolves from its registry at call
-  time, including planner context, summaries, and child agents. A client the
-  application holds directly is not gated, including any client obtained from
-  `rt.ModelClient` inside the register callback before gates are installed.
-  Register callbacks and hooks (interceptors, planners, executors, and adapters)
-  must not retain those references; resolve clients through the runtime registry
-  at call time. Gating at registration time is follow-up FA2.
+- Harness construction gates both model registration APIs before `register`
+  runs, snapshots the gates, seals registration and verifies every stored client
+  against that snapshot. Registration changes after the snapshot fail construction.
+  Register every model inside `register`; later registrations return
+  `runtime.ErrRegistrationClosed`.
+- Clients retained from `rt.ModelClient` or `RegisterModelClient` during
+  registration stay gated in hooks and planners. Preserve the supplied run
+  context so capture can identify the call. Interceptor side calls share their
+  outer call's capture identity. Direct runtime clients do not record requests;
+  stopping before a recorded call returns `ErrCaptureNoModelCall` without calling
+  the provider. Use planner-context clients for recorded requests.
+- Original application-held clients, unregistered clients, and `h.Model` clients
+  for direct `Decide` calls remain outside the gate. Registering a client does
+  not modify the original object. Detached contexts without run or call identity
+  also remain outside capture.
 - Capture rejects the harness if any registered agent has a non-nil History
   policy, including `Compress`, `KeepRecentTurns`, and custom policies. It returns
   `*agenttest.CaptureHistoryError` naming the agent before creating a session or

@@ -707,19 +707,23 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 
 ## Agent Testing
 
-- Harness construction gates models, seals runtime registration and verifies
-  every stored client equals the installed gate. Gate replacement or new ungated
-  models during construction fail setup. RegisterModelClient atomically returns
-  the stored client with runtime decoration so this check preserves context limits.
-  Register all models, agents and toolsets in the callback; later registration and model
-  replacement return `runtime.ErrRegistrationClosed`.
-- Capture gates only model calls resolved from the runtime registry at call
-  time: planner context, summaries and child agents. Direct application-held
-  clients are not gated, including values obtained from rt.ModelClient inside
-  register before gate installation. Register callbacks and hooks (interceptors,
-  planners, executors and adapters) must not retain those references; resolve
-  clients through the registry at call time. This limit is documented in FA1;
-  gating at registration time is follow-up FA2.
+- Harness construction installs a model registration hook before register runs.
+  RegisterModel and RegisterModelClient expose only gated clients, after runtime
+  context-limit decoration. Retained rt.ModelClient/registration return values
+  stay gated in hooks and planners using the supplied run context. Runtime installs
+  the private Options.modelHook setter through internal/agenttesthook at init;
+  agenttest sets it before construction. No public wrapper option is exposed.
+  The hook runs under the registry lock after context-limit decoration and must
+  return a non-nil client without calling runtime methods.
+  Freeze gate identities before Seal and retain post-Seal verification. Later
+  registrations return runtime.ErrRegistrationClosed. Ordinary runtimes have no hook.
+- Capture counts interceptor side calls and their outer recorded call once per
+  call identity. Direct runtime clients do not record requests; a gated call that
+  stops before recording returns ErrCaptureNoModelCall without provider execution.
+  Use planner-context clients for recorded requests. Original application-held
+  clients (even if also registered), unregistered clients and h.Model clients for
+  Decide remain outside capture. Preserve supplied contexts: detached contexts
+  without run or call identity cannot be associated with capture.
 - Capture rejects every non-nil History policy across all registered agents,
   including Compress, KeepRecentTurns and custom policies. CaptureHistoryError
   names the agent and explains the ungated-client risk before any session,
