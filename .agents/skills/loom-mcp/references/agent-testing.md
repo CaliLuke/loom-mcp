@@ -206,3 +206,34 @@ failures and also appears at Close. Use `errors.As` and read the tool and argume
 Unanswered root awaits and child-run awaits return `ErrUnansweredAwait`.
 Run the child agent directly to test its responder flow. There is no Temporal harness mode. Consult
 [the runtime reference](../../../../docs/runtime.md#harness) for details.
+
+## Release-criteria library (K19a)
+
+- Use `Harness.OpenSession`, `Session.Run`, and `Session.Result` for dynamic turns.
+  Supply caller history explicitly. `RunSession` retains its existing behavior.
+- Put context variants in `Variant.Policy.Context`. Plans own policy pointers.
+  Stored `ContextFingerprints` include every root and child run. Store version stays 1.
+- Use `eval/evidence.Classify` on caller-ordered records and a materializer-owned Spec.
+  Only adopted planner requests establish need points or recalled evidence.
+  Retained summary evidence is present and does not qualify as recall.
+  Asset evidence pairs its digest with `Token`, the rendered grammar token.
+  Received request bytes must match to support it. Detect checkpoints by metadata, then use
+  `checkpoint.Sections` selects the first user label, last receipt label, then last
+  summary label before that receipt. Label-free components split exactly; embedded
+  labels use that precedence. Only user_index/summary/receipt attribution is affected:
+  sources are reported, never gated; presence and gated measures are unaffected.
+- Grammar tokens require received input from an adopted planner request. User
+  messages, tool results including recall, and checkpoint sections support tokens.
+  Earlier assistant text, tool-call arguments and final outputs do not. Decoy
+  detection is unchanged (K19 Amendment 1).
+- `eval/gate.FromStored` adapts reserved checks and scores after Parent overlays.
+  `Evaluate` uses cumulative manifest items, paired repeats, equal scenario weights,
+  and shared stratified PCG bootstrap draws. `Decide` enforces the stopping rule.
+  Exact margin equality is inconclusive, including recall (Q17).
+- `Calibrate` uses the same evaluator for 972 cells and two sensitivity rows.
+  Qualification uses independent Bernoulli draws so recall retains its stated rate.
+  `CalibrateChecks` supplies the two 200-simulation production check cells.
+- Verify the trusted freeze hash, raw pool bytes, materialized bytes, and experiment
+  labels before a look or report. Refuse pool generation after a freeze exists.
+- The long-running fixture, CLI, committed calibration, and freeze remain K19b.
+  See docs/agent_testing.md, Release-criteria library, for stable API details.

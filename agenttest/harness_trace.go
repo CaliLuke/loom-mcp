@@ -31,22 +31,17 @@ func WithTracerProvider(provider trace.TracerProvider) Option {
 // Prior history comes only from the agent's memory policy; the harness carries
 // no messages between turns.
 func (h *Harness) RunSession(ctx context.Context, id agent.Ident, turns ...Input) (*SessionResult, error) {
-	sessionID, err := h.newSession(ctx)
+	session, err := h.OpenSession(ctx)
 	if err != nil {
 		return nil, err
 	}
-	result := &SessionResult{SessionID: sessionID, Runs: make([]*Result, 0, len(turns)), Trajectory: make(trajectory.Session, 0, len(turns))}
 	for i, input := range turns {
-		run, err := h.run(ctx, id, sessionID, input)
-		if run != nil {
-			result.Runs = append(result.Runs, run)
-			result.Trajectory = append(result.Trajectory, run.Trajectory)
-		}
-		if err != nil {
-			return result, fmt.Errorf("agenttest: session %s turn %d: %w", sessionID, i+1, err)
+		if _, err := session.Run(ctx, id, input); err != nil {
+			result := session.Result()
+			return result, fmt.Errorf("agenttest: session %s turn %d: %w", result.SessionID, i+1, err)
 		}
 	}
-	return result, nil
+	return session.Result(), nil
 }
 
 func configureTracer(options *harnessOptions) telemetry.Tracer {

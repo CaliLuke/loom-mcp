@@ -70,6 +70,10 @@ func clonePolicy(p *api.PolicyOverrides) *api.PolicyOverrides {
 		return nil
 	}
 	owned := *p
+	if p.Context != nil {
+		context := p.Context.Clone()
+		owned.Context = &context
+	}
 	owned.AllowedTags = slices.Clone(p.AllowedTags)
 	owned.DeniedTags = slices.Clone(p.DeniedTags)
 	owned.PerToolTimeout = maps.Clone(p.PerToolTimeout)

@@ -22,10 +22,14 @@ type fingerprintContext struct {
 	KeepResultTools    []tools.Ident               `json:"keep_result_tools"`
 }
 
-// recordFingerprint reads all call identities but hashes only root context settings.
+// recordFingerprint reads all call and settings identities. The legacy Context
+// field continues to hash root context settings for store compatibility.
 func recordFingerprint(rec *runrecord.RunRecord) (Fingerprint, error) {
 	f := Fingerprint{Models: make(map[model.ModelClass][]string)}
 	for _, r := range rec.Runs {
+		if r.ContextFingerprint != "" {
+			f.ContextFingerprints = append(f.ContextFingerprints, r.ContextFingerprint)
+		}
 		if r.RunID == rec.RootRunID {
 			data, err := callrecord.Encode(fingerprintContext{r.ContextSettings, r.RecoverySettings, r.CompactionSettings, r.KeepResultTools})
 			if err != nil {
@@ -69,6 +73,7 @@ func mergeFingerprint(a, b Fingerprint) Fingerprint {
 	out.Prompts = slices.Compact(out.Prompts)
 	out.SystemHashes = sortedUnique(append(slices.Clone(a.SystemHashes), b.SystemHashes...))
 	out.ToolHashes = sortedUnique(append(slices.Clone(a.ToolHashes), b.ToolHashes...))
+	out.ContextFingerprints = sortedUnique(append(slices.Clone(a.ContextFingerprints), b.ContextFingerprints...))
 	out.Context = sortedUnique(append(slices.Clone(a.Context), b.Context...))
 	return out
 }

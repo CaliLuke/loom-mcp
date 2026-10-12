@@ -25,7 +25,7 @@
 // Factories must forward supplied options and return fresh harnesses. Prefer
 // ScriptedModel, which creates one script per harness, over ScriptedModelFrom
 // with a shared script. Variant labels and cloned policy are run defaults;
-// context compaction and recovery settings belong in Variant.Options.
+// context compaction and recovery settings belong in Variant.Policy.Context.
 //
 // Verdict precedence is error, failed, pending, passed. Gating claims remain
 // pending until judging; informational claims do not gate. HarnessErr records

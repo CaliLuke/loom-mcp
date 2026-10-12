@@ -329,3 +329,121 @@ See [Harness](runtime.md#harness), [Capturing and deciding](runtime.md#capturing
 [Stubbing tools](runtime.md#stubbing-tools), [Expectations](runtime.md#expectations)
 and [Trajectories from RunRecord](runtime.md#trajectories-from-runrecord) for the
 full contracts.
+
+## Release-criteria library
+
+`eval/gate` provides deterministic statistics for paired context-compaction experiments.
+`eval/evidence` classifies exported records without a model or harness.
+The long-running fixture, commands, pools, and committed calibration belong to the next implementation phase.
+
+### Drive a session
+
+Use `h.OpenSession(ctx)` when later inputs depend on earlier results.
+Call `session.Run(ctx, agentID, input, options...)` for each turn.
+Call `session.Result()` to return the completed session from a scenario's `Drive` function.
+The result contains an owned snapshot of the run lists.
+Individual results retain their original evidence objects.
+
+The caller supplies each turn's conversation history.
+Session does not append messages automatically.
+Threshold-enabled agents use the runtime's existing continuation contract when the caller history matches its visible prefix.
+Baseline agents with threshold disabled do not publish or adopt continuation.
+`RunSession` uses this API and retains its existing behavior.
+
+Context variants use `Variant.Policy.Context`, including `ContextWindow` for the pretend window.
+The execution plan owns a deep copy before harness construction starts.
+Stored fingerprints include sorted, unique `ContextFingerprints` from root and child runs.
+This optional field retains store schema version 1 and compatibility with older experiments.
+
+### Classify evidence
+
+Call `evidence.Classify(records, spec, threshold)` with records in caller session order.
+`Spec.Needs` declares each trigger and its required evidence IDs.
+`Spec.Evidence` maps each ID to one literal value or lowercase SHA-256 asset digest.
+For image or PDF claims, supply `Evidence{Asset: digest, Token: renderedToken}`.
+The materializer declares the token rendered in the asset. Matching bytes in received
+input of an adopted planner request support that token; the digest alone does not.
+`Spec.Answer` declares the tokens required across the final answer and final action arguments together.
+`Spec.Decoys` and `Spec.Grammar` define deterministic unsupported claims.
+A grammar token requires support from received input of an adopted planner request.
+User messages, tool results including recall, and checkpoint sections provide support.
+Earlier assistant text, tool-call arguments, and final outputs do not provide support.
+Stored content alone does not establish support.
+Decoys remain unsupported even when received input contains them.
+
+Only adopted planner requests establish need points.
+The first request containing a trigger is that need's point, ordered by run, sequence, and attempt.
+An absent value counts as recalled only in a later adopted request in the same run.
+A result after the last adopted request does not count.
+All absent values across all needs must return for recall success.
+
+The sources are `pins`, `user_index`, `summary`, `receipt`, `tail`, and `recall`.
+Checkpoint identity comes from message metadata.
+`checkpoint.Sections` splits section bodies without trimming whitespace.
+It selects the first user label, the last receipt label after it, and the last
+summary label between those boundaries. This is exact for label-free components.
+Embedded labels make the original boundaries ambiguous; the same precedence applies.
+This affects only source attribution among `user_index`, `summary`, and `receipt`.
+Sources are reported, never gated; presence and all gated measures are unaffected.
+Retained checkpoint attachments count as `user_index`.
+Image and PDF evidence requires matching bytes in the request.
+An unsupported-asset recall result does not restore those bytes.
+
+A hybrid summary that retains evidence is present evidence, not a recall attempt.
+A missing need point makes evidence use and recall qualification false.
+`Result.Checks(runsSucceeded, actionOK)` returns the two reserved checks.
+`Result.Scores()` returns the reserved evidence and context-operation scores.
+The scenario supplies its deterministic action check.
+
+### Evaluate and decide
+
+Use `gate.FromStored` after overlaying Parent reruns by attempt key.
+It requires `task_success`, `no_unsupported_claim`, `evidence_used`, `recall_qualifying`, and `recall_success`.
+Missing or nonbinary measures produce errors.
+Infrastructure failures remain missing pairs. Agent run errors remain quality outcomes.
+
+Call `gate.Evaluate(table, config, look)` on cumulative items.
+Supply two gated variant IDs, the baseline ID, scenario IDs, two repeats, and the frozen seed.
+Supply `Config.Items` from the cumulative freeze manifest to detect entirely missing items.
+Without a manifest, the observed item union defines the plan.
+Reported variants and scenarios do not enter the gate.
+
+The bootstrap resamples items within each scenario in sorted item-ID order.
+Both repeats move together.
+All measures and variants share each PCG draw.
+The estimate gives each scenario equal weight.
+Production uses 10,000 resamples and family alpha 0.05 divided across three looks.
+Recall uses the item agreement design effect and a Wilson interval.
+Exact margin equality is inconclusive for every criterion, including recall, as required by Q17.
+The scenario guard fails only below a success difference of -0.10.
+
+Call `gate.Decide(evaluation, previous)` for the stopping decision.
+For ordered execution, supply the consecutive `CONTINUE` prefix.
+A terminal result refuses a later look. An incomplete look requires a rerun of that look.
+An empty prefix supports analysis of an isolated cumulative look.
+`gate.Render` reports criteria, precision, scenario estimates, and exact missing run keys.
+
+### Calibrate and freeze
+
+`gate.Calibrate(ctx, config)` runs all 972 cells plus two copula sensitivity rows.
+It uses the same evaluator and stopping rule as real experiments.
+Decision cells use 2,000 simulations. Other cells use 400.
+Qualification is an independent Bernoulli draw from the offline validated fraction.
+Recall quality and the other measures use the Gaussian copula.
+This preserves the stated recall rate among qualifying runs.
+Baseline rates come from the pilot or labelled assumed defaults.
+Worker count does not change the report bytes.
+`gate.CalibrateChecks` runs the two reference cells with 200 simulations and the production bootstrap.
+Only package tests can reduce the bootstrap count.
+
+`gate.Freeze` stores the experiment identity, policies, margins, pool hashes, item hashes, and calibration provenance.
+Pool keys in `FreezeInputs` use `scenario/partition`.
+Materialized bytes use globally unique item IDs.
+Pool digests cover the exact dataset file bytes.
+
+Before each look or report, call `Freeze.Verify` with the trusted original freeze hash and current input bytes.
+Then call `Freeze.VerifyLabel` for each stored experiment.
+`Freeze.Label` creates `gate/<configuration>/<freeze-sha8>/look<N>`.
+Call `gate.CanGenerateItems` before pool generation.
+The library refuses regeneration when a freeze exists.
+The caller owns file creation, write-once enforcement, and storage of the trusted freeze hash.

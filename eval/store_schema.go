@@ -54,13 +54,15 @@ type StoredVariant struct {
 }
 
 // Fingerprint summarizes recorded model, prompt, tool and context evidence.
-// Context contains sorted unique hashes, including across runs and attempts.
+// Context retains legacy root-settings hashes. ContextFingerprints contains
+// sorted, unique recorded settings identities from every root and child run.
 type Fingerprint struct {
-	Models       map[model.ModelClass][]string `json:"models"`
-	Prompts      []prompt.PromptRef            `json:"prompts"`
-	SystemHashes []string                      `json:"system_hashes"`
-	ToolHashes   []string                      `json:"tool_hashes"`
-	Context      []string                      `json:"context"`
+	ContextFingerprints []string                      `json:"context_fingerprints,omitempty"`
+	Models              map[model.ModelClass][]string `json:"models"`
+	Prompts             []prompt.PromptRef            `json:"prompts"`
+	SystemHashes        []string                      `json:"system_hashes"`
+	ToolHashes          []string                      `json:"tool_hashes"`
+	Context             []string                      `json:"context"`
 }
 
 // JudgeInfo records judge provenance for schema version 1.

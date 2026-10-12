@@ -39,6 +39,7 @@ func buildPlan(cfg Config) ([]plannedAttempt, error) {
 	problems := validateConfig(cfg, variants)
 	var full []plannedAttempt
 	for _, v := range variants {
+		v.Policy = clonePolicy(v.Policy)
 		for _, s := range cfg.Scenarios {
 			for _, item := range s.Items.Items() {
 				full = append(full, plannedAttempt{variant: v, scenario: s, item: item})
