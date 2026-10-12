@@ -4,10 +4,14 @@ import (
 	"context"
 	"encoding/json/v2"
 	"fmt"
+	"os"
+	"os/exec"
+	"regexp"
 	goruntime "runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 	"unsafe"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
@@ -42,96 +46,145 @@ func (s *measuredViewStore) Get(ctx context.Context, root string, hash runstore.
 // as their combined retained heap. Allocations measure the final load and message
 // snapshot. The in-memory engine has no durable history; input bytes are reported.
 func TestIndexLoaderGrowth(t *testing.T) {
+	childCase := os.Getenv("LOOM_INDEX_GROWTH_CHILD")
+	if childCase != "" {
+		require.Contains(t, []string{
+			"TestIndexLoaderGrowth/1000/cold", "TestIndexLoaderGrowth/1000/warm",
+			"TestIndexLoaderGrowth/5000/cold", "TestIndexLoaderGrowth/5000/warm",
+		}, childCase, "invalid isolated growth case")
+	}
 	for _, steps := range []int{1000, 5000} {
 		t.Run(fmt.Sprint(steps), func(t *testing.T) {
 			if testing.Short() && steps == 5000 {
 				t.Skip("full growth measurements: make test-payload-growth")
 			}
-			store := &measuredViewStore{Store: storeinmem.New()}
-			base := buildGrowthIndex(t, store, steps)
-			require.Len(t, base.Entries, steps*3)
-			stepCount := uint64(len(base.Entries)) / 3
-			input := api.PlanActivityInput{AgentID: "growth.agent", RunID: "run", RunContext: base.RunContext, View: base.view()}
-			wire, err := json.Marshal(input)
-			require.NoError(t, err)
-			indexJSON, err := json.Marshal(base.Entries)
-			require.NoError(t, err)
-			// Resident index estimate: backing arrays plus referenced strings/structs.
-			indexMemory := growthIndexMemory(base)
-			inputBytes, indexBytes := len(wire), len(indexJSON)
 			for _, warm := range []bool{false, true} {
 				mode := "cold"
 				if warm {
 					mode = "warm"
 				}
 				t.Run(mode, func(t *testing.T) {
-					rt := New(WithRunStore(store))
-					goruntime.GC()
-					goruntime.GC() // Drain sync.Pool victims before sampling retained heap.
-					var before goruntime.MemStats
-					goruntime.ReadMemStats(&before)
-					if warm {
-						_, err := rt.loadTestView(t.Context(), "root", "run", index.ViewRef{IndexHead: base.IndexHead})
-						require.NoError(t, err)
+					if childCase == "" {
+						runIndexGrowthChild(t)
+						return
 					}
-					store.reads.Store(0)
-					store.bytes.Store(0)
-					var start goruntime.MemStats
-					goruntime.ReadMemStats(&start)
-					view, err := rt.loadTestView(t.Context(), "root", "run", input.View)
-					require.NoError(t, err)
-					var allocated goruntime.MemStats
-					goruntime.ReadMemStats(&allocated)
-					require.Len(t, view.Outputs, steps)
-					require.Len(t, view.Typed, steps)
-					require.Len(t, view.Messages, 2*steps)
-					goruntime.GC()
-					goruntime.GC() // Drain sync.Pool victims before sampling retained heap.
-					var after goruntime.MemStats
-					goruntime.ReadMemStats(&after)
-					require.Greater(t, after.HeapAlloc, before.HeapAlloc)
-					retained := after.HeapAlloc - before.HeapAlloc
-					rt.viewMu.Lock()
-					rt.viewCaches = nil
-					rt.viewLRU.Init()
-					rt.viewMu.Unlock()
-					goruntime.GC()
-					goruntime.GC() // Drain sync.Pool victims before sampling retained heap.
-					var plannerOnly goruntime.MemStats
-					goruntime.ReadMemStats(&plannerOnly)
-					require.Greater(t, plannerOnly.HeapAlloc, before.HeapAlloc)
-					plannerHeap := plannerOnly.HeapAlloc - before.HeapAlloc
-					alloc := allocated.TotalAlloc - start.TotalAlloc
-					reads, loaded := store.reads.Load(), store.bytes.Load()
-					t.Logf("growth steps=%d cache=%s reads=%d loaded=%d planner_heap=%d planner_and_cache_heap=%d final_load_alloc=%d workflow_index_heap=%d workflow_index_json=%d input=%d history=N/A(inmem)", steps, mode, reads, loaded, plannerHeap, retained, alloc, indexMemory, indexBytes, inputBytes)
-					// Measured baseline: 5 reads/step, ~12 KB/step cold; warm 5 reads,
-					// ~12 KB. Retained heap ~3.8 KB/step, cold allocation ~50 KB/step under race,
-					// warm snapshot ~18 KB/step under race. Ceilings include allocator headroom.
-					if warm {
-						assert.LessOrEqual(t, reads, int64(6))
-						assert.LessOrEqual(t, loaded, int64(16*1024))
-					} else {
-						assert.LessOrEqual(t, reads, int64(6*steps))
-						assert.LessOrEqual(t, loaded, int64(16*1024*steps))
+					require.Equal(t, childCase, t.Name(), "child must run only its selected measurement")
+					t.Logf("isolated growth pid=%d case=%s", os.Getpid(), t.Name())
+					measureIndexLoaderGrowth(t, steps, warm, mode)
+					if !t.Failed() {
+						t.Logf("isolated growth completed: %s", t.Name())
 					}
-					assert.LessOrEqual(t, plannerHeap, 4000*stepCount)
-					assert.Positive(t, retained)
-					assert.LessOrEqual(t, retained, 7000*stepCount)
-					if warm {
-						assert.LessOrEqual(t, alloc, 30_000*stepCount+512_000)
-					} else {
-						assert.LessOrEqual(t, alloc, 75_000*stepCount)
-					}
-					assert.LessOrEqual(t, indexMemory, 2000*stepCount)
-					assert.LessOrEqual(t, inputBytes, 4096+400*3+100)
-					goruntime.KeepAlive(rt)
-					goruntime.KeepAlive(view)
-					goruntime.KeepAlive(base)
-					goruntime.KeepAlive(store)
 				})
 			}
 		})
 	}
+}
+
+// runIndexGrowthChild isolates process-global heap counters from preceding tests
+// and cases while retaining the current binary's race and build instrumentation.
+func runIndexGrowthChild(t *testing.T) {
+	t.Helper()
+	executable, err := os.Executable()
+	require.NoError(t, err)
+	parts := strings.Split(t.Name(), "/")
+	for i, part := range parts {
+		parts[i] = "^" + regexp.QuoteMeta(part) + "$"
+	}
+	timeout := 5 * time.Minute
+	if deadline, ok := t.Deadline(); ok {
+		timeout = min(timeout, time.Until(deadline))
+	}
+	require.Positive(t, timeout, "parent deadline must permit the isolated measurement")
+	ctx, cancel := context.WithTimeout(t.Context(), timeout)
+	defer cancel()
+	// #nosec G204 -- Re-executes this test binary with fixed flags and an anchored test name.
+	cmd := exec.CommandContext(ctx, executable,
+		"-test.run="+strings.Join(parts, "/"), "-test.count=1", "-test.v=true",
+		fmt.Sprintf("-test.short=%t", testing.Short()), "-test.timeout="+timeout.String())
+	cmd.Env = append(os.Environ(), "LOOM_INDEX_GROWTH_CHILD="+t.Name())
+	output, err := cmd.CombinedOutput()
+	t.Logf("%s", output)
+	require.NoError(t, err, "isolated growth %s failed (context: %v):\n%s", t.Name(), ctx.Err(), output)
+	require.Contains(t, string(output), "isolated growth completed: "+t.Name(), "child exited without completing its selected measurement")
+}
+
+func measureIndexLoaderGrowth(t *testing.T, steps int, warm bool, mode string) {
+	t.Helper()
+	store := &measuredViewStore{Store: storeinmem.New()}
+	base := buildGrowthIndex(t, store, steps)
+	require.Len(t, base.Entries, steps*3)
+	stepCount := uint64(len(base.Entries)) / 3
+	input := api.PlanActivityInput{AgentID: "growth.agent", RunID: "run", RunContext: base.RunContext, View: base.view()}
+	wire, err := json.Marshal(input)
+	require.NoError(t, err)
+	indexJSON, err := json.Marshal(base.Entries)
+	require.NoError(t, err)
+	// Resident index estimate: backing arrays plus referenced strings/structs.
+	indexMemory := growthIndexMemory(base)
+	inputBytes, indexBytes := len(wire), len(indexJSON)
+	rt := New(WithRunStore(store))
+	goruntime.GC()
+	goruntime.GC() // Drain sync.Pool victims before sampling retained heap.
+	var before goruntime.MemStats
+	goruntime.ReadMemStats(&before)
+	if warm {
+		_, err := rt.loadTestView(t.Context(), "root", "run", index.ViewRef{IndexHead: base.IndexHead})
+		require.NoError(t, err)
+	}
+	store.reads.Store(0)
+	store.bytes.Store(0)
+	var start goruntime.MemStats
+	goruntime.ReadMemStats(&start)
+	view, err := rt.loadTestView(t.Context(), "root", "run", input.View)
+	require.NoError(t, err)
+	var allocated goruntime.MemStats
+	goruntime.ReadMemStats(&allocated)
+	require.Len(t, view.Outputs, steps)
+	require.Len(t, view.Typed, steps)
+	require.Len(t, view.Messages, 2*steps)
+	goruntime.GC()
+	goruntime.GC() // Drain sync.Pool victims before sampling retained heap.
+	var after goruntime.MemStats
+	goruntime.ReadMemStats(&after)
+	require.Greater(t, after.HeapAlloc, before.HeapAlloc)
+	retained := after.HeapAlloc - before.HeapAlloc
+	rt.viewMu.Lock()
+	rt.viewCaches = nil
+	rt.viewLRU.Init()
+	rt.viewMu.Unlock()
+	goruntime.GC()
+	goruntime.GC() // Drain sync.Pool victims before sampling retained heap.
+	var plannerOnly goruntime.MemStats
+	goruntime.ReadMemStats(&plannerOnly)
+	require.Greater(t, plannerOnly.HeapAlloc, before.HeapAlloc)
+	plannerHeap := plannerOnly.HeapAlloc - before.HeapAlloc
+	alloc := allocated.TotalAlloc - start.TotalAlloc
+	reads, loaded := store.reads.Load(), store.bytes.Load()
+	t.Logf("growth steps=%d cache=%s reads=%d loaded=%d planner_heap=%d planner_and_cache_heap=%d final_load_alloc=%d workflow_index_heap=%d workflow_index_json=%d input=%d history=N/A(inmem)", steps, mode, reads, loaded, plannerHeap, retained, alloc, indexMemory, indexBytes, inputBytes)
+	// Measured baseline: 5 reads/step, ~12 KB/step cold; warm 5 reads,
+	// ~12 KB. Retained heap ~3.8 KB/step, cold allocation ~50 KB/step under race,
+	// warm snapshot ~18 KB/step under race. Ceilings include allocator headroom.
+	if warm {
+		assert.LessOrEqual(t, reads, int64(6))
+		assert.LessOrEqual(t, loaded, int64(16*1024))
+	} else {
+		assert.LessOrEqual(t, reads, int64(6*steps))
+		assert.LessOrEqual(t, loaded, int64(16*1024*steps))
+	}
+	assert.LessOrEqual(t, plannerHeap, 4000*stepCount)
+	assert.Positive(t, retained)
+	assert.LessOrEqual(t, retained, 7000*stepCount)
+	if warm {
+		assert.LessOrEqual(t, alloc, 30_000*stepCount+512_000)
+	} else {
+		assert.LessOrEqual(t, alloc, 75_000*stepCount)
+	}
+	assert.LessOrEqual(t, indexMemory, 2000*stepCount)
+	assert.LessOrEqual(t, inputBytes, 4096+400*3+100)
+	goruntime.KeepAlive(rt)
+	goruntime.KeepAlive(view)
+	goruntime.KeepAlive(base)
+	goruntime.KeepAlive(store)
 }
 
 func buildGrowthIndex(t *testing.T, store runstore.Store, steps int) *workflowPlanInput {
