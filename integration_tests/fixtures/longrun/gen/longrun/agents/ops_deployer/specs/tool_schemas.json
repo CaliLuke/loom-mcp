@@ -1,0 +1,106 @@
+{
+  "tools": [
+    {
+      "id": "ops_deployer.deploy",
+      "service": "longrun",
+      "toolset": "longrun.ops_deployer",
+      "title": "Deploy",
+      "description": "Execute deploy for the current task",
+      "payload": {
+        "name": "DeployPayload",
+        "schema": {
+          "additionalProperties": false,
+          "properties": {
+            "step": {
+              "description": "Materialised work step",
+              "type": "string"
+            },
+            "target": {
+              "description": "Final action target or combined evidence",
+              "type": "string"
+            }
+          },
+          "required": [
+            "step",
+            "target"
+          ],
+          "type": "object"
+        }
+      },
+      "result": {
+        "name": "DeployResult",
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "id": "ops_deployer.list_services",
+      "service": "longrun",
+      "toolset": "longrun.ops_deployer",
+      "title": "List Services",
+      "description": "Execute list_services for the current task",
+      "payload": {
+        "name": "ListServicesPayload",
+        "schema": {
+          "additionalProperties": false,
+          "properties": {
+            "step": {
+              "description": "Materialised work step",
+              "type": "string"
+            },
+            "target": {
+              "description": "Final action target or combined evidence",
+              "type": "string"
+            }
+          },
+          "required": [
+            "step",
+            "target"
+          ],
+          "type": "object"
+        }
+      },
+      "result": {
+        "name": "ListServicesResult",
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "id": "ops_deployer.read_service_log",
+      "service": "longrun",
+      "toolset": "longrun.ops_deployer",
+      "title": "Read Service Log",
+      "description": "Execute read_service_log for the current task",
+      "payload": {
+        "name": "ReadServiceLogPayload",
+        "schema": {
+          "additionalProperties": false,
+          "properties": {
+            "step": {
+              "description": "Materialised work step",
+              "type": "string"
+            },
+            "target": {
+              "description": "Final action target or combined evidence",
+              "type": "string"
+            }
+          },
+          "required": [
+            "step",
+            "target"
+          ],
+          "type": "object"
+        }
+      },
+      "result": {
+        "name": "ReadServiceLogResult",
+        "schema": {
+          "type": "string"
+        }
+      }
+    }
+  ]
+}

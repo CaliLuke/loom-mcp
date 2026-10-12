@@ -18,6 +18,7 @@ func TestQuickstart_Renders_Minimal(t *testing.T) {
 
 	content := fileContent(t, files, "AGENTS_QUICKSTART.md")
 	require.NotEmpty(t, content)
+	require.NotRegexp(t, `(?m)[\t ]+$`, content, "regeneration must not reintroduce trailing whitespace")
 	require.NotContains(t, content, "* **`calc.helpers`** ")
 
 	// Compare the header + services overview against a golden with normalization.

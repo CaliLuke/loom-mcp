@@ -87,6 +87,7 @@ func partFragments(p model.Part, source Source, isCheckpoint bool, names map[str
 			f.source = Recall
 			f.recallID = v.ToolUseID
 		}
+		return attachmentFragments(f, v.Parts, names)
 	case model.ToolUsePart:
 		text, err := jsonText(v.Input)
 		if err != nil {
@@ -97,6 +98,22 @@ func partFragments(p model.Part, source Source, isCheckpoint bool, names map[str
 		return nil, nil
 	}
 	return []fragment{f}, nil
+}
+
+// attachmentFragments attributes received bytes to the enclosing result's source.
+func attachmentFragments(parent fragment, parts []model.ToolResultContentPart, names map[string]bool) ([]fragment, error) {
+	out := []fragment{parent}
+	for _, part := range parts {
+		nested, err := partFragments(part, parent.source, false, names)
+		if err != nil {
+			return nil, err
+		}
+		for i := range nested {
+			nested[i].recallID = parent.recallID
+		}
+		out = append(out, nested...)
+	}
+	return out, nil
 }
 func jsonText(value any) (string, error) {
 	if s, ok := value.(string); ok {

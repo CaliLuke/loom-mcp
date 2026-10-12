@@ -48,7 +48,7 @@ type CalibrationReport struct {
 }
 
 // SimulatorVersion changes whenever synthetic sampling or reporting changes.
-const SimulatorVersion = "k19-v1"
+const SimulatorVersion = "k19-v1-report2"
 
 // CalibrationGrid returns all 972 cells in a stable order.
 func CalibrationGrid() []Cell {

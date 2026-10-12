@@ -1,0 +1,106 @@
+{
+  "tools": [
+    {
+      "id": "dispatch_planner.book_carrier",
+      "service": "longrun",
+      "toolset": "longrun.dispatch_planner",
+      "title": "Book Carrier",
+      "description": "Execute book_carrier for the current task",
+      "payload": {
+        "name": "BookCarrierPayload",
+        "schema": {
+          "additionalProperties": false,
+          "properties": {
+            "step": {
+              "description": "Materialised work step",
+              "type": "string"
+            },
+            "target": {
+              "description": "Final action target or combined evidence",
+              "type": "string"
+            }
+          },
+          "required": [
+            "step",
+            "target"
+          ],
+          "type": "object"
+        }
+      },
+      "result": {
+        "name": "BookCarrierResult",
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "id": "dispatch_planner.list_shipments",
+      "service": "longrun",
+      "toolset": "longrun.dispatch_planner",
+      "title": "List Shipments",
+      "description": "Execute list_shipments for the current task",
+      "payload": {
+        "name": "ListShipmentsPayload",
+        "schema": {
+          "additionalProperties": false,
+          "properties": {
+            "step": {
+              "description": "Materialised work step",
+              "type": "string"
+            },
+            "target": {
+              "description": "Final action target or combined evidence",
+              "type": "string"
+            }
+          },
+          "required": [
+            "step",
+            "target"
+          ],
+          "type": "object"
+        }
+      },
+      "result": {
+        "name": "ListShipmentsResult",
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "id": "dispatch_planner.read_manifest",
+      "service": "longrun",
+      "toolset": "longrun.dispatch_planner",
+      "title": "Read Manifest",
+      "description": "Execute read_manifest for the current task",
+      "payload": {
+        "name": "ReadManifestPayload",
+        "schema": {
+          "additionalProperties": false,
+          "properties": {
+            "step": {
+              "description": "Materialised work step",
+              "type": "string"
+            },
+            "target": {
+              "description": "Final action target or combined evidence",
+              "type": "string"
+            }
+          },
+          "required": [
+            "step",
+            "target"
+          ],
+          "type": "object"
+        }
+      },
+      "result": {
+        "name": "ReadManifestResult",
+        "schema": {
+          "type": "string"
+        }
+      }
+    }
+  ]
+}

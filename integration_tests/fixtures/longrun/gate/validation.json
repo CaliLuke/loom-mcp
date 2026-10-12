@@ -1,0 +1,45 @@
+{
+  "materializer_version": "k19b-v3",
+  "pools_sha256": "27adb93ea772eefa14c834bca36a53ac345ae7aeb66937883607999074636d88",
+  "attempts": 3852,
+  "qualifying": {
+    "hybrid": {
+      "decisions_dependencies": 1,
+      "fact_early": 1,
+      "large_result_middle": 1,
+      "model_change": 1,
+      "multimodal_anthropic": 1,
+      "multimodal_bedrock_anthropic": 1,
+      "multimodal_gemini": 1,
+      "multimodal_offline": 1,
+      "multimodal_openai": 1,
+      "no_summariser": 1,
+      "obsolete_buried": 0,
+      "obsolete_collapsed": 0,
+      "obsolete_cross_run": 0,
+      "obsolete_index_line": 0,
+      "recall_pressure": 1,
+      "session_three_runs": 1,
+      "summariser_rejected": 1
+    },
+    "receipt_only": {
+      "decisions_dependencies": 1,
+      "fact_early": 1,
+      "large_result_middle": 1,
+      "model_change": 1,
+      "multimodal_anthropic": 1,
+      "multimodal_bedrock_anthropic": 1,
+      "multimodal_gemini": 1,
+      "multimodal_offline": 1,
+      "multimodal_openai": 1,
+      "no_summariser": 1,
+      "obsolete_buried": 1,
+      "obsolete_collapsed": 1,
+      "obsolete_cross_run": 0,
+      "obsolete_index_line": 0,
+      "recall_pressure": 1,
+      "session_three_runs": 1,
+      "summariser_rejected": 1
+    }
+  }
+}

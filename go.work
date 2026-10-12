@@ -4,6 +4,7 @@ use (
 	.
 	./integration_tests/fixtures/agent_features
 	./integration_tests/fixtures/assistant
+	./integration_tests/fixtures/longrun
 )
 
 replace github.com/modelcontextprotocol/go-sdk => github.com/modelcontextprotocol/go-sdk v1.8.1-0.20260922085944-8075fb3cf313

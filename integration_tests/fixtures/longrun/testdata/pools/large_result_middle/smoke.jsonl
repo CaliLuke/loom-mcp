@@ -1,0 +1,4 @@
+{"format":"loom-mcp.eval.items","version":1}
+{"data":{"result_bytes":10000,"scenario":"large_result_middle","seed":11400714819309884606,"steps":18,"template":"ops_deployer","wording":0},"id":"large_result_middle.ops_deployer.54","input":"Audit the rollout and deploy the approved target."}
+{"data":{"result_bytes":10000,"scenario":"large_result_middle","seed":11400714819309884607,"steps":18,"template":"ledger_clerk","wording":0},"id":"large_result_middle.ledger_clerk.55","input":"Reconcile the ledger and pay the approved account."}
+{"data":{"result_bytes":10000,"scenario":"large_result_middle","seed":11400714819309884608,"steps":18,"template":"dispatch_planner","wording":0},"id":"large_result_middle.dispatch_planner.56","input":"Check the manifests and book the approved carrier."}

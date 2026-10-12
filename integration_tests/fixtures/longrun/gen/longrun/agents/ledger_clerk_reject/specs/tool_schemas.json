@@ -1,0 +1,106 @@
+{
+  "tools": [
+    {
+      "id": "ledger_clerk.post_payment",
+      "service": "longrun",
+      "toolset": "longrun.ledger_clerk",
+      "title": "Post Payment",
+      "description": "Execute post_payment for the current task",
+      "payload": {
+        "name": "PostPaymentPayload",
+        "schema": {
+          "additionalProperties": false,
+          "properties": {
+            "step": {
+              "description": "Materialised work step",
+              "type": "string"
+            },
+            "target": {
+              "description": "Final action target or combined evidence",
+              "type": "string"
+            }
+          },
+          "required": [
+            "step",
+            "target"
+          ],
+          "type": "object"
+        }
+      },
+      "result": {
+        "name": "PostPaymentResult",
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "id": "ledger_clerk.read_invoice",
+      "service": "longrun",
+      "toolset": "longrun.ledger_clerk",
+      "title": "Read Invoice",
+      "description": "Execute read_invoice for the current task",
+      "payload": {
+        "name": "ReadInvoicePayload",
+        "schema": {
+          "additionalProperties": false,
+          "properties": {
+            "step": {
+              "description": "Materialised work step",
+              "type": "string"
+            },
+            "target": {
+              "description": "Final action target or combined evidence",
+              "type": "string"
+            }
+          },
+          "required": [
+            "step",
+            "target"
+          ],
+          "type": "object"
+        }
+      },
+      "result": {
+        "name": "ReadInvoiceResult",
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "id": "ledger_clerk.search_invoices",
+      "service": "longrun",
+      "toolset": "longrun.ledger_clerk",
+      "title": "Search Invoices",
+      "description": "Execute search_invoices for the current task",
+      "payload": {
+        "name": "SearchInvoicesPayload",
+        "schema": {
+          "additionalProperties": false,
+          "properties": {
+            "step": {
+              "description": "Materialised work step",
+              "type": "string"
+            },
+            "target": {
+              "description": "Final action target or combined evidence",
+              "type": "string"
+            }
+          },
+          "required": [
+            "step",
+            "target"
+          ],
+          "type": "object"
+        }
+      },
+      "result": {
+        "name": "SearchInvoicesResult",
+        "schema": {
+          "type": "string"
+        }
+      }
+    }
+  ]
+}

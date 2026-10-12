@@ -50,7 +50,7 @@ PROTOC_GEN_GO_GRPC := protoc-gen-go-grpc
 PROTOC_GEN_GO_GRPC_VERSION ?= v1.6.2
 PROTOC_INSTALL_DIR ?= $(GOPATH)
 
-.PHONY: all build lint lint-pre-commit lint-install-hook test test-docker coverage-check coverage-check-critical coverage-parser-test docker-coverage test-stress test-fuzz itest ci tools ensure-golangci ensure-staticcheck ensure-protoc-plugins install-protoc protoc-check gen-example loom-local loom-remote loom-status update-mcp-go-sdk verify-generated verify-mcp-local regen-quickstart regen-assistant-fixture regen-progressive-discovery-fixture regen-agent-feature-fixture regen-sdkbridge-consumer-fixture verify-agent-feature-fixture
+.PHONY: all build lint lint-pre-commit lint-install-hook test test-docker coverage-check coverage-check-critical coverage-parser-test docker-coverage test-stress test-fuzz itest ci tools ensure-golangci ensure-staticcheck ensure-protoc-plugins install-protoc protoc-check gen-example loom-local loom-remote loom-status update-mcp-go-sdk verify-generated verify-mcp-local regen-quickstart regen-assistant-fixture regen-longrun-fixture regen-progressive-discovery-fixture regen-agent-feature-fixture regen-sdkbridge-consumer-fixture verify-agent-feature-fixture
 
 all: build lint test
 
@@ -303,6 +303,7 @@ verify-generated: tools
 	bash ./scripts/verify_generated.sh
 
 verify-mcp-local:
+	$(GO) test -C ./integration_tests/fixtures/longrun -race -count=1 -timeout=30m ./...
 	$(GO) test -C ./integration_tests/fixtures/assistant -race ./... -count=1
 	$(GO) test -C ./integration_tests/fixtures/agent_features -race ./... -count=1
 	cd ./integration_tests/fixtures/sdkbridge_consumer && GOWORK=off $(GO) test -race ./... -count=1
@@ -310,6 +311,9 @@ verify-mcp-local:
 
 regen-quickstart:
 	cd ./quickstart && GOWORK=off $(GO) run -mod=mod $(LOOM_CLI_PACKAGE) gen example.com/quickstart/design
+
+regen-longrun-fixture:
+	cd ./integration_tests/fixtures/longrun && $(GO) run $(LOOM_CLI_PACKAGE) gen example.com/longrun/design
 
 regen-assistant-fixture:
 	cd ./integration_tests/fixtures/assistant && $(GO) run $(LOOM_CLI_PACKAGE) gen example.com/assistant/design

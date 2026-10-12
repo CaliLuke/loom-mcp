@@ -1,0 +1,7 @@
+{"format":"loom-mcp.eval.items","version":1}
+{"data":{"result_bytes":10000,"scenario":"multimodal_gemini","seed":20261020,"steps":18,"template":"ops_deployer","wording":0},"id":"multimodal_gemini.ops_deployer.0","input":"Audit the rollout and deploy the approved target."}
+{"data":{"result_bytes":10000,"scenario":"multimodal_gemini","seed":20261021,"steps":18,"template":"ledger_clerk","wording":0},"id":"multimodal_gemini.ledger_clerk.1","input":"Reconcile the ledger and pay the approved account."}
+{"data":{"result_bytes":10000,"scenario":"multimodal_gemini","seed":20261022,"steps":18,"template":"dispatch_planner","wording":0},"id":"multimodal_gemini.dispatch_planner.2","input":"Check the manifests and book the approved carrier."}
+{"data":{"result_bytes":10000,"scenario":"multimodal_gemini","seed":20261023,"steps":18,"template":"ops_deployer","wording":1},"id":"multimodal_gemini.ops_deployer.3","input":"Review service evidence before releasing."}
+{"data":{"result_bytes":10000,"scenario":"multimodal_gemini","seed":20261024,"steps":18,"template":"ledger_clerk","wording":1},"id":"multimodal_gemini.ledger_clerk.4","input":"Inspect invoice evidence before posting payment."}
+{"data":{"result_bytes":10000,"scenario":"multimodal_gemini","seed":20261025,"steps":18,"template":"dispatch_planner","wording":1},"id":"multimodal_gemini.dispatch_planner.5","input":"Review shipment evidence before dispatch."}

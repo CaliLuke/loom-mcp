@@ -235,5 +235,16 @@ Run the child agent directly to test its responder flow. There is no Temporal ha
   `CalibrateChecks` supplies the two 200-simulation production check cells.
 - Verify the trusted freeze hash, raw pool bytes, materialized bytes, and experiment
   labels before a look or report. Refuse pool generation after a freeze exists.
-- The long-running fixture, CLI, committed calibration, and freeze remain K19b.
-  See docs/agent_testing.md, Release-criteria library, for stable API details.
+- The longrun fixture and compaction-gate CLI implement the release suite.
+  Regenerate generated agents with `make regen-longrun-fixture`; never hand-edit pools.
+  CI verifies committed freeze/validation and byte-for-byte seed reproduction of all pools.
+- Freeze verification binds gated/reported lists, scenario drive contexts, policies,
+  raw pools and materialized items. Record dirty provenance alongside the base revision.
+  Supply cumulative Config.Items and the prior look prefix; reject live-config --offline.
+- Protocol 18 Reader and Summariser support PNG/PDF attachment reads. Credit received
+  nested bytes, never descriptors alone; multimodal scenarios protect 2000 tool tokens.
+- Calibration reports every measured target and look-1 FAIL rates, including a labelled
+  guard lower bound when stored outputs lack joint causes. The K19b frozen guard blocks
+  equal-to-baseline variants; K19c must repair it before any live look. Keep the K19b
+  guard unchanged and preserve existing simulations when re-rendering reports.
+- Test 7 recomputes the full report's embedded check cells. See docs/agent_testing.md.

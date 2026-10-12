@@ -334,7 +334,8 @@ full contracts.
 
 `eval/gate` provides deterministic statistics for paired context-compaction experiments.
 `eval/evidence` classifies exported records without a model or harness.
-The long-running fixture, commands, pools, and committed calibration belong to the next implementation phase.
+The long-running fixture and commands are described below under Release-criteria
+suite, including the current calibration and freeze prerequisites.
 
 ### Drive a session
 
@@ -447,3 +448,103 @@ Then call `Freeze.VerifyLabel` for each stored experiment.
 Call `gate.CanGenerateItems` before pool generation.
 The library refuses regeneration when a freeze exists.
 The caller owns file creation, write-once enforcement, and storage of the trusted freeze hash.
+
+## Release-criteria suite
+
+The `integration_tests/fixtures/longrun` module contains the K19 operational suite.
+Its generated agents cover deployment, ledger, and dispatch tasks.
+Each task has standard, no-summarizer, and forced-rejection registrations.
+`make regen-longrun-fixture` generates all nine registrations from the design.
+
+The suite compares `baseline`, `receipt_only`, and `hybrid` through recorded
+`Variant.Policy.Context` values. It reports `clear_only` at look 1.
+Scenario overrides apply only to threshold-enabled variants.
+Session scenarios supply the same caller history and earlier final messages to every variant.
+
+Each scenario has separate pilot, look 1, look 2, look 3, and smoke pools.
+The partitions contain 6, 12, 12, 24, and 3 items respectively.
+The reported model-change scenario has no pilot pool.
+CI runs only the smoke items. Live runs require `LOOM_LIVE_MODEL=1`.
+Offline model results describe fixture structure, not model quality.
+
+From the fixture directory, prepare the suite in this order:
+
+```sh
+go run ./cmd/compaction-gate items --seed 19
+go run ./cmd/compaction-gate validate --offline --workers 10
+nice -n 10 go run ./cmd/compaction-gate calibrate --workers 10
+go run ./cmd/compaction-gate freeze
+```
+
+`validate` runs all partitions under the offline models and records qualifying
+fractions. Its outcomes never enter a release decision.
+The full calibration uses 972 cells, two sensitivity rows, and production bootstrap settings.
+The full artifact includes the two 200-simulation check cells.
+`freeze` requires a full calibration report.
+
+The large-result scenario keeps its fact in the middle of a result below 60 KB,
+including JSON framing, so the full result survives transcript projection.
+Its five pools use seed `20261021`; recall-pressure pools use `20261022`, and
+other pools use `20261020`. Pressure facts sit beyond the summary prefix, with
+distinct middle and final need markers, so the fixture tests actual recall.
+
+On protocol 18, offline Reader and Summariser clients declare PNG/PDF support.
+The Reader reads attachment descriptors at text offset zero, then requests each
+original part with `part: "attachment"` and its 1-based `index`. Multimodal
+scenarios allow 2,000 protected tool tokens to fit the 1,500-token image. The
+baseline policy remains unchanged. Evidence classification credits received
+attachment bytes, never a descriptor alone.
+
+Run the full calibration only after validation and all checks pass. It embeds
+both 200-simulation check cells in `calibration_default.json`; test 7 recomputes
+them exactly. Generate the write-once freeze afterwards.
+
+
+The committed K19b calibration exposes a guard problem: the gate as frozen
+cannot pass even a variant equal to baseline at the required 80% null-pass rate.
+Worst null PASS is 0%, and the best whole-gate PASS across all cells is 1.9%.
+Null cells FAIL at look 1 in 80.7%–99.55% of simulations. The stored criterion
+marginals prove a conservative guard-at-look-1 failure lower bound of
+80.45%–99.45%; exact joint guard counts were not retained. The report labels
+this bound and prints each null/margin target with its measured value.
+
+The cause is the point-estimate scenario guard (`D_s < -0.10`), which stops the
+whole gate early. K19b preserves this frozen rule and all simulation outcomes;
+its report revision only corrects the interpretation. **K19c must repair the
+guard before any live look**: design 7.4 amendment, interval guard, per-variant
+decision, and freeze v2. Low margin-cell PASS rates must be read alongside this
+near-universal early rejection. The fake dry gate remains a structural check.
+
+The freeze also binds the exact gated/reported scenario lists and each
+scenario's drive context overrides. It records `dirty` with `git_revision` so
+an uncommitted calibration source is explicit. CI verifies the committed freeze
+and validation and regenerates all pool bytes in memory from their recorded
+seed provenance. CLI `--offline` is accepted for pilot/look only with
+`--config offline`.
+
+For a frozen configuration, run the held-out looks in order:
+
+```sh
+go run ./cmd/compaction-gate look 1 --config offline
+go run ./cmd/compaction-gate report --config offline --verify
+```
+
+Only `CONTINUE` permits the next look. `PASS`, `FAIL`, and `NOT_PASSED` stop the gate.
+`INCOMPLETE` reports missing keys. The same look reruns missing groups with a recorded `Parent`.
+Every decision uses the complete cumulative item manifest, including items with no stored attempts.
+
+`report` uses stored experiments without a harness or model client.
+With `--verify`, it rebuilds reserved measures from the exported records.
+Both commands check the freeze hash, raw pool bytes, materialized item hashes, policies, and experiment labels.
+The separate `.sha256` file records the trusted freeze identity for review and version control.
+`items` refuses to regenerate pools after any freeze exists.
+The embedded `run`, `show`, `compare`, and `list` commands use `evalcli.Main`.
+Their ordinary `run` command uses the disjoint smoke pool.
+
+Live configurations are `anthropic`, `bedrock-anthropic`, `openai`, and `gemini`.
+Each configuration requires explicit model names for planner, small planner, and summarizer.
+The environment variables use `LONGRUN_<CONFIG>_<ROLE>` with uppercase names and underscores.
+For example, `LONGRUN_BEDROCK_ANTHROPIC_PLANNER_SMALL` names the small Bedrock model.
+Provider API keys use the normal `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, and `GEMINI_API_KEY` variables.
+Bedrock uses `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and optional `AWS_SESSION_TOKEN`.
+The CLI never enables live models automatically.

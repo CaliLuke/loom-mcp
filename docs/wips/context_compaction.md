@@ -1986,7 +1986,10 @@ recoveries. Long-running scenarios use the pretend window.
   bootstrap intervals over items on differences and rates, held-out item
   pools, and per-run evidence classification from the record (present in the
   view or absent when needed).
-  K19 adds them to the eval tool if the eval plan has not.
+  K19a completed these library APIs in `eval/gate` and `eval/evidence`.
+  K19b supplies the longrun fixture and CLI on protocol 18, including attachment
+  recall and record-derived evidence scoring. Validation precedes full calibration
+  and the write-once freeze. See 7.4.1.
 
 ### 7.4 Release criteria
 
@@ -2118,6 +2121,60 @@ Latency, total cost and allowance exhaustion are reported, not gated: a
 slower or dearer default that keeps runs working is a trade the release notes
 state. The suite reports each criterion, so a failure names the scenario and
 measure.
+
+### 7.4.1 Operational definitions (K19)
+
+The committed K19b calibration exposes a guard problem: the gate as frozen
+cannot pass even a variant equal to baseline at the required 80% null-pass rate.
+Worst null PASS is 0%, and the best whole-gate PASS across all cells is 1.9%.
+Null cells FAIL at look 1 in 80.7%–99.55% of simulations. The stored criterion
+marginals prove a conservative guard-at-look-1 failure lower bound of
+80.45%–99.45%; exact joint guard counts were not retained. The report labels
+this bound and prints each null/margin target with its measured value.
+
+The cause is the point-estimate scenario guard (`D_s < -0.10`), which stops the
+whole gate early. K19b preserves this frozen rule and all simulation outcomes;
+its report revision only corrects the interpretation. **K19c must repair the
+guard before any live look**: design 7.4 amendment, interval guard, per-variant
+decision, and freeze v2. Low margin-cell PASS rates must be read alongside this
+near-universal early rejection. The fake dry gate remains a structural check.
+
+The freeze also binds the exact gated/reported scenario lists and each
+scenario's drive context overrides. It records `dirty` with `git_revision` so
+an uncommitted calibration source is explicit. CI verifies the committed freeze
+and validation and regenerates all pool bytes in memory from their recorded
+seed provenance. CLI `--offline` is accepted for pilot/look only with
+`--config offline`.
+
+A need point is the first adopted planner request that contains the materialized
+trigger. Abandoned attempts do not establish need points. Missing need points
+fail evidence use and never qualify as recall attempts.
+
+Evidence sources are pins, the checkpoint user index, the checkpoint summary,
+the checkpoint receipt, recalled results, and the remaining tail. Source
+attribution is informational. Embedded checkpoint labels follow the deterministic
+Sections precedence described in the testing guide. They do not change presence
+or gated measures.
+
+The deterministic unsupported-claim measure detects planted decoys and fabricated
+`[A-Z]{3}-[0-9A-Z]{5}` tokens. Only received input in an adopted planner request
+supports a token. Earlier assistant claims, tool arguments, and final output do
+not support themselves. Asset tokens require matching received bytes.
+Task success requires successful runs, the expected final action and arguments,
+and all required answer tokens. No judge decides the release gate.
+
+Calibration uses item-level beta random effects and paired conditional outcomes.
+A Gaussian copula with kappa 0.5 couples measures within a run. Qualification uses
+independent Bernoulli draws from offline structural fractions. Recall outcomes use
+the copula and an item-level beta distribution. Sensitivity rows use kappa 0 and
+0.8. The calibration and operational suite call the same evaluator and stopping rule.
+
+The longrun command and pools implement the operational boundary. Amendment 3
+sizes the large-result fixture below 60 KB, with its fact in the middle, so it
+survives the 64 KiB projection cap. Its regenerated smoke pools pass acceptance 15.
+K22b attachment reads recover evicted PNG/PDF evidence under the declared fake
+capabilities. The offline dry gate requires both gated variants to pass. Validation
+precedes the full calibration and freeze; none of these change the release criteria.
 
 ## 8. Formal model
 

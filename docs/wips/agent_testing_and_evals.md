@@ -780,8 +780,9 @@ func Execute(ctx context.Context, h *agenttest.Harness, s Scenario, item Item) (
   fresh harness/session per attempt. Harness-local run/session IDs can repeat;
   `AttemptKey{Variant, Scenario, Item, Repeat}` is the identity.
 - **Variants.** Each carries labels, cloned per-run `PolicyOverrides` and opaque
-  agenttest options. Per-agent context compaction/recovery are runtime options in
-  `Variant.Options`, not policy fields. No variants means `default`.
+  agenttest options. Context compaction and recovery overrides use
+  `Variant.Policy.Context`, so the stored policy and fingerprint identify them.
+  No variants means `default`.
 - `HarnessFunc(ctx, variant, opts...)` forwards supplied options and returns a new
   harness. `NewHarnessFunc(register, setup, base...)` provides the standard builder.
   Scripts and stubs are isolated per harness; use ScriptedModel, not shared scripts.

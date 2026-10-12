@@ -187,9 +187,9 @@ type MySmartPlanner struct{}
 func (p *MySmartPlanner) PlanStart(ctx context.Context, in *planner.PlanInput) (*planner.PlanResult, error) {
     // 1. Get an LLM client from the runtime.
     // mc, _ := in.Agent.ModelClient("bedrock")
-    
+
     // 2. Build a prompt from in.Messages.
-    
+
     // 3. Call the LLM and decide whether to call tools or give a final answer.
     return &planner.PlanResult{
         FinalResponse: &planner.FinalResponse{

@@ -71,7 +71,7 @@ func calibrate(ctx context.Context, cfg CalibrationConfig, cells []Cell, count i
 			return out, err
 		}
 	}
-	out.Targets = calibrationTargets(out.Cells)
+	out.Targets = CalibrationTargets(out.Cells)
 	return out, nil
 }
 func simulateCell(ctx context.Context, cfg CalibrationConfig, c Cell, n int, eval evaluator) (CellReport, error) {
@@ -119,41 +119,6 @@ func normalizeCell(r *CellReport, n float64) {
 			m[s] /= n
 		}
 	}
-}
-func calibrationTargets(cells []CellReport) []string {
-	worst := map[string]float64{measureNull: 1}
-	limiting := "unknown"
-	lowest := 2.0
-	for _, c := range cells {
-		axis := c.Cell.axis()
-		if c.Infeasible != "" || axis == "" {
-			continue
-		}
-		if axis == measureNull {
-			worst[axis] = min(worst[axis], c.Pass)
-			for name, dist := range c.Final {
-				if dist[Pass] < lowest || (dist[Pass] == lowest && name < limiting) {
-					lowest = dist[Pass]
-					limiting = name
-				}
-			}
-		} else {
-			worst[axis] = max(worst[axis], c.Pass)
-		}
-	}
-	var out []string
-	if worst[measureNull] < .8 {
-		out = append(out, fmt.Sprintf("the gate cannot certify margin %s at 48 items per scenario (worst null pass %.4f)", limiting, worst[measureNull]))
-	}
-	for _, axis := range []string{measureSuccess, measureUnsupported, measureEvidence, measureRecall} {
-		if worst[axis] > .05 {
-			out = append(out, fmt.Sprintf("the gate cannot certify margin %s at 48 items per scenario (margin pass %.4f)", axis, worst[axis]))
-		}
-	}
-	if len(out) == 0 {
-		out = append(out, "calibration targets met for supplied cells")
-	}
-	return out
 }
 
 func validateCalibration(cfg CalibrationConfig) error {

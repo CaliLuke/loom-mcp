@@ -12,6 +12,7 @@ GENERATED_PATHS=(
   registry/gen
   integration_tests/fixtures/assistant
   integration_tests/fixtures/agent_features
+  integration_tests/fixtures/longrun
   integration_tests/fixtures/sdkbridge_consumer
 )
 
@@ -41,6 +42,7 @@ make -C "${ROOT_DIR}" regen-quickstart
 make -C "${ROOT_DIR}" regen-assistant-fixture
 make -C "${ROOT_DIR}" regen-progressive-discovery-fixture
 make -C "${ROOT_DIR}" regen-agent-feature-fixture
+make -C "${ROOT_DIR}" regen-longrun-fixture
 
 if bash "${ROOT_DIR}/scripts/sdkbridge_consumer_guard.sh" changed; then
   make -C "${ROOT_DIR}" regen-sdkbridge-consumer-fixture

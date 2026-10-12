@@ -51,12 +51,14 @@ type Freeze struct {
 	Guard               float64                    `json:"guard"`
 	GatedScenarios      []string                   `json:"gated_scenarios"`
 	ReportedScenarios   []string                   `json:"reported_scenarios"`
+	ScenarioContexts    map[string]json.RawMessage `json:"scenario_contexts"`
 	Policies            map[string]json.RawMessage `json:"policies"`
 	Pools               []Pool                     `json:"pools"`
 	MaterializerVersion string                     `json:"materializer_version"`
 	CalibrationSHA256   string                     `json:"calibration_sha256"`
 	SimulatorVersion    string                     `json:"simulator_version"`
 	GitRevision         string                     `json:"git_revision"`
+	Dirty               bool                       `json:"dirty"`
 	Created             time.Time                  `json:"created"`
 }
 
