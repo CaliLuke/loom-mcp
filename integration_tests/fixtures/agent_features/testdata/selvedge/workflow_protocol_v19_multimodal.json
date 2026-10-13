@@ -1,0 +1,1459 @@
+{
+  "format": "selvedge.history/v1",
+  "instance": {
+    "instance_id": "multimodal-run",
+    "workflow_name": "features.coordinator.workflow",
+    "status": "completed",
+    "input": {
+      "context_settings": {
+        "threshold": true,
+        "max_tier": "summary",
+        "guard_margin": {
+          "Tokens": 1,
+          "Bytes": 10
+        },
+        "prompt": {
+          "Ref": {
+            "ID": "features.coordinator.context.summary",
+            "Version": "sha256:c213a63837087dad5fb990d74a4fea84f0072c70f4455cce27e9a646268aef95"
+          },
+          "Template": "sha256:c213a63837087dad5fb990d74a4fea84f0072c70f4455cce27e9a646268aef95"
+        },
+        "framing_tokens": 200,
+        "max_pins": 32,
+        "max_pinned_parts": 2,
+        "max_summary_chunks": 8,
+        "recall_scan_bytes": 8000000,
+        "TriggerAt": {
+          "Tokens": 17,
+          "Bytes": 20
+        },
+        "keep_recent_tokens": 100,
+        "protect_recent_tool_tokens": 2000,
+        "min_saving_tokens": 1,
+        "RecallDiscoveryCalls": 20,
+        "RecallReadCalls": 20
+      },
+      "context_fingerprint": "sha256:be6590967880533278e4c49e4d8dcedcbcfbb6497ecb6a07c7222d6baa0a6ea7",
+      "context_default_agents": {
+        "features.coordinator": {
+          "Disabled": false,
+          "ContextModel": null
+        }
+      },
+      "context_compaction": {
+        "ContextModel": null,
+        "TriggerAt": {
+          "Tokens": 85,
+          "Bytes": 100
+        },
+        "KeepRecentTokens": 100,
+        "ProtectRecentToolTokens": 2000,
+        "MinSavingTokens": 1,
+        "RecallDiscoveryCalls": 20,
+        "RecallReadCalls": 20,
+        "KeepResultTools": null,
+        "Summary": {
+          "Instructions": "",
+          "Prompt": ""
+        }
+      },
+      "context_recovery": {
+        "guard_margin": {
+          "Tokens": 1,
+          "Bytes": 10
+        },
+        "disable_recall": false
+      },
+      "compaction_agents": {
+        "features.coordinator": {
+          "ContextModel": null,
+          "TriggerAt": {
+            "Tokens": 85,
+            "Bytes": 100
+          },
+          "KeepRecentTokens": 100,
+          "ProtectRecentToolTokens": 2000,
+          "MinSavingTokens": 1,
+          "RecallDiscoveryCalls": 20,
+          "RecallReadCalls": 20,
+          "KeepResultTools": null,
+          "Summary": {
+            "Instructions": "",
+            "Prompt": ""
+          }
+        }
+      },
+      "WorkflowProtocolVersion": 19,
+      "AgentID": "features.coordinator",
+      "RunID": "multimodal-run",
+      "RootRunID": "multimodal-run",
+      "SessionID": "multimodal-session",
+      "TurnID": "",
+      "ParentToolCallID": "",
+      "ParentRunID": "",
+      "ParentAgentID": "",
+      "Tool": "",
+      "ToolArgs": null,
+      "Messages": [
+        {
+          "Role": "user",
+          "Parts": [
+            {
+              "Kind": "text",
+              "Text": "remember image"
+            },
+            {
+              "Kind": "image",
+              "Format": "png",
+              "Bytes": "AQID"
+            }
+          ],
+          "Meta": null
+        },
+        {
+          "Role": "assistant",
+          "Parts": [
+            {
+              "Kind": "text",
+              "Text": "noted"
+            }
+          ],
+          "Meta": null
+        },
+        {
+          "Role": "user",
+          "Parts": [
+            {
+              "Kind": "text",
+              "Text": "remember PDF"
+            },
+            {
+              "Kind": "document",
+              "Name": "manual",
+              "Format": "pdf",
+              "Bytes": "JVBERi10ZXN0",
+              "Text": "",
+              "Chunks": null,
+              "URI": "",
+              "Context": "",
+              "Cite": false
+            }
+          ],
+          "Meta": null
+        },
+        {
+          "Role": "assistant",
+          "Parts": [
+            {
+              "Kind": "text",
+              "Text": "history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history history "
+            }
+          ],
+          "Meta": null
+        },
+        {
+          "Role": "user",
+          "Parts": [
+            {
+              "Kind": "text",
+              "Text": "recall both"
+            }
+          ],
+          "Meta": null
+        }
+      ],
+      "Labels": null,
+      "Metadata": null,
+      "WorkflowOptions": null,
+      "Policy": null
+    },
+    "output": {
+      "AgentID": "features.coordinator",
+      "RunID": "multimodal-run",
+      "Final": {
+        "Role": "assistant",
+        "Parts": [
+          {
+            "Kind": "text",
+            "Text": "recalled image and PDF"
+          }
+        ],
+        "Meta": null
+      },
+      "FinalRef": "sha256:6ac7f85bd7b41d3dda917f41821d8b5bcfcb0c961db05a67f55c55f61eca850a",
+      "FinalToolResult": null,
+      "ToolEventsRef": "sha256:07ce9287d544053e11e8058273c9bd5a98b78988d68bdfd493510916b7a4989e",
+      "ToolEventCount": 3,
+      "ToolSummary": {
+        "FailedCount": 0,
+        "LastError": null,
+        "Telemetry": null
+      },
+      "Notes": [],
+      "Usage": {
+        "Model": "",
+        "ModelClass": "",
+        "InputTokens": 0,
+        "OutputTokens": 0,
+        "TotalTokens": 0,
+        "CacheReadTokens": 0,
+        "CacheWriteTokens": 0
+      }
+    },
+    "cancel_requested": false,
+    "cancel_reason": "",
+    "parent_instance_id": "",
+    "parent_key": ""
+  },
+  "events": [
+    {
+      "seq": 1,
+      "key": "#1",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 23
+    },
+    {
+      "seq": 2,
+      "key": "#2",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 23
+    },
+    {
+      "seq": 3,
+      "key": "#3",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.633672Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 3
+    },
+    {
+      "seq": 4,
+      "key": "#4",
+      "command": "activity:features.coordinator.record_content",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "continuation": {
+          "Prev": null,
+          "Pos": 1,
+          "ContinuedFrom": null,
+          "Outcome": "fresh",
+          "Reason": "no_head",
+          "View": {
+            "chain_pos": 1,
+            "context_fingerprint": "sha256:be6590967880533278e4c49e4d8dcedcbcfbb6497ecb6a07c7222d6baa0a6ea7"
+          },
+          "Limits": {
+            "ContextWindow": 0,
+            "MaxOutputTokens": 0,
+            "DefaultMaxTokens": 0,
+            "ImageTokens": 0
+          },
+          "Visible": [
+            "sha256:9ccd1bf5725450e3fe45cc70431d0675e2b3d2e26f9e768a0b2352cfec4521a8",
+            "sha256:ed488af92401fe2f5253c2bea39044b5c1d316f29ff88a7978a024b4fe9c9413",
+            "sha256:60815fe4cc3480c064486827d52a779d874f17d1782350b8d47fa07e57e778eb",
+            "sha256:d82b1ce7708e639c5cd615619fe1462213cddc60e048b554a9e69af982b76e26",
+            "sha256:c700dad39346e3b08675ec6b4b7b846cfb9d017b17f68f9b08987d732d84f8ea"
+          ]
+        },
+        "Refs": [
+          "sha256:8ce42a7e13ce84bf6ee33dc8a421eb2b830a3628c7ae98003212b3fdef7a9608",
+          "sha256:22b62f0a66319b622f88879780c8c6f5816936011574a250cb5c34fce36c0cdd",
+          "sha256:a5f4c89c3c61f794e005e59504de8dca47326dc58107763858affcb93a0450f6",
+          "sha256:f1fcab53820063dc6ba480d901481914746dfab2edfc5bad0eaa6a451818f57e",
+          "sha256:9fe8efeacce88727b9eed4b4ff4b17e7986c0bfc12ac6e4bcfd0c70fb4a4cfd8"
+        ],
+        "IndexHead": "sha256:57e00b00a4a32b2532859759fa1b82d50497a28bb5d3cb3487e59ec01ad570dc",
+        "Entries": [
+          {
+            "id": 1,
+            "kind": "message",
+            "hash": "sha256:8ce42a7e13ce84bf6ee33dc8a421eb2b830a3628c7ae98003212b3fdef7a9608",
+            "role": "user",
+            "bytes": 14,
+            "non_text": 1500,
+            "chain": "sha256:a65302a53a71021f8343d1bedc10b4e19a9966b2ba119a2846dbf01afa09176b"
+          },
+          {
+            "id": 2,
+            "kind": "message",
+            "hash": "sha256:22b62f0a66319b622f88879780c8c6f5816936011574a250cb5c34fce36c0cdd",
+            "role": "assistant",
+            "bytes": 5,
+            "chain": "sha256:894dfa6d33de8100aff4fc927f89cc51bf460efcf4b1ca3bb0b9b835fefdaa40"
+          },
+          {
+            "id": 3,
+            "kind": "message",
+            "hash": "sha256:a5f4c89c3c61f794e005e59504de8dca47326dc58107763858affcb93a0450f6",
+            "role": "user",
+            "bytes": 18,
+            "non_text": 5,
+            "chain": "sha256:b87364c06bccbc6d79ff319ed00276e91c71610a7b7a6fa6c9b0d892289a57e9"
+          },
+          {
+            "id": 4,
+            "kind": "message",
+            "hash": "sha256:f1fcab53820063dc6ba480d901481914746dfab2edfc5bad0eaa6a451818f57e",
+            "role": "assistant",
+            "bytes": 96000,
+            "chain": "sha256:b76aba531e7edb0d645bda874d4ae3b38b527b15a1cd6afb4b0cda39a64e7dff"
+          },
+          {
+            "id": 5,
+            "kind": "message",
+            "hash": "sha256:9fe8efeacce88727b9eed4b4ff4b17e7986c0bfc12ac6e4bcfd0c70fb4a4cfd8",
+            "role": "user",
+            "bytes": 11,
+            "chain": "sha256:5ba71dd5325cb7c88b71be0b1f8ae6180396d533bc725430249fce09f702b94a"
+          }
+        ],
+        "ToolResults": null,
+        "Calls": null,
+        "CallRefs": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 23
+    },
+    {
+      "seq": 5,
+      "key": "#5",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.640464Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 5
+    },
+    {
+      "seq": 6,
+      "key": "#6",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.640902Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 6
+    },
+    {
+      "seq": 7,
+      "key": "#7",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 23
+    },
+    {
+      "seq": 8,
+      "key": "#8",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.642845Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 8
+    },
+    {
+      "seq": 9,
+      "key": "#9",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.643482Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 9
+    },
+    {
+      "seq": 10,
+      "key": "#10",
+      "command": "activity:features.coordinator.plan",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "facts": [
+          {
+            "tool_result_parts": {
+              "ImageFormats": [
+                "png"
+              ],
+              "DocumentFormats": [
+                "pdf"
+              ],
+              "DocumentURISchemes": null,
+              "MaxImageBytes": 10000,
+              "MaxDocumentBytes": 10000
+            },
+            "call": {
+              "RunID": "multimodal-run",
+              "Seq": 1,
+              "Attempt": 1
+            },
+            "model": "history",
+            "context_window": 12000,
+            "output_reserve": 0,
+            "view_bearing": true,
+            "view_text_bytes": 96048,
+            "view_non_text": 1505,
+            "input_tokens": 0,
+            "text_bytes": 96648,
+            "fixed_bytes": 600,
+            "non_text": 1505,
+            "count_latency": 0,
+            "outcome": "ok",
+            "recovery_tool_bytes": 2776
+          }
+        ],
+        "Result": {
+          "ToolCalls": [
+            {
+              "Name": "workflow.draft",
+              "Payload": {
+                "topic": "start"
+              },
+              "Error": null,
+              "AgentID": "features.coordinator",
+              "RunID": "multimodal-run",
+              "RootRunID": "multimodal-run",
+              "SessionID": "multimodal-session",
+              "Labels": null,
+              "TurnID": "",
+              "ToolCallID": "initial",
+              "ParentToolCallID": ""
+            }
+          ],
+          "FinalResponse": null,
+          "FinalToolResult": null,
+          "Streamed": false,
+          "Await": null,
+          "RetryHint": null,
+          "ExpectedChildren": 0,
+          "Notes": null
+        },
+        "IndexHead": "sha256:57e00b00a4a32b2532859759fa1b82d50497a28bb5d3cb3487e59ec01ad570dc",
+        "View": null,
+        "call_view": {
+          "chain_pos": 1,
+          "context_fingerprint": "sha256:be6590967880533278e4c49e4d8dcedcbcfbb6497ecb6a07c7222d6baa0a6ea7",
+          "index_head": "sha256:57e00b00a4a32b2532859759fa1b82d50497a28bb5d3cb3487e59ec01ad570dc"
+        },
+        "TranscriptRef": "sha256:d397d8192ce1602bdaf90b56810786d6a410f5396826351a80415f12ab6a14b1",
+        "TranscriptSize": {
+          "Bytes": 8,
+          "NonText": 0,
+          "Role": "assistant"
+        },
+        "ToolCallRefs": [
+          "sha256:6890e7c731f75d1f7e52b91ed38001c1b2beef814b674103c4dca5fb90934bfa"
+        ],
+        "AwaitCallRefs": null,
+        "CallKeys": [
+          {
+            "RunID": "multimodal-run",
+            "Seq": 1,
+            "Attempt": 1
+          }
+        ],
+        "ProducingCall": {
+          "RunID": "multimodal-run",
+          "Seq": 1,
+          "Attempt": 1
+        },
+        "RequestGrowth": null,
+        "Usage": {
+          "Model": "",
+          "ModelClass": "",
+          "InputTokens": 0,
+          "OutputTokens": 0,
+          "TotalTokens": 0,
+          "CacheReadTokens": 0,
+          "CacheWriteTokens": 0
+        },
+        "ToolPolicyActive": true,
+        "AllowedTools": [
+          "delegated.summarize",
+          "workflow.draft",
+          "workflow.finalize",
+          "workflow.method_echo",
+          "workflow.publish",
+          "workflow.retry",
+          "workflow.review",
+          "workflow.revise"
+        ],
+        "PolicyCaps": {
+          "MaxToolCalls": 12,
+          "RemainingToolCalls": 12,
+          "MaxRecoveryTurns": 2,
+          "RemainingRecoveryTurns": 2,
+          "ExpiresAt": "0001-01-01T00:00:00Z"
+        },
+        "Recovery": null,
+        "Attempt": 1
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 23
+    },
+    {
+      "seq": 11,
+      "key": "#11",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.653893Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 11
+    },
+    {
+      "seq": 12,
+      "key": "#12",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 23
+    },
+    {
+      "seq": 13,
+      "key": "#13",
+      "command": "receive_async:loom_mcp.runtime.pause",
+      "event_type": "SignalNone",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 14,
+      "key": "#14",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.657436Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 14
+    },
+    {
+      "seq": 15,
+      "key": "#15",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.657702Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 15
+    },
+    {
+      "seq": 16,
+      "key": "#16",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.657986Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 16
+    },
+    {
+      "seq": 17,
+      "key": "#17",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.658274Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 17
+    },
+    {
+      "seq": 18,
+      "key": "#18",
+      "command": "sleep",
+      "event_type": "Reserved",
+      "data_type": "json",
+      "binary": null,
+      "reservation": {
+        "expires_at": "2026-10-12T23:25:28.640694Z"
+      },
+      "delivered_seq": 0
+    },
+    {
+      "seq": 19,
+      "key": "#19",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 23
+    },
+    {
+      "seq": 20,
+      "key": "#20",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.661135Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 20
+    },
+    {
+      "seq": 21,
+      "key": "#21",
+      "command": "activity:features.coordinator.executetool",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "Preview": "",
+        "ResultBytes": 27,
+        "Refs": {
+          "Result": "sha256:ce2d59223e6653b8e03f54a8e761d2d046f4f2d01d14bf7e6b2c7c37522ddfa0",
+          "ServerData": "",
+          "Payload": "sha256:a64c154e449e59b1d1d619cf3af86b1d79123609766898c969e00c6bc26d4f1f"
+        },
+        "Payload": null,
+        "ServerData": null,
+        "Bounds": null,
+        "Telemetry": null,
+        "Error": "",
+        "ErrorKind": "",
+        "RetryHint": null,
+        "Pause": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 23
+    },
+    {
+      "seq": 22,
+      "key": "#22",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.662377Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 22
+    },
+    {
+      "seq": 23,
+      "key": "#23",
+      "command": "await",
+      "event_type": "AwaitCompleted",
+      "data": {
+        "history": 8,
+        "signals": 0
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 23
+    },
+    {
+      "seq": 24,
+      "key": "#24",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.687506Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 24
+    },
+    {
+      "seq": 25,
+      "key": "#25",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 26,
+      "key": "#26",
+      "command": "activity:features.coordinator.record_content",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "Refs": [
+          "sha256:bd0f76a809e186b50fe61546dd32faa1ce5b97d868b9f12c9c61c97c121972b1"
+        ],
+        "IndexHead": "",
+        "Entries": null,
+        "ToolResults": null,
+        "Calls": null,
+        "CallRefs": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 27,
+      "key": "#27",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.694661Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 27
+    },
+    {
+      "seq": 28,
+      "key": "#28",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.695128Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 28
+    },
+    {
+      "seq": 29,
+      "key": "#29",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.69554Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 29
+    },
+    {
+      "seq": 30,
+      "key": "#30",
+      "command": "activity:features.coordinator.resume",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "facts": [
+          {
+            "tool_result_parts": {
+              "ImageFormats": [
+                "png"
+              ],
+              "DocumentFormats": [
+                "pdf"
+              ],
+              "DocumentURISchemes": null,
+              "MaxImageBytes": 10000,
+              "MaxDocumentBytes": 10000
+            },
+            "call": {
+              "RunID": "multimodal-run",
+              "Seq": 2,
+              "Attempt": 1
+            },
+            "model": "history",
+            "context_window": 12000,
+            "output_reserve": 0,
+            "view_bearing": true,
+            "view_text_bytes": 1087,
+            "view_non_text": 5,
+            "input_tokens": 0,
+            "text_bytes": 4858,
+            "fixed_bytes": 3771,
+            "non_text": 5,
+            "count_latency": 0,
+            "outcome": "ok"
+          }
+        ],
+        "Result": {
+          "ToolCalls": [
+            {
+              "Name": "runtime.recall_context",
+              "Payload": {
+                "read": {
+                  "id": "1",
+                  "part": "attachment",
+                  "index": 2,
+                  "offset": 0
+                }
+              },
+              "Error": null,
+              "AgentID": "features.coordinator",
+              "RunID": "multimodal-run",
+              "RootRunID": "multimodal-run",
+              "SessionID": "multimodal-session",
+              "Labels": null,
+              "TurnID": "",
+              "ToolCallID": "image",
+              "ParentToolCallID": ""
+            },
+            {
+              "Name": "runtime.recall_context",
+              "Payload": {
+                "read": {
+                  "id": "3",
+                  "part": "attachment",
+                  "index": 2,
+                  "offset": 0
+                }
+              },
+              "Error": null,
+              "AgentID": "features.coordinator",
+              "RunID": "multimodal-run",
+              "RootRunID": "multimodal-run",
+              "SessionID": "multimodal-session",
+              "Labels": null,
+              "TurnID": "",
+              "ToolCallID": "pdf",
+              "ParentToolCallID": ""
+            }
+          ],
+          "FinalResponse": null,
+          "FinalToolResult": null,
+          "Streamed": false,
+          "Await": null,
+          "RetryHint": null,
+          "ExpectedChildren": 0,
+          "Notes": null
+        },
+        "IndexHead": "sha256:4f471ff807453393985594719cae10431cbed208fda9c9ca9c13a5ac428c7925",
+        "View": {
+          "Checkpoint": "sha256:d539a2f9eb2b02a6aaba5705fa510d9a500dd96f85792cd12538662d715f4db1",
+          "Pinned": [
+            1,
+            5,
+            3
+          ],
+          "CheckpointBytes": 1007
+        },
+        "call_view": {
+          "chain_pos": 1,
+          "context_fingerprint": "sha256:be6590967880533278e4c49e4d8dcedcbcfbb6497ecb6a07c7222d6baa0a6ea7",
+          "index_head": "sha256:4f471ff807453393985594719cae10431cbed208fda9c9ca9c13a5ac428c7925",
+          "checkpoint": "sha256:d539a2f9eb2b02a6aaba5705fa510d9a500dd96f85792cd12538662d715f4db1",
+          "tail_from": 6,
+          "pinned": [
+            1,
+            5,
+            3
+          ],
+          "budget": {
+            "keep_user_tokens": 600,
+            "max_summary_tokens": 1200,
+            "receipt_tokens": 360,
+            "framing_tokens": 200
+          }
+        },
+        "TranscriptRef": "sha256:d397d8192ce1602bdaf90b56810786d6a410f5396826351a80415f12ab6a14b1",
+        "TranscriptSize": {
+          "Bytes": 8,
+          "NonText": 0,
+          "Role": "assistant"
+        },
+        "ToolCallRefs": [
+          "sha256:178ddc2ec17830a4fa276453a8aed9aa654f27454d91f3353f6b7e9c80bd91e2",
+          "sha256:13b9a716fe861920f72fc033697cb9257399305ed1dff2ded6d331d9afa9d394"
+        ],
+        "AwaitCallRefs": null,
+        "CallKeys": [
+          {
+            "RunID": "multimodal-run",
+            "Seq": 2,
+            "Attempt": 1
+          }
+        ],
+        "ProducingCall": {
+          "RunID": "multimodal-run",
+          "Seq": 2,
+          "Attempt": 1
+        },
+        "RequestGrowth": null,
+        "Usage": {
+          "Model": "",
+          "ModelClass": "",
+          "InputTokens": 0,
+          "OutputTokens": 0,
+          "TotalTokens": 0,
+          "CacheReadTokens": 0,
+          "CacheWriteTokens": 0
+        },
+        "ToolPolicyActive": true,
+        "AllowedTools": [
+          "delegated.summarize",
+          "workflow.draft",
+          "workflow.finalize",
+          "workflow.method_echo",
+          "workflow.publish",
+          "workflow.retry",
+          "workflow.review",
+          "workflow.revise",
+          "runtime.recall_context"
+        ],
+        "PolicyCaps": {
+          "MaxToolCalls": 12,
+          "RemainingToolCalls": 11,
+          "MaxRecoveryTurns": 2,
+          "RemainingRecoveryTurns": 2,
+          "ExpiresAt": "0001-01-01T00:00:00Z"
+        },
+        "Recovery": null,
+        "Attempt": 2
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 31,
+      "key": "#31",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.705833Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 31
+    },
+    {
+      "seq": 32,
+      "key": "#32",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.709804Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 32
+    },
+    {
+      "seq": 33,
+      "key": "#33",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 34,
+      "key": "#34",
+      "command": "receive_async:loom_mcp.runtime.pause",
+      "event_type": "SignalNone",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 35,
+      "key": "#35",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.713737Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 35
+    },
+    {
+      "seq": 36,
+      "key": "#36",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.714012Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 36
+    },
+    {
+      "seq": 37,
+      "key": "#37",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.714273Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 37
+    },
+    {
+      "seq": 38,
+      "key": "#38",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.714481Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 38
+    },
+    {
+      "seq": 39,
+      "key": "#39",
+      "command": "sleep",
+      "event_type": "Reserved",
+      "data_type": "json",
+      "binary": null,
+      "reservation": {
+        "expires_at": "2026-10-12T23:25:28.640668Z"
+      },
+      "delivered_seq": 0
+    },
+    {
+      "seq": 40,
+      "key": "#40",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 41,
+      "key": "#41",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 42,
+      "key": "#42",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.718531Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 42
+    },
+    {
+      "seq": 43,
+      "key": "#43",
+      "command": "activity:features.coordinator.recall",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "parts": "sha256:47bddf8e88621e534ffe53524ae554be3c98b73637330bbf69957e1a44d38735",
+        "non_text": 1500,
+        "Result": {
+          "non_text": 1500,
+          "Preview": "context lookup result",
+          "ResultBytes": 116,
+          "Refs": {
+            "parts": "sha256:47bddf8e88621e534ffe53524ae554be3c98b73637330bbf69957e1a44d38735",
+            "Result": "sha256:44c1c3e78709d14259448ef38a8c6e5d27daf6dbd152a0947aaeb899c7060be9",
+            "ServerData": "",
+            "Payload": ""
+          },
+          "Payload": null,
+          "ServerData": null,
+          "Bounds": null,
+          "Telemetry": null,
+          "Error": "",
+          "ErrorKind": "",
+          "RetryHint": null,
+          "Pause": null
+        },
+        "Code": "",
+        "Bytes": 116
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 44,
+      "key": "#44",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.723983Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 44
+    },
+    {
+      "seq": 45,
+      "key": "#45",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 46,
+      "key": "#46",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 47,
+      "key": "#47",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.729215Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 47
+    },
+    {
+      "seq": 48,
+      "key": "#48",
+      "command": "activity:features.coordinator.recall",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "parts": "sha256:86eb6fc9bd686792e839db7cf243a7c6578a33e4c83b90915b2d7037593dec14",
+        "non_text": 5,
+        "Result": {
+          "non_text": 5,
+          "Preview": "context lookup result",
+          "ResultBytes": 116,
+          "Refs": {
+            "parts": "sha256:86eb6fc9bd686792e839db7cf243a7c6578a33e4c83b90915b2d7037593dec14",
+            "Result": "sha256:a42eddc77b4a97a4e3d61e2fb9b87ee6def2548aad0eb5d664ccb683fb2cc999",
+            "ServerData": "",
+            "Payload": ""
+          },
+          "Payload": null,
+          "ServerData": null,
+          "Bounds": null,
+          "Telemetry": null,
+          "Error": "",
+          "ErrorKind": "",
+          "RetryHint": null,
+          "Pause": null
+        },
+        "Code": "",
+        "Bytes": 116
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 49,
+      "key": "#49",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.732266Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 49
+    },
+    {
+      "seq": 50,
+      "key": "#50",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 51,
+      "key": "#51",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 52,
+      "key": "#52",
+      "command": "activity:features.coordinator.record_content",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "Refs": [
+          "sha256:e50aec721f717c3f5c7fa06df10cfa44eca1ea4a488580b8c1727871c61014e5",
+          "sha256:ea44df2ba2e62a217441e40148ded8e6136ea3a75dabe85329dc10aed21dc8ef"
+        ],
+        "IndexHead": "",
+        "Entries": null,
+        "ToolResults": null,
+        "Calls": null,
+        "CallRefs": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 53,
+      "key": "#53",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.738797Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 53
+    },
+    {
+      "seq": 54,
+      "key": "#54",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.739106Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 54
+    },
+    {
+      "seq": 55,
+      "key": "#55",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.740289Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 55
+    },
+    {
+      "seq": 56,
+      "key": "#56",
+      "command": "activity:features.coordinator.resume",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "facts": [
+          {
+            "tool_result_parts": {
+              "ImageFormats": [
+                "png"
+              ],
+              "DocumentFormats": [
+                "pdf"
+              ],
+              "DocumentURISchemes": null,
+              "MaxImageBytes": 10000,
+              "MaxDocumentBytes": 10000
+            },
+            "call": {
+              "RunID": "multimodal-run",
+              "Seq": 3,
+              "Attempt": 1
+            },
+            "model": "history",
+            "context_window": 12000,
+            "output_reserve": 0,
+            "view_bearing": true,
+            "view_text_bytes": 1513,
+            "view_non_text": 1510,
+            "input_tokens": 0,
+            "text_bytes": 5284,
+            "fixed_bytes": 3771,
+            "non_text": 1510,
+            "count_latency": 0,
+            "outcome": "ok"
+          }
+        ],
+        "Result": {
+          "ToolCalls": null,
+          "FinalResponse": {
+            "Message": {
+              "Role": "assistant",
+              "Parts": [
+                {
+                  "Kind": "text",
+                  "Text": "recalled image and PDF"
+                }
+              ],
+              "Meta": null
+            }
+          },
+          "FinalToolResult": null,
+          "Streamed": false,
+          "Await": null,
+          "RetryHint": null,
+          "ExpectedChildren": 0,
+          "Notes": null
+        },
+        "IndexHead": "sha256:e89f46af42752e7a8d9e54356a5ffe45a47a4c9d9c16039bba64afe56ba2304f",
+        "View": {
+          "Checkpoint": "sha256:d539a2f9eb2b02a6aaba5705fa510d9a500dd96f85792cd12538662d715f4db1",
+          "Pinned": [
+            1,
+            5,
+            3
+          ],
+          "CheckpointBytes": 1007
+        },
+        "call_view": {
+          "chain_pos": 1,
+          "context_fingerprint": "sha256:be6590967880533278e4c49e4d8dcedcbcfbb6497ecb6a07c7222d6baa0a6ea7",
+          "index_head": "sha256:e89f46af42752e7a8d9e54356a5ffe45a47a4c9d9c16039bba64afe56ba2304f",
+          "checkpoint": "sha256:d539a2f9eb2b02a6aaba5705fa510d9a500dd96f85792cd12538662d715f4db1",
+          "tail_from": 6,
+          "pinned": [
+            1,
+            5,
+            3
+          ],
+          "budget": {
+            "keep_user_tokens": 600,
+            "max_summary_tokens": 1200,
+            "receipt_tokens": 360,
+            "framing_tokens": 200
+          }
+        },
+        "TranscriptRef": "sha256:3cc4240f9a7e4aeff437e11ea51bf66cea92f0ec603338f7d8d1d50b12116984",
+        "TranscriptSize": {
+          "Bytes": 22,
+          "NonText": 0,
+          "Role": "assistant"
+        },
+        "ToolCallRefs": null,
+        "AwaitCallRefs": null,
+        "CallKeys": [
+          {
+            "RunID": "multimodal-run",
+            "Seq": 3,
+            "Attempt": 1
+          }
+        ],
+        "ProducingCall": {
+          "RunID": "multimodal-run",
+          "Seq": 3,
+          "Attempt": 1
+        },
+        "RequestGrowth": null,
+        "Usage": {
+          "Model": "",
+          "ModelClass": "",
+          "InputTokens": 0,
+          "OutputTokens": 0,
+          "TotalTokens": 0,
+          "CacheReadTokens": 0,
+          "CacheWriteTokens": 0
+        },
+        "ToolPolicyActive": true,
+        "AllowedTools": [
+          "delegated.summarize",
+          "workflow.draft",
+          "workflow.finalize",
+          "workflow.method_echo",
+          "workflow.publish",
+          "workflow.retry",
+          "workflow.review",
+          "workflow.revise",
+          "runtime.recall_context"
+        ],
+        "PolicyCaps": {
+          "MaxToolCalls": 12,
+          "RemainingToolCalls": 9,
+          "MaxRecoveryTurns": 2,
+          "RemainingRecoveryTurns": 2,
+          "ExpiresAt": "0001-01-01T00:00:00Z"
+        },
+        "Recovery": null,
+        "Attempt": 3
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 57,
+      "key": "#57",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.746488Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 57
+    },
+    {
+      "seq": 58,
+      "key": "#58",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 59,
+      "key": "#59",
+      "command": "receive_async:loom_mcp.runtime.pause",
+      "event_type": "SignalNone",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 60,
+      "key": "#60",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 61,
+      "key": "#61",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 62,
+      "key": "#62",
+      "command": "activity:features.coordinator.finish",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "FinalRef": "sha256:6ac7f85bd7b41d3dda917f41821d8b5bcfcb0c961db05a67f55c55f61eca850a",
+        "ToolEventsRef": "sha256:07ce9287d544053e11e8058273c9bd5a98b78988d68bdfd493510916b7a4989e",
+        "ToolEventCount": 3,
+        "ToolSummary": {
+          "FailedCount": 0,
+          "LastError": null,
+          "Telemetry": null
+        },
+        "FinalToolResult": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 63,
+      "key": "#63",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.758916Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 63
+    },
+    {
+      "seq": 64,
+      "key": "#64",
+      "command": "activity:features.coordinator.seal",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "IndexHead": "sha256:45d2ac326f683f667dccf19759c01ad4a3d81ec0073d1b9c2bddae4e819e961d"
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 65,
+      "key": "#65",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    }
+  ],
+  "signals": []
+}

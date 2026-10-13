@@ -35,7 +35,7 @@ func TestContentChildOutputUsesRootScope(t *testing.T) {
 					}
 					return failAt
 				}()}
-				rt := New(WithRunStore(store))
+				rt := New(WithRunStore(store), WithoutContextDefault("content.agent"), WithoutContextDefault("child.agent"))
 				var childOutput *api.RunOutput
 				require.NoError(t, rt.RegisterAgent(t.Context(), AgentRegistration{
 					ID: "child.agent", Planner: &stubPlanner{start: func(ctx context.Context, in *planner.PlanInput) (*planner.PlanResult, error) {

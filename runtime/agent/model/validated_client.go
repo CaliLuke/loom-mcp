@@ -29,7 +29,8 @@ func NewClient(provider Provider) (Client, error) {
 	}
 	info, _ := provider.(ContextInfo)
 	parts, _ := provider.(ToolResultPartsInfo)
-	return WithCapabilitySet(client, Capabilities{Counter: counter, Info: info, ToolResultParts: parts}), nil
+	configuration, _ := provider.(ProviderConfigurationInfo)
+	return WithCapabilitySet(client, Capabilities{Counter: counter, Info: info, ToolResultParts: parts, ProviderConfiguration: configuration}), nil
 }
 
 // Complete validates the request before provider work and accepts only output

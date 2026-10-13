@@ -22,7 +22,8 @@ const (
 
 // prepareWorkflowSummary adopts the summary attempt before any planner command.
 func (r *Runtime) prepareWorkflowSummary(wf engine.WorkflowContext, base *workflowPlanInput, input *PlanActivityInput, deadline time.Time) error {
-	if !base.contextSettings.Threshold || base.contextSettings.MaxTier == compaction.Clear || base.contextSettings.MaxTier == compaction.Evict {
+	tier := compaction.EffectiveTier(base.compactionState, base.contextSettings)
+	if !compaction.On(base.compactionState, base.Entries, base.contextSettings) || tier == compaction.Clear || tier == compaction.Evict {
 		return nil
 	}
 	if !base.contextSettings.Summary.Enabled {

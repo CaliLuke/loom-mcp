@@ -54,5 +54,6 @@ func (r *runReader) readOverflow(event *runlog.Event) error {
 			return fmt.Errorf("runrecord: recovery differs from recorded facts")
 		}
 	}
+	r.overflowRetry = overflow.Outcome == "recovered" || overflow.Outcome == "guard_off"
 	return nil
 }

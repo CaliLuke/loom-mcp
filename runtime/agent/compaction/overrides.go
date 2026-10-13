@@ -18,6 +18,7 @@ type (
 	}
 	// ContextOverrides replaces individual registered settings; nil fields inherit.
 	ContextOverrides struct {
+		KeepNonTextResident       *bool          `json:"nontext_resident,omitzero"`
 		Threshold                 *bool          `json:"threshold,omitzero"`
 		MaxTier                   *Tier          `json:"max_tier,omitzero"`
 		TriggerAt                 *Ratio         `json:"trigger_at,omitzero"`
@@ -77,6 +78,10 @@ func Merge(registered Settings, overrides *ContextOverrides) Settings {
 	s.RecallScanBytes = replacement(s.RecallScanBytes, overrides.RecallScanBytes)
 	s.ContextWindow = replacement(s.ContextWindow, overrides.ContextWindow)
 	s.Threshold = replacement(s.Threshold, overrides.Threshold)
+	if overrides.Threshold != nil {
+		s.Default = false
+	}
+	s.KeepNonTextResident = replacement(s.KeepNonTextResident, overrides.KeepNonTextResident)
 	s.MaxTier = replacement(s.MaxTier, overrides.MaxTier)
 	s.DisableRecall = replacement(s.DisableRecall, overrides.DisableRecall)
 
@@ -111,6 +116,9 @@ func ValidateOverrides(registered Settings, overrides *ContextOverrides) error {
 			if r.value != nil && r.value.Den <= 0 {
 				return settingsError(r.field, *r.value, "denominator must be positive")
 			}
+		}
+		if overrides.KeepNonTextResident != nil && !*overrides.KeepNonTextResident && !Merge(registered, overrides).Threshold {
+			return settingsError("KeepNonTextResident", false, "requires explicit Threshold")
 		}
 		if overrides.MaxTier != nil && !Merge(registered, overrides).Threshold {
 			return settingsError("MaxTier", *overrides.MaxTier, "requires Threshold")

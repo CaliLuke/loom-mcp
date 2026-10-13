@@ -27,7 +27,8 @@ func nonTextTokens(part model.Part, measure PartTokens) int {
 	return 1500
 }
 
-func partPlaceholder(part model.Part, label string, number int) string {
+// PartPlaceholder names an omitted original attachment without retaining its bytes.
+func PartPlaceholder(part model.Part, label string, number int) string {
 	kind, format, size := "image", "", 0
 	switch value := partValue(part).(type) {
 	case model.ImagePart:
@@ -86,7 +87,7 @@ func pinParts(user UserMessage, label string, allowance *partAllowance) (string,
 			allowance.tokens -= cost
 			parts = append(parts, part)
 		} else {
-			placeholders = append(placeholders, partPlaceholder(part, label, i+1))
+			placeholders = append(placeholders, PartPlaceholder(part, label, i+1))
 		}
 	}
 	return strings.Join(placeholders, "\n"), parts

@@ -7,6 +7,7 @@ import (
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextmeasure"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 )
 
@@ -17,6 +18,8 @@ type (
 	// Settings holds per-run trigger settings. Zero fields resolve to the design
 	// defaults against the smallest recorded usable model budget.
 	Settings struct {
+		Default                   bool                `json:"default,omitzero"`
+		KeepNonTextResident       bool                `json:"nontext_resident,omitzero"`
 		Threshold                 bool                `json:"threshold,omitzero"`
 		MaxTier                   Tier                `json:"max_tier,omitzero"`
 		GuardMargin               contextmeasure.Rate `json:"guard_margin,omitzero"`
@@ -43,6 +46,9 @@ type (
 	// ModelState holds the last view-bearing measurements for one model. Rate is
 	// replaced only by usage-bearing facts, independently of the latest overhead.
 	ModelState struct {
+		Qualified       contextmeasure.QualificationTier
+		ProviderConfig  string
+		FirstCall       runstore.CallKey
 		ToolResultParts model.ToolResultPartSupport
 		Rate            contextmeasure.Rate
 		Calibrated      bool
@@ -51,11 +57,13 @@ type (
 		FixedBytes      int
 	}
 	// Flags holds sticky observations for later workflow event emission.
-	Flags struct{ Unmeasured, LimitsUnknown, BudgetTooSmall bool }
+	Flags struct{ Unmeasured, LimitsUnknown, BudgetTooSmall, NonTextResident, UnqualifiedStep bool }
 	// State is reconstructed from adopted facts and preceding decisions. OpenFrom
 	// is the first entry of an open await/confirmation/clarification, set by the
 	// caller from workflow state before Decide; zero means no open suffix.
 	State struct {
+		// Compatibility holds the last durably adopted attachment check.
+		Compatibility Compatibility
 		// ValidateBudgets enables strict mid-run validation for explicit run overrides.
 		// This provenance is separate from the canonical effective settings.
 		ValidateBudgets bool
@@ -66,6 +74,7 @@ type (
 		Models             map[string]ModelState
 		MinB               int
 		// EffectiveWindow is the window of the fact that established MinB.
+		LimitingModel   string
 		EffectiveWindow int
 		NoProgressAt    int
 		OpenFrom        index.MessageID
@@ -81,7 +90,7 @@ type (
 		Bytes    int
 	}
 	// Tier names the strongest transformation requested by a decision.
-	Tier string
+	Tier = contextmeasure.QualificationTier
 	// SkipReason explains an attempted or suppressed threshold compaction.
 	SkipReason string
 	// Decision returns the next view and state without mutating its inputs. A new
@@ -137,11 +146,7 @@ func Observe(state State, facts []contextmeasure.RequestFacts) State {
 		state.Flags.BudgetTooSmall = state.Flags.BudgetTooSmall || (fact.ContextWindow > 0 && fact.OutputReserve >= fact.ContextWindow)
 		if previous.Known {
 			previous.Budget = fact.ContextWindow - max(fact.OutputReserve, 0)
-			if state.MinB == 0 || previous.Budget < state.MinB {
-				state.MinB = previous.Budget
-				state.EffectiveWindow = fact.ContextWindow
-			}
-			state.Flags.BudgetTooSmall = state.Flags.BudgetTooSmall || previous.Budget < 2900
+			observeBudget(&state, fact, previous.Budget)
 		}
 		state.Flags.LimitsUnknown = state.Flags.LimitsUnknown || fact.ContextWindow == 0 || fact.LimitsInvalid
 		state.Models[fact.Model] = previous
@@ -175,5 +180,16 @@ func observedModel(models map[string]ModelState, fact contextmeasure.RequestFact
 	if previous, seen := models[fact.Model]; seen {
 		return previous
 	}
-	return ModelState{ToolResultParts: fact.ToolResultParts.Intersect(fact.ToolResultParts)}
+	return ModelState{ToolResultParts: fact.ToolResultParts.Intersect(fact.ToolResultParts), Qualified: fact.Qualified, ProviderConfig: fact.ProviderConfig, FirstCall: fact.Call}
+}
+
+func observeBudget(state *State, fact contextmeasure.RequestFacts, budget int) {
+	if state.MinB == 0 || budget < state.MinB {
+		state.MinB = budget
+		state.EffectiveWindow = fact.ContextWindow
+		state.LimitingModel = fact.Model
+	} else if budget == state.MinB && (state.LimitingModel == "" || fact.Model < state.LimitingModel) {
+		state.LimitingModel = fact.Model
+	}
+	state.Flags.BudgetTooSmall = state.Flags.BudgetTooSmall || budget < 2900
 }

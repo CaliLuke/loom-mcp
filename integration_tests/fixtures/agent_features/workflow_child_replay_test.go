@@ -19,14 +19,16 @@ import (
 )
 
 const (
-	workflowChildHistoryFile    = "testdata/workflow_protocol_v18_child.json"
-	workflowChildRunHistoryFile = "testdata/workflow_protocol_v18_child_run.json"
+	workflowChildHistoryFile    = "testdata/workflow_protocol_v19_child.json"
+	workflowChildRunHistoryFile = "testdata/workflow_protocol_v19_child_run.json"
 )
 
 func TestGeneratedFeatureChildWorkflowReplay(t *testing.T) {
 	root, err := os.OpenRoot(".")
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, root.Close()) })
+	t.Cleanup(func() {
+		require.NoError(t, root.Close())
+	})
 	for _, filename := range []string{workflowChildHistoryFile, workflowChildRunHistoryFile} {
 		t.Run(filename, func(t *testing.T) {
 			data, err := root.ReadFile(filename)

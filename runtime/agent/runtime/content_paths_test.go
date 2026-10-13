@@ -73,7 +73,8 @@ func TestContentRunStartRecordsEffectiveMessagesBeforePlanner(t *testing.T) {
 			store := &contentPathStore{Store: storeinmem.New(), failAt: failAt}
 			effective := []*model.Message{contentMessage("first"), contentMessage("rewritten"), contentMessage("third")}
 			called := false
-			rt := New(WithEngine(engineinmem.New()), WithRunStore(store), WithInterceptors(RuntimeInterceptorFuncs{
+			// Isolate run-start content writes from the default continuation seed.
+			rt := New(WithoutContextDefault("content.agent"), WithEngine(engineinmem.New()), WithRunStore(store), WithInterceptors(RuntimeInterceptorFuncs{
 				BeforeRunFunc: func(_ context.Context, in *BeforeRunInput) (*BeforeRunDecision, error) {
 					input := in.Input
 					input.Messages = effective

@@ -19,7 +19,7 @@ func TestContentInlineResultBeforeResume(t *testing.T) {
 	for _, failAt := range []int{0, 4, 5} {
 		t.Run(fmt.Sprint(failAt), func(t *testing.T) {
 			store := &contentPathStore{Store: storeinmem.New(), failAt: failAt}
-			rt := New(WithRunStore(store))
+			rt := New(WithoutContextDefault("content.agent"), WithRunStore(store))
 			spec := newAnyJSONSpec("inline.result", "inline")
 			require.NoError(t, rt.RegisterToolset(ToolsetRegistration{Name: "inline", Inline: true, Specs: []tools.ToolSpec{spec}, Execute: func(_ context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
 				return Executed(&planner.ToolResult{Name: call.Name, ToolCallID: call.ToolCallID, Result: map[string]bool{"ok": true}, ServerData: rawjson.Message(`{"private":true}`)}), nil
@@ -55,7 +55,7 @@ func TestContentInlineResultBeforeResume(t *testing.T) {
 
 func TestContentErrorOnlyInlineDoesNotStoreResult(t *testing.T) {
 	store := &contentPathStore{Store: storeinmem.New()}
-	rt := New(WithRunStore(store))
+	rt := New(WithoutContextDefault("content.agent"), WithRunStore(store))
 	spec := newAnyJSONSpec("inline.error", "inline")
 	require.NoError(t, rt.RegisterToolset(ToolsetRegistration{Name: "inline", Inline: true, Specs: []tools.ToolSpec{spec}, Execute: func(_ context.Context, call *planner.ToolRequest) (*ToolExecutionResult, error) {
 		return Executed(&planner.ToolResult{Name: call.Name, ToolCallID: call.ToolCallID, Error: planner.NewToolError("failed")}), nil

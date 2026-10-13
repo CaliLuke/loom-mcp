@@ -8,11 +8,16 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 )
 
+// QualificationTier identifies a recorded context transformation qualification.
+type QualificationTier string
+
 // RequestOutcome classifies a completed request independently of provider details.
 type RequestOutcome string
 
 // RequestFacts carries the measurements of one request and its eventual outcome.
 type RequestFacts struct {
+	ProviderConfig  string                      `json:"provider_config,omitzero"`
+	Qualified       QualificationTier           `json:"qualified,omitzero"`
 	ToolResultParts model.ToolResultPartSupport `json:"tool_result_parts,omitzero"`
 	// LimitsInvalid distinguishes an invalid merged override from absent limits.
 	LimitsInvalid bool             `json:"limits_invalid,omitzero"`

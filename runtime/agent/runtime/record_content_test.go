@@ -37,7 +37,7 @@ func TestRecordContentRegistrationAndEmptyRun(t *testing.T) {
 		t.Run(map[bool]string{false: "empty", true: "three messages"}[messages], func(t *testing.T) {
 			store := &contentPathStore{Store: storeinmem.New()}
 			eng := &contentRecordingEngine{Engine: engineinmem.New()}
-			rt := New(WithEngine(eng), WithRunStore(store))
+			rt := New(WithoutContextDefault("content.agent"), WithEngine(eng), WithRunStore(store))
 			registerContentAgent(t, rt, &stubPlanner{start: func(context.Context, *planner.PlanInput) (*planner.PlanResult, error) {
 				return &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: contentMessage("done")}}, nil
 			}})
@@ -63,7 +63,7 @@ func TestRecordContentRegistrationAndEmptyRun(t *testing.T) {
 
 func TestRecordContentFailsWithoutPublishingPartialRefs(t *testing.T) {
 	store := &contentPathStore{Store: storeinmem.New(), failAt: 2}
-	rt := New(WithRunStore(store))
+	rt := New(WithoutContextDefault("content.agent"), WithRunStore(store))
 	out, err := rt.RecordContentActivity(t.Context(), &api.RecordContentInput{RootRunID: "root", Items: [][]byte{[]byte("first"), []byte("second")}})
 	require.ErrorIs(t, err, runstore.ErrContentTooLarge)
 	assert.Nil(t, out)

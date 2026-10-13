@@ -40,15 +40,20 @@ func (r *Runtime) recordContinuationStart(ctx context.Context, input *api.Record
 	if err != nil || saved != nil {
 		return saved, err
 	}
-	store, ok := r.SessionStore.(session.ContinuationStore)
-	if !ok {
-		return nil, fmt.Errorf("continuation requires ContinuationStore")
-	}
-	head, err := store.LoadContinuationHead(ctx, in.SessionID)
-	if err != nil {
-		return nil, err
-	}
 	state := &api.ContinuationStartOutput{View: index.ViewRef{ContextFingerprint: in.ContextFingerprint}, Pos: 1, Outcome: "fresh", Reason: "no_head"}
+	store, ok := r.SessionStore.(session.ContinuationStore)
+	var head *session.Continuation
+	if !ok {
+		if !in.Settings.Default {
+			return nil, fmt.Errorf("continuation requires ContinuationStore")
+		}
+		state.Reason = "store_unsupported"
+	} else {
+		head, err = store.LoadContinuationHead(ctx, in.SessionID)
+		if err != nil {
+			return nil, err
+		}
+	}
 	state.Visible, err = continuationVisible(input.Items)
 	if err != nil {
 		return nil, err

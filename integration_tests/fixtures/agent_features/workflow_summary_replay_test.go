@@ -26,7 +26,7 @@ import (
 
 type summaryHistoryPlanner struct{}
 
-const workflowSummaryHistoryFile = "testdata/workflow_protocol_v18_summary.json"
+const workflowSummaryHistoryFile = "testdata/workflow_protocol_v19_summary.json"
 const historyClarificationText = "I need a detail before continuing."
 
 const historySummaryText = "# Goal\nRemember the task [message 1].\n# Decisions\nUse evidence.\n# Facts\nHistory is recorded.\n# Progress\nRead it.\n# Open questions\nNone.\n# Next\nFinish."

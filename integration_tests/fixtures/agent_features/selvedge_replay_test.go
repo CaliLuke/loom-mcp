@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sync/atomic"
 	"testing"
 
 	"example.com/agentfeatures/gen/features/agents/coordinator"
@@ -22,9 +23,9 @@ func TestSelvedgeWorkflowReplay(t *testing.T) {
 	t.Cleanup(func() {
 		require.NoError(t, root.Close())
 	})
-	for _, suffix := range []string{"", "_child", "_child_run", "_continued", "_multimodal", "_summary", "_confirmed_pause", "_budget"} {
+	for _, suffix := range []string{"", "_child", "_child_run", "_continued", "_multimodal", "_summary", "_confirmed_pause", "_budget", "_default", "_nontext_resident"} {
 		t.Run("current"+suffix, func(t *testing.T) {
-			filename := "workflow_protocol_v18" + suffix + ".json"
+			filename := "workflow_protocol_v19" + suffix + ".json"
 			data, err := root.ReadFile(filename)
 			require.NoError(t, err)
 			history, err := sv.ParseHistory(data)
@@ -34,7 +35,7 @@ func TestSelvedgeWorkflowReplay(t *testing.T) {
 			eng, live := newSelvedgeRecordingEngine(t)
 			observed := &replayCommandObservations{}
 			// These deliberately conflict with recorded settings; replay must use the recorded start.
-			options := []agentsruntime.RuntimeOption{agentsruntime.WithEngine(observingSelvedgeEngine{Engine: eng, observed: observed})}
+			options := []agentsruntime.RuntimeOption{agentsruntime.WithEngine(observingSelvedgeEngine{Engine: eng, observed: observed}), agentsruntime.WithoutContextDefault(coordinator.AgentID)}
 			if suffix == "" || suffix == "_confirmed_pause" {
 				options = append(options, historyConfirmation())
 			}
@@ -47,6 +48,8 @@ func TestSelvedgeWorkflowReplay(t *testing.T) {
 				require.NoError(t, specialist.RegisterSpecialistAgent(t.Context(), fx.rt, specialist.SpecialistAgentConfig{Planner: &specialistFinalResultPlanner{}}))
 				registerCoordinatorToolsets(t, t.Context(), fx.rt, newRecordingWorkflowExecutor())
 				require.NoError(t, coordinator.RegisterCoordinatorAgent(t.Context(), fx.rt, coordinator.CoordinatorAgentConfig{Planner: parentDelegationPlanner{}}))
+			case "_default", "_nontext_resident":
+				registerDefaultHistoryAgent(t, fx)
 			case "_continued":
 				registerContinuationHistoryAgent(t, fx)
 			case "_multimodal":
@@ -61,7 +64,15 @@ func TestSelvedgeWorkflowReplay(t *testing.T) {
 			default:
 				registerHistoryReplayAgent(t, fx)
 			}
+			var defaultEffects *atomic.Int64
+			if suffix == "_default" || suffix == "_nontext_resident" {
+				defaultEffects = forbidDefaultReplayEffects(t, fx)
+			}
 			require.NoError(t, eng.ReplayHistory(t.Context(), history))
+			if defaultEffects != nil {
+				assert.Zero(t, defaultEffects.Load())
+				assertDefaultReplayEvidence(t, observed, suffix == "_nontext_resident")
+			}
 			assert.Zero(t, live.hookCalls(), "offline replay cannot invoke activities or hook callbacks")
 			if suffix != "_child_run" {
 				require.NotEmpty(t, observed.planners)
@@ -89,7 +100,7 @@ func TestSelvedgeWorkflowReplay(t *testing.T) {
 				assertSelvedgeContinuation(t, history)
 			}
 			plannerCount, summaryCount := len(observed.planners), len(observed.summaries)
-			for _, version := range []int{0, api.WorkflowProtocolVersion + 1} {
+			for _, version := range []int{0, 18, api.WorkflowProtocolVersion + 1} {
 				altered, err := sv.ParseHistory(data)
 				require.NoError(t, err)
 				var input map[string]json.RawMessage
@@ -111,6 +122,18 @@ func TestSelvedgeWorkflowReplay(t *testing.T) {
 			}
 		})
 	}
+	t.Run("protocol18 actual history rejected", func(t *testing.T) {
+		data, err := root.ReadFile("workflow_protocol_v18.json")
+		require.NoError(t, err)
+		history, err := sv.ParseHistory(data)
+		require.NoError(t, err)
+		eng, live := newSelvedgeRecordingEngine(t)
+		fx := newFeatureRuntime(t, agentsruntime.WithEngine(eng), historyConfirmation())
+		registerHistoryReplayAgent(t, fx)
+		require.ErrorIs(t, eng.ReplayHistory(t.Context(), history), api.ErrWorkflowProtocolMismatch)
+		assert.Zero(t, live.hookCalls())
+	})
+
 	for version := 5; version < 18; version++ {
 		t.Run(fmt.Sprintf("protocol%d", version), func(t *testing.T) {
 			t.Skip("no Selvedge history exists below protocol18")
@@ -141,7 +164,7 @@ func assertSelvedgeChildStart(t *testing.T, history *sv.RecordedHistory, parent 
 	var prepared *api.ContextStartOutput
 	var preparationSeq int64
 	children := 0
-	data, err := os.ReadFile("testdata/selvedge/workflow_protocol_v18_child_run.json")
+	data, err := os.ReadFile("testdata/selvedge/workflow_protocol_v19_child_run.json")
 	require.NoError(t, err)
 	childHistory, err := sv.ParseHistory(data)
 	require.NoError(t, err)

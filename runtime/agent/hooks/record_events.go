@@ -110,7 +110,7 @@ const (
 // commit protocol. The reserved kinds acquire producers in later phases.
 func IsRecordEvent(kind EventType) bool {
 	return kind == ContinuationStarted || kind == ContinuationPublished || kind == ContinuationSuperseded || kind == PlannerStep || kind == RunSealed || kind == ContextCompacted ||
-		kind == ContextCompactionSkipped || kind == ContextOverflow || kind == ChildRunLinked || kind == ContextRecalled
+		kind == ContextCompatibility || kind == ContextResidencyAdopted || kind == ContextCompactionSkipped || kind == ContextOverflow || kind == ChildRunLinked || kind == ContextRecalled
 }
 
 // NewPlannerStepEvent constructs a replay-stable adoption record with workflow time.
@@ -207,6 +207,15 @@ func decodeRecallEvent(input *ActivityInput) (Event, bool, error) {
 }
 
 func decodeContextEvent(input *ActivityInput) (Event, bool, error) {
+	if input.Type == ContextResidencyAdopted {
+		var event ContextResidencyEvent
+		if err := decodeHookPayload(input, &event); err != nil {
+			return nil, false, err
+		}
+		event.baseEvent = baseEvent{runID: input.RunID, agentID: input.AgentID, sessionID: input.SessionID}
+		return &event, true, nil
+	}
+
 	if input.Type == ContextOverflow {
 		var event ContextOverflowEvent
 		if err := decodeHookPayload(input, &event); err != nil {
@@ -215,7 +224,7 @@ func decodeContextEvent(input *ActivityInput) (Event, bool, error) {
 		event.baseEvent = baseEvent{runID: input.RunID, agentID: input.AgentID, sessionID: input.SessionID}
 		return &event, true, nil
 	}
-	if input.Type == ContextCompacted || input.Type == ContextCompactionSkipped {
+	if input.Type == ContextCompatibility || input.Type == ContextCompacted || input.Type == ContextCompactionSkipped {
 		var p ContextCompactionEvent
 		if err := decodeHookPayload(input, &p); err != nil {
 			return nil, false, err
@@ -224,8 +233,14 @@ func decodeContextEvent(input *ActivityInput) (Event, bool, error) {
 		p.kind = input.Type
 		return &p, true, nil
 	}
-	if input.Type == ContextUnmeasured || input.Type == ContextLimitsUnknown || input.Type == ContextBudgetTooSmall || input.Type == ContextRecallDisabled {
-		return &ContextDiagnosticEvent{baseEvent: baseEvent{runID: input.RunID, agentID: input.AgentID, sessionID: input.SessionID}, kind: input.Type}, true, nil
+	if input.Type == ContextUnmeasured || input.Type == ContextLimitsUnknown || input.Type == ContextBudgetTooSmall || input.Type == ContextRecallDisabled || input.Type == ContextNonTextResident {
+		var diagnostic ContextDiagnosticEvent
+		if err := decodeHookPayload(input, &diagnostic); err != nil {
+			return nil, false, err
+		}
+		diagnostic.baseEvent = baseEvent{runID: input.RunID, agentID: input.AgentID, sessionID: input.SessionID}
+		diagnostic.kind = input.Type
+		return &diagnostic, true, nil
 	}
 
 	return nil, false, nil

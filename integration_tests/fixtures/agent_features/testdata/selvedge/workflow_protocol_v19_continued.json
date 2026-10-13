@@ -1,0 +1,585 @@
+{
+  "format": "selvedge.history/v1",
+  "instance": {
+    "instance_id": "continuation-second",
+    "workflow_name": "features.coordinator.workflow",
+    "status": "completed",
+    "input": {
+      "context_settings": {
+        "threshold": true,
+        "max_tier": "summary",
+        "guard_margin": {
+          "Tokens": 1,
+          "Bytes": 10
+        },
+        "prompt": {
+          "Ref": {
+            "ID": "features.coordinator.context.summary",
+            "Version": "sha256:c213a63837087dad5fb990d74a4fea84f0072c70f4455cce27e9a646268aef95"
+          },
+          "Template": "sha256:c213a63837087dad5fb990d74a4fea84f0072c70f4455cce27e9a646268aef95"
+        },
+        "framing_tokens": 200,
+        "max_pins": 32,
+        "max_pinned_parts": 2,
+        "max_summary_chunks": 8,
+        "recall_scan_bytes": 8000000,
+        "TriggerAt": {
+          "Tokens": 17,
+          "Bytes": 20
+        },
+        "RecallDiscoveryCalls": 20,
+        "RecallReadCalls": 20
+      },
+      "context_fingerprint": "sha256:94f30232957ea1c68a6f954be366f664a7764ec44275cb08a9beedf4c3d3702d",
+      "context_default_agents": {
+        "features.coordinator": {
+          "Disabled": false,
+          "ContextModel": null
+        }
+      },
+      "context_compaction": {
+        "ContextModel": null,
+        "TriggerAt": {
+          "Tokens": 85,
+          "Bytes": 100
+        },
+        "KeepRecentTokens": 0,
+        "ProtectRecentToolTokens": 0,
+        "MinSavingTokens": 0,
+        "RecallDiscoveryCalls": 20,
+        "RecallReadCalls": 20,
+        "KeepResultTools": null,
+        "Summary": {
+          "Instructions": "",
+          "Prompt": ""
+        }
+      },
+      "context_recovery": {
+        "guard_margin": {
+          "Tokens": 1,
+          "Bytes": 10
+        },
+        "disable_recall": false
+      },
+      "compaction_agents": {
+        "features.coordinator": {
+          "ContextModel": null,
+          "TriggerAt": {
+            "Tokens": 85,
+            "Bytes": 100
+          },
+          "KeepRecentTokens": 0,
+          "ProtectRecentToolTokens": 0,
+          "MinSavingTokens": 0,
+          "RecallDiscoveryCalls": 20,
+          "RecallReadCalls": 20,
+          "KeepResultTools": null,
+          "Summary": {
+            "Instructions": "",
+            "Prompt": ""
+          }
+        }
+      },
+      "WorkflowProtocolVersion": 19,
+      "AgentID": "features.coordinator",
+      "RunID": "continuation-second",
+      "RootRunID": "continuation-second",
+      "SessionID": "continuation-history",
+      "TurnID": "",
+      "ParentToolCallID": "",
+      "ParentRunID": "",
+      "ParentAgentID": "",
+      "Tool": "",
+      "ToolArgs": null,
+      "Messages": [
+        {
+          "Role": "user",
+          "Parts": [
+            {
+              "Kind": "text",
+              "Text": "choose"
+            }
+          ],
+          "Meta": null
+        },
+        {
+          "Role": "assistant",
+          "Parts": [
+            {
+              "Kind": "text",
+              "Text": "carry this decision"
+            }
+          ],
+          "Meta": null
+        },
+        {
+          "Role": "user",
+          "Parts": [
+            {
+              "Kind": "text",
+              "Text": "continue"
+            }
+          ],
+          "Meta": null
+        }
+      ],
+      "Labels": null,
+      "Metadata": null,
+      "WorkflowOptions": null,
+      "Policy": null
+    },
+    "output": {
+      "AgentID": "features.coordinator",
+      "RunID": "continuation-second",
+      "Final": {
+        "Role": "assistant",
+        "Parts": [
+          {
+            "Kind": "text",
+            "Text": "carry this decision"
+          }
+        ],
+        "Meta": null
+      },
+      "FinalRef": "sha256:60d2ff3f14f718c3b9f6794517d58dd4198788bb5f18f78954306977b8cf5fa8",
+      "FinalToolResult": null,
+      "ToolEventsRef": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "ToolEventCount": 0,
+      "ToolSummary": {
+        "FailedCount": 0,
+        "LastError": null,
+        "Telemetry": null
+      },
+      "Notes": [],
+      "Usage": {
+        "Model": "",
+        "ModelClass": "",
+        "InputTokens": 0,
+        "OutputTokens": 0,
+        "TotalTokens": 0,
+        "CacheReadTokens": 0,
+        "CacheWriteTokens": 0
+      }
+    },
+    "cancel_requested": false,
+    "cancel_reason": "",
+    "parent_instance_id": "",
+    "parent_key": ""
+  },
+  "events": [
+    {
+      "seq": 1,
+      "key": "#1",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 2,
+      "key": "#2",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 3,
+      "key": "#3",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.573805Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 3
+    },
+    {
+      "seq": 4,
+      "key": "#4",
+      "command": "activity:features.coordinator.record_content",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "continuation": {
+          "Prev": "continuation-first",
+          "Pos": 2,
+          "ContinuedFrom": null,
+          "Outcome": "continued",
+          "Reason": "",
+          "View": {
+            "chain_pos": 2,
+            "context_fingerprint": "sha256:94f30232957ea1c68a6f954be366f664a7764ec44275cb08a9beedf4c3d3702d",
+            "index_head": "sha256:f2b03665d0a4cdd5ee355ec0bcca5cb2962f4bde0318312458f37e1d390d3303",
+            "budget": {
+              "keep_user_tokens": 400,
+              "max_summary_tokens": 800,
+              "receipt_tokens": 240,
+              "framing_tokens": 200
+            }
+          },
+          "Limits": {
+            "ContextWindow": 8000,
+            "MaxOutputTokens": 0,
+            "DefaultMaxTokens": 0,
+            "ImageTokens": 0
+          },
+          "Visible": [
+            "sha256:ececc7dc8d2fee7763ce425d09061971859d3aba4f1c97a24cd2b53d6797ec07",
+            "sha256:b81ccd8e29062cedaa233c029be3937426e1e70ec4c0b4603a698bc20c910f60",
+            "sha256:dcbf19e4133d8d4b194877e5f2215a7a0c8d68d14236cdf17bd73c28cbdbf086"
+          ]
+        },
+        "Refs": [
+          "sha256:6f91a9eb4ee6acd7aa689597d58d953bfce429592d29146e7e9e9fa06c1685c8"
+        ],
+        "IndexHead": "sha256:f2b03665d0a4cdd5ee355ec0bcca5cb2962f4bde0318312458f37e1d390d3303",
+        "Entries": [
+          {
+            "id": 1,
+            "kind": "message",
+            "hash": "sha256:ececc7dc8d2fee7763ce425d09061971859d3aba4f1c97a24cd2b53d6797ec07",
+            "role": "user",
+            "bytes": 6,
+            "origin": {
+              "scope": "continuation-first",
+              "run": "continuation-first",
+              "pos": 1,
+              "id": 1,
+              "form": "full"
+            },
+            "chain": "sha256:b966fae6391e2091fb81696174beba68afa03cb23240d84114367f8190b4af99"
+          },
+          {
+            "id": 2,
+            "kind": "message",
+            "hash": "sha256:b81ccd8e29062cedaa233c029be3937426e1e70ec4c0b4603a698bc20c910f60",
+            "role": "assistant",
+            "bytes": 19,
+            "origin": {
+              "scope": "continuation-first",
+              "run": "continuation-first",
+              "pos": 1,
+              "id": 2,
+              "form": "full"
+            },
+            "chain": "sha256:8676e2f835d58e8504774a3067ea08f96915f34a09f30ddc2e938f4ca38c3858"
+          },
+          {
+            "id": 3,
+            "kind": "message",
+            "hash": "sha256:6f91a9eb4ee6acd7aa689597d58d953bfce429592d29146e7e9e9fa06c1685c8",
+            "role": "user",
+            "bytes": 8,
+            "chain": "sha256:486392934e6626125a0d489a511f9885e80616c0120c87e6d246afc2616a5c1e"
+          }
+        ],
+        "ToolResults": null,
+        "Calls": null,
+        "CallRefs": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 5,
+      "key": "#5",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.575053Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 5
+    },
+    {
+      "seq": 6,
+      "key": "#6",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.575527Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 6
+    },
+    {
+      "seq": 7,
+      "key": "#7",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 8,
+      "key": "#8",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.577091Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 8
+    },
+    {
+      "seq": 9,
+      "key": "#9",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.577473Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 9
+    },
+    {
+      "seq": 10,
+      "key": "#10",
+      "command": "activity:features.coordinator.plan",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "facts": [
+          {
+            "call": {
+              "RunID": "continuation-second",
+              "Seq": 1,
+              "Attempt": 1
+            },
+            "model": "history",
+            "context_window": 8000,
+            "output_reserve": 0,
+            "view_bearing": true,
+            "view_text_bytes": 33,
+            "input_tokens": 0,
+            "text_bytes": 633,
+            "fixed_bytes": 600,
+            "non_text": 0,
+            "count_latency": 0,
+            "outcome": "ok",
+            "recovery_tool_bytes": 2776
+          }
+        ],
+        "Result": {
+          "ToolCalls": null,
+          "FinalResponse": {
+            "Message": {
+              "Role": "assistant",
+              "Parts": [
+                {
+                  "Kind": "text",
+                  "Text": "carry this decision"
+                }
+              ],
+              "Meta": null
+            }
+          },
+          "FinalToolResult": null,
+          "Streamed": false,
+          "Await": null,
+          "RetryHint": null,
+          "ExpectedChildren": 0,
+          "Notes": null
+        },
+        "IndexHead": "sha256:f2b03665d0a4cdd5ee355ec0bcca5cb2962f4bde0318312458f37e1d390d3303",
+        "View": null,
+        "call_view": {
+          "chain_pos": 2,
+          "context_fingerprint": "sha256:94f30232957ea1c68a6f954be366f664a7764ec44275cb08a9beedf4c3d3702d",
+          "index_head": "sha256:f2b03665d0a4cdd5ee355ec0bcca5cb2962f4bde0318312458f37e1d390d3303",
+          "budget": {
+            "keep_user_tokens": 400,
+            "max_summary_tokens": 800,
+            "receipt_tokens": 240,
+            "framing_tokens": 200
+          }
+        },
+        "TranscriptRef": "sha256:32ab96340ecb4905004ec76dd5a6c62e57e1ba187d758e10b55292e47b92e82b",
+        "TranscriptSize": {
+          "Bytes": 19,
+          "NonText": 0,
+          "Role": "assistant"
+        },
+        "ToolCallRefs": null,
+        "AwaitCallRefs": null,
+        "CallKeys": [
+          {
+            "RunID": "continuation-second",
+            "Seq": 1,
+            "Attempt": 1
+          }
+        ],
+        "ProducingCall": {
+          "RunID": "continuation-second",
+          "Seq": 1,
+          "Attempt": 1
+        },
+        "RequestGrowth": {
+          "Key": {
+            "RunID": "continuation-second",
+            "Seq": 1,
+            "Attempt": 1
+          },
+          "Inside": 227,
+          "Outside": 665
+        },
+        "Usage": {
+          "Model": "",
+          "ModelClass": "",
+          "InputTokens": 0,
+          "OutputTokens": 0,
+          "TotalTokens": 0,
+          "CacheReadTokens": 0,
+          "CacheWriteTokens": 0
+        },
+        "ToolPolicyActive": true,
+        "AllowedTools": [
+          "delegated.summarize",
+          "workflow.draft",
+          "workflow.finalize",
+          "workflow.method_echo",
+          "workflow.publish",
+          "workflow.retry",
+          "workflow.review",
+          "workflow.revise"
+        ],
+        "PolicyCaps": {
+          "MaxToolCalls": 12,
+          "RemainingToolCalls": 12,
+          "MaxRecoveryTurns": 2,
+          "RemainingRecoveryTurns": 2,
+          "ExpiresAt": "0001-01-01T00:00:00Z"
+        },
+        "Recovery": null,
+        "Attempt": 1
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 11,
+      "key": "#11",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.579322Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 11
+    },
+    {
+      "seq": 12,
+      "key": "#12",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 13,
+      "key": "#13",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.580721Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 13
+    },
+    {
+      "seq": 14,
+      "key": "#14",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 15,
+      "key": "#15",
+      "command": "receive_async:loom_mcp.runtime.pause",
+      "event_type": "SignalNone",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 16,
+      "key": "#16",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 17,
+      "key": "#17",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 18,
+      "key": "#18",
+      "command": "activity:features.coordinator.finish",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "FinalRef": "sha256:60d2ff3f14f718c3b9f6794517d58dd4198788bb5f18f78954306977b8cf5fa8",
+        "ToolEventsRef": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "ToolEventCount": 0,
+        "ToolSummary": {
+          "FailedCount": 0,
+          "LastError": null,
+          "Telemetry": null
+        },
+        "FinalToolResult": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 19,
+      "key": "#19",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:24:58.590061Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 19
+    },
+    {
+      "seq": 20,
+      "key": "#20",
+      "command": "activity:features.coordinator.seal",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "IndexHead": "sha256:3f66e21273d7a59c153cafc836ef5d9e66bdad474732bf3cca94b0fb9b654673"
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 21,
+      "key": "#21",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    }
+  ],
+  "signals": []
+}

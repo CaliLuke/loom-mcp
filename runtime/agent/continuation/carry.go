@@ -118,7 +118,7 @@ func dropUncarriedParts(entry *Entry) {
 	}
 	for _, message := range entry.Messages {
 		parts := make([]model.Part, 0, len(message.Parts))
-		for _, part := range message.Parts {
+		for number, part := range message.Parts {
 			switch part := part.(type) {
 			case model.ToolResultPart:
 				if len(part.Parts) > 0 {
@@ -129,7 +129,7 @@ func dropUncarriedParts(entry *Entry) {
 			case model.ThinkingPart:
 				continue
 			case model.ImagePart, model.DocumentPart:
-				parts = append(parts, model.TextPart{Text: "[non-text content omitted]"})
+				parts = append(parts, model.TextPart{Text: checkpoint.PartPlaceholder(part, fmt.Sprintf("m%d", entry.Entry.ID), number+1)})
 				entry.Form = Preview
 			default:
 				parts = append(parts, part)

@@ -95,6 +95,9 @@ func (r *Runtime) publishContinuation(ctx context.Context, in *api.SealRecordInp
 	}
 	store, ok := r.SessionStore.(session.ContinuationStore)
 	if !ok {
+		if in.ContextSettings.Default {
+			return nil
+		}
 		return fmt.Errorf("continuation requires ContinuationStore")
 	}
 	inputHash, done, err := r.continuationPublishRetry(ctx, in)

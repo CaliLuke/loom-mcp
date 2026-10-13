@@ -36,10 +36,14 @@ func prepareCompaction(base *workflowPlanInput, input *PlanActivityInput) {
 	input.View.ContextFingerprint = base.contextFingerprint
 	input.Models = compactionModels(base.compactionState)
 	if base.contextSettings.GuardMargin.Bytes == 0 {
-		base.contextSettings = resolvedContextSettings(base.compaction, base.recovery)
+		if base.contextSettings.Default {
+			base.contextSettings = compaction.Merge(base.contextSettings, nil)
+		} else {
+			base.contextSettings = resolvedContextSettings(base.compaction, base.recovery)
+		}
 	}
 	input.ContextSettings = plannerContextSettings(base.contextSettings)
-	if !input.ContextSettings.Threshold || input.Overflow != nil {
+	if !compaction.On(base.compactionState, base.Entries, base.contextSettings) || input.Overflow != nil {
 		return
 	}
 	state := base.compactionState
@@ -48,7 +52,9 @@ func prepareCompaction(base *workflowPlanInput, input *PlanActivityInput) {
 		// and their decision state are discarded on this schedule.
 		state.OpenFrom = 1
 	}
-	decision := compaction.Decide(state, base.Entries, input.View, base.contextSettings)
+	settings := base.contextSettings
+	settings.MaxTier = compaction.EffectiveTier(state, settings)
+	decision := compaction.Decide(state, base.Entries, input.View, settings)
 	if input.Recovery != nil {
 		decision.View = input.View
 		decision.State = base.compactionState
@@ -61,7 +67,7 @@ func prepareCompaction(base *workflowPlanInput, input *PlanActivityInput) {
 }
 
 func compactionRecord(wf engine.WorkflowContext, base *workflowPlanInput, input PlanActivityInput, out *PlanActivityOutput, view index.ViewRef) hooks.Event {
-	if base.summaryApplied || base.compaction == nil || out.Recovery != nil {
+	if base.summaryApplied || !compaction.On(base.compactionState, base.Entries, base.contextSettings) || out.Recovery != nil {
 		return nil
 	}
 	d := base.compactionDecision
@@ -83,7 +89,7 @@ func (r *Runtime) adoptCompaction(wf engine.WorkflowContext, base *workflowPlanI
 		if input.Recovery == nil {
 			base.compactionSuppressed = base.compactionDecision.Skipped == compaction.NoProgress
 		}
-		if base.compaction != nil && input.Overflow == nil {
+		if compaction.On(base.compactionState, base.Entries, base.contextSettings) && input.Overflow == nil {
 			base.compactionState = base.compactionDecision.State
 		}
 		if !base.summaryApplied && (base.compactionDecision.Tier == compaction.Clear || base.compactionDecision.Tier == compaction.Evict) {
@@ -174,5 +180,5 @@ func stampCompactionEvent(base *workflowPlanInput, event *hooks.ContextCompactio
 // plannerContextSettings sends only guard inputs in the bounded planner envelope.
 // Canonical records retain the full workflow-stamped settings and fingerprint.
 func plannerContextSettings(settings compaction.Settings) compaction.Settings {
-	return compaction.Settings{Threshold: settings.Threshold, GuardMargin: settings.GuardMargin, TriggerAt: settings.TriggerAt, DisableRecall: settings.DisableRecall}
+	return compaction.Settings{Default: settings.Default, KeepNonTextResident: settings.KeepNonTextResident, Threshold: settings.Threshold, GuardMargin: settings.GuardMargin, TriggerAt: settings.TriggerAt, DisableRecall: settings.DisableRecall}
 }

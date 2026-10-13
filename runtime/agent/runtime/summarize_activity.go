@@ -46,6 +46,7 @@ func (r *Runtime) SummarizeContextActivity(ctx context.Context, in *SummarizeCon
 		}
 	}()
 	recording := NewCallRecording(r.RunStore, in.Scope, index.ViewRef{}, nil, in.Step)
+	recording.qualifications = r.contextQualifications
 	recording.fingerprint = in.ContextFingerprint
 	recording.activity = callrecord.ActivitySummarize
 	defer recording.finishSummaryActivity(context.WithoutCancel(ctx), &out, &activityErr)

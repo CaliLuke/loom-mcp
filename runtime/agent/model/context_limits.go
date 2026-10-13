@@ -35,7 +35,7 @@ func WithCapabilities(client Client, counter TokenCounter, info ContextInfo) Cli
 
 // WithCapabilitySet preserves exactly the supplied optional capabilities.
 func WithCapabilitySet(client Client, caps Capabilities) Client {
-	counter, info, parts := caps.Counter, caps.Info, caps.ToolResultParts
+	counter, info, parts, configuration := caps.Counter, caps.Info, caps.ToolResultParts, caps.ProviderConfiguration
 	if isNilModelValue(counter) {
 		counter = nil
 	}
@@ -45,55 +45,132 @@ func WithCapabilitySet(client Client, caps Capabilities) Client {
 	if isNilModelValue(parts) {
 		parts = nil
 	}
-	switch {
-	case counter != nil && info != nil && parts != nil:
+	if isNilModelValue(configuration) {
+		configuration = nil
+	}
+	mask := 0
+	if counter != nil {
+		mask |= 1
+	}
+	if info != nil {
+		mask |= 2
+	}
+	if parts != nil {
+		mask |= 4
+	}
+	if configuration != nil {
+		mask |= 8
+	}
+	return withCapabilityMask(client, Capabilities{Counter: counter, Info: info, ToolResultParts: parts, ProviderConfiguration: configuration}, mask)
+}
+
+func withCapabilityMask(client Client, caps Capabilities, mask int) Client {
+	counter, info, parts := caps.Counter, caps.Info, caps.ToolResultParts
+	if mask&8 != 0 {
+		return withConfigurationMask(client, caps, mask)
+	}
+	switch mask {
+	case 1:
+		return struct {
+			Client
+			TokenCounter
+		}{client, counter}
+	case 2:
+		return struct {
+			Client
+			ContextInfo
+		}{client, info}
+	case 3:
+		return struct {
+			Client
+			TokenCounter
+			ContextInfo
+		}{client, counter, info}
+	case 4:
+		return struct {
+			Client
+			ToolResultPartsInfo
+		}{client, parts}
+	case 5:
+		return struct {
+			Client
+			TokenCounter
+			ToolResultPartsInfo
+		}{client, counter, parts}
+	case 6:
+		return struct {
+			Client
+			ContextInfo
+			ToolResultPartsInfo
+		}{client, info, parts}
+	case 7:
 		return struct {
 			Client
 			TokenCounter
 			ContextInfo
 			ToolResultPartsInfo
 		}{client, counter, info, parts}
-	case counter != nil && parts != nil:
-		return struct {
-			Client
-			TokenCounter
-			ToolResultPartsInfo
-		}{client, counter, parts}
-	case info != nil && parts != nil:
-		return struct {
-			Client
-			ContextInfo
-			ToolResultPartsInfo
-		}{client, info, parts}
-	case parts != nil:
-		return struct {
-			Client
-			ToolResultPartsInfo
-		}{client, parts}
 	default:
-		return withTextCapabilities(client, counter, info)
+		return client
 	}
 }
 
-// withTextCapabilities selects the original counting/limits method sets.
-func withTextCapabilities(client Client, counter TokenCounter, info ContextInfo) Client {
-	switch {
-	case counter != nil && info != nil:
+func withConfigurationMask(client Client, caps Capabilities, mask int) Client {
+	counter, info, parts, configuration := caps.Counter, caps.Info, caps.ToolResultParts, caps.ProviderConfiguration
+	switch mask {
+	case 8:
+		return struct {
+			Client
+			ProviderConfigurationInfo
+		}{client, configuration}
+	case 9:
+		return struct {
+			Client
+			TokenCounter
+			ProviderConfigurationInfo
+		}{client, counter, configuration}
+	case 10:
+		return struct {
+			Client
+			ContextInfo
+			ProviderConfigurationInfo
+		}{client, info, configuration}
+	case 11:
 		return struct {
 			Client
 			TokenCounter
 			ContextInfo
-		}{client, counter, info}
-	case counter != nil:
+			ProviderConfigurationInfo
+		}{client, counter, info, configuration}
+	case 12:
+		return struct {
+			Client
+			ToolResultPartsInfo
+			ProviderConfigurationInfo
+		}{client, parts, configuration}
+	case 13:
 		return struct {
 			Client
 			TokenCounter
-		}{client, counter}
-	case info != nil:
+			ToolResultPartsInfo
+			ProviderConfigurationInfo
+		}{client, counter, parts, configuration}
+	case 14:
 		return struct {
 			Client
 			ContextInfo
-		}{client, info}
+			ToolResultPartsInfo
+			ProviderConfigurationInfo
+		}{client, info, parts, configuration}
+	case 15:
+		return struct {
+			Client
+			TokenCounter
+			ContextInfo
+			ToolResultPartsInfo
+			ProviderConfigurationInfo
+		}{client, counter, info, parts, configuration}
+
 	default:
 		return client
 	}

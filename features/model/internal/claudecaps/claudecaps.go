@@ -5,7 +5,14 @@ package claudecaps
 import (
 	"strconv"
 	"strings"
+
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 )
+
+// NormalizeModelID removes a Bedrock routing prefix without changing the model version.
+func NormalizeModelID(id string) string {
+	return model.NormalizeProviderModel("bedrock", id)
+}
 
 // TemperatureSupported reports whether modelID accepts the temperature
 // sampling parameter. Newer Claude generations reject sampling controls.

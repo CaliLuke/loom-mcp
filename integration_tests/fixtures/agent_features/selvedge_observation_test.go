@@ -12,6 +12,7 @@ import (
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/compaction"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextcompat"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	sv "github.com/CaliLuke/selvedge"
@@ -162,8 +163,10 @@ type observingSelvedgeEngine struct {
 	observed *replayCommandObservations
 }
 type replayCommandObservations struct {
-	planners  []*api.PlanActivityInput
-	summaries []*api.SummarizeContextInput
+	planners        []*api.PlanActivityInput
+	outputs         []*api.PlanActivityOutput
+	compatibilities []*contextcompat.Result
+	summaries       []*api.SummarizeContextInput
 }
 type observingSelvedgeContext struct {
 	engine.WorkflowContext
@@ -199,7 +202,15 @@ func (w *observingSelvedgeContext) ExecutePlannerActivity(ctx context.Context, c
 		return nil, err
 	}
 	w.observed.planners = append(w.observed.planners, cloned)
-	return w.WorkflowContext.ExecutePlannerActivity(ctx, call)
+	output, err := w.WorkflowContext.ExecutePlannerActivity(ctx, call)
+	if err == nil && output != nil {
+		cloned, cloneErr := cloneSelvedgeInput(output)
+		if cloneErr != nil {
+			return nil, cloneErr
+		}
+		w.observed.outputs = append(w.observed.outputs, cloned)
+	}
+	return output, err
 }
 func (w *observingSelvedgeContext) ExecuteSummarizeContextActivity(ctx context.Context, call engine.SummarizeContextActivityCall) (*api.SummarizeContextOutput, error) {
 	cloned, err := cloneSelvedgeInput(call.Input)
@@ -229,7 +240,7 @@ func assertSelvedgeContextStart(t *testing.T, filename string, history *sv.Recor
 	assert.Equal(t, fmt.Sprintf("sha256:%x", sha256.Sum256(compaction.Canonical(start.ContextSettings))), start.ContextFingerprint)
 	assert.NotEmpty(t, start.ContextSettings.Prompt.Template)
 	assert.NotEmpty(t, start.ContextSettings.Prompt.Ref.ID)
-	if filename == "workflow_protocol_v18.json" || filename == "workflow_protocol_v18_summary.json" {
+	if filename == "workflow_protocol_v19.json" || filename == "workflow_protocol_v19_summary.json" {
 		require.NotNil(t, start.Policy)
 		require.NotNil(t, start.Policy.Context)
 		require.NotNil(t, start.Policy.Context.ContextWindow)
@@ -253,10 +264,10 @@ func assertSelvedgeObservedHistory(t *testing.T, filename string, history *sv.Re
 			planners++
 			if observation.Name == "features.coordinator.resume" {
 				resumes++
-				if filename == "workflow_protocol_v18_summary.json" {
+				if filename == "workflow_protocol_v19_summary.json" {
 					assert.Equal(t, 1, adoptions)
 				}
-				if filename == "workflow_protocol_v18_budget.json" {
+				if filename == "workflow_protocol_v19_budget.json" {
 					assert.Nil(t, input.Finalize)
 					var output api.PlanActivityOutput
 					require.NoError(t, json.Unmarshal(observation.Output, &output))
@@ -289,7 +300,7 @@ func assertSelvedgeObservedHistory(t *testing.T, filename string, history *sv.Re
 						assert.Equal(t, 1, adopted.Chunks)
 					}
 				}
-				if filename == "workflow_protocol_v18_budget.json" && hook.Type == hooks.PlannerStep {
+				if filename == "workflow_protocol_v19_budget.json" && hook.Type == hooks.PlannerStep {
 					var step hooks.PlannerStepEvent
 					require.NoError(t, json.Unmarshal(hook.Payload, &step))
 					if step.Step == 2 {
@@ -301,16 +312,28 @@ func assertSelvedgeObservedHistory(t *testing.T, filename string, history *sv.Re
 			}
 		}
 	}
-	if filename != "workflow_protocol_v18_child_run.json" {
+	if filename != "workflow_protocol_v19_child_run.json" {
 		assert.Positive(t, planners)
 	}
-	if filename == "workflow_protocol_v18_summary.json" {
+	if filename == "workflow_protocol_v19_summary.json" {
 		assert.Equal(t, 1, summaries)
 		assert.Equal(t, 1, adoptions)
 		assert.Equal(t, 1, resumes)
 	}
-	if filename == "workflow_protocol_v18_budget.json" {
+	if filename == "workflow_protocol_v19_budget.json" {
 		assert.True(t, budgetAdoption, "terminal adoption must complete after crossing the active budget")
 		assert.Equal(t, 1, resumes)
 	}
+}
+
+func (w *observingSelvedgeContext) ExecuteRecordContentActivity(ctx context.Context, call engine.RecordContentActivityCall) (*api.RecordContentOutput, error) {
+	output, err := w.WorkflowContext.ExecuteRecordContentActivity(ctx, call)
+	if err == nil && output != nil && output.Compatibility != nil {
+		cloned, cloneErr := cloneSelvedgeInput(output.Compatibility)
+		if cloneErr != nil {
+			return nil, cloneErr
+		}
+		w.observed.compatibilities = append(w.observed.compatibilities, cloned)
+	}
+	return output, err
 }

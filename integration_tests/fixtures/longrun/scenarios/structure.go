@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/hooks"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runrecord"
 )
@@ -46,7 +47,7 @@ func CheckStructure(scenario, variant string, rec *runrecord.RunRecord) error {
 				compactions++
 			}
 		}
-		if r.WorkflowProtocolVersion != 18 {
+		if r.WorkflowProtocolVersion != api.WorkflowProtocolVersion {
 			return fmt.Errorf("workflow protocol is %d", r.WorkflowProtocolVersion)
 		}
 		if variant == "baseline" {

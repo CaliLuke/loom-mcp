@@ -1634,3 +1634,18 @@ Protocol 18 includes main, budget, summary, child, child_run, confirmed_pause,
 continued and multimodal real Temporal histories. Protocol 17 rejects before
 workflow effects; its run-record exports remain readable. Drain v17 workflows
 before deployment. Structural TemplateProtocolVersion stays 5.
+
+
+### Qualified default policy (protocol 19)
+
+See `docs/context_defaults.md`. Default planner settings carry `Default` and
+`KeepNonTextResident`; explicit settings retain omitted-field canonical bytes.
+ProviderConfigurationInfo is forwarded by all four client wrappers. Recorded
+first-call ProviderConfig/Qualified/support drives pure On and tier narrowing;
+shipped Qualifications is empty and public self-certification is exact-match.
+RecordContent compatibility checks committed plus pending originals, records a
+compact fact and canonical adoption, and preserves the existing planner bound.
+RunRecord exports validate that evidence without backend history or live clients.
+No compatibility command is added to unqualified, waived or sticky-resident runs.
+Overflow retries retain their recorded recovery path; the next normal threshold
+decision still requires evidence. History and generated APIs remain until K21b.

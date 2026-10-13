@@ -7,6 +7,7 @@ import (
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextcompat"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextmeasure"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
@@ -30,6 +31,16 @@ func (r *Runtime) RecordContentActivity(ctx context.Context, input *api.RecordCo
 	}
 	if r.RunStore == nil {
 		return nil, fmt.Errorf("record content: run store is required")
+	}
+	if input.Compatibility != nil {
+		if input.Compatibility.Scope != input.RootRunID {
+			return nil, fmt.Errorf("compatibility root scope mismatch")
+		}
+		result, err := contextcompat.Check(ctx, r.RunStore, *input.Compatibility)
+		if err != nil {
+			return nil, err
+		}
+		return &api.RecordContentOutput{Compatibility: &result}, nil
 	}
 	if input.Continue != nil {
 		return r.recordContinuationStart(ctx, input)
@@ -81,7 +92,7 @@ func recordWorkflowContent(ctx context.Context, items [][]byte) ([]runstore.Hash
 }
 
 func seedWorkflowIndex(wf engine.WorkflowContext, input *RunInput) (*api.RecordContentOutput, error) {
-	if len(input.Messages) == 0 && (input.ContextCompaction == nil || input.ParentRunID != "" || input.SessionID == "") {
+	if len(input.Messages) == 0 && (input.ContextCompaction == nil && !input.ContextSettings.Default || input.ParentRunID != "" || input.SessionID == "") {
 		return &api.RecordContentOutput{}, nil
 	}
 	items, err := encodeContentMessages(input.Messages)
@@ -89,7 +100,7 @@ func seedWorkflowIndex(wf engine.WorkflowContext, input *RunInput) (*api.RecordC
 		return nil, err
 	}
 	record := &api.RecordContentInput{RootRunID: input.RootRunID, Items: items, SeedMessages: true}
-	if input.ContextCompaction != nil && input.ParentRunID == "" && input.SessionID != "" {
+	if (input.ContextCompaction != nil || input.ContextSettings.Default) && input.ParentRunID == "" && input.SessionID != "" {
 		record.Continue = &api.ContinuationStartInput{ContextFingerprint: input.ContextFingerprint, SessionID: input.SessionID, RunID: input.RunID, AgentID: input.AgentID, Settings: input.ContextSettings, Timestamp: wf.Now()}
 	}
 	return wf.ExecuteRecordContentActivity(wf.Context(), engine.RecordContentActivityCall{Name: RecordContentActivityName(input.AgentID), Input: record})

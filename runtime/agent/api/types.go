@@ -37,6 +37,8 @@ type (
 		ContextSettings compaction.ContextSettings `json:"context_settings,omitzero"`
 		// ContextFingerprint addresses the canonical settings in the root scope.
 		ContextFingerprint string `json:"context_fingerprint,omitzero"`
+		// ContextDefaultAgents snapshots default policy for child dispatch.
+		ContextDefaultAgents map[agent.Ident]ContextDefault `json:"context_default_agents,omitzero"`
 		// ContextCompaction is runtime-stamped configuration for this run.
 		ContextCompaction *ContextCompaction `json:"context_compaction,omitzero"`
 		// ContextRecovery is the resolved runtime-stamped lookup configuration.
@@ -139,7 +141,7 @@ type (
 		BackoffCoefficient float64
 	}
 
-	// PolicyOverrides configures per-run policy constraints. All fields are optional;
+	// PolicyOverrides configures per-run policy constraints. All fields are optional
 	// zero values mean no override.
 	PolicyOverrides struct {
 		// Context overrides registered context settings for this run only.
@@ -483,8 +485,15 @@ type (
 		ToolCatalog []tools.Ident
 	}
 
+	// ContextDefault configures qualified defaults without explicit thresholds.
+	ContextDefault struct {
+		Disabled     bool
+		ContextModel *ContextModel
+	}
 	// ContextCompaction configures opt-in threshold compaction. Zero token settings use budget-derived defaults.
 	ContextCompaction struct {
+		// KeepNonTextResident protects original attachments during threshold compaction.
+		KeepNonTextResident bool `json:"nontext_resident,omitzero"`
 		// ContextModel enables summaries when explicitly configured.
 		ContextModel            *ContextModel
 		TriggerAt               contextmeasure.Rate

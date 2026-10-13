@@ -49,6 +49,7 @@ func (r *Runtime) PlanStartActivity(ctx context.Context, input *PlanActivityInpu
 	recordedView := input.View
 	recordedView.IndexHead, recordedView.Pending = view.Head, nil
 	callRecording := NewCallRecording(r.RunStore, input.RunContext.RootRunID, recordedView, view.Messages, input.Step)
+	callRecording.qualifications = r.contextQualifications
 	callRecording.configureOverflow(input)
 	defer callRecording.finishActivity(ctx, &out, &activityErr, events)
 	reg, agentCtx, err := r.plannerContext(ctx, input, events, recoveryRecorder, callRecording)
@@ -99,6 +100,7 @@ func (r *Runtime) PlanResumeActivity(ctx context.Context, input *PlanActivityInp
 	recordedView := input.View
 	recordedView.IndexHead, recordedView.Pending = view.Head, nil
 	callRecording := NewCallRecording(r.RunStore, input.RunContext.RootRunID, recordedView, view.Messages, input.Step)
+	callRecording.qualifications = r.contextQualifications
 	callRecording.configureOverflow(input)
 	defer callRecording.finishActivity(ctx, &out, &activityErr, events)
 	reg, agentCtx, err := r.plannerContext(ctx, input, events, recoveryRecorder, callRecording)

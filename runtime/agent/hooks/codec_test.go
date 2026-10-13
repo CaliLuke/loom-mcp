@@ -85,7 +85,7 @@ func isSupportedHookEventType(eventType EventType) bool {
 		PromptRendered,
 		PlannerStep,
 		RunSealed,
-		ContextRequestGrowth,
+		ContextRequestGrowth, ContextCompatibility, ContextNonTextResident, ContextResidencyAdopted,
 		ContextRecalled, ContextRecallDisabled, RecallBudgetExhausted, ContextUnmeasured, ContextLimitsUnknown, ContextBudgetTooSmall, ContextCompacted, ContextCompactionSkipped:
 		return true
 	case ContinuationStarted, ContinuationPublished, ContinuationSuperseded:

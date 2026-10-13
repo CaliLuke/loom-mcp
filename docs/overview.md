@@ -515,6 +515,21 @@ recoverable tool output. Successful registered domain work resets the
 allowance. Final-answer recovery uses bounded private evidence and disables
 tools for the replacement turn.
 
+### Qualified Context Defaults
+
+Planner agents record a default context policy in protocol 19. The shipped
+qualification table is empty, so automatic threshold compaction stays off until
+an exact provider configuration and model are qualified. Applications may use
+`runtime.WithContextQualification` to self-certify a pair. First adopted call
+facts fix qualification and attachment support for replay. Original attachments
+stay resident when they cannot be recalled; overflow recovery remains independent.
+
+Explicit `WithContextCompaction` retains its existing behavior.
+`WithoutContextDefault` disables implicit thresholds, and per-run context
+overrides merge field by field. See [Qualified context defaults](context_defaults.md)
+for residency, continuation, custom-store behavior and migration constraints.
+History policy and generator APIs remain available in this release.
+
 ### History Management
 
 | Function                          | Purpose                                      |

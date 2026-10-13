@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const recordEventProtocolVersion = 18
+const recordEventProtocolVersion = 19
 
 func TestRecordEvents(t *testing.T) {
 	for _, kind := range []EventType{PlannerStep, RunSealed, ContextCompacted, ContextCompactionSkipped, ContextOverflow, ChildRunLinked, ContextRecalled, ContinuationStarted, ContinuationPublished, ContinuationSuperseded} {

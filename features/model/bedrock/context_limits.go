@@ -3,6 +3,7 @@ package bedrock
 import (
 	"context"
 
+	"github.com/CaliLuke/loom-mcp/v2/features/model/internal/claudecaps"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 )
 
@@ -12,7 +13,7 @@ var contextLimitsTable = map[string]model.ContextLimits{}
 
 // ContextLimits resolves the request model and reports table limits, if known.
 func (c *Client) ContextLimits(_ context.Context, req *model.Request) (model.ContextLimits, string, bool) {
-	id := c.resolveModelID(req)
+	id := claudecaps.NormalizeModelID(c.resolveModelID(req))
 	limits, known := contextLimitsTable[id]
 	limits.DefaultMaxTokens = max(0, c.maxTok)
 	return limits, id, known

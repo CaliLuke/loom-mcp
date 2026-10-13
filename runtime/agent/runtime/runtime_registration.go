@@ -88,7 +88,17 @@ func (r *Runtime) RegisterAgent(ctx context.Context, reg AgentRegistration) erro
 	if err := r.registerAgentWithEngine(ctx, reg); err != nil {
 		return err
 	}
-	return r.storeRegisteredAgent(reg)
+	r.mu.RLock()
+	_, alreadyRegistered := r.agents[reg.ID]
+	warnConflict := !alreadyRegistered && reg.Policy.ContextCompaction == nil && reg.Policy.ContextDefault != nil && reg.Policy.ContextDefault.Disabled && r.defaultRecallConflict(reg)
+	r.mu.RUnlock()
+	if err := r.storeRegisteredAgent(reg); err != nil {
+		return err
+	}
+	if warnConflict {
+		r.logger.Warn(ctx, "context default disabled by reserved recall tool name", "agent_id", reg.ID)
+	}
+	return nil
 }
 
 func (r *Runtime) resolveNamedAgentInterceptors(reg AgentRegistration) (AgentRegistration, error) {
@@ -631,6 +641,16 @@ func (r *Runtime) validateAgentExecution(reg AgentRegistration) error {
 func (r *Runtime) validateSummaryModels() error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	for id, settings := range r.agentContextDefault {
+		if _, explicit := r.agentContextCompaction[id]; settings.Disabled || explicit {
+			continue
+		}
+		if settings.ContextModel != nil {
+			if _, ok := r.models[settings.ContextModel.ID]; !ok {
+				return fmt.Errorf("agent %s: context summary model %q is not registered", id, settings.ContextModel.ID)
+			}
+		}
+	}
 	for id, settings := range r.agentContextCompaction {
 		if settings.ContextModel != nil {
 			if _, ok := r.models[settings.ContextModel.ID]; !ok {

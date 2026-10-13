@@ -1,0 +1,884 @@
+{
+  "format": "selvedge.history/v1",
+  "instance": {
+    "instance_id": "default-run",
+    "workflow_name": "features.coordinator.workflow",
+    "status": "completed",
+    "input": {
+      "context_settings": {
+        "default": true,
+        "nontext_resident": true,
+        "max_tier": "summary",
+        "guard_margin": {
+          "Tokens": 1,
+          "Bytes": 10
+        },
+        "prompt": {
+          "Ref": {
+            "ID": "features.coordinator.context.summary",
+            "Version": "sha256:c213a63837087dad5fb990d74a4fea84f0072c70f4455cce27e9a646268aef95"
+          },
+          "Template": "sha256:c213a63837087dad5fb990d74a4fea84f0072c70f4455cce27e9a646268aef95"
+        },
+        "framing_tokens": 200,
+        "max_pins": 32,
+        "max_pinned_parts": 2,
+        "max_summary_chunks": 8,
+        "recall_scan_bytes": 8000000,
+        "TriggerAt": {
+          "Tokens": 17,
+          "Bytes": 20
+        },
+        "RecallDiscoveryCalls": 20,
+        "RecallReadCalls": 20
+      },
+      "context_fingerprint": "sha256:dad60a2a0bce0d2545da071d43b4d0461c4b4106b6ff076af09be49d0849af76",
+      "context_default_agents": {
+        "features.coordinator": {
+          "Disabled": false,
+          "ContextModel": null
+        }
+      },
+      "context_recovery": {
+        "guard_margin": {
+          "Tokens": 1,
+          "Bytes": 10
+        },
+        "disable_recall": false
+      },
+      "WorkflowProtocolVersion": 19,
+      "AgentID": "features.coordinator",
+      "RunID": "default-run",
+      "RootRunID": "default-run",
+      "SessionID": "default-session",
+      "TurnID": "",
+      "ParentToolCallID": "",
+      "ParentRunID": "",
+      "ParentAgentID": "",
+      "Tool": "",
+      "ToolArgs": null,
+      "Messages": [
+        {
+          "Role": "user",
+          "Parts": [
+            {
+              "Kind": "text",
+              "Text": "remember"
+            }
+          ],
+          "Meta": null
+        },
+        {
+          "Role": "assistant",
+          "Parts": [
+            {
+              "Kind": "text",
+              "Text": "earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context "
+            }
+          ],
+          "Meta": null
+        },
+        {
+          "Role": "user",
+          "Parts": [
+            {
+              "Kind": "text",
+              "Text": "finish"
+            }
+          ],
+          "Meta": null
+        }
+      ],
+      "Labels": null,
+      "Metadata": null,
+      "WorkflowOptions": null,
+      "Policy": null
+    },
+    "output": {
+      "AgentID": "features.coordinator",
+      "RunID": "default-run",
+      "Final": {
+        "Role": "assistant",
+        "Parts": [
+          {
+            "Kind": "text",
+            "Text": "qualified default complete"
+          }
+        ],
+        "Meta": null
+      },
+      "FinalRef": "sha256:ae4b4228e9f5b66efa6321642a98e58783f848b385a7f645324deaa592fc244b",
+      "FinalToolResult": null,
+      "ToolEventsRef": "sha256:b86196f2d64cacad0f05b1488a4923a68fcbee2791621eb4fe59b5c735e2d494",
+      "ToolEventCount": 1,
+      "ToolSummary": {
+        "FailedCount": 0,
+        "LastError": null,
+        "Telemetry": null
+      },
+      "Notes": [],
+      "Usage": {
+        "Model": "",
+        "ModelClass": "",
+        "InputTokens": 0,
+        "OutputTokens": 0,
+        "TotalTokens": 0,
+        "CacheReadTokens": 0,
+        "CacheWriteTokens": 0
+      }
+    },
+    "cancel_requested": false,
+    "cancel_reason": "",
+    "parent_instance_id": "",
+    "parent_key": ""
+  },
+  "events": [
+    {
+      "seq": 1,
+      "key": "#1",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 23
+    },
+    {
+      "seq": 2,
+      "key": "#2",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 23
+    },
+    {
+      "seq": 3,
+      "key": "#3",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:22:53.132242Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 3
+    },
+    {
+      "seq": 4,
+      "key": "#4",
+      "command": "activity:features.coordinator.record_content",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "continuation": {
+          "Prev": null,
+          "Pos": 1,
+          "ContinuedFrom": null,
+          "Outcome": "fresh",
+          "Reason": "no_head",
+          "View": {
+            "chain_pos": 1,
+            "context_fingerprint": "sha256:dad60a2a0bce0d2545da071d43b4d0461c4b4106b6ff076af09be49d0849af76"
+          },
+          "Limits": {
+            "ContextWindow": 0,
+            "MaxOutputTokens": 0,
+            "DefaultMaxTokens": 0,
+            "ImageTokens": 0
+          },
+          "Visible": [
+            "sha256:3014713b0849afa355daa798065e2454f187d46f6c6c1ae417f1368ee0ee28c1",
+            "sha256:9090e30315ff0f05663f7eb3c63579ba88eb22109af51ce8cb137df5b79c5dbf",
+            "sha256:0d2312acc6d89ad08ad63854029ab934db87be7097a6f8c4b49c902a3ce074e1"
+          ]
+        },
+        "Refs": [
+          "sha256:32e7bf40f1372bba4e837c017d579798b5e6f03f2bd8acfa8d22d22f705d2523",
+          "sha256:2b4077ca955166de06aafe394e128ddf6a3d07c5e66049e56a8eb952c3e0424a",
+          "sha256:bbb846097bdd2f2d2d5c4756c729f406ddcb64005cb2460d6fa5337d42b71740"
+        ],
+        "IndexHead": "sha256:9f7dd9fa3c7e1525245dd816cab54bf61f1dd2d72e8eda367ff594f2700e43eb",
+        "Entries": [
+          {
+            "id": 1,
+            "kind": "message",
+            "hash": "sha256:32e7bf40f1372bba4e837c017d579798b5e6f03f2bd8acfa8d22d22f705d2523",
+            "role": "user",
+            "bytes": 8,
+            "chain": "sha256:3fc893b685604b75e79a80322b0a3b2d03279aadf3225f1c76f166a6cda1da4c"
+          },
+          {
+            "id": 2,
+            "kind": "message",
+            "hash": "sha256:2b4077ca955166de06aafe394e128ddf6a3d07c5e66049e56a8eb952c3e0424a",
+            "role": "assistant",
+            "bytes": 96000,
+            "chain": "sha256:e56a55f876e00c6c13811ed3b7dc10716884c635d2dfc5c6d4519c03510600bc"
+          },
+          {
+            "id": 3,
+            "kind": "message",
+            "hash": "sha256:bbb846097bdd2f2d2d5c4756c729f406ddcb64005cb2460d6fa5337d42b71740",
+            "role": "user",
+            "bytes": 6,
+            "chain": "sha256:5a249b2e25b5e5f1f9a12e5229aef0cd807075578608e1de919d89c816aee990"
+          }
+        ],
+        "ToolResults": null,
+        "Calls": null,
+        "CallRefs": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 23
+    },
+    {
+      "seq": 5,
+      "key": "#5",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:22:53.145321Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 5
+    },
+    {
+      "seq": 6,
+      "key": "#6",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:22:53.146817Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 6
+    },
+    {
+      "seq": 7,
+      "key": "#7",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 23
+    },
+    {
+      "seq": 8,
+      "key": "#8",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:22:53.148292Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 8
+    },
+    {
+      "seq": 9,
+      "key": "#9",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:22:53.148596Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 9
+    },
+    {
+      "seq": 10,
+      "key": "#10",
+      "command": "activity:features.coordinator.plan",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "facts": [
+          {
+            "provider_config": "fixture-qualified",
+            "qualified": "evict",
+            "tool_result_parts": {
+              "ImageFormats": [
+                "jpeg"
+              ],
+              "DocumentFormats": null,
+              "DocumentURISchemes": null,
+              "MaxImageBytes": 10000,
+              "MaxDocumentBytes": 0
+            },
+            "call": {
+              "RunID": "default-run",
+              "Seq": 1,
+              "Attempt": 1
+            },
+            "model": "history",
+            "context_window": 12000,
+            "output_reserve": 0,
+            "view_bearing": true,
+            "view_text_bytes": 96014,
+            "input_tokens": 0,
+            "text_bytes": 96614,
+            "fixed_bytes": 600,
+            "non_text": 0,
+            "count_latency": 0,
+            "outcome": "ok",
+            "recovery_tool_bytes": 2776
+          }
+        ],
+        "Result": {
+          "ToolCalls": [
+            {
+              "Name": "workflow.draft",
+              "Payload": {
+                "topic": "default"
+              },
+              "Error": null,
+              "AgentID": "features.coordinator",
+              "RunID": "default-run",
+              "RootRunID": "default-run",
+              "SessionID": "default-session",
+              "Labels": null,
+              "TurnID": "",
+              "ToolCallID": "draft",
+              "ParentToolCallID": ""
+            }
+          ],
+          "FinalResponse": null,
+          "FinalToolResult": null,
+          "Streamed": false,
+          "Await": null,
+          "RetryHint": null,
+          "ExpectedChildren": 0,
+          "Notes": null
+        },
+        "IndexHead": "sha256:9f7dd9fa3c7e1525245dd816cab54bf61f1dd2d72e8eda367ff594f2700e43eb",
+        "View": null,
+        "call_view": {
+          "chain_pos": 1,
+          "context_fingerprint": "sha256:dad60a2a0bce0d2545da071d43b4d0461c4b4106b6ff076af09be49d0849af76",
+          "index_head": "sha256:9f7dd9fa3c7e1525245dd816cab54bf61f1dd2d72e8eda367ff594f2700e43eb"
+        },
+        "TranscriptRef": "sha256:d397d8192ce1602bdaf90b56810786d6a410f5396826351a80415f12ab6a14b1",
+        "TranscriptSize": {
+          "Bytes": 8,
+          "NonText": 0,
+          "Role": "assistant"
+        },
+        "ToolCallRefs": [
+          "sha256:d479658d340ea0146e7a200d29ba33f37387612b200de77b735f3fbc7a15e417"
+        ],
+        "AwaitCallRefs": null,
+        "CallKeys": [
+          {
+            "RunID": "default-run",
+            "Seq": 1,
+            "Attempt": 1
+          }
+        ],
+        "ProducingCall": {
+          "RunID": "default-run",
+          "Seq": 1,
+          "Attempt": 1
+        },
+        "RequestGrowth": null,
+        "Usage": {
+          "Model": "",
+          "ModelClass": "",
+          "InputTokens": 0,
+          "OutputTokens": 0,
+          "TotalTokens": 0,
+          "CacheReadTokens": 0,
+          "CacheWriteTokens": 0
+        },
+        "ToolPolicyActive": true,
+        "AllowedTools": [
+          "delegated.summarize",
+          "workflow.draft",
+          "workflow.finalize",
+          "workflow.method_echo",
+          "workflow.publish",
+          "workflow.retry",
+          "workflow.review",
+          "workflow.revise"
+        ],
+        "PolicyCaps": {
+          "MaxToolCalls": 12,
+          "RemainingToolCalls": 12,
+          "MaxRecoveryTurns": 2,
+          "RemainingRecoveryTurns": 2,
+          "ExpiresAt": "0001-01-01T00:00:00Z"
+        },
+        "Recovery": null,
+        "Attempt": 1
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 23
+    },
+    {
+      "seq": 11,
+      "key": "#11",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:22:53.154168Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 11
+    },
+    {
+      "seq": 12,
+      "key": "#12",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 23
+    },
+    {
+      "seq": 13,
+      "key": "#13",
+      "command": "receive_async:loom_mcp.runtime.pause",
+      "event_type": "SignalNone",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 14,
+      "key": "#14",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:22:53.157811Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 14
+    },
+    {
+      "seq": 15,
+      "key": "#15",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:22:53.158086Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 15
+    },
+    {
+      "seq": 16,
+      "key": "#16",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:22:53.158346Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 16
+    },
+    {
+      "seq": 17,
+      "key": "#17",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:22:53.15856Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 17
+    },
+    {
+      "seq": 18,
+      "key": "#18",
+      "command": "sleep",
+      "event_type": "Reserved",
+      "data_type": "json",
+      "binary": null,
+      "reservation": {
+        "expires_at": "2026-10-12T23:23:23.145522Z"
+      },
+      "delivered_seq": 0
+    },
+    {
+      "seq": 19,
+      "key": "#19",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 23
+    },
+    {
+      "seq": 20,
+      "key": "#20",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:22:53.160148Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 20
+    },
+    {
+      "seq": 21,
+      "key": "#21",
+      "command": "activity:features.coordinator.executetool",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "Preview": "",
+        "ResultBytes": 27,
+        "Refs": {
+          "Result": "sha256:ce2d59223e6653b8e03f54a8e761d2d046f4f2d01d14bf7e6b2c7c37522ddfa0",
+          "ServerData": "",
+          "Payload": "sha256:5f09b9b9a094b0cf2fc9b37437ca9db92e8aaa329ba910e9a0cb14cdfd13d576"
+        },
+        "Payload": null,
+        "ServerData": null,
+        "Bounds": null,
+        "Telemetry": null,
+        "Error": "",
+        "ErrorKind": "",
+        "RetryHint": null,
+        "Pause": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 23
+    },
+    {
+      "seq": 22,
+      "key": "#22",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:22:53.160893Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 22
+    },
+    {
+      "seq": 23,
+      "key": "#23",
+      "command": "await",
+      "event_type": "AwaitCompleted",
+      "data": {
+        "history": 8,
+        "signals": 0
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 23
+    },
+    {
+      "seq": 24,
+      "key": "#24",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:22:53.174956Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 24
+    },
+    {
+      "seq": 25,
+      "key": "#25",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 26,
+      "key": "#26",
+      "command": "activity:features.coordinator.record_content",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "Refs": [
+          "sha256:ea02f77e4003248004c37d82b396625e0a45325006f52976b8b14d628205e1d3"
+        ],
+        "IndexHead": "",
+        "Entries": null,
+        "ToolResults": null,
+        "Calls": null,
+        "CallRefs": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 27,
+      "key": "#27",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:22:53.184648Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 27
+    },
+    {
+      "seq": 28,
+      "key": "#28",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:22:53.186025Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 28
+    },
+    {
+      "seq": 29,
+      "key": "#29",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:22:53.186271Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 29
+    },
+    {
+      "seq": 30,
+      "key": "#30",
+      "command": "activity:features.coordinator.resume",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "facts": [
+          {
+            "provider_config": "fixture-qualified",
+            "qualified": "evict",
+            "tool_result_parts": {
+              "ImageFormats": [
+                "jpeg"
+              ],
+              "DocumentFormats": null,
+              "DocumentURISchemes": null,
+              "MaxImageBytes": 10000,
+              "MaxDocumentBytes": 0
+            },
+            "call": {
+              "RunID": "default-run",
+              "Seq": 2,
+              "Attempt": 1
+            },
+            "model": "history",
+            "context_window": 12000,
+            "output_reserve": 0,
+            "view_bearing": true,
+            "view_text_bytes": 962,
+            "input_tokens": 0,
+            "text_bytes": 4733,
+            "fixed_bytes": 3771,
+            "non_text": 0,
+            "count_latency": 0,
+            "outcome": "ok"
+          }
+        ],
+        "Result": {
+          "ToolCalls": null,
+          "FinalResponse": {
+            "Message": {
+              "Role": "assistant",
+              "Parts": [
+                {
+                  "Kind": "text",
+                  "Text": "qualified default complete"
+                }
+              ],
+              "Meta": null
+            }
+          },
+          "FinalToolResult": null,
+          "Streamed": false,
+          "Await": null,
+          "RetryHint": null,
+          "ExpectedChildren": 0,
+          "Notes": null
+        },
+        "IndexHead": "sha256:c01c8b7ca6bb12cb0d5ffa885263bd8a282e712a3d5e4c5bcc9bb24476a6e063",
+        "View": {
+          "Checkpoint": "sha256:37a8d300a16aec7c4da3214060efcfa14760495925a43dcc1c049b4ac0b40c61",
+          "Pinned": [
+            1,
+            3
+          ],
+          "CheckpointBytes": 884
+        },
+        "call_view": {
+          "chain_pos": 1,
+          "context_fingerprint": "sha256:dad60a2a0bce0d2545da071d43b4d0461c4b4106b6ff076af09be49d0849af76",
+          "index_head": "sha256:c01c8b7ca6bb12cb0d5ffa885263bd8a282e712a3d5e4c5bcc9bb24476a6e063",
+          "checkpoint": "sha256:37a8d300a16aec7c4da3214060efcfa14760495925a43dcc1c049b4ac0b40c61",
+          "tail_from": 4,
+          "pinned": [
+            1,
+            3
+          ],
+          "budget": {
+            "keep_user_tokens": 600,
+            "max_summary_tokens": 1200,
+            "receipt_tokens": 360,
+            "framing_tokens": 200
+          }
+        },
+        "TranscriptRef": "sha256:d80f8a6f4d661b23f0315851c8a14b4f873292e11f07ded0bc25e63de0261e13",
+        "TranscriptSize": {
+          "Bytes": 26,
+          "NonText": 0,
+          "Role": "assistant"
+        },
+        "ToolCallRefs": null,
+        "AwaitCallRefs": null,
+        "CallKeys": [
+          {
+            "RunID": "default-run",
+            "Seq": 2,
+            "Attempt": 1
+          }
+        ],
+        "ProducingCall": {
+          "RunID": "default-run",
+          "Seq": 2,
+          "Attempt": 1
+        },
+        "RequestGrowth": null,
+        "Usage": {
+          "Model": "",
+          "ModelClass": "",
+          "InputTokens": 0,
+          "OutputTokens": 0,
+          "TotalTokens": 0,
+          "CacheReadTokens": 0,
+          "CacheWriteTokens": 0
+        },
+        "ToolPolicyActive": true,
+        "AllowedTools": [
+          "delegated.summarize",
+          "workflow.draft",
+          "workflow.finalize",
+          "workflow.method_echo",
+          "workflow.publish",
+          "workflow.retry",
+          "workflow.review",
+          "workflow.revise",
+          "runtime.recall_context"
+        ],
+        "PolicyCaps": {
+          "MaxToolCalls": 12,
+          "RemainingToolCalls": 11,
+          "MaxRecoveryTurns": 2,
+          "RemainingRecoveryTurns": 2,
+          "ExpiresAt": "0001-01-01T00:00:00Z"
+        },
+        "Recovery": null,
+        "Attempt": 2
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 31,
+      "key": "#31",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:22:53.188866Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 31
+    },
+    {
+      "seq": 32,
+      "key": "#32",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:22:53.189109Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 32
+    },
+    {
+      "seq": 33,
+      "key": "#33",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 34,
+      "key": "#34",
+      "command": "receive_async:loom_mcp.runtime.pause",
+      "event_type": "SignalNone",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 35,
+      "key": "#35",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 36,
+      "key": "#36",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 37,
+      "key": "#37",
+      "command": "activity:features.coordinator.finish",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "FinalRef": "sha256:ae4b4228e9f5b66efa6321642a98e58783f848b385a7f645324deaa592fc244b",
+        "ToolEventsRef": "sha256:b86196f2d64cacad0f05b1488a4923a68fcbee2791621eb4fe59b5c735e2d494",
+        "ToolEventCount": 1,
+        "ToolSummary": {
+          "FailedCount": 0,
+          "LastError": null,
+          "Telemetry": null
+        },
+        "FinalToolResult": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 38,
+      "key": "#38",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-12T23:22:53.194704Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 38
+    },
+    {
+      "seq": 39,
+      "key": "#39",
+      "command": "activity:features.coordinator.seal",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "IndexHead": "sha256:0579ac419338880d8e203ceaee15b7356a8b61cc18ea8aea0dc4803eb80ff3e1"
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 40,
+      "key": "#40",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    }
+  ],
+  "signals": []
+}

@@ -77,7 +77,7 @@ func (r *Runtime) ExecuteWorkflow(wfCtx engine.WorkflowContext, input *RunInput)
 	settings := cloneCompaction(input.ContextCompaction)
 	recoverySettings := input.ContextRecovery
 	agentSettings := cloneCompactionOptions(input.CompactionAgents)
-	wfCtx = compactionWorkflowContext{WorkflowContext: wfCtx, settings: agentSettings, recovery: cloneRecoveryOptions(input.RecoveryAgents)}
+	wfCtx = compactionWorkflowContext{WorkflowContext: wfCtx, settings: agentSettings, recovery: cloneRecoveryOptions(input.RecoveryAgents), defaults: cloneDefaultOptions(input.ContextDefaultAgents)}
 	input, err = r.prepareEffectiveRunInput(wfCtx.Context(), reg, input, runCtx)
 	if err != nil {
 		return nil, err
@@ -270,7 +270,7 @@ func (r *Runtime) finishWorkflowExecution(
 	} else if *finalStatus != runStatusSuccess {
 		*finalStatus = runStatusSuccess
 	}
-	if *out != nil && *finalErr == nil && (*out).FinalRef != "" && input.ParentRunID == "" && input.SessionID != "" && input.ContextCompaction != nil {
+	if *out != nil && *finalErr == nil && (*out).FinalRef != "" && input.ParentRunID == "" && input.SessionID != "" && (input.ContextCompaction != nil || input.ContextSettings.Default && compaction.ObservedQualifiedTier(planInput.compactionState) != "" && !planInput.compactionState.Flags.NonTextResident && !planInput.compactionState.Flags.UnqualifiedStep) {
 		planInput.FinalHash = (*out).FinalRef
 		planInput.PublishContinuation = true
 	}

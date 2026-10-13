@@ -3,6 +3,12 @@ package agentfeatures_test
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
 	"example.com/agentfeatures/gen/features/agents/coordinator"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextmeasure"
@@ -13,17 +19,18 @@ import (
 	sv "github.com/CaliLuke/selvedge"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
-	"time"
 )
 
 func TestSelvedgeRecordWorkflowHistory(t *testing.T) {
 	if os.Getenv("LOOM_MCP_RECORD_WORKFLOW_HISTORY") != "1" {
 		t.Skip("set LOOM_MCP_RECORD_WORKFLOW_HISTORY=1 to re-record")
 	}
+	t.Run("default", func(t *testing.T) {
+		recordSelvedgeDefaultHistory(t, false)
+	})
+	t.Run("nontext resident", func(t *testing.T) {
+		recordSelvedgeDefaultHistory(t, true)
+	})
 	t.Run("main", recordSelvedgeWorkflowHistory)
 	t.Run("child", recordSelvedgeChildWorkflowHistory)
 	t.Run("continuation", recordSelvedgeContinuationWorkflowHistory)

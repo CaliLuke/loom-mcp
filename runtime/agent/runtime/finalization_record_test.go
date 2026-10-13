@@ -23,7 +23,7 @@ func TestRunRecordFinalizationResultsRemainOutsideTranscript(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			eng := &contentBatchEngine{Engine: engineinmem.New()}
-			rt := New(WithEngine(eng))
+			rt := New(WithoutContextDefault("content.agent"), WithEngine(eng))
 			domain := newAnyJSONSpec("test.domain", "test")
 			terminal := bookkeepingSpec("test.control_limit", true)
 			terminal.Toolset = "test"
@@ -112,7 +112,7 @@ func TestRunRecordFinalizationResultsRemainOutsideTranscript(t *testing.T) {
 }
 
 func TestStageResultRequiresIndexedCall(t *testing.T) {
-	rt := New()
+	rt := New(WithoutContextDefault("content.agent"))
 	base := testWorkflowInput(t, rt, &planner.PlanInput{})
 	call := planner.ToolRequest{Name: "test.domain", ToolCallID: "indexed"}
 	testRecordAssistant(t, rt, base, []planner.ToolRequest{call})

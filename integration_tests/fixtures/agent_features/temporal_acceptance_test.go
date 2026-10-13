@@ -89,20 +89,38 @@ func TestGeneratedFeatureRealTemporalContracts(t *testing.T) {
 		measurePlannerStepLatency(t, server.Client())
 	})
 
-	t.Run("multimodal planner fails once", func(t *testing.T) { testMultimodalPlannerRetry(t, server.Client()) })
+	t.Run("multimodal planner fails once", func(t *testing.T) {
+		testMultimodalPlannerRetry(t, server.Client())
+	})
 
 	t.Run("record workflow history", func(t *testing.T) {
 		if os.Getenv("LOOM_MCP_RECORD_WORKFLOW_HISTORY") != "1" {
 			t.Skip("set LOOM_MCP_RECORD_WORKFLOW_HISTORY=1 to re-record")
 		}
-		t.Run("multimodal", func(t *testing.T) { recordMultimodalWorkflowHistory(t, server.Client()) })
-		t.Run("continuation", func(t *testing.T) { recordContinuationWorkflowHistory(t, server.Client()) })
-		t.Run("child start", func(t *testing.T) { recordChildWorkflowHistory(t, server.Client()) })
+		t.Run("default", func(t *testing.T) {
+			recordDefaultWorkflowHistory(t, server.Client(), false)
+		})
+		t.Run("nontext resident", func(t *testing.T) {
+			recordDefaultWorkflowHistory(t, server.Client(), true)
+		})
+		t.Run("multimodal", func(t *testing.T) {
+			recordMultimodalWorkflowHistory(t, server.Client())
+		})
+		t.Run("continuation", func(t *testing.T) {
+			recordContinuationWorkflowHistory(t, server.Client())
+		})
+		t.Run("child start", func(t *testing.T) {
+			recordChildWorkflowHistory(t, server.Client())
+		})
 		t.Run("main", func(t *testing.T) {
 			recordWorkflowHistory(t, server.Client())
 		})
-		t.Run("summary adoption", func(t *testing.T) { recordSummaryWorkflowHistory(t, server.Client()) })
-		t.Run("confirmed pause", func(t *testing.T) { recordPauseWorkflowHistory(t, server.Client()) })
+		t.Run("summary adoption", func(t *testing.T) {
+			recordSummaryWorkflowHistory(t, server.Client())
+		})
+		t.Run("confirmed pause", func(t *testing.T) {
+			recordPauseWorkflowHistory(t, server.Client())
+		})
 		t.Run("budget adoption", func(t *testing.T) {
 			recordBudgetWorkflowHistory(t, server.Client())
 		})
@@ -421,7 +439,7 @@ func testTemporalWorkerReplacement(
 		logTemporalAwaitFailure(t, temporalClient, first, "run-temporal-restart")
 	}()
 	// A published prompt precedes the activity acknowledgement and the workflow
-	// task that enters the await. Close only at that durable, idle boundary;
+	// task that enters the await. Close only at that durable, idle boundary
 	// stopping an active workflow task can strand queries until its timeout.
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
 		if !assert.Positive(collect, first.recorder.count(hooks.AwaitTypedInput)) || !assert.Positive(collect, first.recorder.count(hooks.RunPaused)) {

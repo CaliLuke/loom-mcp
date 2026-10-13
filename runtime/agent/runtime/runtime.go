@@ -131,16 +131,19 @@ type (
 		toolsets  map[string]ToolsetRegistration
 		toolSpecs map[tools.Ident]tools.ToolSpec
 		// parsed tool payload schemas cached by tool name for hint building
-		toolSchemas       map[string]map[string]any
-		models            map[string]model.Client
-		modelHook         func(string, model.Client) model.Client
-		contextLimits     map[string]model.ContextLimits
-		contextCompaction map[agent.Ident]ContextCompaction
-		contextRecovery   map[agent.Ident]ContextRecovery
-		recallAuthorizer  func(context.Context, RecallAccess) error
+		toolSchemas           map[string]map[string]any
+		models                map[string]model.Client
+		modelHook             func(string, model.Client) model.Client
+		contextLimits         map[string]model.ContextLimits
+		contextCompaction     map[agent.Ident]ContextCompaction
+		contextDefault        map[agent.Ident]ContextDefault
+		contextQualifications []Qualification
+		contextRecovery       map[agent.Ident]ContextRecovery
+		recallAuthorizer      func(context.Context, RecallAccess) error
 
 		// Resolved registration settings remain separate from original options.
 		agentContextCompaction map[agent.Ident]ContextCompaction
+		agentContextDefault    map[agent.Ident]ContextDefault
 		agentContextRecovery   map[agent.Ident]ContextRecovery
 
 		// Per-agent tool specs registered during agent registration for introspection.
@@ -207,7 +210,11 @@ type (
 	// for production deployments. Noop implementations are substituted for nil Logger,
 	// Metrics, and Tracer. A default in-memory event bus is created if Hooks is nil.
 	Options struct {
-		modelHook func(string, model.Client) model.Client
+		// ContextDefault configures implicit threshold policy by agent.
+		ContextDefault map[agent.Ident]ContextDefault
+		// ContextQualifications are application-owned exact model attestations.
+		ContextQualifications []Qualification
+		modelHook             func(string, model.Client) model.Client
 		// ContextLimits overrides adapter limits by resolved model, with registered-ID fallback.
 		// Positive fields win; negative values or max output above the window panic.
 		ContextLimits map[string]model.ContextLimits
@@ -436,6 +443,8 @@ type (
 	// These values are evaluated during workflow execution to enforce limits and prevent
 	// runaway tool loops or budget overruns.
 	RunPolicy struct {
+		// ContextDefault configures qualified compaction defaults.
+		ContextDefault *ContextDefault
 		// MaxToolCalls caps the total number of tool invocations per run (0 = unlimited).
 		MaxToolCalls int
 

@@ -24,6 +24,7 @@ func (o ContextOverrides) Clone() ContextOverrides {
 	o.RecallScanBytes = clonePointer(o.RecallScanBytes)
 	o.ContextWindow = clonePointer(o.ContextWindow)
 	o.Threshold = clonePointer(o.Threshold)
+	o.KeepNonTextResident = clonePointer(o.KeepNonTextResident)
 	o.MaxTier = clonePointer(o.MaxTier)
 	o.DisableRecall = clonePointer(o.DisableRecall)
 	o.TriggerAt = clonePointer(o.TriggerAt)

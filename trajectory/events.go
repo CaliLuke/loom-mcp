@@ -48,6 +48,9 @@ func (r *runBuilder) readEventsAndEntries() error {
 				first = event.Timestamp
 				hasRecord = true
 			}
+			if r.out.AgentID == "" {
+				r.out.AgentID = event.AgentID
+			}
 			last = event.Timestamp
 		}
 		if event.Type == hooks.PlannerStep {

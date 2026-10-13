@@ -6,6 +6,7 @@ import (
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/compaction"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextcompat"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/prompt"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
@@ -15,9 +16,11 @@ import (
 type (
 	// ContextCompactionEvent records a committed compaction or a suppressed attempt.
 	ContextCompactionEvent struct {
-		Fingerprint     string `json:"fingerprint,omitzero"`
-		EffectiveWindow int    `json:"effective_window,omitzero"`
-		Pretend         bool   `json:"pretend,omitzero"`
+		// Compatibility binds an attachment check to this decision boundary.
+		Compatibility   *contextcompat.Result `json:"compatibility,omitzero"`
+		Fingerprint     string                `json:"fingerprint,omitzero"`
+		EffectiveWindow int                   `json:"effective_window,omitzero"`
+		Pretend         bool                  `json:"pretend,omitzero"`
 		// Latency is the summary attempt duration in nanoseconds.
 		Latency int64 `json:"latency,omitzero"`
 		// Kind is the ordered validation or provider rejection, independent of Reason.
@@ -52,6 +55,10 @@ type (
 )
 
 const (
+	// ContextCompatibility adopts verified original attachment evidence.
+	ContextCompatibility EventType = "context_compatibility"
+	// ContextNonTextResident reports sticky preservation through an ordinary diagnostic.
+	ContextNonTextResident EventType = "context_nontext_resident"
 	// ContextUnmeasured reports an adopted attempt with no view-bearing requests.
 	ContextUnmeasured EventType = "context_unmeasured"
 	// ContextLimitsUnknown reports missing limits for a view-bearing request.
@@ -72,7 +79,11 @@ func NewContextDiagnosticEvent(runID string, agentID agent.Ident, sessionID stri
 }
 
 // Type identifies the canonical compaction record.
-func (e *ContextCompactionEvent) Type() EventType { return e.kind }
+func (e *ContextCompactionEvent) Type() EventType {
+	return e.kind
+}
 
 // Type identifies the run-scoped diagnostic.
-func (e *ContextDiagnosticEvent) Type() EventType { return e.kind }
+func (e *ContextDiagnosticEvent) Type() EventType {
+	return e.kind
+}

@@ -76,10 +76,11 @@ func TestToolResultBatchUsesOneContentActivity(t *testing.T) {
 			require.NoError(t, err)
 			eng.mu.Lock()
 			defer eng.mu.Unlock()
-			assert.Len(t, eng.records, 1, "one result batch must schedule one content activity")
-			require.Len(t, eng.records, 1)
+			require.Len(t, eng.records, 2, "one seed plus one result batch")
+			require.NotNil(t, eng.records[0].Continue)
+			assert.Nil(t, eng.records[1].Continue)
 			reminders := 0
-			for _, item := range eng.records[0].Items {
+			for _, item := range eng.records[1].Items {
 				if string(item) == spec.ResultReminder {
 					reminders++
 				}
@@ -133,8 +134,10 @@ func TestProvidedResultBatchUsesOneContentActivity(t *testing.T) {
 	})
 	eng.mu.Lock()
 	defer eng.mu.Unlock()
-	require.Len(t, eng.records, 1)
-	assert.Len(t, eng.records[0].Provided.Results, 50)
+	require.Len(t, eng.records, 2, "one seed plus one provided result batch")
+	require.NotNil(t, eng.records[0].Continue)
+	assert.Nil(t, eng.records[1].Continue)
+	assert.Len(t, eng.records[1].Provided.Results, 50)
 }
 
 func TestFailedContentBatchDoesNotAdoptEntries(t *testing.T) {

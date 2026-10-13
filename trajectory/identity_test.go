@@ -20,6 +20,7 @@ func TestBuildPrefersRecordIdentity(t *testing.T) {
 		events         []*runlog.Event
 		agent, session string
 	}{
+		{"unidentified continuation first", []*runlog.Event{observer, {Type: hooks.ContinuationStarted, SessionID: "record-session"}, record}, "record-agent", "record-session"},
 		{"observer first", []*runlog.Event{observer, record}, "record-agent", "record-session"},
 		{"record first", []*runlog.Event{record, observer}, "record-agent", "record-session"},
 		{"observer only", []*runlog.Event{observer}, "observer-agent", "observer-session"},

@@ -36,6 +36,9 @@ func TestSchemaLimitsInvalidOptionalBoolean(t *testing.T) {
 		valid        bool
 	}{
 		{"legacy absent", "", true},
+		{"provider configuration", `,"provider_config":"bedrock-anthropic","qualified":"evict"`, true},
+		{"qualification wrong type", `,"qualified":3`, false},
+		{"provider configuration wrong type", `,"provider_config":3`, false},
 		{"invalid limits", `,"limits_invalid":true`, true},
 		{"valid limits", `,"limits_invalid":false`, true},
 		{"wrong type", `,"limits_invalid":"true"`, false},

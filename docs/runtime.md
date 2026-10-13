@@ -4156,6 +4156,37 @@ const (
 
 ---
 
+## Qualified Context Defaults
+
+Protocol 19 stamps `Default` and `KeepNonTextResident` for planner agents that
+have no explicit context policy. The shipped qualification table is empty.
+`runtime.WithContextQualification` self-certifies exact provider configuration
+and model IDs; it does not waive attachment protection. Recorded call facts own
+qualification and support on replay. New models can narrow eligibility, and
+unknown limits remain diagnostic for defaults. Explicit compaction retains its
+existing unknown-limit validation.
+
+`RunPolicy.ContextDefault` accepts `Disabled` and a registered `ContextModel`.
+`runtime.WithoutContextDefault(agentID)` disables implicit thresholds. Explicit
+`WithContextCompaction` takes precedence. Context overrides merge each field:
+`Threshold=true` clears default provenance but retains an inherited residency
+guard; an explicit `KeepNonTextResident=false` waives that guard only when the
+merged threshold is enabled. `Threshold=false` disables both enablement modes.
+
+Original attachments that cannot be recalled stop threshold compaction and emit
+one `context_nontext_resident` diagnostic. Exact compatibility checks run through
+RecordContent and are verified in RunRecord exports. Overflow recovery remains
+available. Qualified default runs publish continuation only if every observed
+step remained qualified and no residency flag was set. Other default runs keep
+the previous session head. Stores without continuation support start fresh;
+explicit context registration still requires that capability. Reserved recall
+names disable only defaults and produce one registration warning.
+
+See [Qualified context defaults](context_defaults.md) for provider identities,
+self-certification, attachment rules and continuation behavior. Drain protocol 18
+workflows before deploying. History policy and generator APIs below remain
+available until their separate migration.
+
 ## History Policies
 
 Control how conversation history is managed before each planner turn:

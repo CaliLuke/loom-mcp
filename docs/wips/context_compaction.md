@@ -957,26 +957,26 @@ estimated tokens of parts.
 document attachments to `model.ToolResultPart.Parts`. Anthropic and Bedrock
 Claude encode them; other adapters reject them before provider I/O. Capability
 forwarding, byte limits and non-text measurement landed in K22a under workflow
-protocol 17; the current workflow protocol is 18. Ordinary tools still return JSON in `Content`.
+protocol 17; the current workflow protocol is 19. Ordinary tools still return JSON in `Content`.
 
 K22b implements attachment reads, support folding, result blobs and continuation
 part dropping under protocol 18. See section 4.18. K22a retained protocol 17.
 
-**Default boundary.** A placeholder makes an evicted part discoverable, not
-usable. So the default is decided per provider configuration, not globally:
+**Default boundary (implemented in K21a).** A placeholder names an evicted part
+but does not make its content usable. Qualified defaults keep original non-text
+resident if the recorded support fold is empty, exact part compatibility fails,
+or the aggregate non-text estimate exceeds the current recall allowance.
+KeepNonTextResident is sticky and applies to pending and already-evicted originals;
+carried placeholders have NonText=0. Explicit compaction waives it unless the
+runtime field or per-run override enables it. Overflow recovery is unchanged.
 
-- A configuration whose adapter supports multimodal tool results (after K22)
-  gets threshold compaction by default when its release suite passes,
-  including the multimodal scenario.
-- A configuration whose adapter does not support them, but accepts images or
-  documents in user messages, gets threshold compaction by default only for
-  runs without non-text parts. In a run that has one, threshold compaction
-  stays off for the run and `context_nontext_resident` is emitted once:
-  non-text parts stay in the view, and only overflow recovery can evict them,
-  as it can evict anything today. An agent that opts in explicitly accepts
-  the loss of model access, which its configuration states.
-- Before K22 no configuration supports multimodal tool results, so every
-  configuration follows the second rule.
+Exact compatibility runs through the existing RecordContent activity before
+threshold Decide. Its compact fact binds original content coverage and first
+adopted terminal view-bearing call identities. A new part/model invalidates it;
+text-only additions may reuse it. Budget narrowing is checked on every decision.
+Canonical adoption precedes the next planner; standalone RunRecord export verifies
+its scope, hashes, call provenance, coverage and order without live clients.
+Missing content and invalid evidence fail; the planner envelope retains P2.
 
 The multimodal release scenario runs for each provider configuration that
 would receive the default (7.4). On a configuration under the second rule it
@@ -1482,6 +1482,17 @@ retention has removed the content, the result is `recall_unavailable`.
 
 ### 4.17 Settings, prompts and overrides
 
+K21a implements recorded qualified defaults. Planner agents without explicit
+settings stamp `Default=true`, `KeepNonTextResident=true`, `Threshold=false`.
+The shipped qualification table is empty. Public self-certification matches an
+exact provider configuration and normalized model; there is no family fallback.
+First adopted view-bearing call facts fix support and qualification, including a
+terminal failed overflow call. The observed tier can narrow but never widen.
+`WithoutContextDefault` and `ContextDefault.Disabled` disable implicit compaction;
+explicit runtime settings win. A registered `ContextDefault.ContextModel` enables
+summaries only at a qualified summary tier. See [the runtime guide](../context_defaults.md).
+Generator/History removal remains K21b.
+
 **Defaults are fractions of the usable budget B, with caps only**, so they fit
 any window:
 
@@ -1774,7 +1785,10 @@ head, actual view, step, facts, stamped settings and pure recomputation), `conte
 `continuation_started` (prev, pos, outcome continued|fresh, reason, seeded),
 `continuation_published` (id, prev, pos, outcome published|already),
 `continuation_superseded` (prev, head),
-`context_nontext_resident`.
+`context_nontext_resident` (once per run before the affected planner; Reason
+`provider` or `too_large`, and recorded Model witness), and
+`context_compatibility` (canonical compact fact adoption with coverage/support
+identity).
 Each newly inserted compacted or skipped record produces one `context.compact`
 internal span. Duplicate event keys produce no additional span. It ends at the
 event timestamp and lasts the recorded summary latency (zero for other tiers).
@@ -1805,7 +1819,7 @@ correlation. These record events reach the canonical telemetry subscriber.
 | Another run advanced the session head first | `continuation_superseded`; this run's view is not carried (4.16). |
 | Crash between a call's start and completion | The call record stays `started` and `RunRecord` reports it incomplete (4.5). |
 | Recall allowance spent | `recall_budget_exhausted` naming the allowance; the next compaction refills it (4.18). |
-| A run with non-text parts on a provider without multimodal tool results | Threshold compaction off for the run by default; `context_nontext_resident` once (4.10). |
+| Qualified default with unsupported or oversized original non-text parts | Threshold compaction off for the run by default; `context_nontext_resident` once (4.10). |
 | A part a model or provider cannot take (an image for a text-only summariser, a document in a tool result) | Placeholder, "not summarised" receipt line, or `recall_unsupported_part` (4.10); never dropped silently. |
 | Earlier run's content removed by retention | `recall_context` returns `recall_unavailable`; a continuation whose content is missing is ignored, recorded, fresh start. |
 | Run terminated outside workflow code | Unsealed record, complete to the last planner step; the run log says so. No continuation is written, so the head stays at the previous continuation and the session's next run continues from it when its messages match, else starts fresh, and that decision is recorded. |
@@ -1841,7 +1855,7 @@ clarification-only text retention. Protocol 15 is rejected before workflow effec
 
 K18 advanced the workflow to protocol 17 for session continuation, compact optional
 seal projection fields, cross-run identity, and overflow-retry usage accounting.
-K22b advances the current workflow to protocol 18 and records the same seven
+K22b advanced the workflow to protocol 18 and records the same seven
 histories plus multimodal, rejects 17 before effects, and retains earlier fixtures.
 Genuine v17 main, budget, summary, child, child_run, confirmed_pause and continued
 histories preserve FR1 behavior. Keep FR1's v16 recordings unchanged and reject
@@ -1869,6 +1883,14 @@ still require draining; changing worker options cannot change an existing run.
 The roadmap's durable cross-workflow continuations must carry the index head
 and latest checkpoint as part of the successor's replay seed. The index
 segments are what make `ContinueAsNew` possible later.
+
+K21a advances the current workflow to protocol 19. Both Temporal and Selvedge
+record ten real completed histories: main, budget, summary, child, child_run,
+confirmed_pause, continued, multimodal, qualified default, and nontext resident.
+The final two verify recorded qualification and compatibility despite changed
+live registration. Replay performs no activity, provider, store or hook effects.
+Protocol 18, future and missing versions reject before effects; earlier files
+remain. TemplateProtocolVersion stays 5.
 
 ### 4.23 Remaining growth
 
@@ -1902,8 +1924,8 @@ The tickets, their order and their acceptance proofs are in
 
 | # | Decision | Proposal |
 |---|---|---|
-| D1 | Enablement | Overflow recovery on for every agent from K14. Threshold compaction opt-in until the release criteria pass, then on by default per provider configuration (K21); on a provider without multimodal tool results, runs with non-text parts keep it off (4.10). |
-| D2 | Remove `History`, `KeepRecentTurns`, `Compress` without an alias | Yes, in K21, once compaction is the default. |
+| D1 | Enablement | Implemented K21a: recorded qualified default, empty shipped table, explicit opt-in preserved; non-text residency protection applies (4.10). Overflow recovery remains independent. |
+| D2 | Remove `History`, `KeepRecentTurns`, `Compress` without an alias | Accepted; pending K21b. K21a does not remove runtime or generator History behavior. |
 | D3 | Advertise `recall_context` after the first compaction | Yes, through the policy envelope; ships before overflow recovery adds eviction to every agent; opt-out per agent with `Recall(false)` (runtime option in K13, DSL in K16); rendered views never name it. |
 | D4 | Planners receive the projected view; `ToolOutputs` carries references | Yes. This changes the documented `ToolOutputs` contract. |
 | D5 | Session continuity | For agents with threshold compaction: a continuation record holding the final view in bounded carried forms (full, preview, placeholder) with each entry's `Origin`, matched on caller-visible message hashes; only the carried bytes are copied into the new root scope; the evidence stays in the earlier run and is recalled by run-qualified reference. |

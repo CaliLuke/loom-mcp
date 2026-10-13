@@ -21,6 +21,7 @@ type (
 		engine.WorkflowContext
 		settings map[agent.Ident]ContextCompaction
 		recovery map[agent.Ident]ContextRecovery
+		defaults map[agent.Ident]ContextDefault
 	}
 )
 
@@ -94,6 +95,7 @@ func (r *Runtime) stampContextCompaction(input *RunInput) {
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	input.ContextDefaultAgents = cloneDefaultOptions(r.agentContextDefault)
 	input.ContextRecovery = r.agentContextRecovery[input.AgentID]
 	input.RecoveryAgents = cloneRecoveryOptions(r.agentContextRecovery)
 	input.ContextCompaction = nil
@@ -101,10 +103,12 @@ func (r *Runtime) stampContextCompaction(input *RunInput) {
 	if settings, enabled := input.CompactionAgents[input.AgentID]; enabled {
 		input.ContextCompaction = cloneCompaction(&settings)
 	}
-	input.ContextSettings = resolvedContextSettings(input.ContextCompaction, input.ContextRecovery)
+	input.ContextSettings = defaultContextSettings(resolvedContextSettings(input.ContextCompaction, input.ContextRecovery), input.AgentID, input.ContextDefaultAgents)
 }
 
 func inheritCompaction(ctx context.Context, input *RunInput) {
+	defaults, _ := ctx.Value(defaultSettingsKey{}).(map[agent.Ident]ContextDefault)
+	input.ContextDefaultAgents = cloneDefaultOptions(defaults)
 	recovery, _ := ctx.Value(recoverySettingsKey{}).(map[agent.Ident]ContextRecovery)
 	input.ContextRecovery = recovery[input.AgentID]
 	input.RecoveryAgents = cloneRecoveryOptions(recovery)
@@ -113,7 +117,7 @@ func inheritCompaction(ctx context.Context, input *RunInput) {
 	if config, enabled := settings[input.AgentID]; enabled {
 		input.ContextCompaction = cloneCompaction(&config)
 	}
-	input.ContextSettings = resolvedContextSettings(input.ContextCompaction, input.ContextRecovery)
+	input.ContextSettings = defaultContextSettings(resolvedContextSettings(input.ContextCompaction, input.ContextRecovery), input.AgentID, input.ContextDefaultAgents)
 }
 
 func resolvedContextSettings(threshold *ContextCompaction, recovery ContextRecovery) compaction.ContextSettings {
@@ -136,6 +140,7 @@ func resolvedContextSettings(threshold *ContextCompaction, recovery ContextRecov
 	resolved.GuardMargin = margin
 	resolved.DisableRecall = recovery.DisableRecall
 	if threshold != nil {
+		resolved.KeepNonTextResident = threshold.KeepNonTextResident
 		resolved.Summary.Settings = threshold.Summary
 		if threshold.ContextModel != nil {
 			resolved.Summary.Enabled = true
@@ -150,11 +155,12 @@ func keepCompactionResult(settings *ContextCompaction, tool tools.Ident) bool {
 }
 
 func (c compactionWorkflowContext) Context() context.Context {
-	ctx := context.WithValue(c.WorkflowContext.Context(), compactionSettingsKey{}, c.settings)
+	ctx := context.WithValue(c.WorkflowContext.Context(), defaultSettingsKey{}, c.defaults)
+	ctx = context.WithValue(ctx, compactionSettingsKey{}, c.settings)
 	return context.WithValue(ctx, recoverySettingsKey{}, c.recovery)
 }
 
 func (c compactionWorkflowContext) WithCancel() (engine.WorkflowContext, func()) {
 	derived, cancel := c.WorkflowContext.WithCancel()
-	return compactionWorkflowContext{WorkflowContext: derived, settings: c.settings, recovery: c.recovery}, cancel
+	return compactionWorkflowContext{WorkflowContext: derived, settings: c.settings, recovery: c.recovery, defaults: c.defaults}, cancel
 }

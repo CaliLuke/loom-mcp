@@ -34,6 +34,7 @@ type recordingContentStore struct {
 	mu     sync.Mutex
 	writes []contentWrite
 	failAt int
+	failed []byte
 }
 type contentPlanner struct {
 	t     *testing.T
@@ -75,13 +76,7 @@ func TestActivityContentTypedLargeRoundTrip(t *testing.T) {
 func TestActivityContentGeneratedDispatchAndWorkflow(t *testing.T) {
 	for _, failAt := range []int{0, 1, 2, 3} {
 		t.Run([]string{"success", "result put fails", "server data put fails", "payload put fails"}[failAt], func(t *testing.T) {
-			store := &recordingContentStore{Store: runstoreinmem.New(), failAt: func() int {
-				if failAt > 0 {
-					// Start stores the pinned prompt and canonical settings before the call.
-					return failAt + 3
-				}
-				return 0
-			}()}
+			store := &recordingContentStore{Store: runstoreinmem.New()}
 			before := agentsruntime.RuntimeInterceptorFuncs{BeforeToolFunc: func(_ context.Context, input *agentsruntime.BeforeToolInput) (*agentsruntime.BeforeToolDecision, error) {
 				assert.JSONEq(t, `{"topic":"adapter"}`, string(input.Call.Payload))
 				return &agentsruntime.BeforeToolDecision{Payload: rawjson.Message(`{"topic":"interceptor"}`)}, nil
@@ -105,6 +100,13 @@ func TestActivityContentGeneratedDispatchAndWorkflow(t *testing.T) {
 					assert.Equal(t, "private-session", payload.SessionID)
 					// A later service mutation must not alter the recorded input snapshot.
 					payload.Topic = "mutated-by-service"
+					if failAt > 0 {
+						// Arm after startup and request recording. The next writes retain
+						// the result, server data, and executed payload in that order.
+						store.mu.Lock()
+						store.failAt = len(store.writes) + failAt
+						store.mu.Unlock()
+					}
 					return &features.MethodEchoResult{OK: true, Message: "eligible"}, nil
 				}),
 			)
@@ -136,6 +138,14 @@ func TestActivityContentGeneratedDispatchAndWorkflow(t *testing.T) {
 			require.Len(t, events, 1)
 			event := events[0]
 			if failAt != 0 {
+				wantFailed := []string{
+					`{"ok":true,"message":"eligible"}`,
+					`{"private":"sidecar-marker"}`,
+					`{"topic":"mapped-injected","session_id":"private-session"}`,
+				}[failAt-1]
+				store.mu.Lock()
+				assert.JSONEq(t, wantFailed, string(store.failed))
+				store.mu.Unlock()
 				// No successful-result or executed-payload refs leak from the failed
 				// write. The materializer's fresh synthesized error sidecar is canonical.
 				assert.Empty(t, event.Refs.Result)
@@ -172,6 +182,7 @@ func (s *recordingContentStore) Put(ctx context.Context, scope string, data []by
 	defer s.mu.Unlock()
 	if s.failAt != 0 && len(s.writes)+1 == s.failAt {
 		s.failAt = 0 // Fail this tool write once; allow terminal event retention.
+		s.failed = append([]byte(nil), data...)
 		return "", runstore.ErrContentTooLarge
 	}
 	hash, err := s.Store.Put(ctx, scope, data)

@@ -29,17 +29,21 @@ type reader struct {
 }
 
 type runReader struct {
-	owner         *reader
-	run           Run
-	adopted       map[runstore.CallKey]bool
-	renderer      index.Renderer
-	rendered      []index.MessageEntry
-	views         map[runstore.Hash][]*model.Message
-	checkpoints   map[string]bool
-	state         compaction.State
-	overflowCalls map[runstore.CallKey]bool
-	callRecords   []runstore.CallRecord
-	byKey         map[runstore.CallKey]runstore.CallRecord
+	owner                 *reader
+	run                   Run
+	adopted               map[runstore.CallKey]bool
+	renderer              index.Renderer
+	rendered              []index.MessageEntry
+	views                 map[runstore.Hash][]*model.Message
+	checkpoints           map[string]bool
+	state                 compaction.State
+	lastPlannerStep       int
+	overflowRetry         bool
+	lastCompatibilityStep int
+	pendingResidency      *hooks.ContextResidencyEvent
+	overflowCalls         map[runstore.CallKey]bool
+	callRecords           []runstore.CallRecord
+	byKey                 map[runstore.CallKey]runstore.CallRecord
 }
 
 // Read reconstructs a parent-first run tree from root-scoped content and the
@@ -133,6 +137,12 @@ func (r *runReader) readEvents() ([]string, error) {
 }
 
 func (r *runReader) readEvent(event *runlog.Event) (string, error) {
+	if event.Type == hooks.ContextResidencyAdopted {
+		return "", r.readResidencyAdoption(event)
+	}
+	if event.Type == hooks.ContextCompatibility {
+		return "", r.readCompatibility(event)
+	}
 	if event.Type == hooks.ContinuationStarted {
 		var start struct {
 			Pos  int     `json:"pos"`
@@ -260,6 +270,11 @@ func (r *runReader) readStep(event *runlog.Event) error {
 	if err := r.recordContextSettings(step.ContextSettings); err != nil {
 		return err
 	}
+	if err := r.verifyNonTextBoundary(step.IndexHead, step.Step, !r.overflowRetry); err != nil {
+		return err
+	}
+	r.overflowRetry = false
+	r.lastPlannerStep = step.Step
 	if !r.run.Sealed {
 		r.run.IndexHead = step.IndexHead
 	}
@@ -332,6 +347,9 @@ func (r *runReader) readSeal(event *runlog.Event) error {
 		return err
 	}
 	if err := r.recordContextSettings(seal.ContextSettings); err != nil {
+		return err
+	}
+	if err := r.verifyResidencyAdoption(seal.IndexHead, 0); err != nil {
 		return err
 	}
 	r.run.Sealed = true

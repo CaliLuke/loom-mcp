@@ -77,9 +77,9 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   runs before deployment. Preserve protocol 14 overflow source classification,
   retry definition accounting and the fixed-rate progress check.
 
-- Current workflow protocol is 18. Every agent observes adopted call facts,
+- Current workflow protocol is 19. Every agent observes adopted call facts,
   sends sorted Models and runs the advisory guard, bounded overflow recovery and
-  recall advertising. Threshold compaction stays opt-in. The existing
+  recall advertising. Threshold compaction is explicit or qualified-default; the shipped qualification table is empty. The existing
   run.ContextRecovery adds GuardMargin (zero=10%) beside DisableRecall; RunInput
   stamps ContextSettings for every agent. Marked attempts discard all streamed
   presentations and return ContextOverflow independently of the planner result.
@@ -957,3 +957,25 @@ Protocol 18 includes main, budget, summary, child, child_run, confirmed_pause,
 continued and multimodal real Temporal histories. Protocol 17 rejects before
 workflow effects; its run-record exports remain readable. Drain v17 workflows
 before deployment. Structural TemplateProtocolVersion stays 5.
+
+### Qualified defaults (K21a, protocol 19)
+
+Planner agents stamp Default and KeepNonTextResident unless disabled or explicit.
+WithContextQualification self-certifies exact configuration/model pairs; only
+Bedrock routing prefixes normalize. The first adopted view-bearing terminal call
+fixes qualification and support. New models narrow eligibility. Explicit opt-in
+retains canonical bytes, unknown-limit errors and its default attachment waiver.
+Default unknown limits remain diagnostic. Reserved recall names disable defaults
+with one registration warning. ContextDefault.ContextModel uses a registered ID;
+WithoutContextDefault disables the default, with explicit options authoritative.
+
+RecordContent checks exact original attachment compatibility when required,
+including pending and evicted entries, before threshold decisions. Compact
+coverage/support facts and canonical adoption keep P2 unchanged. Missing content
+fails; residency is sticky, diagnosed once, and never blocks overflow recovery.
+RunRecord verifies self-contained export evidence and first failed-call provenance.
+Successful qualified/nonresident defaults may publish continuation; other defaults
+preserve the previous head, and stores lacking continuation support start fresh.
+Both backend corpora contain ten v19 histories and reject v18/future/missing inputs
+before effects. Structural templates stay 5. History/codegen removal remains K21b;
+no production qualifications or live-provider gates are introduced here.

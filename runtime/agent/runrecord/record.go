@@ -28,6 +28,8 @@ type (
 	}
 	// Run holds one run's transcript and evidence in canonical order.
 	Run struct {
+		// NonTextResident reconstructs sticky original-attachment preservation.
+		NonTextResident bool `json:"nontext_resident,omitzero"`
 		// ToolResultParts is the support intersection rebuilt from adopted call facts.
 		ToolResultParts model.ToolResultPartSupport `json:"tool_result_parts,omitzero"`
 		// Pos and Prev are recorded session-chain identity, absent on older exports.

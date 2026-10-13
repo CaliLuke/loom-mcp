@@ -256,6 +256,9 @@ func (r *Runtime) preparePlanActivity(wfCtx engine.WorkflowContext, base *workfl
 	// Reserve the identity now, even if preparation later consumes the budget.
 	base.step++
 	input.Step = base.step
+	if err := r.prepareNonTextCompatibility(wfCtx, base, input, options); err != nil {
+		return err
+	}
 	prepareCompaction(base, input)
 	if err := r.prepareWorkflowSummary(wfCtx, base, input, hardDeadline); err != nil {
 		return err

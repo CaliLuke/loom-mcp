@@ -35,7 +35,7 @@ func (r *Runtime) recoverOverflow(wf engine.WorkflowContext, base *workflowPlanI
 	input.View.ContextFingerprint = base.contextFingerprint
 	view, adoption := plannerAdoptionEvent(wf, base, *input, out)
 	state := base.compactionState
-	if base.compaction != nil && input.Overflow == nil {
+	if compaction.On(base.compactionState, base.Entries, base.contextSettings) && input.Overflow == nil {
 		state = base.compactionDecision.State
 	}
 	var err error
@@ -132,7 +132,7 @@ func (r *Runtime) commitOverflow(wf engine.WorkflowContext, base *workflowPlanIn
 // Threshold adoption precedes the recovery refill, matching the record order.
 func (base *workflowPlanInput) adoptOverflowView(input PlanActivityInput, view index.ViewRef, state compaction.State, decision overflowDecision, threshold hooks.Event) {
 	base.compactionView, base.compactionState = view, state
-	if base.compaction != nil && input.Overflow == nil && input.Recovery == nil {
+	if compaction.On(base.compactionState, base.Entries, base.contextSettings) && input.Overflow == nil && input.Recovery == nil {
 		base.compactionSuppressed = base.compactionDecision.Skipped == compaction.NoProgress
 	}
 	if threshold != nil && threshold.Type() == hooks.ContextCompacted {

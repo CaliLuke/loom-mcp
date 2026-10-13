@@ -127,6 +127,8 @@
     "RequestFacts": {
       "type": "object",
       "properties": {
+        "provider_config": { "type": "string" },
+        "qualified": { "type": "string", "enum": ["evict", "summary"] },
         "limits_invalid": {
           "type": "boolean"
         },

@@ -10,6 +10,7 @@ import (
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/callrecord"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/compaction"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextmeasure"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/overflow"
@@ -25,28 +26,29 @@ type (
 	// CallRecording owns call evidence for one activity attempt. Workflow state
 	// owns run-level adoption and growth event publication.
 	CallRecording struct {
-		store        runstore.Store
-		scope        string
-		ref          index.ViewRef
-		view         []*model.Message
-		viewErr      error
-		step         int
-		activity     callrecord.ActivityKind
-		mu           sync.Mutex
-		keys         []runstore.CallKey
-		completed    []runstore.CallKey
-		facts        map[runstore.CallKey]contextmeasure.RequestFacts
-		responses    map[runstore.CallKey]runstore.Hash
-		growth       *RequestGrowth
-		streams      []*callRecordingStream
-		failures     []error
-		overflowStep overflow.Step
-		models       []api.ModelContext
-		fingerprint  string
-		guardMargin  contextmeasure.Rate
-		triggerAt    contextmeasure.Rate
-		retryTools   []*model.ToolDefinition
-		marked       *contextmeasure.ContextOverflow
+		qualifications []Qualification
+		store          runstore.Store
+		scope          string
+		ref            index.ViewRef
+		view           []*model.Message
+		viewErr        error
+		step           int
+		activity       callrecord.ActivityKind
+		mu             sync.Mutex
+		keys           []runstore.CallKey
+		completed      []runstore.CallKey
+		facts          map[runstore.CallKey]contextmeasure.RequestFacts
+		responses      map[runstore.CallKey]runstore.Hash
+		growth         *RequestGrowth
+		streams        []*callRecordingStream
+		failures       []error
+		overflowStep   overflow.Step
+		models         []api.ModelContext
+		fingerprint    string
+		guardMargin    contextmeasure.Rate
+		triggerAt      contextmeasure.Rate
+		retryTools     []*model.ToolDefinition
+		marked         *contextmeasure.ContextOverflow
 	}
 
 	callRecordingClient struct {
@@ -334,6 +336,14 @@ func (r *CallRecording) measureRequest(ctx context.Context, req *model.Request, 
 	}
 	facts.Call = key
 	facts.Model = firstNonEmpty(resolved, req.Model, modelID)
+	if info, ok := registered.(model.ProviderConfigurationInfo); ok {
+		facts.ProviderConfig = info.ProviderConfiguration(ctx, req)
+	}
+	facts.Model = model.NormalizeProviderModel(facts.ProviderConfig, facts.Model)
+	facts.Qualified = compaction.LookupQualification(r.qualifications, facts.ProviderConfig, facts.Model)
+	if facts.Qualified == "" {
+		facts.Qualified = compaction.QualifiedTier(facts.ProviderConfig, facts.Model)
+	}
 	return facts, limits, nil
 }
 

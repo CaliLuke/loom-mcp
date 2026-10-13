@@ -3,6 +3,7 @@ package api
 import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/compaction"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextcompat"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
@@ -12,6 +13,8 @@ import (
 
 // RecordContentInput carries ordered content to store before workflow adoption.
 type RecordContentInput struct {
+	// Compatibility requests an exact check of original attachments.
+	Compatibility *contextcompat.Request `json:"compatibility,omitzero"`
 	// Continue requests recorded session seeding for a compaction root.
 	Continue *ContinuationStartInput `json:"continue,omitzero"`
 	// ContextStart pins child context settings outside workflow execution.
@@ -58,6 +61,8 @@ type ProvidedContent struct {
 
 // RecordContentOutput is returned only after every input item has been stored.
 type RecordContentOutput struct {
+	// Compatibility addresses the verified original attachment fact.
+	Compatibility *contextcompat.Result `json:"compatibility,omitzero"`
 	// Continuation records start lineage and the selected view.
 	Continuation *ContinuationStartOutput `json:"continuation,omitzero"`
 	// ContextStart is the recorded result of child prompt and settings pinning.

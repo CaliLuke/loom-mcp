@@ -58,47 +58,77 @@ func New(opts ...RuntimeOption) *Runtime {
 }
 
 // WithEngine sets the workflow engine.
-func WithEngine(e engine.Engine) RuntimeOption { return func(o *Options) { o.Engine = e } }
+func WithEngine(e engine.Engine) RuntimeOption {
+	return func(o *Options) {
+		o.Engine = e
+	}
+}
 
 // WithHookActivityTimeout sets the StartToClose timeout for the hook publishing activity.
 func WithHookActivityTimeout(d time.Duration) RuntimeOption {
 	if d <= 0 {
 		panic("runtime: hook activity timeout must be greater than zero")
 	}
-	return func(o *Options) { o.HookActivityTimeout = d }
+	return func(o *Options) {
+		o.HookActivityTimeout = d
+	}
 }
 
 // WithMemoryStore sets the memory store.
-func WithMemoryStore(m memory.Store) RuntimeOption { return func(o *Options) { o.MemoryStore = m } }
+func WithMemoryStore(m memory.Store) RuntimeOption {
+	return func(o *Options) {
+		o.MemoryStore = m
+	}
+}
 
 // WithMemorySearcher sets the indexed or cross-run memory searcher.
 func WithMemorySearcher(s memory.Searcher) RuntimeOption {
-	return func(o *Options) { o.MemorySearcher = s }
+	return func(o *Options) {
+		o.MemorySearcher = s
+	}
 }
 
 // WithMemoryService sets the long-term memory service.
 func WithMemoryService(s memory.Service) RuntimeOption {
-	return func(o *Options) { o.MemoryService = s }
+	return func(o *Options) {
+		o.MemoryService = s
+	}
 }
 
 // WithMemoryScopeResolver sets the long-term memory scope resolver.
 func WithMemoryScopeResolver(r memory.ScopeResolver) RuntimeOption {
-	return func(o *Options) { o.MemoryScopeResolver = r }
+	return func(o *Options) {
+		o.MemoryScopeResolver = r
+	}
 }
 
 // WithArtifactStore sets the artifact store.
 func WithArtifactStore(s artifact.Store) RuntimeOption {
-	return func(o *Options) { o.ArtifactStore = s }
+	return func(o *Options) {
+		o.ArtifactStore = s
+	}
 }
 
 // WithPromptStore sets the prompt override store.
-func WithPromptStore(s prompt.Store) RuntimeOption { return func(o *Options) { o.PromptStore = s } }
+func WithPromptStore(s prompt.Store) RuntimeOption {
+	return func(o *Options) {
+		o.PromptStore = s
+	}
+}
 
 // WithSessionStore sets the session store.
-func WithSessionStore(s session.Store) RuntimeOption { return func(o *Options) { o.SessionStore = s } }
+func WithSessionStore(s session.Store) RuntimeOption {
+	return func(o *Options) {
+		o.SessionStore = s
+	}
+}
 
 // WithRunEventStore sets the canonical run event store.
-func WithRunEventStore(s runlog.Store) RuntimeOption { return func(o *Options) { o.RunEventStore = s } }
+func WithRunEventStore(s runlog.Store) RuntimeOption {
+	return func(o *Options) {
+		o.RunEventStore = s
+	}
+}
 
 // WithRunStore sets the scoped content and call record store.
 func WithRunStore(s runstore.Store) RuntimeOption {
@@ -120,31 +150,59 @@ func WithViewCacheRuns(n int) RuntimeOption {
 }
 
 // WithPolicy sets the policy engine.
-func WithPolicy(p policy.Engine) RuntimeOption { return func(o *Options) { o.Policy = p } }
+func WithPolicy(p policy.Engine) RuntimeOption {
+	return func(o *Options) {
+		o.Policy = p
+	}
+}
 
 // WithStream sets the stream sink.
-func WithStream(s stream.Sink) RuntimeOption { return func(o *Options) { o.Stream = s } }
+func WithStream(s stream.Sink) RuntimeOption {
+	return func(o *Options) {
+		o.Stream = s
+	}
+}
 
 // WithHooks sets the event bus.
-func WithHooks(b hooks.Bus) RuntimeOption { return func(o *Options) { o.Hooks = b } }
+func WithHooks(b hooks.Bus) RuntimeOption {
+	return func(o *Options) {
+		o.Hooks = b
+	}
+}
 
 // WithLogger sets the logger.
-func WithLogger(l telemetry.Logger) RuntimeOption { return func(o *Options) { o.Logger = l } }
+func WithLogger(l telemetry.Logger) RuntimeOption {
+	return func(o *Options) {
+		o.Logger = l
+	}
+}
 
 // WithMetrics sets the metrics recorder.
-func WithMetrics(m telemetry.Metrics) RuntimeOption { return func(o *Options) { o.Metrics = m } }
+func WithMetrics(m telemetry.Metrics) RuntimeOption {
+	return func(o *Options) {
+		o.Metrics = m
+	}
+}
 
 // WithTracer sets the tracer.
-func WithTracer(t telemetry.Tracer) RuntimeOption { return func(o *Options) { o.Tracer = t } }
+func WithTracer(t telemetry.Tracer) RuntimeOption {
+	return func(o *Options) {
+		o.Tracer = t
+	}
+}
 
 // WithCaptureGenAIMessages opts model spans into sensitive GenAI message attributes.
 func WithCaptureGenAIMessages(enabled bool) RuntimeOption {
-	return func(o *Options) { o.CaptureGenAIMessages = enabled }
+	return func(o *Options) {
+		o.CaptureGenAIMessages = enabled
+	}
 }
 
 // WithToolConfirmation configures runtime-enforced confirmation for selected tools.
 func WithToolConfirmation(cfg *ToolConfirmationConfig) RuntimeOption {
-	return func(o *Options) { o.ToolConfirmation = cfg }
+	return func(o *Options) {
+		o.ToolConfirmation = cfg
+	}
 }
 
 // WithInterceptors registers call-path interceptors in execution order.
@@ -168,7 +226,9 @@ func WithNamedInterceptors(interceptors map[string]Interceptor) RuntimeOption {
 
 // WithHintOverrides configures per-tool call hint overrides.
 func WithHintOverrides(m map[tools.Ident]HintOverrideFunc) RuntimeOption {
-	return func(o *Options) { o.HintOverrides = m }
+	return func(o *Options) {
+		o.HintOverrides = m
+	}
 }
 
 // WithWorker configures the worker for a specific agent.
@@ -183,7 +243,9 @@ func WithWorker(id agent.Ident, cfg WorkerConfig) RuntimeOption {
 
 // WithQueue returns a WorkerOption that sets the queue name on a WorkerConfig.
 func WithQueue(name string) WorkerOption {
-	return func(c *WorkerConfig) { c.Queue = name }
+	return func(c *WorkerConfig) {
+		c.Queue = name
+	}
 }
 
 // newFromOptions constructs a Runtime using the provided options.
@@ -243,6 +305,8 @@ func newFromOptions(opts Options) *Runtime {
 // resolveRuntimeOptions defaults the cache bound and validates configuration
 // before construction, preserving validation order and panic behavior.
 func resolveRuntimeOptions(opts Options) Options {
+	opts.ContextDefault = cloneDefaultOptions(opts.ContextDefault)
+	opts.ContextQualifications = cloneQualifications(opts.ContextQualifications)
 	opts.ContextLimits = cloneContextLimits(opts.ContextLimits)
 	opts.ContextCompaction = cloneCompactionOptions(opts.ContextCompaction)
 	opts.ContextRecovery = cloneRecoveryOptions(opts.ContextRecovery)

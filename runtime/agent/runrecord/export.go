@@ -25,7 +25,8 @@ type Export struct {
 	Content map[runstore.Hash][]byte `json:"content"`
 }
 
-// FromExport decodes an export without constructing a store or renderer.
+// FromExport decodes an export and verifies new attachment evidence entirely
+// from its included content and canonical records.
 func FromExport(data []byte) (*RunRecord, error) {
 	var exported Export
 	if err := json.Unmarshal(data, &exported, jsonopts.FormatDurationAsNano(true), json.RejectUnknownMembers(true), json.WithUnmarshalers(json.JoinUnmarshalers(json.UnmarshalFunc(decodeExportEvent), json.UnmarshalFunc(decodeExportSettings)))); err != nil {
@@ -63,7 +64,11 @@ func FromExport(data []byte) (*RunRecord, error) {
 			}
 		}
 	}
-	return &RunRecord{RootRunID: exported.RootRunID, Runs: exported.Runs, Content: exported.Content}, nil
+	record := &RunRecord{RootRunID: exported.RootRunID, Runs: exported.Runs, Content: exported.Content}
+	if err := verifyExportCompatibility(record); err != nil {
+		return nil, err
+	}
+	return record, nil
 }
 
 // Export returns a versioned snapshot suitable for deterministic encoding.

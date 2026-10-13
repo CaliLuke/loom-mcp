@@ -42,7 +42,7 @@ import (
 type historyReplayPlanner struct{}
 
 const (
-	workflowHistoryFile        = "testdata/workflow_protocol_v18.json"
+	workflowHistoryFile        = "testdata/workflow_protocol_v19.json"
 	workflowHistoryIdentity    = "loom-mcp-history-recorder"
 	workflowHistoryStickyQueue = "loom-mcp-history-recorder-sticky"
 	workflowHistoryQuestion    = "Which topic should the draft use?"
@@ -76,6 +76,7 @@ func TestGeneratedFeatureWorkflowReplay(t *testing.T) {
 		{name: "protocol 15 rejected before effects", previous: 15},
 		{name: "protocol 16 rejected before effects", previous: 16},
 		{name: "protocol 17 rejected before effects", previous: 17},
+		{name: "protocol 18 rejected before effects", previous: 18},
 		{name: "future", rewrite: true},
 		{name: "missing", rewrite: true, missing: true},
 	} {
@@ -202,6 +203,7 @@ func recordCompletedWorkflowHistory(t *testing.T, ctx context.Context, temporalC
 	data, err := (protojson.MarshalOptions{Indent: "  "}).Marshal(history)
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll("testdata", 0o750))
+	require.False(t, t.Failed(), "failed assertions must not publish a history")
 	require.NoError(t, os.WriteFile(filename, append(data, '\n'), 0o600))
 	return history
 }

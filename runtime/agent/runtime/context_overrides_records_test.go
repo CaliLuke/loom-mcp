@@ -65,7 +65,9 @@ func TestContextOverrideWorkflowRevalidation(t *testing.T) {
 	base := &workflowPlanInput{compactionState: compaction.State{ValidateBudgets: true}, contextSettings: compaction.Merge(compaction.Settings{Threshold: true, KeepRecentTokens: 10000}, nil)}
 	wf := &testWorkflowContext{ctx: t.Context(), hookRuntime: rt}
 	in := PlanActivityInput{RunID: "run"}
+	prepareCompaction(base, &in)
 	require.NoError(t, rt.adoptCompaction(wf, base, in, &PlanActivityOutput{Facts: []contextmeasure.RequestFacts{{Model: "large", ViewBearing: true, ContextWindow: 200000}}}, index.ViewRef{}))
+	prepareCompaction(base, &in)
 	err := rt.adoptCompaction(wf, base, in, &PlanActivityOutput{Facts: []contextmeasure.RequestFacts{{Model: "small", ViewBearing: true, ContextWindow: 8000}}}, index.ViewRef{})
 	var application *engine.ApplicationError
 	require.ErrorAs(t, err, &application)
@@ -108,7 +110,9 @@ func TestContextOverrideChildWorkflow(t *testing.T) {
 	rt := New(WithContextCompaction("content.agent", ContextCompaction{}), WithContextCompaction("child.agent", ContextCompaction{}))
 	var childSettings compaction.Settings
 	var childFingerprint string
-	require.NoError(t, rt.RegisterAgent(t.Context(), AgentRegistration{ID: "child.agent", Planner: &stubPlanner{start: func(context.Context, *planner.PlanInput) (*planner.PlanResult, error) { return oracleFinal(), nil }}, Workflow: engine.WorkflowDefinition{Name: "child.workflow", TaskQueue: "child.queue", Handler: func(w engine.WorkflowContext, in *api.RunInput) (*api.RunOutput, error) {
+	require.NoError(t, rt.RegisterAgent(t.Context(), AgentRegistration{ID: "child.agent", Planner: &stubPlanner{start: func(context.Context, *planner.PlanInput) (*planner.PlanResult, error) {
+		return oracleFinal(), nil
+	}}, Workflow: engine.WorkflowDefinition{Name: "child.workflow", TaskQueue: "child.queue", Handler: func(w engine.WorkflowContext, in *api.RunInput) (*api.RunOutput, error) {
 		childSettings = in.ContextSettings
 		childFingerprint = in.ContextFingerprint
 		return rt.ExecuteWorkflow(w, in)

@@ -27,6 +27,9 @@ func registrationSummary(reg AgentRegistration) SummarySettings {
 // initContextOptions keeps the original options separate from settings resolved
 // during agent registration, so re-registration cannot create option conflicts.
 func (r *Runtime) initContextOptions(opts Options) {
+	r.contextDefault = opts.ContextDefault
+	r.contextQualifications = opts.ContextQualifications
+	r.agentContextDefault = cloneDefaultOptions(opts.ContextDefault)
 	r.contextCompaction = opts.ContextCompaction
 	r.contextRecovery = opts.ContextRecovery
 	r.agentContextCompaction = cloneCompactionOptions(opts.ContextCompaction)
@@ -63,26 +66,22 @@ func (r *Runtime) resolveAgentContext(reg AgentRegistration) (AgentRegistration,
 		if err != nil {
 			return reg, fmt.Errorf("%w: %w", ErrInvalidConfig, err)
 		}
-		specs := reg.Specs
-		if len(reg.Specs) == 0 {
-			specs = make([]tools.ToolSpec, 0, len(r.toolSpecs))
-			for _, spec := range r.toolSpecs {
-				specs = append(specs, spec)
-			}
-		}
-		owned.KeepResultTools = appendKeptSpecs(owned.KeepResultTools, specs)
-		for _, ts := range reg.Toolsets {
-			owned.KeepResultTools = appendKeptSpecs(owned.KeepResultTools, ts.Specs)
-		}
-		slices.Sort(owned.KeepResultTools)
-		owned.KeepResultTools = slices.Compact(owned.KeepResultTools)
+		owned.KeepResultTools = r.registeredKeptTools(reg, owned.KeepResultTools)
 		reg.Policy.ContextCompaction = &owned
 	}
+	reg = r.resolveAgentDefault(reg, settings == nil)
 	return reg, nil
 }
 
 // storeAgentContextLocked publishes the resolved settings with the agent.
 func (r *Runtime) storeAgentContextLocked(reg AgentRegistration) {
+	if r.agentContextDefault == nil {
+		r.agentContextDefault = make(map[agent.Ident]ContextDefault)
+	}
+	delete(r.agentContextDefault, reg.ID)
+	if reg.Policy.ContextDefault != nil && reg.Planner != nil {
+		r.agentContextDefault[reg.ID] = cloneDefaultOptions(map[agent.Ident]ContextDefault{reg.ID: *reg.Policy.ContextDefault})[reg.ID]
+	}
 	if reg.Policy.ContextCompaction != nil {
 		if r.agentContextCompaction == nil {
 			r.agentContextCompaction = make(map[agent.Ident]ContextCompaction)
@@ -95,4 +94,41 @@ func (r *Runtime) storeAgentContextLocked(reg AgentRegistration) {
 		}
 		r.agentContextRecovery[reg.ID] = *reg.Policy.ContextRecovery
 	}
+}
+
+func (r *Runtime) resolveAgentDefault(reg AgentRegistration, enabled bool) AgentRegistration {
+	if reg.Planner != nil {
+		value := ContextDefault{}
+		if reg.Policy.ContextDefault != nil {
+			value = *reg.Policy.ContextDefault
+		}
+		if option, ok := r.contextDefault[reg.ID]; ok {
+			value = option
+		}
+		if value.ContextModel != nil {
+			value.ContextModel = new(*value.ContextModel)
+		}
+		if enabled && r.defaultRecallConflict(reg) {
+			value.Disabled = true
+		}
+		reg.Policy.ContextDefault = &value
+	}
+	return reg
+}
+
+func (r *Runtime) registeredKeptTools(reg AgentRegistration, kept []tools.Ident) []tools.Ident {
+	specs := reg.Specs
+	if len(reg.Specs) == 0 {
+		specs = make([]tools.ToolSpec, 0, len(r.toolSpecs))
+		for _, spec := range r.toolSpecs {
+			specs = append(specs, spec)
+		}
+	}
+	kept = appendKeptSpecs(kept, specs)
+	for _, ts := range reg.Toolsets {
+		kept = appendKeptSpecs(kept, ts.Specs)
+	}
+	slices.Sort(kept)
+	kept = slices.Compact(kept)
+	return kept
 }

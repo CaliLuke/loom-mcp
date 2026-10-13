@@ -27,11 +27,17 @@ type ToolResultPartsInfo interface {
 	ToolResultParts(ctx context.Context, req *Request) ToolResultPartSupport
 }
 
+// ProviderConfigurationInfo names the exact provider configuration of a request.
+type ProviderConfigurationInfo interface {
+	ProviderConfiguration(context.Context, *Request) string
+}
+
 // Capabilities selects the optional interfaces a decorated client exposes.
 type Capabilities struct {
-	Counter         TokenCounter
-	Info            ContextInfo
-	ToolResultParts ToolResultPartsInfo
+	ProviderConfiguration ProviderConfigurationInfo
+	Counter               TokenCounter
+	Info                  ContextInfo
+	ToolResultParts       ToolResultPartsInfo
 }
 
 const unsupportedFormat = "format"

@@ -138,7 +138,7 @@ func outputReservationClusterKey(key string) string {
 // initialTPM and maxTPM are expressed in tokens per minute. When maxTPM is
 // zero or less than initialTPM, it is clamped to initialTPM.
 //
-// The bucket burst is pinned at maxTPM for the lifetime of the limiter;
+// The bucket burst is pinned at maxTPM for the lifetime of the limiter
 // backoff and probing adjust only the refill rate. This guarantees that any
 // request estimated at or below maxTPM tokens can always be admitted by
 // waiting for refill, even after repeated backoffs shrink the effective
@@ -191,7 +191,8 @@ func (l *AdaptiveRateLimiter) Middleware() func(model.Client) model.Client {
 		client.counter, _ = next.(model.TokenCounter)
 		info, _ := next.(model.ContextInfo)
 		parts, _ := next.(model.ToolResultPartsInfo)
-		return model.WithCapabilitySet(client, model.Capabilities{Counter: client.counter, Info: info, ToolResultParts: parts})
+		configuration, _ := next.(model.ProviderConfigurationInfo)
+		return model.WithCapabilitySet(client, model.Capabilities{Counter: client.counter, Info: info, ToolResultParts: parts, ProviderConfiguration: configuration})
 	}
 }
 

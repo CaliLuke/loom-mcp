@@ -38,5 +38,8 @@ func ObserveEffective(state State, facts []contextmeasure.RequestFacts, settings
 		}
 		state = Observe(state, []contextmeasure.RequestFacts{effective})
 	}
+	if settings.Default && ObservedQualifiedTier(state) == "" {
+		state.Flags.UnqualifiedStep = true
+	}
 	return state, nil
 }
