@@ -847,7 +847,7 @@ func TestPlanActivitiesDoNotRecoverHookPersistenceFailure(t *testing.T) {
 	}
 }
 
-func TestPlanActivitiesAppendRecoveryAfterHistoryPolicy(t *testing.T) {
+func TestPlanActivitiesAppendRecoveryAfterLoadedView(t *testing.T) {
 	tests := []struct {
 		name     string
 		activity func(*Runtime, context.Context, *PlanActivityInput) (*PlanActivityOutput, error)
@@ -875,12 +875,6 @@ func TestPlanActivitiesAppendRecoveryAfterHistoryPolicy(t *testing.T) {
 			rt.agents["svc.agent"] = AgentRegistration{
 				ID:      "svc.agent",
 				Planner: capture,
-				Policy: RunPolicy{History: func(context.Context, []*model.Message, []*model.ToolDefinition) ([]*model.Message, error) {
-					return []*model.Message{{
-						Role:  model.ConversationRoleUser,
-						Parts: []model.Part{model.TextPart{Text: "fresh history slice"}},
-					}}, nil
-				}},
 			}
 			input := &PlanActivityInput{
 				AgentID:    "svc.agent",
@@ -888,7 +882,7 @@ func TestPlanActivitiesAppendRecoveryAfterHistoryPolicy(t *testing.T) {
 				RunContext: run.Context{RootRunID: "test-root", RunID: "run-history-recovery", Attempt: 2},
 				View: testSeedView(t, rt, []*model.Message{{
 					Role:  model.ConversationRoleUser,
-					Parts: []model.Part{model.TextPart{Text: "original history"}},
+					Parts: []model.Part{model.TextPart{Text: "loaded view"}},
 				}}, "test-root"),
 				Recovery: testRecovery(t, rt, "test-root", &api.ModelRecovery{
 					Kind:       model.OutputValidationToolArguments,
@@ -902,7 +896,7 @@ func TestPlanActivitiesAppendRecoveryAfterHistoryPolicy(t *testing.T) {
 			require.NotNil(t, out.Result)
 			messages := test.messages(capture)
 			require.Len(t, messages, 2)
-			require.Equal(t, "fresh history slice", messages[0].Parts[0].(model.TextPart).Text)
+			require.Equal(t, "loaded view", messages[0].Parts[0].(model.TextPart).Text)
 			require.Equal(t, model.ConversationRoleSystem, messages[1].Role)
 			require.Equal(t, "use the safe field contract", messages[1].Parts[0].(model.TextPart).Text)
 		})

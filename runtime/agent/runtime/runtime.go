@@ -472,11 +472,6 @@ type (
 		// "finalize" | "await_clarification" | "resume"
 		OnMissingFields MissingFieldsAction
 
-		// History, when non-nil, transforms the message history before each planner
-		// invocation (PlanStart and PlanResume). It can truncate or compress history
-		// while preserving system prompts and logical turn boundaries.
-		History HistoryPolicy
-
 		// ContextCompaction declares context policy; conflicts with WithContextCompaction.
 		ContextCompaction *ContextCompaction
 		// ContextRecovery declares recovery policy; conflicts with WithContextRecovery.

@@ -349,7 +349,10 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
 - Enabled Context generates RunPolicy.ContextCompaction with ContextModel from
   generated agent config. Summarize emits quoted SummarySettings Instructions
   and Prompt literals and requires ContextModel in Config.Validate.
-- Disable omits compaction and the config model field. Recall(false) emits only
+- Every planner config exposes optional ContextModel. No-Context registration
+  emits ContextDefault{ContextModel: cfg.ContextModel}; Disable emits
+  ContextDefault{Disabled: true}. Explicit runtime compaction remains authoritative.
+  Recall(false) independently emits
   RunPolicy.ContextRecovery.DisableRecall; it never belongs to ContextCompaction.
 - Registration resolves DSL policy and runtime options through shared
   normalizers and rejects both sources for the same agent and setting.

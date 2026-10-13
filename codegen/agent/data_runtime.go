@@ -34,17 +34,6 @@ func newRunPolicyData(expr *agentsExpr.RunPolicyExpr) RunPolicyData {
 	rp.InterruptsAllowed = expr.InterruptsAllowed
 	rp.OnMissingFields = expr.OnMissingFields
 	rp.NamedInterceptors = append([]string(nil), expr.Interceptors...)
-	if expr.History != nil {
-		h := &HistoryData{
-			Mode:                     string(expr.History.Mode),
-			KeepRecent:               expr.History.KeepRecent,
-			CompressAtTurns:          expr.History.CompressAtTurns,
-			CompressAtMaxInputTokens: expr.History.CompressAtMaxInputTokens,
-			KeepMaxTurns:             expr.History.KeepMaxTurns,
-			KeepMaxInputTokens:       expr.History.KeepMaxInputTokens,
-		}
-		rp.History = h
-	}
 	if expr.Cache != nil {
 		rp.Cache = CacheData{
 			AfterSystem: expr.Cache.AfterSystem,

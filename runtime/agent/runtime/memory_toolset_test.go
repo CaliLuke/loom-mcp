@@ -12,6 +12,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -604,32 +605,33 @@ func TestPlanStartActivityPreloadCurrentRunWithSessionIDReturnsRunEvents(t *test
 	require.NotNil(t, out.Result.FinalResponse)
 }
 
-func TestPlanStartActivityInjectsLongTermMemoryFromHistoryFilteredLatestUserText(t *testing.T) {
+func TestPlanStartActivityInjectsLongTermMemoryFromLoadedLatestUserText(t *testing.T) {
 	ctx := context.Background()
 	service := memoryinmem.NewService()
 	scope := memory.Scope{Namespace: "agent:service.agent", UserID: "user-1", Visibility: memory.VisibilityUser}
 	_, err := service.PutEntry(ctx, memory.PutEntryInput{
 		Scope:   scope,
-		Content: "filtered question matches long-term entry",
+		Content: "loaded question matches long-term entry",
 		Author:  "user",
 	})
+	require.NoError(t, err)
+
+	_, err = service.PutEntry(ctx, memory.PutEntryInput{Scope: scope, Content: "unrelated astronomy telescope", Author: "user"})
 	require.NoError(t, err)
 
 	called := false
 	pl := &stubPlanner{start: func(_ context.Context, input *planner.PlanInput) (*planner.PlanResult, error) {
 		called = true
 		require.Len(t, input.Messages, 1)
+		assert.Equal(t, "loaded question", input.Messages[0].Parts[0].(model.TextPart).Text)
 		require.Len(t, input.PreloadedMemoryEntries, 1)
-		require.Equal(t, "filtered question matches long-term entry", input.PreloadedMemoryEntries[0].Content)
+		require.Equal(t, "loaded question matches long-term entry", input.PreloadedMemoryEntries[0].Content)
 		return &planner.PlanResult{FinalResponse: &planner.FinalResponse{Message: &model.Message{Role: "assistant", Parts: []model.Part{model.TextPart{Text: "ok"}}}}}, nil
 	}}
 	rt := newTestRuntimeWithPlanner("service.agent", pl)
 	rt.MemoryService = service
 	rt.MemoryScopeResolver = memory.ScopeResolverFunc(defaultResolveMemoryScope)
 	reg := rt.agents["service.agent"]
-	reg.Policy.History = func(_ context.Context, _ []*model.Message, _ []*model.ToolDefinition) ([]*model.Message, error) {
-		return []*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "filtered question"}}}}, nil
-	}
 	reg.Policy.PreloadLongTermMemory = &LongTermMemoryPreloadPolicy{Visibility: memory.VisibilityUser, MaxResults: 5}
 	rt.agents["service.agent"] = reg
 
@@ -637,7 +639,7 @@ func TestPlanStartActivityInjectsLongTermMemoryFromHistoryFilteredLatestUserText
 		AgentID: "service.agent",
 		RunID:   "run-123",
 		View: testSeedView(t, rt, []*model.Message{
-			{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "unfiltered question"}}},
+			{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "loaded question"}}},
 		}, "test-root"),
 		RunContext: run.Context{RootRunID: "test-root",
 			RunID:  "run-123",

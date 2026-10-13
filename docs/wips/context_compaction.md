@@ -38,9 +38,12 @@ follows. loom-mcp designs its own approach; upstream goa-ai is one input among
 the others. It is input to a ROADMAP workstream; its architecture is frozen
 pending maintainer sign-off, and the execution plan is the next step.
 
-## 1. Current state in loom-mcp
+## 1. Historical baseline before context compaction
 
-Compaction is the `HistoryPolicy` in `runtime/agent/runtime/history.go`,
+This section retains the original investigation evidence; these APIs were removed
+in K21b. Current behavior is in sections4.10,4.17 and the runtime migration guide.
+
+Compaction was the `HistoryPolicy` in `runtime/agent/runtime/history.go`,
 declared per agent with `RunPolicy(History(...))` and generated into the
 registration (`codegen/agent/registry_render.go:113`). Two policies exist:
 `KeepRecentTurns(n)` and `Compress(client, cfg)`.
@@ -1296,9 +1299,9 @@ uses calibrated usage, the current view alone, a guard rejection, or call ordina
 as its baseline. `overflow.Check` checks the advisory guard first, then this
 per-model baseline; the caller retains each model's smallest rejected size.
 
-For an agent that still uses `HistoryPolicy`, the policy runs on the loaded
-view inside the planner activity, so recovery shrinks the view the policy
-receives.
+The planner receives the loaded recovered view inside its activity. A planner
+request transformation is recorded exactly, and unrelated requests remain
+ineligible for view-based recovery.
 
 Provider overflows have their own budget of two per step, separate from
 `RemainingRecoveryTurns` and from guard rejections. The step fails with a typed error carrying the
@@ -1491,7 +1494,8 @@ terminal failed overflow call. The observed tier can narrow but never widen.
 `WithoutContextDefault` and `ContextDefault.Disabled` disable implicit compaction;
 explicit runtime settings win. A registered `ContextDefault.ContextModel` enables
 summaries only at a qualified summary tier. See [the runtime guide](../context_defaults.md).
-Generator/History removal remains K21b.
+K21b removes the retired policy API and generates qualified defaults without
+changing protocol 19 or its twenty native histories.
 
 **Defaults are fractions of the usable budget B, with caps only**, so they fit
 any window:
@@ -1529,21 +1533,22 @@ after receipt and summary donations. `MinCheckpointBytes`
 is a renderer function of the current budget, not a token setting. At B=2,900,
 K12 budgets give MinCheckpointBytes=790 and MaxBytes=1,444.
 
-**Enablement.** Overflow recovery (4.15) is on for every agent: without it the
-run would fail. Threshold compaction (the trigger, tier 1, eviction,
-summaries) is opt-in through `Context(...)`, or the runtime option before the
-DSL lands, until the release criteria (7.4) pass. Then it becomes the default
-(K21, D1), per provider configuration and with the non-text rule of 4.10. An agent cannot declare both `Context(...)` and `History(...)`;
-registration fails fast.
+**Enablement.** Overflow recovery (4.15) is on for every agent. Threshold
+compaction is explicit through Context or WithContextCompaction, or enabled by
+recorded exact qualification under the default policy. The shipped table remains
+empty. Default attachment residency follows4.10. Every generated planner config
+has optional ContextModel; only explicit Summarize requires it. Disable emits
+ContextDefault.Disabled, and explicit runtime compaction overrides generated
+policy. Custom request transformations belong in the planner; the old policy API
+is removed without aliases (see the runtime migration guide).
 
-**Runtime option (K12).** Before the DSL lands, use
+**Runtime option.** Use
 `runtime.WithContextCompaction(agentID, runtime.ContextCompaction{TriggerAt:
-contextmeasure.Rate{Tokens: 85, Bytes: 100}, KeepResultTools: []tools.Ident{...}})`.
-Zero token settings select the defaults above. Registration rejects an agent
-with both compaction and `HistoryPolicy`. Workflow start also rejects stamped
-compaction settings against a worker registration with `HistoryPolicy`, so split
-client/worker deployments fail before effects. Observe, sorted Models and the
-three diagnostic hooks run for every agent under protocol 9. `KeepResultTools` sets immutable result
+contextmeasure.Rate{Tokens:85,Bytes:100}, KeepResultTools:[]tools.Ident{...}})`.
+Zero token settings select the defaults above. Owned settings are stamped for
+split client/worker deployments; worker changes cannot alter a recorded run.
+Observe, sorted Models and diagnostics apply to every agent under protocol 19.
+`KeepResultTools` sets immutable result
 entry `Keep` bits. `DisableRecall` belongs to `ContextRecovery` (K13), not this
 option.
 
@@ -1892,6 +1897,9 @@ live registration. Replay performs no activity, provider, store or hook effects.
 Protocol 18, future and missing versions reject before effects; earlier files
 remain. TemplateProtocolVersion stays 5.
 
+K21b removes activity-side policy transforms and updates generated registration;
+protocol 19/template 5 and all twenty K21a history bytes remain unchanged.
+
 ### 4.23 Remaining growth
 
 P2 bounds activity payloads and P3 bounds requests. These costs still grow
@@ -1902,7 +1910,7 @@ with run length:
 | Temporal history events | One set per step | `ContinueAsNew` (follow-up), which the index segments make possible |
 | The index in workflow memory and replay | About 400 bytes per entry | The same follow-up; at 1,000 steps with batches of 50 calls, about 20 MB |
 | Store size: content, segments, call records | Linear | Retention (D7) |
-| All recorder writes (addressed content + every `PutCall` body, K12 run) | At 1,000 steps: off 2,212.230 bytes/step (max residual 990.001 bytes); `keep_recent` 2,242.624 (1,239.443); `compress` 2,669.240 (3,937.941); `real_compaction` 2,740.337 (542.128), two evictions after 1,000 seed turns | Entry-size metadata moved all four modes from K8. Same 500–4,000 bytes/step slope and <16 KiB residual bounds; first request full; repeated recorder writes included; index/checkpoint setup excluded |
+| All recorder writes (addressed content + every `PutCall` body, K12 run) | At 1,000 steps: off2,212.230 bytes/step (max residual990.001 bytes); `real_compaction` 2,740.337 (542.128), two evictions after 1,000 seed turns | Historical K12 measurements shown for the two retained modes; K21b removes the two retired turn-policy comparisons. Same 500–4,000 bytes/step slope and <16 KiB residual bounds; first request full; repeated recorder writes included; index/checkpoint setup excluded |
 | Building `ToolOutputs` and `TypedInputs` (4.7) | A cold worker walks every segment: work linear in the run *per step*, so quadratic over a run whose steps all land on cold workers | The loader keeps both slices per worker and appends only new entries, so a warm step does work linear in its new entries |
 | Planner memory | `ToolOutputs` holds a hash and a bounded preview per call | Linear in calls. If measurements show it matters, a lazy accessor is a follow-up planner API change |
 | Recall `find` | Scans up to `RecallScanBytes` per call | Bounded per call; the allowance bounds calls (4.18) |
@@ -1925,7 +1933,7 @@ The tickets, their order and their acceptance proofs are in
 | # | Decision | Proposal |
 |---|---|---|
 | D1 | Enablement | Implemented K21a: recorded qualified default, empty shipped table, explicit opt-in preserved; non-text residency protection applies (4.10). Overflow recovery remains independent. |
-| D2 | Remove `History`, `KeepRecentTurns`, `Compress` without an alias | Accepted; pending K21b. K21a does not remove runtime or generator History behavior. |
+| D2 | Remove `History`, `KeepRecentTurns`, `Compress` without an alias | Implemented K21b: removed DSL/expr/runtime/capture/generator APIs; migration uses Context and registered ContextModel. No aliases. |
 | D3 | Advertise `recall_context` after the first compaction | Yes, through the policy envelope; ships before overflow recovery adds eviction to every agent; opt-out per agent with `Recall(false)` (runtime option in K13, DSL in K16); rendered views never name it. |
 | D4 | Planners receive the projected view; `ToolOutputs` carries references | Yes. This changes the documented `ToolOutputs` contract. |
 | D5 | Session continuity | For agents with threshold compaction: a continuation record holding the final view in bounded carried forms (full, preview, placeholder) with each entry's `Origin`, matched on caller-visible message hashes; only the carried bytes are copied into the new root scope; the evidence stays in the earlier run and is recalled by run-qualified reference. |

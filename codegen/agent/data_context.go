@@ -7,6 +7,7 @@ type (
 	ContextData struct {
 		TriggerNum, TriggerDen, KeepRecentTokens int
 		Threshold                                bool
+		Disabled                                 bool
 		DisableRecall                            bool
 		Summary                                  *SummaryData
 		HasSummarize                             bool
@@ -21,7 +22,7 @@ func newContextData(c *agentsExpr.ContextExpr) *ContextData {
 	if c == nil {
 		return nil
 	}
-	data := &ContextData{Threshold: !c.Disabled, KeepRecentTokens: c.KeepRecentTokens, DisableRecall: c.RecallSet && !c.Recall}
+	data := &ContextData{Disabled: c.Disabled, Threshold: !c.Disabled, KeepRecentTokens: c.KeepRecentTokens, DisableRecall: c.RecallSet && !c.Recall}
 	if c.TriggerAt != nil {
 		data.TriggerNum, data.TriggerDen = c.TriggerAt.Num, c.TriggerAt.Den
 	}

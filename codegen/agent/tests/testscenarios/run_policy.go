@@ -17,10 +17,9 @@ func RunPolicyBasic() func() {
 					InterruptsAllowed(true)
 					Interceptors("audit", "safety")
 					RetryAndReflect(MaxRetries(2), ErrorIfRetryExceeded(true))
-					History(func() {
-						CompressAtMaxInputTokens(120000)
-						KeepMaxInputTokens(40000)
-						KeepMaxTurns(12)
+					Cache(func() {
+						AfterSystem()
+						AfterTools()
 					})
 				})
 				Use("helpers", func() {

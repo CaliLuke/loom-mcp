@@ -134,7 +134,7 @@ func main() {
     // Register toolsets first, then agents, then seal registration.
     if err := chat.RegisterChatAgent(ctx, rt, chat.ChatAgentConfig{
         Planner:      newChatPlanner(),
-        HistoryModel: smallModelClient, // for history compression
+        ContextModel: &runtime.ContextModel{ID: "summary"}, // registered summary client
     }); err != nil {
         panic(err)
     }
@@ -327,16 +327,13 @@ rt := runtime.New(runtime.WithContextCompaction("service.agent", runtime.Context
 }))
 ```
 
-Registration rejects an agent with compaction and `HistoryPolicy`. Workflow
-start also rejects stamped compaction settings against a worker registration
-with `HistoryPolicy`, including separate client and worker deployments. The client
-stamps owned settings into `RunInput`, overwriting caller values, and snapshots
+The client stamps owned settings into `RunInput`, overwriting caller values, and snapshots
 child-agent settings for replayable child starts. Worker option changes cannot
 alter an existing run. `KeepResultTools` marks result entries `Keep`; those
 results retain their normal projection when clearing.
 
 Every agent observes facts from adopted planner outputs and sends `Models`;
-threshold transformations remain opt-in. `Facts` parallels
+threshold transformations are explicit or qualified-default. `Facts` parallels
 `CallKeys` and contains the recorder's durable `Completion.Facts`; `Models` sends
 a sorted snapshot of the last adopted rate and usable budget for each model.
 Only view-bearing calls update rates and budgets. The first planner step sends
@@ -443,10 +440,8 @@ With
 known limits and a calibrated rate the target is strictly below `B × TriggerAt`;
 otherwise it halves the failed request's view text bytes. The workflow immediately
 reschedules without a threshold transformation, append or summary between recovery
-and retry. A HistoryPolicy runs on the loaded recovered view; a request unrelated
-to that view cannot be recovered (`not_view_bearing`). Using `Compress` alone does
-not imply immediate failure: it retains recent messages that can still match the
-loaded view. After the first recovery shortens a view, agents gain `recall_context`
+and retry. The planner receives the loaded recovered view; a request unrelated
+to that view cannot be recovered (`not_view_bearing`). After the first recovery shortens a view, agents gain `recall_context`
 even without threshold compaction, unless recall or tools are disabled. Recall is
 omitted during finalization.
 
@@ -528,7 +523,7 @@ outside model messages. RunRecord reconstructs these same exchanges from their c
 Typed entries never render as model messages. Canonical JSON message equality is
 the observable contract on both Temporal and in-memory engines; codec-collapsed
 Go representations are not distinct messages. Resume-only `ValidateBedrock`,
-`HistoryPolicy`, and recovery corrections run after loading as before.
+planner transformations and recovery corrections run after loading.
 
 **Breaking planner contract.** `PlanResumeInput.ToolOutputs` retains every
 non-bookkeeping output as hashes, bounded preview, bounds, error, retry hint and
@@ -1144,7 +1139,7 @@ Missing `CallInfo` or an engine attempt below 1 rejects the call before sending.
 
 `runtime/agent/callrecord` owns the deterministic JSON v2 bodies. Requests use
 ordered, zero-based half-open spans of the committed view captured before
-history policy, plus hashes for other messages. Matching includes `Meta` and
+planner transformations, plus hashes for other messages. Matching includes `Meta` and
 cache checkpoints. Reconstruction loads the recorded `ViewRef` and verifies
 all exported request fields against the recorded request. Messages whose
 ordinary JSON round trip changes numeric precision use hashes; hashed messages
@@ -1521,16 +1516,9 @@ application also registers them. Retain the registration return value or look up
 `rt.ModelClient` instead. Clients never registered and `h.Model` clients used for
 direct `Decide` calls also remain outside capture.
 
-Before creating a session, capture checks every registered agent for a non-nil
-`RunPolicy.History`. If one is present, capture returns
-`*agenttest.CaptureHistoryError`, which names the agent and explains that an
-ungated model client cannot be ruled out. This includes `Compress`, pure policies
-such as `KeepRecentTurns`, and custom policies, even on an agent other than the
-capture target. `HistoryPolicy` is a
-function type whose captured clients cannot be inspected. Capture neither invokes
-nor skips the policy; skipping it would change the captured request. Ordinary
-harness runs still apply History policies. `Runtime.AgentsWithHistoryPolicy()`
-provides a sorted snapshot of the affected agent IDs without invoking policies.
+Capture works with default and explicit context policies. ContextModel identifies
+a registered model and uses the same registration-time gate as planner clients;
+capture preserves the provider request and does not consume scripted responses.
 
 `agenttest.Decide(t, h.Model(id), request)` performs one validated Complete or
 Stream call, returning `Decision` with the request, response, calls and latency.
@@ -4184,56 +4172,47 @@ names disable only defaults and produce one registration warning.
 
 See [Qualified context defaults](context_defaults.md) for provider identities,
 self-certification, attachment rules and continuation behavior. Drain protocol 18
-workflows before deploying. History policy and generator APIs below remain
-available until their separate migration.
+workflows before deploying. See the removal migration below.
 
-## History Policies
+## Migration from removed History APIs
 
-Control how conversation history is managed before each planner turn:
+The former History DSL, expression, runtime and capture APIs are removed without
+aliases or tombstones. Applications using them now fail to compile. Protocol 19
+is unchanged by this removal; drain pre-19 workflows before upgrading. The
+shipped qualification table remains empty: explicit `Context(...)` works on any
+configuration, while default threshold compaction requires exact qualification.
 
-### KeepRecentTurns
-
-Sliding window that preserves system messages and recent turns:
+| Removed API | Replacement |
+|---|---|
+| `History`, `KeepRecentTurns(N)` | Qualified defaults or explicit `Context(func() { KeepRecentTokens(T) })`. Retention counts tokens rather than turns; eviction leaves recallable receipts. |
+| `Compress`, `HistoryCompressionConfig`, `CompressAtMaxInputTokens(X)`, `KeepMaxInputTokens(Y)` | Explicit `Context` with `TriggerAt(X/window)`, `KeepRecentTokens(Y)` and `Summarize`. |
+| `CompressAtTurns`, `KeepMaxTurns` | No turn-count equivalent. Choose token budgets from the model window. |
+| Generated `HistoryModel` | `ContextModel: &runtime.ContextModel{ID: "summary"}` after `rt.RegisterModel("summary", client)`. Every planner config has this optional field; only explicit `Summarize` requires it. |
+| `CompressOption`, `WithSummaryPrompt` | `Summarize(Prompt(...))` or a prompt-registry override of `<agent>.context.summary`. |
+| `WithModelClass` | `ContextModel.Class`. |
+| `WithSummaryRole`, `WithTokenCounter` | No replacement option. The recorded context machinery owns rendering and measurement. |
+| `HistoryPolicy`, `RunPolicy.History` | Transform requests in the planner. Call records preserve the exact provider request; a request unrelated to the committed view cannot use view-based overflow recovery. |
+| `HistoryExpr`, `HistoryMode`, `HistoryData`, `AgentsWithHistoryPolicy`, `agenttest.CaptureHistoryError` | Removed. Capture uses the registration-time model gate. |
 
 ```go
-// DSL
 RunPolicy(func() {
-    History(func() {
-        KeepRecentTurns(20)
+    Context(func() {
+        TriggerAt(0.85)
+        KeepRecentTokens(8000)
+        Summarize(func() { Instructions("Preserve decisions and evidence.") })
     })
 })
 ```
 
-### Compress
-
-Model-assisted summarization for long conversations:
-
-```go
-// DSL
-RunPolicy(func() {
-    History(func() {
-        CompressAtMaxInputTokens(120000)
-        KeepMaxInputTokens(40000)
-        KeepMaxTurns(12)
-    })
-})
-
-// Registration
-cfg := chat.ChatAgentConfig{
-    Planner:      myPlanner,
-    HistoryModel: smallModelClient, // For compression
-}
-```
-
-Compression triggers are explicit. Use `CompressAtTurns` for a turn-count
-threshold, `CompressAtMaxInputTokens` for an exact provider input-token
-threshold, or both. Retention is explicit too: `KeepMaxTurns` caps the newest
-exact turns, while `KeepMaxInputTokens` keeps newest whole turns that fit within
-the measured token budget. Token-budget compression requires a history model
-that implements `model.TokenCounter`; approximate estimators are rejected for
-hard compression decisions.
-
----
+Without an explicit Context declaration, generated registration supplies
+`ContextDefault{ContextModel: cfg.ContextModel}`. A registered summary model
+permits the summary tier only when the exact configuration qualifies for it;
+without one, eligible defaults retain receipts. `Disable()` emits
+`ContextDefault{Disabled: true}`; `Recall(false)` independently sets recovery's
+DisableRecall. Explicit runtime compaction options still win over generated
+default/disabled policy. Custom provider clients must be registered before
+activation so capture can intercept them. Cache/AfterSystem/AfterTools retain
+their existing behavior.
 
 ## Prompt Caching
 
@@ -4744,7 +4723,7 @@ or activity-output fields and does not change the workflow protocol. K12 adds
 `Facts` to `PlanActivityOutput`, sorted `Models` to activity input,
 trigger decisions and `context_unmeasured` / `context_limits_unknown` events;
 K14 applies Observe, Models, guard checks, recovery and diagnostics to every
-agent. Only threshold transformations remain opt-in.
+agent. Only threshold transformations are explicit or qualified-default.
 
 `contextmeasure.GuardTokens` uses the upper clamp rate (1/2) to decide whether
 to ask a token counter before calibration. Its fallback estimate still uses
@@ -6344,8 +6323,7 @@ Agent registration installs the embedded `<agent>.context.summary` baseline.
 adds task guidance. The activity resolves scoped overrides once and renders
 `.Previous`, `.Evicted`, `.Instructions`, `.Budget` for each fold. Evidence fields
 are quoted data; planning measures the same resolved template. Every call and
-successful checkpoint retains its resolved `PromptRef`. The legacy `Compress`
-history policy's application-supplied summariser remains unrecorded.
+successful checkpoint retains its resolved `PromptRef`.
 
 Enable summaries explicitly with a registered model:
 

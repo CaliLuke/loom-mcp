@@ -28,7 +28,9 @@ func TestGolden_Context(t *testing.T) {
 	disabledCfg := fileContent(t, files, "gen/alpha/agents/disabled/config.go")
 	assert.NotContains(t, disabled, "ContextCompaction:")
 	assert.Contains(t, disabled, "DisableRecall: true")
-	assert.NotContains(t, disabledCfg, "ContextModel")
+	assert.Contains(t, disabledCfg, "ContextModel *agentsruntime.ContextModel")
+	assert.NotContains(t, disabledCfg, "context model is required")
+	assert.Contains(t, disabled, "ContextDefault: &agentsruntime.ContextDefault{Disabled: true}")
 	assertGoldenGo(t, "context", "disabled_registry.go.golden", disabled)
 	defaults := fileContent(t, files, "gen/alpha/agents/defaults/registry.go")
 	defaultCfg := fileContent(t, files, "gen/alpha/agents/defaults/config.go")
@@ -37,4 +39,14 @@ func TestGolden_Context(t *testing.T) {
 	assert.NotContains(t, defaults, "ContextRecovery:")
 	assert.Contains(t, defaultCfg, "ContextModel *agentsruntime.ContextModel")
 	assert.NotContains(t, defaultCfg, "context model is required")
+}
+
+func TestGeneratedImplicitContextDefault(t *testing.T) {
+	files := buildAndGenerate(t, testscenarios.ContextPolicies())
+	reg := fileContent(t, files, "gen/alpha/agents/implicit/registry.go")
+	cfg := fileContent(t, files, "gen/alpha/agents/implicit/config.go")
+	assert.Contains(t, cfg, "ContextModel *agentsruntime.ContextModel")
+	assert.NotContains(t, cfg, "context model is required")
+	assert.Contains(t, reg, "ContextDefault: &agentsruntime.ContextDefault{ContextModel: cfg.ContextModel}")
+	assert.NotContains(t, reg, "ContextCompaction:")
 }

@@ -36,12 +36,7 @@ var (
 // recorded, then fails that model invocation without consuming its client.
 // Planners must return the sentinel error. Tools scheduled before that invocation
 // follow the normal strict stub rules; model interceptors may short-circuit it.
-// If any registered agent has a non-nil History policy, capture returns a
-// *CaptureHistoryError before creating a session or invoking any policy or model.
 func (h *Harness) CaptureFirstRequest(ctx context.Context, id agent.Ident, input Input, opts ...RunOption) (Request, error) {
-	if agents := h.rt.AgentsWithHistoryPolicy(); len(agents) > 0 {
-		return Request{}, &CaptureHistoryError{AgentID: agents[0]}
-	}
 	sessionID, err := h.newSession(ctx)
 	if err != nil {
 		return Request{}, err

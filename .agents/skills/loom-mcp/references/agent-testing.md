@@ -115,13 +115,9 @@ registered), unregistered clients and h.Model clients for Decide remain outside
 the gate. Preserve supplied contexts; detached contexts without run or call
 identity cannot be associated with capture.
 
-Capture rejects the harness when any registered agent has a non-nil History
-policy, including Compress, KeepRecentTurns and custom policies. It returns
-`*agenttest.CaptureHistoryError` naming the agent and the ungated-client risk
-before creating a session or invoking any policy or model. History functions can
-retain clients that capture gates cannot intercept, and their captured state is
-not inspectable. Do not skip History to obtain a different request. Ordinary
-Run still applies History policies.
+Capture supports default and explicit context policies. ContextModel uses a
+registered model ID and the same registration-time gate; capture does not consume
+planner or summary scripted responses. Ungated clients remain rejected by FA2.
 
 Capture returns `(Request, error)`; it propagates a sentinel rather than consuming
 the model. Decide returns `*Decision` and runs no tools. Repeat takes

@@ -293,9 +293,6 @@ func (r *Runtime) setupWorkflowExecution(
 	if !ok {
 		return AgentRegistration{}, nil, run.Context{}, "", fmt.Errorf("agent %q is not registered", input.AgentID)
 	}
-	if input.ContextCompaction != nil && reg.Policy.History != nil {
-		return AgentRegistration{}, nil, run.Context{}, "", fmt.Errorf("%w: context compaction cannot be combined with HistoryPolicy", ErrInvalidConfig)
-	}
 	r.logger.Info(wfCtx.Context(), "Agent found, executing plan activity", "agent_id", input.AgentID)
 	return reg, interrupt.NewController(wfCtx), workflowRunContext(input), input.TurnID, nil
 }

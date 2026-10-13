@@ -70,6 +70,7 @@ func RegisterChatAgent(ctx context.Context, rt *agentsruntime.Runtime, cfg ChatA
 			MaxToolCalls:     2,
 			MaxRecoveryTurns: 1,
 			TimeBudget:       time.Duration(15000000000),
+			ContextDefault:   &agentsruntime.ContextDefault{ContextModel: cfg.ContextModel},
 		},
 	}); err != nil {
 		return err

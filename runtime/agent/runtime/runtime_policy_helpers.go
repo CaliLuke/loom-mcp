@@ -1,10 +1,6 @@
 package runtime
 
 import (
-	"context"
-	"encoding/json/v2"
-
-	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
@@ -24,47 +20,6 @@ func toPolicyRetryHint(hint *planner.RetryHint) *policy.RetryHint {
 		ClarifyingQuestion: hint.ClarifyingQuestion,
 		Message:            hint.Message,
 	}
-}
-
-// applyHistoryPolicy applies the agent's history policy to the given messages.
-func (r *Runtime) applyHistoryPolicy(ctx context.Context, reg *AgentRegistration, msgs []*model.Message) ([]*model.Message, error) {
-	if reg.Policy.History == nil || len(msgs) == 0 {
-		return msgs, nil
-	}
-	out, err := reg.Policy.History(ctx, msgs, toolDefinitionsForHistory(reg.Specs))
-	if err != nil {
-		return nil, err
-	}
-	if len(out) == 0 {
-		return msgs, nil
-	}
-	return out, nil
-}
-
-func toolDefinitionsForHistory(specs []tools.ToolSpec) []*model.ToolDefinition {
-	if len(specs) == 0 {
-		return nil
-	}
-	defs := make([]*model.ToolDefinition, 0, len(specs))
-	for _, spec := range specs {
-		defs = append(defs, &model.ToolDefinition{
-			Name:        spec.Name.String(),
-			Description: spec.Description,
-			InputSchema: historyToolInputSchema(spec),
-		})
-	}
-	return defs
-}
-
-func historyToolInputSchema(spec tools.ToolSpec) any {
-	if len(spec.Payload.Schema) == 0 {
-		return map[string]any{jsonSchemaTypeKey: jsonSchemaTypeValue}
-	}
-	var schema any
-	if err := json.Unmarshal(spec.Payload.Schema, &schema); err != nil {
-		return map[string]any{jsonSchemaTypeKey: jsonSchemaTypeValue}
-	}
-	return schema
 }
 
 // initialCaps constructs the initial caps state from the agent's run policy.

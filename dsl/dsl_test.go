@@ -622,56 +622,6 @@ func TestTimingConfiguration(t *testing.T) {
 	require.Equal(t, 2*time.Minute, policy.ToolTimeout)
 }
 
-// TestHistoryKeepRecentTurns verifies History with KeepRecentTurns.
-func TestHistoryKeepRecentTurns(t *testing.T) {
-	runDSL(t, func() {
-		API("test", func() {})
-		Service("svc", func() {
-			Agent("agent", "desc", func() {
-				RunPolicy(func() {
-					History(func() {
-						KeepRecentTurns(20)
-					})
-				})
-			})
-		})
-	})
-
-	require.Len(t, agentsexpr.Root.Agents, 1)
-	policy := agentsexpr.Root.Agents[0].RunPolicy
-	require.NotNil(t, policy)
-	require.NotNil(t, policy.History)
-	require.Equal(t, agentsexpr.HistoryModeKeepRecent, policy.History.Mode)
-	require.Equal(t, 20, policy.History.KeepRecent)
-}
-
-// TestHistoryCompress verifies History with Compress.
-func TestHistoryCompress(t *testing.T) {
-	runDSL(t, func() {
-		API("test", func() {})
-		Service("svc", func() {
-			Agent("agent", "desc", func() {
-				RunPolicy(func() {
-					History(func() {
-						CompressAtMaxInputTokens(120000)
-						KeepMaxInputTokens(40000)
-						KeepMaxTurns(10)
-					})
-				})
-			})
-		})
-	})
-
-	require.Len(t, agentsexpr.Root.Agents, 1)
-	policy := agentsexpr.Root.Agents[0].RunPolicy
-	require.NotNil(t, policy)
-	require.NotNil(t, policy.History)
-	require.Equal(t, agentsexpr.HistoryModeCompress, policy.History.Mode)
-	require.Equal(t, 120000, policy.History.CompressAtMaxInputTokens)
-	require.Equal(t, 40000, policy.History.KeepMaxInputTokens)
-	require.Equal(t, 10, policy.History.KeepMaxTurns)
-}
-
 // TestCacheConfiguration verifies Cache with AfterSystem and AfterTools.
 func TestCacheConfiguration(t *testing.T) {
 	runDSL(t, func() {

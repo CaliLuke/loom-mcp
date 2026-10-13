@@ -148,7 +148,7 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   Result/ServerData/Payload; TypedInputs has PayloadRef and empty Payload.
   PlanResumeInput.Content is the root-scoped ContentLoader. Finalize still has no
   typed answers. Canonical JSON message equality is the planner contract, also
-  on the in-memory engine. Resume-only ValidateBedrock, history policy and
+  on the in-memory engine. Resume-only ValidateBedrock, planner transformations and
   recovery correction run after loading.
   PreChildValidator has AgentToolValidationInput.View (ViewLoader), not Messages,
   and runs in the typed child-dispatch activity before child admission/start.
@@ -713,12 +713,11 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 
 - RunPolicy Context configures compaction with TriggerAt, KeepRecentTokens,
   Summarize, Recall and Disable. Tools support KeepResultInContext. Context conflicts with
-  History and Workflow. Generated enabled Context config has ContextModel;
-  Summarize requires it. DSL and runtime options for the same context setting
-  conflict at registration. Recall(false) belongs to ContextRecovery only.
+  Workflow. Every generated planner config has optional ContextModel;
+  Summarize requires it. Explicit runtime compaction options override generated default/disabled policy. Recall(false) belongs to ContextRecovery only.
   Keep flags join explicit KeepResultTools at registration and are stamped.
-  Disable omits opt-in threshold policy; it does not cancel runtime
-  options. Workflow protocol remains 13. See codegen-contracts.md and
+  Disable emits ContextDefault.Disabled; it does not cancel explicit runtime
+  options. Workflow protocol remains 19. See codegen-contracts.md and
   user-guides/dsl-reference.md for validation and generated acceptance details.
 
 ## Agent Testing
@@ -740,13 +739,9 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   clients (even if also registered), unregistered clients and h.Model clients for
   Decide remain outside capture. Preserve supplied contexts: detached contexts
   without run or call identity cannot be associated with capture.
-- Capture rejects every non-nil History policy across all registered agents,
-  including Compress, KeepRecentTurns and custom policies. CaptureHistoryError
-  names the agent and explains the ungated-client risk before any session,
-  policy invocation or model call. HistoryPolicy is a function whose captured
-  clients cannot be inspected. Never skip the policy to obtain a different
-  request. Ordinary Run still applies History; resolving Compress clients by ID
-  remains the separate FR2 runtime follow-up, not a change in FA1.
+- Capture supports default and explicit context policies. Summary clients use a
+  registered ContextModel.ID and the same FA2 registration-time gate. Preserve
+  ProviderConfigurationInfo forwarding and all optional model method sets.
 - RawStub result-decoder failures are dispatch `StubError` values, recorded in
   stub and harness calls and reported by Run and Close.
 - Request fixtures reject unknown envelope and nested request members by
@@ -977,5 +972,5 @@ RunRecord verifies self-contained export evidence and first failed-call provenan
 Successful qualified/nonresident defaults may publish continuation; other defaults
 preserve the previous head, and stores lacking continuation support start fresh.
 Both backend corpora contain ten v19 histories and reject v18/future/missing inputs
-before effects. Structural templates stay 5. History/codegen removal remains K21b;
-no production qualifications or live-provider gates are introduced here.
+before effects. Structural templates stay 5. Retired policy APIs have no aliases; use Context and registered ContextModel.
+No production qualifications or live-provider gates are introduced here.

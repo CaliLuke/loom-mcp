@@ -180,15 +180,8 @@ func agentConfigFile(agent *AgentData) *codegen.File {
 	imports := []*codegen.ImportSpec{
 		{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"},
 	}
-	if agent.Workflow == nil || (agent.RunPolicy.History != nil && agent.RunPolicy.History.Mode == "compress") {
+	if agent.Workflow == nil {
 		imports = append(imports, &codegen.ImportSpec{Path: "errors"})
-	}
-	// Import model client when a compress-history policy is configured so the
-	// generated config can reference model.Client in the HistoryModel field.
-	if agent.RunPolicy.History != nil && agent.RunPolicy.History.Mode == "compress" {
-		imports = append(imports,
-			&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/model", Name: "model"},
-		)
 	}
 	// Determine whether fmt is needed. The config Validate() uses fmt.Errorf for
 	// missing method-backed toolset dependencies and for MCP callers.
@@ -229,7 +222,7 @@ func agentConfigFile(agent *AgentData) *codegen.File {
 			imports = append(imports, &codegen.ImportSpec{Path: ts.PackageImportPath, Name: ts.PackageName})
 		}
 	}
-	if agent.RunPolicy.Context != nil && agent.RunPolicy.Context.Threshold {
+	if agent.Workflow == nil {
 		imports = append(imports, &codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime", Name: "agentsruntime"})
 	}
 	sections := []codegen.Section{

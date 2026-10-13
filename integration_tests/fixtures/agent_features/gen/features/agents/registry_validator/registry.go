@@ -67,6 +67,7 @@ func RegisterRegistryValidatorAgent(ctx context.Context, rt *agentsruntime.Runti
 		Specs: nil,
 		Policy: agentsruntime.RunPolicy{
 			MaxRecoveryTurns: 3,
+			ContextDefault:   &agentsruntime.ContextDefault{ContextModel: cfg.ContextModel},
 		},
 	}); err != nil {
 		return err

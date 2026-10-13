@@ -312,13 +312,9 @@ The examples use no confirmation flows.
   for direct `Decide` calls remain outside the gate. Registering a client does
   not modify the original object. Detached contexts without run or call identity
   also remain outside capture.
-- Capture rejects the harness if any registered agent has a non-nil History
-  policy, including `Compress`, `KeepRecentTurns`, and custom policies. It returns
-  `*agenttest.CaptureHistoryError` naming the agent before creating a session or
-  calling any policy or model. History functions can retain clients outside the
-  capture gates, and their captured state cannot be inspected. Capture never
-  skips the policy to manufacture a different request. Ordinary `Run` remains
-  available with History policies.
+- Capture supports default and explicit context policies. Summary clients are
+  registered by ContextModel.ID and use the same registration-time capture gate.
+  Capturing does not consume the planner or summary scripted response.
 - Child-run awaits return `ErrUnansweredAwait`; test their responder flows
   by running the child agent directly.
 - The harness has no Temporal mode.

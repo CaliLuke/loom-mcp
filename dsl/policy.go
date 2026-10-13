@@ -19,7 +19,7 @@ import (
 //   - TimeBudget to set maximum execution duration
 //   - InterruptsAllowed to enable or disable user interruptions
 //   - OnMissingFields to configure validation behavior
-//   - History to configure how conversation history is truncated or compressed
+//   - Context to configure transcript compaction and recall
 //   - Cache to configure prompt caching hints for supported providers
 //
 // Example:
@@ -30,8 +30,8 @@ import (
 //	        TimeBudget("5m")
 //	        InterruptsAllowed(true)
 //	        OnMissingFields("await_clarification")
-//	        History(func() {
-//	            KeepRecentTurns(20)
+//	        Context(func() {
+//	            KeepRecentTokens(8000)
 //	        })
 //	    })
 //	})

@@ -33,9 +33,6 @@ type (
 		// missing fields.  Allowed values: "finalize" |
 		// "await_clarification" | "resume". Empty means unspecified.
 		OnMissingFields string
-		// History configures how the runtime prunes or compresses
-		// conversational history before planner invocations.
-		History *HistoryExpr
 		// Context configures threshold compaction and recall.
 		Context *ContextExpr
 		// Cache configures prompt caching hints for planner/model calls.
@@ -103,37 +100,6 @@ type (
 		MaxRecoveryTurns int
 	}
 
-	// HistoryMode identifies which history policy is configured on an agent.
-	HistoryMode string
-
-	// HistoryExpr captures the design-time configuration for history
-	// management. It encodes either a KeepRecentTurns or Compress
-	// policy; at most one mode may be set.
-	HistoryExpr struct {
-		eval.DSLFunc
-
-		// Policy is the run policy expression this history configuration
-		// belongs to.
-		Policy *RunPolicyExpr
-		// Mode selects the history strategy.
-		Mode HistoryMode
-		// KeepRecent is the number of recent turns to retain when
-		// ModeKeepRecent is selected.
-		KeepRecent int
-		// CompressAtTurns is the optional logical-turn threshold that triggers
-		// compression.
-		CompressAtTurns int
-		// CompressAtMaxInputTokens is the optional runtime-counted input-token
-		// threshold that triggers compression.
-		CompressAtMaxInputTokens int
-		// KeepMaxTurns is the optional maximum number of newest logical turns to
-		// retain exactly after compression.
-		KeepMaxTurns int
-		// KeepMaxInputTokens is the optional runtime-counted input-token budget
-		// for newest exact turns after compression.
-		KeepMaxInputTokens int
-	}
-
 	// CacheExpr captures the design-time configuration for prompt caching
 	// behavior. Zero-value means no cache policy is configured.
 	CacheExpr struct {
@@ -150,12 +116,6 @@ type (
 )
 
 const (
-	// HistoryModeKeepRecent configures a sliding-window policy that
-	// retains only the most recent N turns.
-	HistoryModeKeepRecent HistoryMode = "keep_recent"
-	// HistoryModeCompress configures a summarization policy that
-	// compresses older turns once a trigger threshold is reached.
-	HistoryModeCompress HistoryMode = "compress"
 	// MemoryScopeCurrentRun scopes memory preload to the current run snapshot.
 	MemoryScopeCurrentRun MemoryScope = "current_run"
 	// MemoryScopeIndexed scopes memory preload to the configured memory searcher.
@@ -173,7 +133,6 @@ func (r *RunPolicyExpr) Validate() error {
 	r.validateTiming(verr)
 	r.validateCaps(verr)
 	r.validateMissingFields(verr)
-	r.validateHistory(verr)
 	r.validateContext(verr)
 	r.validateRetryAndReflect(verr)
 	r.validateInterceptors(verr)
@@ -277,57 +236,6 @@ func (r *RunPolicyExpr) validatePreloadMemory(verr *eval.ValidationErrors) {
 	if r.PreloadMemory.MaxResults < 0 {
 		verr.Add(r.PreloadMemory, "PreloadMemory MaxResults must be non-negative")
 	}
-}
-
-// validateHistory checks the selected history mode and its required settings.
-func (r *RunPolicyExpr) validateHistory(verr *eval.ValidationErrors) {
-	if r.History != nil {
-		switch r.History.Mode {
-		case "":
-			verr.Add(r.History, "history policy must specify a mode")
-		case HistoryModeKeepRecent:
-			if r.History.KeepRecent <= 0 {
-				verr.Add(r.History, "KeepRecentTurns requires a positive turn count")
-			}
-		case HistoryModeCompress:
-			r.History.validateCompress(verr)
-		default:
-			verr.Add(r.History, "unknown history mode %q", r.History.Mode)
-		}
-	}
-}
-
-// validateCompress checks token-aware compression triggers and retention caps.
-func (h *HistoryExpr) validateCompress(verr *eval.ValidationErrors) {
-	if h.CompressAtTurns <= 0 && h.CompressAtMaxInputTokens <= 0 {
-		verr.Add(h, "compression requires CompressAtTurns or CompressAtMaxInputTokens")
-	}
-	if h.KeepMaxTurns <= 0 && h.KeepMaxInputTokens <= 0 {
-		verr.Add(h, "compression requires KeepMaxTurns or KeepMaxInputTokens")
-	}
-	if h.CompressAtTurns < 0 {
-		verr.Add(h, "CompressAtTurns must be positive when set")
-	}
-	if h.CompressAtMaxInputTokens < 0 {
-		verr.Add(h, "CompressAtMaxInputTokens must be positive when set")
-	}
-	if h.KeepMaxTurns < 0 {
-		verr.Add(h, "KeepMaxTurns must be positive when set")
-	}
-	if h.KeepMaxInputTokens < 0 {
-		verr.Add(h, "KeepMaxInputTokens must be positive when set")
-	}
-	if h.CompressAtTurns > 0 && h.KeepMaxTurns >= h.CompressAtTurns {
-		verr.Add(h, "KeepMaxTurns must be less than CompressAtTurns")
-	}
-}
-
-// EvalName returns a descriptive identifier for error reporting.
-func (h *HistoryExpr) EvalName() string {
-	if h == nil || h.Policy == nil || h.Policy.Agent == nil {
-		return "history policy"
-	}
-	return fmt.Sprintf("history policy for agent %q", h.Policy.Agent.Name)
 }
 
 // EvalName returns a descriptive identifier for error reporting.

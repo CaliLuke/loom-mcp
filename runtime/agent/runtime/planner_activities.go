@@ -269,10 +269,7 @@ func (r *Runtime) startPlanInput(
 	if err != nil {
 		return nil, err
 	}
-	messages, err := r.applyHistoryPolicy(ctx, reg, view.Messages)
-	if err != nil {
-		return nil, err
-	}
+	messages := view.Messages
 	messages = applyRecoveryInstruction(messages, input.Recovery)
 	preloadedEntries, err := r.preloadLongTermMemory(ctx, reg.Policy.PreloadLongTermMemory, string(input.AgentID), input.RunContext, messages)
 	if err != nil {
@@ -407,10 +404,7 @@ func (r *Runtime) resumePlanInput(
 	if err != nil {
 		return nil, err
 	}
-	messages, err := r.applyHistoryPolicy(ctx, reg, view.Messages)
-	if err != nil {
-		return nil, err
-	}
+	messages := view.Messages
 	messages = applyRecoveryInstruction(messages, input.Recovery)
 	preloadedEntries, err := r.preloadLongTermMemory(ctx, reg.Policy.PreloadLongTermMemory, string(input.AgentID), input.RunContext, messages)
 	if err != nil {

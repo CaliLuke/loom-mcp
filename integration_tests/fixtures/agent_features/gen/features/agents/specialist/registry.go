@@ -68,6 +68,7 @@ func RegisterSpecialistAgent(ctx context.Context, rt *agentsruntime.Runtime, cfg
 			MaxRecoveryTurns:  1,
 			TimeBudget:        time.Duration(10000000000),
 			InterruptsAllowed: true,
+			ContextDefault:    &agentsruntime.ContextDefault{ContextModel: cfg.ContextModel},
 		},
 	}); err != nil {
 		return err

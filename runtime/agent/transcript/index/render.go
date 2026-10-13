@@ -24,7 +24,7 @@ type Renderer struct {
 }
 
 // Render resolves entries in order without mutating them or their content.
-// Record hashes and typed-input payloads are never read. HistoryPolicy, provider
+// Record hashes and typed-input payloads are never read. Provider
 // validation and recovery corrections remain the planner activity's concern.
 func Render(ctx context.Context, entries []MessageEntry, source Source) ([]*model.Message, error) {
 	r := Renderer{ctx: ctx, source: source, hidden: make(map[string]bool)}

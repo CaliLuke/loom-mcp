@@ -61,7 +61,7 @@ func TestCallRecordingInterceptorBoundary(t *testing.T) {
 	}
 }
 
-func TestCallRecordingUsesPrePolicyCommittedView(t *testing.T) {
+func TestCallRecordingUsesCommittedViewBeforePlannerTransform(t *testing.T) {
 	for _, resume := range []bool{false, true} {
 		rt, _, input := newCallInfoRuntime(t, func(ctx context.Context, agent planner.PlannerContext) error {
 			client, ok := agent.ModelClient("registered-model")
@@ -83,10 +83,18 @@ func TestCallRecordingUsesPrePolicyCommittedView(t *testing.T) {
 		require.NoError(t, err)
 		input.View.Pending = segment.Entries
 		reg := rt.agents[input.AgentID]
-		reg.Policy.History = func(_ context.Context, messages []*model.Message, _ []*model.ToolDefinition) ([]*model.Message, error) {
-			messages[0].Meta = map[string]any{"policy_mutated": true}
-			return messages[1:], nil
+		transform := func(ctx context.Context, agent planner.PlannerContext, messages []*model.Message) (*planner.PlanResult, error) {
+			messages[0].Meta = map[string]any{"planner_mutated": true}
+			client, ok := agent.ModelClient("registered-model")
+			require.True(t, ok)
+			_, err := client.Complete(ctx, &model.Request{Messages: messages[1:]})
+			return &planner.PlanResult{}, err
 		}
+		reg.Planner = &stubPlanner{start: func(ctx context.Context, in *planner.PlanInput) (*planner.PlanResult, error) {
+			return transform(ctx, in.Agent, in.Messages)
+		}, resume: func(ctx context.Context, in *planner.PlanResumeInput) (*planner.PlanResult, error) {
+			return transform(ctx, in.Agent, in.Messages)
+		}}
 		rt.agents[input.AgentID] = reg
 		ctx := engine.WithActivityAttempt(t.Context(), 1)
 		var out *PlanActivityOutput
@@ -105,7 +113,7 @@ func TestCallRecordingUsesPrePolicyCommittedView(t *testing.T) {
 		assert.Equal(t, out.IndexHead, started.Request.View.IndexHead)
 		assert.Empty(t, started.Request.View.Pending)
 		assert.Equal(t, []callrecord.MessageSegment{{ViewFrom: 1, ViewTo: 2}}, started.Request.Messages)
-		_, err = callrecord.Rebuild(ctx, rt.RunStore, "root-run", started, func(ctx context.Context, recorded index.ViewRef) ([]*model.Message, error) {
+		rebuilt, err := callrecord.Rebuild(ctx, rt.RunStore, "root-run", started, func(ctx context.Context, recorded index.ViewRef) ([]*model.Message, error) {
 			loaded, err := rt.loadTestView(ctx, "root-run", "child-run", recorded)
 			if err != nil {
 				return nil, err
@@ -113,5 +121,9 @@ func TestCallRecordingUsesPrePolicyCommittedView(t *testing.T) {
 			return loaded.Messages, nil
 		})
 		require.NoError(t, err)
+		assert.Equal(t, view[1:], rebuilt.Messages)
+		loaded, err := rt.loadTestView(ctx, "root-run", "child-run", *started.Request.View)
+		require.NoError(t, err)
+		assert.Equal(t, view, loaded.Messages)
 	}
 }

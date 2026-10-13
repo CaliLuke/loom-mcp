@@ -75,4 +75,6 @@ Protocol 19 records these settings, call facts, compatibility evidence and
 adoptions. RunRecord exports verify this evidence using their included content.
 Drain protocol 18 workflows before deploying; old records remain readable.
 Temporal and Selvedge each have ten genuine v19 replay histories. The structural
-template version remains 5. History and generator API removal are a later change.
+template version remains 5. Every generated planner config exposes optional
+ContextModel. Retired policy APIs are removed; see the
+[migration guide](runtime.md#migration-from-removed-history-apis).

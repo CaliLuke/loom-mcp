@@ -635,18 +635,15 @@ func TestRecoveryDisableToolsProducesToolFreeModelRequest(t *testing.T) {
 	require.Nil(t, modelClient.toolChoice)
 }
 
-func TestPlanStartActivityReturnsHistoryPolicyError(t *testing.T) {
-	sentinel := errors.New("history policy unavailable")
+func TestPlanStartActivityReturnsPlannerError(t *testing.T) {
+	sentinel := errors.New("planner unavailable")
 	rt := &Runtime{
 		agents: map[agent.Ident]AgentRegistration{
 			"svc.agent": {
-				ID:      "svc.agent",
-				Planner: &stubPlanner{},
-				Policy: RunPolicy{
-					History: func(context.Context, []*model.Message, []*model.ToolDefinition) ([]*model.Message, error) {
-						return nil, sentinel
-					},
-				},
+				ID: "svc.agent",
+				Planner: &stubPlanner{start: func(context.Context, *planner.PlanInput) (*planner.PlanResult, error) {
+					return nil, sentinel
+				}},
 			},
 		},
 		Bus:           hooks.NewBus(),
@@ -669,18 +666,15 @@ func TestPlanStartActivityReturnsHistoryPolicyError(t *testing.T) {
 	require.ErrorIs(t, err, sentinel)
 }
 
-func TestPlanResumeActivityReturnsHistoryPolicyError(t *testing.T) {
-	sentinel := errors.New("history policy unavailable")
+func TestPlanResumeActivityReturnsPlannerError(t *testing.T) {
+	sentinel := errors.New("planner unavailable")
 	rt := &Runtime{
 		agents: map[agent.Ident]AgentRegistration{
 			"svc.agent": {
-				ID:      "svc.agent",
-				Planner: &stubPlanner{},
-				Policy: RunPolicy{
-					History: func(context.Context, []*model.Message, []*model.ToolDefinition) ([]*model.Message, error) {
-						return nil, sentinel
-					},
-				},
+				ID: "svc.agent",
+				Planner: &stubPlanner{resume: func(context.Context, *planner.PlanResumeInput) (*planner.PlanResult, error) {
+					return nil, sentinel
+				}},
 			},
 		},
 		Bus:           hooks.NewBus(),

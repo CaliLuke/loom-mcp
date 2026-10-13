@@ -9,7 +9,7 @@ import (
 )
 
 // Context configures opt-in threshold compaction inside RunPolicy.
-// It cannot be combined with History or a deterministic Workflow.
+// It cannot be combined with a deterministic Workflow.
 func Context(fn func()) {
 	policy, ok := eval.Current().(*expragents.RunPolicyExpr)
 	if !ok {

@@ -875,7 +875,7 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   changing default transcript/history behavior.
 - Long-term preload is opt-in through generated
   `RunPolicy.PreloadLongTermMemory`. It searches with the latest
-  history-filtered user text and fills `PreloadedMemoryEntries`, leaving raw
+  loaded-view user text and fills `PreloadedMemoryEntries`, leaving raw
   transcript event preload unchanged. Planners that want prompt text should use
   `memory.FormatEntriesForPrompt(...)` rather than inventing ad hoc formatting.
 
@@ -914,7 +914,7 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   WithViewCacheRuns(n) changes the bound and panics for n <= 0. Evicted runs
   reconstruct from IndexHead; eviction removes only the map/list reference so
   active loads remain safe. Canonical JSON message equality is the observable
-  contract, including the in-memory engine. History policy, recovery correction
+  contract, including the in-memory engine. Planner transformations, recovery correction
   and resume-only ValidateBedrock operate on loaded messages.
 - PlanResumeInput.ToolOutputs has refs, bounded preview and metadata, with empty
   Result/ServerData/Payload. PlanResumeInput.Content loads full canonical content
@@ -977,8 +977,8 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   included. runrecord.FromExport restores identical evidence without a store or
   historical renderer. Exact request numeric tokens above 2^53 are preserved.
   New 1000-step recorder-write growth and real Temporal P1 tests skip -short and are
-  wired into test-payload-growth with explicit timeouts. KeepRecentTurns/Compress
-  remain comparison cases; K12 adds real compaction to the same recorder-growth proof.
+  wired into test-payload-growth with explicit timeouts. Only off and real_compaction modes remain in the recorder-growth proof;
+  keep their 1,000-step thresholds unchanged.
 
 - ToolResultReceivedEvent always carries Refs for the full eligible result and
   server-only sidecar/executed payload. Small bodies remain inline unchanged.
@@ -994,8 +994,8 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   without an eligible body. Export includes every resolved server-only byte.
 - K8 growth counts every recorder Put and PutCall body write, including repeated
   writes and addressed content, excluding index/view setup. Over 1000 steps,
-  fitted slopes off 1999.743, KeepRecentTurns 2032.677, Compress 2458.549 bytes/step;
-  max residuals 700.227, 1103.159, 3799.192 bytes. The complete request is a canonical
+  historical off slope 1999.743 bytes/step and max residual 700.227 bytes.
+  Retired turn-policy modes are no longer executable checks. The complete request is a canonical
   verification digest only and is never stored or copied into export Content;
   rebuild and import recompute it. ChildRunLinked is a canonical record event;
   BeforeEvent cannot hide the run tree. Pure loop-state preparation precedes the
@@ -1259,8 +1259,7 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 ## Context Compaction
 
 - WithContextCompaction(agent.Ident, ContextCompaction{TriggerAt, KeepResultTools})
-  opts an agent in; registration and workflow start reject HistoryPolicy when
-  stamped compaction settings are present, including split client/worker deployments. TriggerAt is rational,
+  opts an agent in. Settings are stamped for split client/worker deployments. TriggerAt is rational,
   default 85/100. Zero token settings resolve against the smallest adopted usable
   budget: keep 10% (cap 20k), protect 15% (cap 40k), save 10% (cap 20k).
 - Clients overwrite caller settings with owned resolved configuration in RunInput,
@@ -1387,9 +1386,8 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - RunInput stamps ContextSettings for every agent, including Threshold and
   GuardMargin. Recall activates on shortened views even without threshold options;
   ContextRecovery.DisableRecall and per-episode refill rules still apply.
-  HistoryPolicy receives the recovered loaded view. Requests unrelated to that
-  view fail not_view_bearing at the observed provider overflow. Compress alone
-  does not imply immediate failure because its retained tail can match the view.
+  Planners receive the recovered loaded view. Requests unrelated to that
+  view fail not_view_bearing at the observed provider overflow.
   Agents without threshold compaction gain recall_context after the first
   shortened recovery view, subject to the same disable/finalization rules.
   RequestFacts.RecoveryToolBytes records only missing, enabled retry definitions;
@@ -1460,7 +1458,7 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - Agent registration installs the embedded <agent>.context.summary baseline or
   Summary.Prompt replacement. Pin scoped overrides at run start; render the stored template for
   Previous/Evicted (quoted), Instructions and integer Budget per fold. Preserve
-  PromptRef on every call and checkpoint. Legacy Compress stays unrecorded.
+  PromptRef on every call and checkpoint.
 - Three real v16 fixtures cover recovery/confirmation/clarification/lookup,
   terminal adoption across the budget, and summary adoption before resume.
   v15 and older histories reject before effects. Structural templates stay at 5.
@@ -1648,4 +1646,5 @@ compact fact and canonical adoption, and preserves the existing planner bound.
 RunRecord exports validate that evidence without backend history or live clients.
 No compatibility command is added to unqualified, waived or sticky-resident runs.
 Overflow retries retain their recorded recovery path; the next normal threshold
-decision still requires evidence. History and generated APIs remain until K21b.
+decision still requires evidence. Generated planner configs expose optional
+ContextModel; disabled/default registration uses ContextDefault.

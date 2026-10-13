@@ -241,11 +241,10 @@ var _ = Service("orchestrator", func() {
   RunPolicy(func() {
    DefaultCaps(MaxToolCalls(2), MaxRecoveryTurns(1))
    TimeBudget("15s")
-   History(func() {
-    // For long sessions, summarize older turns and keep a measured exact tail.
-    CompressAtMaxInputTokens(120000)
-    KeepMaxInputTokens(40000)
-    KeepMaxTurns(12)
+   Context(func() {
+    TriggerAt(0.85)
+    KeepRecentTokens(8000)
+    Summarize(func() { Instructions("Preserve decisions and evidence.") })
    })
   })
  })
@@ -309,7 +308,7 @@ func main() {
 
  if err := chat.RegisterChatAgent(context.Background(), rt, chat.ChatAgentConfig{
   Planner:      &StubPlanner{},
-  HistoryModel: myHistoryModelClient, // required when using Compress history
+  ContextModel: &runtime.ContextModel{ID: "summary"}, // register before activation
  }); err != nil {
   panic(err)
  }
@@ -528,18 +527,9 @@ Explicit `WithContextCompaction` retains its existing behavior.
 `WithoutContextDefault` disables implicit thresholds, and per-run context
 overrides merge field by field. See [Qualified context defaults](context_defaults.md)
 for residency, continuation, custom-store behavior and migration constraints.
-History policy and generator APIs remain available in this release.
-
-### History Management
-
-| Function                          | Purpose                                      |
-| --------------------------------- | -------------------------------------------- |
-| `History(func())`                 | Configure conversation history management    |
-| `KeepRecentTurns(n)`              | Retain only the most recent N turns          |
-| `CompressAtTurns(n)`              | Summarize once N logical turns accumulate    |
-| `CompressAtMaxInputTokens(n)`     | Summarize once exact input tokens exceed N   |
-| `KeepMaxTurns(n)`                 | Keep at most N newest turns exact            |
-| `KeepMaxInputTokens(n)`           | Keep newest whole turns within token budget  |
+Every generated planner config exposes optional ContextModel. Disable emits
+ContextDefault.Disabled; explicit runtime compaction still wins. See the
+[removed API migration](runtime.md#migration-from-removed-history-apis).
 
 ### Prompt Caching
 

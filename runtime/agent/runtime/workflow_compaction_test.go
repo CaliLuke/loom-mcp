@@ -37,10 +37,6 @@ func TestContextCompactionOption(t *testing.T) {
 	require.NotNil(t, input.ContextCompaction)
 	assert.Equal(t, []tools.Ident{"test.keep"}, input.ContextCompaction.KeepResultTools)
 	assert.Equal(t, contextmeasure.Rate{Tokens: 80, Bytes: 100}, input.ContextCompaction.TriggerAt)
-	reg := AgentRegistration{ID: "agent", Policy: RunPolicy{History: func(context.Context, []*model.Message, []*model.ToolDefinition) ([]*model.Message, error) {
-		return nil, nil
-	}}}
-	require.ErrorContains(t, rt.RegisterAgent(t.Context(), reg), "HistoryPolicy")
 	rt.stampContextCompaction(&RunInput{AgentID: "off"})
 	assert.Panics(t, func() {
 		New(WithContextCompaction("agent", ContextCompaction{TriggerAt: contextmeasure.Rate{Tokens: 101, Bytes: 100}}))

@@ -5,8 +5,6 @@ import (
 	"github.com/dave/jennifer/jen"
 )
 
-const historyModeCompress = "compress"
-
 func agentImplSection(agent *AgentData) codegen.Section {
 	return codegen.NewJenniferSection("agent-impl", func(stmt *jen.Statement) {
 		emitAgentConstants(stmt, agent)
@@ -250,14 +248,9 @@ func emitAgentConfigStruct(stmt *jen.Statement, agent *AgentData) {
 	stmt.Type().Id(agent.ConfigType).StructFunc(func(g *jen.Group) {
 		g.Comment("Planner provides the concrete planner implementation used by the agent.")
 		g.Id("Planner").Id("planner").Dot("Planner")
-		if agent.RunPolicy.Context != nil && agent.RunPolicy.Context.Threshold {
+		if agent.Workflow == nil {
 			g.Comment("ContextModel selects the registered client used for context summaries.")
 			g.Id("ContextModel").Op("*").Id("agentsruntime").Dot("ContextModel")
-		}
-		if agent.RunPolicy.History != nil && agent.RunPolicy.History.Mode == historyModeCompress {
-			g.Comment("HistoryModel provides the model client used for history compression when a")
-			g.Comment("Compress history policy is configured.")
-			g.Id("HistoryModel").Id("model").Dot("Client")
 		}
 		if len(agent.MCPToolsets) > 0 {
 			g.Comment("MCPCallers maps MCP toolset IDs to the callers that invoke them. A caller must be")
@@ -279,11 +272,6 @@ func emitAgentConfigValidate(stmt *jen.Statement, agent *AgentData) {
 		if agent.RunPolicy.Context != nil && agent.RunPolicy.Context.HasSummarize {
 			g.If(jen.Id("c").Dot("ContextModel").Op("==").Nil()).Block(
 				jen.Return(jen.Qual("errors", "New").Call(jen.Lit("context model is required when Summarize is configured"))),
-			)
-		}
-		if agent.RunPolicy.History != nil && agent.RunPolicy.History.Mode == historyModeCompress {
-			g.If(jen.Id("c").Dot("HistoryModel").Op("==").Nil()).Block(
-				jen.Return(jen.Qual("errors", "New").Call(jen.Lit("history model is required when Compress history policy is configured"))),
 			)
 		}
 		if len(agent.MCPToolsets) > 0 {

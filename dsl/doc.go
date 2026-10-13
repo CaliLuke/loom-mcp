@@ -58,7 +58,6 @@
 //	        RunPolicy(func() {           // Inside Agent
 //	            DefaultCaps(...)         // Inside RunPolicy
 //	            TimeBudget("5m")
-//	            History(func() {...})
 //	        })
 //	    })
 //
@@ -153,7 +152,6 @@
 //   - [RetryAndReflect] configures planner retry/reflection behavior
 //   - [MaxRetries] caps retry/reflection attempts
 //   - [ErrorIfRetryExceeded] controls retry exhaustion behavior
-//   - [History] configures conversation history management
 //   - [Cache] configures prompt caching hints
 //
 // Timing Functions (inside RunPolicy):
@@ -161,13 +159,6 @@
 //   - [Budget] sets the active-work budget
 //   - [Plan] sets planner activity timeout
 //   - [Tools] sets default tool activity timeout
-//
-// History Functions (inside History):
-//   - [KeepRecentTurns] configures sliding window retention
-//   - [CompressAtTurns] configures model-assisted summarization by turn count
-//   - [CompressAtMaxInputTokens] configures model-assisted summarization by input tokens
-//   - [KeepMaxTurns] caps retained turns after summarization
-//   - [KeepMaxInputTokens] caps retained input tokens after summarization
 //
 // Cache Functions (inside Cache):
 //   - [AfterSystem] places cache checkpoint after system messages

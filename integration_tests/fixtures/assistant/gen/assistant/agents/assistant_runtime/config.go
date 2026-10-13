@@ -11,6 +11,7 @@ import (
 	"errors"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
+	agentsruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 )
 
 // AssistantRuntimeAgentConfig configures the AssistantRuntimeAgent agent
@@ -18,6 +19,8 @@ import (
 type AssistantRuntimeAgentConfig struct {
 	// Planner provides the concrete planner implementation used by the agent.
 	Planner planner.Planner
+	// ContextModel selects the registered client used for context summaries.
+	ContextModel *agentsruntime.ContextModel
 }
 
 // Validate ensures the configuration is usable.

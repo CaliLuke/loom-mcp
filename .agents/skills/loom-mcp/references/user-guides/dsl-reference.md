@@ -79,9 +79,6 @@ MCP cannot preserve their authorization and privacy contracts.
 | `DefaultCaps(MaxToolCalls(...), MaxConsecutiveFailedToolCalls(...))` | Run caps |
 | `TimeBudget(...)` | Active execution budget; external-input waits pause it |
 | `Timing(func() { Budget(...); Plan(...); Tools(...) })` | Semantic run, planner, and tool budgets |
-| `History(...)` | Retention/compression policy |
-| `CompressAtTurns`, `CompressAtMaxInputTokens` | Compression triggers |
-| `KeepMaxTurns`, `KeepMaxInputTokens` | Exact-history retention caps |
 | `Cache(AfterSystem(), AfterTools())` | Prompt cache checkpoints |
 | `InterruptsAllowed`, `OnMissingFields` | Human-input and validation policy |
 | `RetryAndReflect(...)` | Structured reflected retry policy |
@@ -149,7 +146,7 @@ application-owned scaffolding.
 Inside RunPolicy, Context enables threshold compaction and accepts TriggerAt
 (exact decimal fraction, strictly between zero and one, at most four decimals),
 KeepRecentTokens (positive), Summarize, Recall and Disable. Context conflicts with
-History and Workflow. Each declaration is unique in its parent.
+Workflow. Each declaration is unique in its parent.
 
 Summarize requires non-empty Instructions or Prompt. Prompt is parsed and
 executed during design validation with the runtime summary prompt's empty custom
@@ -159,9 +156,9 @@ uses nonempty strings and Budget 100, so it validates only the branches taken
 with those values. In particular, the else branch of if .Previous is not checked.
 Test authored templates with empty and nonempty previous summaries.
 
-Enabled Context adds ContextModel *runtime.ContextModel to generated config;
+Every planner config has optional ContextModel *runtime.ContextModel;
 Validate requires it only for Summarize. Register its model ID before Seal.
-Recall(false) sets ContextRecovery.DisableRecall. Disable omits threshold policy;
+Recall(false) sets ContextRecovery.DisableRecall. Disable emits ContextDefault.Disabled and omits threshold policy;
 it may accompany Recall(false), but not threshold or summary settings, and does
 not cancel runtime options.
 

@@ -110,6 +110,13 @@ func Register{{ .StructName }}(ctx context.Context, rt *agentsruntime.Runtime, c
             OnMissingFields: agentsruntime.MissingFieldsResume,
             {{- end }}
 {{- end }}
+{{- if not .Workflow }}
+{{- if not .RunPolicy.Context }}
+            ContextDefault: &agentsruntime.ContextDefault{ContextModel: cfg.ContextModel},
+{{- else if .RunPolicy.Context.Disabled }}
+            ContextDefault: &agentsruntime.ContextDefault{Disabled: true},
+{{- end }}
+{{- end }}
 {{- with .RunPolicy.Context }}
 {{- if .Threshold }}
             ContextCompaction: &agentsruntime.ContextCompaction{
@@ -131,28 +138,6 @@ func Register{{ .StructName }}(ctx context.Context, rt *agentsruntime.Runtime, c
 {{- if .DisableRecall }}
             ContextRecovery: &agentsruntime.ContextRecovery{DisableRecall: true},
 {{- end }}
-{{- end }}
-{{- if .RunPolicy.History }}
-            History: func() agentsruntime.HistoryPolicy {
-            {{- if eq .RunPolicy.History.Mode "keep_recent" }}
-                return agentsruntime.KeepRecentTurns({{ .RunPolicy.History.KeepRecent }})
-            {{- else if eq .RunPolicy.History.Mode "compress" }}
-                return agentsruntime.Compress(cfg.HistoryModel, agentsruntime.HistoryCompressionConfig{
-                {{- if gt .RunPolicy.History.CompressAtTurns 0 }}
-                    CompressAtTurns: {{ .RunPolicy.History.CompressAtTurns }},
-                {{- end }}
-                {{- if gt .RunPolicy.History.CompressAtMaxInputTokens 0 }}
-                    CompressAtMaxInputTokens: {{ .RunPolicy.History.CompressAtMaxInputTokens }},
-                {{- end }}
-                {{- if gt .RunPolicy.History.KeepMaxTurns 0 }}
-                    KeepMaxTurns: {{ .RunPolicy.History.KeepMaxTurns }},
-                {{- end }}
-                {{- if gt .RunPolicy.History.KeepMaxInputTokens 0 }}
-                    KeepMaxInputTokens: {{ .RunPolicy.History.KeepMaxInputTokens }},
-                {{- end }}
-                })
-            {{- end }}
-            }(),
 {{- end }}
 {{- if or .RunPolicy.Cache.AfterSystem .RunPolicy.Cache.AfterTools }}
             Cache: agentsruntime.CachePolicy{

@@ -16,7 +16,7 @@ func TestPackageDocIndexMentionsCurrentDSLFunctions(t *testing.T) {
 	text := string(doc)
 
 	for _, name := range []string{
-		"ServerData",
+		"ServerData", "Cache", "AfterSystem", "AfterTools",
 		"Context", "TriggerAt", "KeepRecentTokens", "Summarize", "Recall", "Disable", "Instructions", "Prompt", "KeepResultInContext",
 		"FromSkills",
 		"FromArtifacts",
@@ -35,7 +35,7 @@ func TestPackageDocIndexMentionsCurrentDSLFunctions(t *testing.T) {
 	}
 
 	for _, name := range []string{
-		"Artifact",
+		"Artifact", "History", "KeepRecentTurns", "CompressAtTurns", "CompressAtMaxInputTokens", "KeepMaxTurns", "KeepMaxInputTokens",
 		"Compress",
 	} {
 		if strings.Contains(text, "["+name+"]") {

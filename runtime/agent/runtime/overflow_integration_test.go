@@ -77,12 +77,12 @@ func (p *overflowCounter) CountTokens(_ context.Context, req *model.Request) (mo
 func TestOverflowInMemoryEngine(t *testing.T) {
 	for _, tc := range []struct {
 		name                                                                                                  string
-		unknown, exact, afterSend, rewrite, unrelated, single, multiple, overhead, modelSwitch, historyPolicy bool
+		unknown, exact, afterSend, rewrite, unrelated, single, multiple, overhead, modelSwitch, subsetRequest bool
 		window, realWindow                                                                                    int
 		failure                                                                                               error
 		first, second                                                                                         string
 	}{
-		{name: "history policy loaded view", historyPolicy: true, window: 8000, realWindow: 8000, first: "provider"},
+		{name: "planner subset of loaded view", subsetRequest: true, window: 8000, realWindow: 8000, first: "provider"},
 		{name: "uncalibrated no usage", window: 8000, realWindow: 8000, first: "provider"},
 		{name: "unknown limits", unknown: true, realWindow: 8000, first: "provider"},
 		{name: "exact before calibration", exact: true, window: 8000, realWindow: 8000, first: "guard"},
@@ -106,9 +106,14 @@ func TestOverflowInMemoryEngine(t *testing.T) {
 				require.NoError(t, rt.RegisterModel("large", &overflowProvider{window: 120000, realWindow: 120000, usage: true, resolved: "large"}))
 			}
 			var original []*model.Message
+			subsetCalls := 0
 			decide := func(ctx context.Context, agent planner.PlannerContext, messages []*model.Message) (*planner.PlanResult, error) {
 				if original == nil {
 					original = cloneMessages(messages)
+				}
+				if tc.subsetRequest {
+					subsetCalls++
+					messages = messages[:len(messages)-1]
 				}
 				if tc.rewrite {
 					messages = original
@@ -145,23 +150,15 @@ func TestOverflowInMemoryEngine(t *testing.T) {
 			}, resume: func(ctx context.Context, input *planner.PlanResumeInput) (*planner.PlanResult, error) {
 				return decide(ctx, input.Agent, input.Messages)
 			}})
-			historyCalls := 0
-			if tc.historyPolicy {
-				registration := rt.agents["content.agent"]
-				registration.Policy.History = func(_ context.Context, messages []*model.Message, _ []*model.ToolDefinition) ([]*model.Message, error) {
-					historyCalls++
-					return messages[:len(messages)-1], nil
-				}
-				rt.agents["content.agent"] = registration
-			}
+
 			seed := []*model.Message{contentMessage(strings.Repeat("history", 9000))}
 			if !tc.single {
 				seed = append(seed, &model.Message{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "earlier response"}}}, contentMessage("continue"))
 			}
 			_, err := rt.MustClient("content.agent").Run(t.Context(), "session", seed, WithRunID("overflow-run"))
 			runErr := err
-			if tc.historyPolicy {
-				assert.GreaterOrEqual(t, historyCalls, 2)
+			if tc.subsetRequest {
+				assert.GreaterOrEqual(t, subsetCalls, 2)
 			}
 			if tc.failure != nil {
 				require.ErrorIs(t, err, tc.failure)

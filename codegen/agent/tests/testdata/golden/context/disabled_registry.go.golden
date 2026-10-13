@@ -62,6 +62,7 @@ func RegisterDisabledAgent(ctx context.Context, rt *agentsruntime.Runtime, cfg D
 		Specs: nil,
 		Policy: agentsruntime.RunPolicy{
 			MaxRecoveryTurns: 3,
+			ContextDefault:   &agentsruntime.ContextDefault{Disabled: true},
 			ContextRecovery:  &agentsruntime.ContextRecovery{DisableRecall: true},
 		},
 	}); err != nil {

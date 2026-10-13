@@ -19,18 +19,6 @@ func TestContextDSLValidation(t *testing.T) {
 			Context(nil)
 			Context(nil)
 		}, `Context already defined for agent "agent"`},
-		{"History first", func() {
-			History(func() {
-				KeepRecentTurns(2)
-			})
-			Context(nil)
-		}, "Context cannot be combined with History"},
-		{"Context first", func() {
-			Context(nil)
-			History(func() {
-				KeepRecentTurns(2)
-			})
-		}, "Context cannot be combined with History"},
 		{"zero trigger", func() {
 			Context(func() {
 				TriggerAt(0)

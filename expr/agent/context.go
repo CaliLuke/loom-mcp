@@ -79,9 +79,6 @@ func (r *RunPolicyExpr) validateContext(verr *eval.ValidationErrors) {
 	if c == nil {
 		return
 	}
-	if r.History != nil {
-		verr.Add(c, "Context cannot be combined with History")
-	}
 	if r.Agent.Workflow != nil {
 		verr.Add(c, "Context requires a planner agent and cannot be combined with Workflow")
 	}

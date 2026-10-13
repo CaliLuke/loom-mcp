@@ -266,10 +266,6 @@ type (
 		// fields. Allowed: "finalize" | "await_clarification" | "resume".
 		// Empty means unspecified.
 		OnMissingFields string
-		// History captures conversational history management configuration (if
-		// any). When nil, no history policy is configured and callers retain
-		// full history.
-		History *HistoryData
 		// Context captures optional context compaction and recovery settings.
 		Context *ContextData
 		// Cache captures prompt caching configuration (if any). Zero value
@@ -310,29 +306,6 @@ type (
 		Visibility string
 		// MaxResults bounds the number of entries injected into planner input.
 		MaxResults int
-	}
-
-	// HistoryData represents the configured history policy for an agent. It
-	// encodes either a KeepRecentTurns sliding window or a Compress policy; at
-	// most one mode is set for a given agent.
-	HistoryData struct {
-		// Mode is "keep_recent" or "compress".
-		Mode string
-		// KeepRecent is the number of recent turns to retain when Mode ==
-		// "keep_recent".
-		KeepRecent int
-		// CompressAtTurns triggers summarization after this many logical turns
-		// when Mode == "compress".
-		CompressAtTurns int
-		// CompressAtMaxInputTokens triggers summarization after this runtime
-		// counted input-token threshold when Mode == "compress".
-		CompressAtMaxInputTokens int
-		// KeepMaxTurns caps exact retention to this many newest logical turns
-		// when Mode == "compress".
-		KeepMaxTurns int
-		// KeepMaxInputTokens caps exact retention to newest whole turns that fit
-		// this runtime counted input-token budget when Mode == "compress".
-		KeepMaxInputTokens int
 	}
 
 	// CacheData represents the configured prompt caching policy for an agent.

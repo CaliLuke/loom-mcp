@@ -411,7 +411,7 @@ implements the corresponding transcript-local policy.
 | `Instructions(text)`  | Inside `Summarize` | Adds non-empty summary instructions                                      |
 | `Prompt(text)`        | Inside `Summarize` | Replaces the summary template                                            |
 | `Recall(enabled)`     | Inside `Context`   | `Recall(false)` disables recall advertising                              |
-| `Disable()`           | Inside `Context`   | Omits generated threshold compaction configuration                       |
+| `Disable()`           | Inside `Context`   | Disables generated qualified defaults                       |
 
 ```go
 RunPolicy(func() {
@@ -426,7 +426,7 @@ RunPolicy(func() {
 ```
 
 Each declaration may appear only once in its parent. `Context` cannot be
-combined with `History` or a deterministic `Workflow`. An agent with `Context`
+combined with a deterministic `Workflow`. An agent with `Context`
 cannot use tools whose names contain `recall_context`.
 
 `Summarize` requires `Instructions`, `Prompt`, or both. Templates receive only
@@ -441,14 +441,14 @@ checked. Test custom templates with empty and nonempty previous summaries and
 representative runtime values. The runtime registers the prompt as
 `<agent>.context.summary`.
 
-An enabled `Context` adds `ContextModel *runtime.ContextModel` to generated
-agent config. It is required by `Config.Validate` only when `Summarize` is
+Every planner agent has optional `ContextModel *runtime.ContextModel` in its
+generated config. It is required by `Config.Validate` only when `Summarize` is
 declared. Its ID must name a registered model when the runtime is sealed.
 
 Omitted settings preserve runtime defaults. `Disable()` can be combined with
 `Recall(false)`, but not `TriggerAt`, `KeepRecentTokens`, or `Summarize`.
-`Disable()` omits the opt-in threshold configuration; it does not override a
-runtime option.
+`Disable()` emits `ContextDefault{Disabled: true}`; explicit runtime compaction
+options remain authoritative.
 
 `KeepResultInContext()` marks the generated tool spec. At agent registration,
 flagged specs join `ContextCompaction.KeepResultTools` in the stamped keep set.
@@ -491,17 +491,6 @@ disables tools for the replacement turn.
 | `Budget(duration)` | Inside `RunPolicy` or `Timing` | Alias for `TimeBudget`; caps active work and pauses during external waits |
 | `Plan(duration)`   | Inside `RunPolicy` or `Timing` | Timeout for Plan and Resume activities |
 | `Tools(duration)`  | Inside `RunPolicy` or `Timing` | Default timeout for tool activities    |
-
-### History Functions
-
-| Function                          | Context            | Purpose                                      |
-| --------------------------------- | ------------------ | -------------------------------------------- |
-| `History(dsl)`                    | Inside `RunPolicy` | Configures conversation history management   |
-| `KeepRecentTurns(n)`              | Inside `History`   | Retain only the most recent N turns          |
-| `CompressAtTurns(n)`              | Inside `History`   | Summarize once N logical turns accumulate    |
-| `CompressAtMaxInputTokens(n)`     | Inside `History`   | Summarize once exact input tokens exceed N   |
-| `KeepMaxTurns(n)`                 | Inside `History`   | Keep at most N newest turns exact            |
-| `KeepMaxInputTokens(n)`           | Inside `History`   | Keep newest whole turns within token budget  |
 
 ### Cache Functions
 
@@ -1440,7 +1429,7 @@ Tool("get_time_series", "Get Time Series", func() {
 
 ---
 
-## RunPolicy, Caps & History
+## RunPolicy, Caps & Context
 
 `RunPolicy` configures execution limits and behavior enforced at runtime:
 
@@ -1468,9 +1457,9 @@ RunPolicy(func() {
         ErrorIfRetryExceeded(true),
     )
 
-    // History management
-    History(func() {
-        KeepRecentTurns(20)
+    // Explicit token retention
+    Context(func() {
+        KeepRecentTokens(8000)
     })
 
     // Prompt caching
@@ -1500,7 +1489,7 @@ is unchanged. Use explicit `Toolset("memory", FromMemory(...))` tools when the
 planner should ask for additional memory.
 
 `PreloadLongTermMemory` searches the configured long-term memory service with
-the latest history-filtered user text and injects durable entries into
+the latest loaded-view user text and injects durable entries into
 `PreloadedMemoryEntries`. Planners that want prompt text can render these
 entries with `memory.FormatEntriesForPrompt(...)`.
 
@@ -1527,40 +1516,11 @@ RunPolicy(func() {
 | `"await_clarification"` | Pause and wait for user input                   |
 | `"resume"`              | Continue execution despite missing fields       |
 
-### History Policies
+### Context retention
 
-History policies transform message history before each planner invocation while preserving
-system prompts and logical turn boundaries.
-
-**Sliding Window** — Keep the last N turns:
-
-```go
-RunPolicy(func() {
-    History(func() {
-        KeepRecentTurns(20)
-    })
-})
-```
-
-**Compression** — Summarize older turns with a model:
-
-```go
-RunPolicy(func() {
-    History(func() {
-        CompressAtMaxInputTokens(120000)
-        KeepMaxInputTokens(40000)
-        KeepMaxTurns(12)
-    })
-})
-```
-
-Compression requires at least one trigger (`CompressAtTurns` or
-`CompressAtMaxInputTokens`) and at least one retention budget (`KeepMaxTurns` or
-`KeepMaxInputTokens`). Token budgets use exact provider token counts; models used
-for token-budget compression must implement `model.TokenCounter`. When
-compression is configured, generated agent config includes a `HistoryModel` field
-that callers must supply with a `model.Client`. The runtime uses
-`ModelClassSmall` for summarization.
+Use qualified defaults or explicit `Context` settings for token retention and
+summary folding. Every planner config exposes optional `ContextModel`; only
+explicit `Summarize` requires it. See [removed API migration](runtime.md#migration-from-removed-history-apis).
 
 ### Cache Policies
 

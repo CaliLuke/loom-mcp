@@ -80,7 +80,7 @@ Generated `FromMemory(MemoryLongTerm(), ...)` registration passes the runtime me
 Memory preload is opt-in in `RunPolicy`:
 
 - transcript preload fills `PlanInput.PreloadedMemory` / `PlanResumeInput.PreloadedMemory`;
-- long-term preload fills `PreloadedMemoryEntries` using the latest history-filtered user text.
+- long-term preload fills `PreloadedMemoryEntries` using the latest loaded-view user text.
 
 Preload does not replace normal planner history. Use `memory.FormatEntriesForPrompt(...)` when a planner needs prompt text from long-term entries.
 

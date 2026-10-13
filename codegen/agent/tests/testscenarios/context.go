@@ -40,7 +40,8 @@ func ContextPolicies() func() {
 					})
 				})
 			})
-			Agent("defaults", "Default compaction", func() {
+			Agent("implicit", "Qualified default compaction", func() {})
+			Agent("defaults", "Explicit default budgets", func() {
 				RunPolicy(func() {
 					Context(nil)
 				})

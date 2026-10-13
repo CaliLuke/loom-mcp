@@ -25,10 +25,9 @@ func TestCallRecordGrowth(t *testing.T) {
 	if testing.Short() {
 		t.Skip("1000 model-call steps run in test-payload-growth")
 	}
-	for _, mode := range []string{"off", "keep_recent", "compress", "real_compaction"} {
+	for _, mode := range []string{"off", "real_compaction"} {
 		t.Run(mode, func(t *testing.T) {
 			store := &callByteStore{Store: inmem.New()}
-			policy := growthHistoryPolicy(mode)
 			var view []*model.Message
 			rt := New(WithRunStore(store.Store))
 			var state compaction.State
@@ -79,8 +78,6 @@ func TestCallRecordGrowth(t *testing.T) {
 					}
 				}
 				recorder := NewCallRecording(store, "root", ref, loadedMessages, step)
-				filtered, err := policy(t.Context(), loadedMessages, nil)
-				require.NoError(t, err)
 				seq, err := store.NextSeq(t.Context(), "root", "run")
 				require.NoError(t, err)
 				ctx := model.WithCallInfo(t.Context(), model.CallInfo{RunID: "run", RootRunID: "root", Seq: seq, Attempt: 1, ModelID: "fake"})
@@ -89,7 +86,7 @@ func TestCallRecordGrowth(t *testing.T) {
 					provider = &growthCompactionClient{historyCountingClient: &historyCountingClient{completeText: "response"}}
 				}
 				client := &callRecordingClient{inner: provider, recording: recorder}
-				_, err = client.Complete(ctx, &model.Request{Model: "fake", Messages: filtered})
+				_, err = client.Complete(ctx, &model.Request{Model: "fake", Messages: loadedMessages})
 				require.NoError(t, err)
 				if mode == "real_compaction" {
 					state = compaction.Observe(state, recorder.Facts())
@@ -126,19 +123,6 @@ func (s *callByteStore) Put(ctx context.Context, scope string, data []byte) (run
 	}
 	s.total += len(data)
 	return hash, nil
-}
-
-func growthHistoryPolicy(mode string) HistoryPolicy {
-	switch mode {
-	case "keep_recent":
-		return KeepRecentTurns(2)
-	case "compress":
-		return Compress(&historyCountingClient{completeText: "bounded summary"}, HistoryCompressionConfig{CompressAtTurns: 8, KeepMaxTurns: 2})
-	default:
-		return func(_ context.Context, messages []*model.Message, _ []*model.ToolDefinition) ([]*model.Message, error) {
-			return messages, nil
-		}
-	}
 }
 
 // fitCallBytes fits all cumulative recorder writes (content and call bodies) against step count and bounds

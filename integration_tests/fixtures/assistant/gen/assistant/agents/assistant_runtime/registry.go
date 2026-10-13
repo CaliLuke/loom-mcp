@@ -68,6 +68,7 @@ func RegisterAssistantRuntimeAgent(ctx context.Context, rt *agentsruntime.Runtim
 		Specs: specs.Specs,
 		Policy: agentsruntime.RunPolicy{
 			MaxRecoveryTurns: 3,
+			ContextDefault:   &agentsruntime.ContextDefault{ContextModel: cfg.ContextModel},
 		},
 	}); err != nil {
 		return err

@@ -178,28 +178,6 @@ func (c *reviewRecoveryClient) Complete(ctx context.Context, request *model.Requ
 	return c.recordingFactsClient.Complete(ctx, request)
 }
 
-func TestWorkflowCompactionHistoryPolicyConflict(t *testing.T) {
-	client := New(WithContextCompaction("agent", ContextCompaction{}))
-	input := &RunInput{AgentID: "agent", RootRunID: "run", RunID: "run", WorkflowProtocolVersion: api.WorkflowProtocolVersion}
-	client.stampContextCompaction(input)
-	before := 0
-	worker := New(WithInterceptors(RuntimeInterceptorFuncs{BeforeRunFunc: func(context.Context, *BeforeRunInput) (*BeforeRunDecision, error) {
-		before++
-		return nil, nil
-	}}))
-	require.NoError(t, worker.RegisterAgent(t.Context(), AgentRegistration{ID: "agent", Planner: &stubPlanner{}, Workflow: engine.WorkflowDefinition{Name: "workflow", TaskQueue: "queue", Handler: worker.ExecuteWorkflow}, PlanActivityName: "plan", ResumeActivityName: "resume", ExecuteToolActivity: "tool", Policy: RunPolicy{History: func(context.Context, []*model.Message, []*model.ToolDefinition) ([]*model.Message, error) {
-		return nil, nil
-	}}}))
-	wf := &testWorkflowContext{ctx: t.Context(), runtime: worker}
-	_, err := worker.ExecuteWorkflow(wf, input)
-	require.ErrorContains(t, err, "HistoryPolicy")
-	assert.Zero(t, before)
-	assert.Empty(t, wf.plannerCalls)
-	page, err := worker.RunEventStore.List(t.Context(), "run", "", 10)
-	require.NoError(t, err)
-	assert.Empty(t, page.Events)
-}
-
 func TestThresholdOptOutObservesFacts(t *testing.T) {
 	rt := New()
 	base := &workflowPlanInput{}

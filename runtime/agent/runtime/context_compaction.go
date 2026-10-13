@@ -25,7 +25,7 @@ type (
 	}
 )
 
-// WithContextCompaction enables threshold compaction. HistoryPolicy cannot be used with it.
+// WithContextCompaction enables explicit threshold compaction.
 func WithContextCompaction(id agent.Ident, settings ContextCompaction) RuntimeOption {
 	return func(opts *Options) {
 		if opts.ContextCompaction == nil {
