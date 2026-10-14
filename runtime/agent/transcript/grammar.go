@@ -12,6 +12,9 @@ type (
 	Grammar interface {
 		viewRules() (alternating, thinking bool)
 	}
+	// GrammarCanonical validates roles, checkpoint boundaries, and tool handshakes
+	// without imposing provider-specific role alternation or thinking requirements.
+	GrammarCanonical struct{}
 	// GrammarBedrock requires alternating roles and optionally thinking before tool use.
 	GrammarBedrock struct{ Thinking bool }
 	// GrammarAnthropic accepts adjacent like roles but requires complete tool handshakes.
@@ -155,5 +158,9 @@ func (g GrammarBedrock) viewRules() (bool, bool) {
 }
 
 func (GrammarAnthropic) viewRules() (bool, bool) {
+	return false, false
+}
+
+func (GrammarCanonical) viewRules() (bool, bool) {
 	return false, false
 }

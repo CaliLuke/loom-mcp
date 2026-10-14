@@ -66,7 +66,7 @@ func TestChildDispatchCompactedParentView(t *testing.T) {
 				assert.Equal(t, model.ConversationRoleAssistant, last.Role)
 				assert.Len(t, last.Parts, 2, "both unanswered child calls remain visible")
 				_, plannerErr := rt.loadView(ctx, "root", "root", loader.view)
-				assert.EqualError(t, plannerErr, "compacted Anthropic grammar: view ends with unanswered tool calls", "the warm planner path must remain strict")
+				assert.EqualError(t, plannerErr, "compacted canonical grammar: view ends with unanswered tool calls", "the warm planner path must remain strict")
 			}
 			validated.Add(1)
 			return nil
@@ -116,9 +116,8 @@ func TestChildAdmissionCompactedViewRejectsInvalidGrammar(t *testing.T) {
 		tail    []*model.Message
 		wantErr string
 	}{
-		{"non-trailing unanswered", []*model.Message{oldCall, call}, "compacted Anthropic grammar: view message 4: calls and results do not match"},
-		{"orphan result", []*model.Message{text, orphan, call}, "compacted Anthropic grammar: view message 4: calls and results do not match"},
-		{"ordering", []*model.Message{text, text}, `compacted Bedrock grammar: view message 4 repeats role "assistant"`},
+		{"non-trailing unanswered", []*model.Message{oldCall, call}, "compacted canonical grammar: view message 4: calls and results do not match"},
+		{"orphan result", []*model.Message{text, orphan, call}, "compacted canonical grammar: view message 4: calls and results do not match"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rt := New()

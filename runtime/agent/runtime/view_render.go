@@ -69,7 +69,8 @@ func (c *runViewCache) renderView(ctx context.Context, store runstore.Store, sco
 	return cloneMessages(messages), update, nil
 }
 
-// assembleView validates checkpoint projections against both provider grammars.
+// assembleView validates canonical checkpoint and tool-handshake invariants.
+// Provider adapters enforce their own role and reasoning requirements.
 // Child admission permits only the trailing unanswered assistant tool turn.
 // Clear-only and full projections retain the existing resume-time validator.
 func (c *runViewCache) assembleView(purpose viewLoadPurpose) ([]*model.Message, error) {
@@ -83,11 +84,8 @@ func (c *runViewCache) assembleView(purpose viewLoadPurpose) ([]*model.Message, 
 		if purpose == childAdmissionView {
 			validate = transcript.ValidateChildAdmissionView
 		}
-		if err := validate(messages, transcript.GrammarAnthropic{}); err != nil {
-			return nil, fmt.Errorf("compacted Anthropic grammar: %w", err)
-		}
-		if err := validate(messages, transcript.GrammarBedrock{}); err != nil {
-			return nil, fmt.Errorf("compacted Bedrock grammar: %w", err)
+		if err := validate(messages, transcript.GrammarCanonical{}); err != nil {
+			return nil, fmt.Errorf("compacted canonical grammar: %w", err)
 		}
 	}
 	return messages, nil

@@ -188,6 +188,7 @@ func TestReadOrphanCallViewAndCheckpoint(t *testing.T) {
 		{ID: 2, Kind: index.Message, Role: model.ConversationRoleAssistant, Hash: f.put(t, assistant)},
 		{ID: 3, Kind: index.Message, Role: model.ConversationRoleUser, Hash: f.put(t, textMessage("orphan tail"))},
 		{ID: 4, Kind: index.Message, Role: model.ConversationRoleAssistant, Hash: f.put(t, assistant)},
+		{ID: 5, Kind: index.Message, Role: model.ConversationRoleAssistant, Hash: f.put(t, assistant)},
 	})
 	source := func(ctx context.Context, h runstore.Hash) ([]byte, error) { return f.store.Get(ctx, "root", h) }
 	entries, err := index.Walk(t.Context(), source, orphan)

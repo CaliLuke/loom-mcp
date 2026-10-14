@@ -357,26 +357,17 @@ func TestTailInheritsHiddenCalls(t *testing.T) {
 	assertCompactedGrammar(t, next)
 }
 
-func TestCompactedGrammarRejectsInvalidTail(t *testing.T) {
-	for _, kind := range []string{"unanswered", "adjacent"} {
-		t.Run(kind, func(t *testing.T) {
-			store := storeinmem.New()
-			base := compactionFixture(t, store, 2)
-			if kind == "unanswered" {
-				base.Entries = base.Entries[:4]
-			} else {
-				require.NoError(t, base.appendEntry(index.MessageEntry{Kind: index.Assistant, Hash: compactionPut(t, store, []*model.Message{{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "one"}}}}), Role: model.ConversationRoleAssistant}))
-				require.NoError(t, base.appendEntry(index.MessageEntry{Kind: index.Assistant, Hash: compactionPut(t, store, []*model.Message{{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.TextPart{Text: "two"}}}}), Role: model.ConversationRoleAssistant}))
-			}
-			rt := New(WithRunStore(store))
-			view := base.view()
-			view.TailFrom = 4
-			view.Budget = compactionBudget()
-			loaded, err := rt.loadTestView(t.Context(), "root", "run", view)
-			require.ErrorContains(t, err, "grammar")
-			assert.Nil(t, loaded)
-		})
-	}
+func TestCompactedGrammarRejectsUnansweredTail(t *testing.T) {
+	store := storeinmem.New()
+	base := compactionFixture(t, store, 2)
+	base.Entries = base.Entries[:4]
+	rt := New(WithRunStore(store))
+	view := base.view()
+	view.TailFrom = 4
+	view.Budget = compactionBudget()
+	loaded, err := rt.loadTestView(t.Context(), "root", "run", view)
+	require.ErrorContains(t, err, "grammar")
+	assert.Nil(t, loaded)
 }
 
 func TestCompactedActivityRecoveryHasNoViewUpdate(t *testing.T) {

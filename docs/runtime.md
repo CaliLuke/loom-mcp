@@ -229,8 +229,8 @@ switch reduces it. Pins use `SelectPins`, cached by record and budget. Checkpoin
 messages are cached by record hash, budget and effective pins; tail messages by
 committed head, tail start, clear/preview/force watermarks and preview budget. Cleared results retain the stored
 result's size, tool-use ID and first error line, while `Keep` results retain their
-existing projection. Hidden-call state crosses the cut. Checkpoint views pass both
-Anthropic and Bedrock view grammars; views without checkpoints retain the existing
+existing projection. Hidden-call state crosses the cut. Checkpoint views validate canonical roles, checkpoint boundaries and complete
+tool handshakes without imposing provider-specific role alternation; views without checkpoints retain the existing
 resume-time Bedrock validation. Successful activity outputs may return `ViewUpdate`;
 output-validation recovery outputs never adopt it. Protocol 7 introduced these view updates, recorded
 request facts and model rates, entry size metadata and stamped run settings.
@@ -425,7 +425,7 @@ minimum savings, evicts closed units while preserving the previous summary, then
 halves all newest-unit previews evenly down to 256 bytes before forcing
 placeholders, including Keep results. `PreviewThrough` and `ForceClearThrough`
 are monotone view watermarks. A trailing user unit stays with the latest legal
-assistant cut so both provider grammars remain valid. Projection caches include
+assistant cut so the checkpoint boundary remains valid. Projection caches include
 both watermarks and the preview budget; cold and warm loads produce identical
 bytes. The stored entries and full results remain available to recall.
 
@@ -6051,7 +6051,10 @@ reasoning, before the tail and retains tail blocks intact. It marks the
 checkpoint with `CheckpointMetaKey`. `ValidateView` ignores system messages,
 requires a first user and an assistant after the checkpoint, validates
 bidirectional complete tool handshakes, and applies `GrammarBedrock` role
-alternation/thinking or `GrammarAnthropic`.
+alternation/thinking, `GrammarAnthropic`, or the provider-neutral `GrammarCanonical`.
+The runtime uses `GrammarCanonical`: adjacent assistant messages from providers
+such as Codex remain separate and retain their original parts. Provider adapters
+remain responsible for provider-specific constraints.
 Compacted parent views loaded for child admission permit trailing unanswered
 calls from the in-flight assistant turn; every other grammar check and planner
 request validation remains unchanged.

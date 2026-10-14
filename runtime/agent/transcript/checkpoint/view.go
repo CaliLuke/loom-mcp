@@ -41,10 +41,7 @@ func Project(ctx context.Context, source index.Source, entries []index.MessageEn
 	}
 	assembled := transcript.AssembleView(systemMessages, message, messages)
 	if message != nil {
-		if err := transcript.ValidateView(assembled, transcript.GrammarAnthropic{}); err != nil {
-			return nil, err
-		}
-		if err := transcript.ValidateView(assembled, transcript.GrammarBedrock{}); err != nil {
+		if err := transcript.ValidateView(assembled, transcript.GrammarCanonical{}); err != nil {
 			return nil, err
 		}
 	}
