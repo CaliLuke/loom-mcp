@@ -88,6 +88,6 @@ func appendProtocolEvent(t *testing.T, f recordFixture, kind hooks.EventType, ve
 	}
 	data, err := callrecord.Encode(payload)
 	require.NoError(t, err)
-	_, err = f.log.Append(t.Context(), &runlog.Event{RunID: "run", EventKey: fmt.Sprintf("record:%d", step), Type: kind, Payload: data, Timestamp: time.Unix(int64(step), 0)})
+	_, err = f.log.Append(t.Context(), &runlog.Event{RunID: "run", EventKey: fmt.Sprintf("record:%d", step), Type: kind, Payload: data, Timestamp: time.Unix(int64(step), 0).UTC()})
 	require.NoError(t, err)
 }

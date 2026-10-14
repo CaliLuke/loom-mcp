@@ -166,6 +166,6 @@ func (f recordFixture) event(t *testing.T, e hooks.Event) {
 	t.Helper()
 	input, err := hooks.EncodeToHookInput(e, "")
 	require.NoError(t, err)
-	_, err = f.log.Append(t.Context(), &runlog.Event{RunID: e.RunID(), EventKey: input.EventKey, Type: e.Type(), Payload: input.Payload, Timestamp: time.UnixMilli(input.TimestampMS)})
+	_, err = f.log.Append(t.Context(), &runlog.Event{RunID: e.RunID(), EventKey: input.EventKey, Type: e.Type(), Payload: input.Payload, Timestamp: time.UnixMilli(input.TimestampMS).UTC()})
 	require.NoError(t, err)
 }
