@@ -29,7 +29,8 @@ type CalibrationArtifact struct {
 }
 
 // Calibrate computes the production report once, then persists it and its text rendering.
-func Calibrate(ctx context.Context, dir, config string, cfg gate.CalibrationConfig, pilot *PilotEvidence) error {
+func Calibrate(ctx context.Context, dir, config string, cfg gate.CalibrationConfig, pilot *PilotEvidence, phase func(string)) error {
+	phase("verify inputs")
 	source, err := ReadSource(ctx, dir, config)
 	if err != nil {
 		return err
@@ -60,6 +61,7 @@ func Calibrate(ctx context.Context, dir, config string, cfg gate.CalibrationConf
 	} else if !os.IsNotExist(err) {
 		return err
 	}
+	phase("check cells")
 	checks, err := gate.CalibrateChecks(ctx, cfg)
 	if err != nil {
 		return err
@@ -68,14 +70,17 @@ func Calibrate(ctx context.Context, dir, config string, cfg gate.CalibrationConf
 	if cfg.Pilot != nil {
 		artifact.QualificationSource = "offline structural validation; complete live baseline pilot"
 	}
+	phase("candidate grid and sensitivity")
 	artifact.Candidates, err = gate.CalibrateCandidates(ctx, cfg)
 	if err != nil {
 		return err
 	}
+	phase("select candidates")
 	artifact.Selections, err = gate.SelectCandidates(artifact.Candidates, cfg.Gate.Variants)
 	if err != nil {
 		return err
 	}
+	phase("verify source and evidence")
 	after, err := ReadSource(ctx, dir, config)
 	if err != nil {
 		return err
@@ -90,6 +95,7 @@ func Calibrate(ctx context.Context, dir, config string, cfg gate.CalibrationConf
 	if err := VerifyCalibration(artifact, cfg, source, artifact.ValidationSHA256); err != nil {
 		return err
 	}
+	phase("write artifacts")
 	return WriteCalibration(dir, config, artifact)
 }
 

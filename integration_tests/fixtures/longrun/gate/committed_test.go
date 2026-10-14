@@ -8,43 +8,21 @@ import (
 	"strings"
 	"testing"
 
-	"example.com/longrun/env"
 	"github.com/CaliLuke/loom-mcp/v2/eval/gate"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestK19cCommittedArtifacts(t *testing.T) {
+	verifyRetainedCalibration(t)
 	t.Setenv("CGO_ENABLED", "0")
-	evidence, err := readFreezeEvidence(t.Context(), "..", "offline")
-	require.NoError(t, err)
-	assert.Equal(t, 2940, evidence.validation.Attempts)
-	assert.Empty(t, evidence.validation.Failures)
-	assert.Equal(t, env.MaterializerVersion, evidence.validation.MaterializerVersion)
-	assert.True(t, evidence.source.Dirty, "retained source bundle identifies the uncommitted implementation")
-	require.Len(t, evidence.calibration.Candidates, 3)
-	for _, candidate := range evidence.calibration.Candidates {
-		assert.Len(t, candidate.Report.Cells, 1620)
-		assert.Len(t, candidate.Report.Sensitivity, 2)
-	}
-	data, err := os.ReadFile("calibration_default.txt")
-	require.NoError(t, err)
-	assert.Equal(t, CalibrationText("offline", evidence.calibration), string(data))
-	eligible := false
-	for _, selection := range evidence.calibration.Selections {
-		eligible = eligible || selection.Status == gate.CalibrationEligible
-	}
-	if eligible {
-		f, err := VerifyFreeze("..", "offline")
-		require.NoError(t, err)
-		assert.Equal(t, evidence.calibration.Selections, f.Selections)
-	} else {
-		_, err := os.Stat("freeze_default.json")
+	_, err := ReadSource(t.Context(), "..", "offline")
+	require.ErrorContains(t, err, "current executable source differs")
+	_, err = BuildVerifiedFreeze(t.Context(), "..", "offline", "inventory_offline.json")
+	require.ErrorContains(t, err, "current executable source differs")
+	for _, name := range []string{"freeze_default.json", "freeze_default.sha256"} {
+		_, err := os.Stat(name)
 		require.ErrorIs(t, err, os.ErrNotExist)
-		_, err = os.Stat("freeze_default.sha256")
-		require.ErrorIs(t, err, os.ErrNotExist)
-		_, err = buildEvidenceFreeze("offline", evidence)
-		require.ErrorContains(t, err, "no calibration-eligible variant")
 	}
 }
 

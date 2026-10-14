@@ -519,9 +519,34 @@ Each variant selects its smallest eligible margin independently.
 Eligibility requires worst null PASS of at least 0.80 and every worst boundary PASS of at most 0.05.
 Reports retain uncertainty, stopping costs, and joint failure causes.
 Identical bootstrap work can be shared without changing a candidate's counts or decisions.
+The calibration CLI writes phase changes and a progress heartbeat every 30 seconds to stderr.
+Updates include completed and total cells, completed and total synthetic simulations, percentage,
+elapsed time, simulation throughput, and an approximate ETA for the current phase.
+Simulation counts describe actual shared populations across candidates, not the sum of candidate counts.
+Progress advances within long cells. Infeasible cells count as completed cells without simulated populations.
+The ETA is unknown before measured progress and can change as cell costs vary; it is not a completion guarantee.
+Input verification, check cells, candidate computation, selection, final verification, and artifact writing have distinct phases.
+Only a successful artifact write produces the final complete status. Errors and cancellation retain failure status.
+Progress stays out of stdout and saved calibration artifacts. Redirect stderr to retain the operator log.
+Library callers can attach `gate.WithCalibrationProgress` to their context; observers must return promptly.
+
 Calibration files are write-once. Freeze and report verification reuse complete results after checking their identities and counts.
 A repeated `calibrate` command refuses to overwrite them; that refusal does not verify their contents.
 Report-only changes do not require new simulations.
+
+The committed offline calibration is a historical diagnostic snapshot from
+`88eabc2283bc4d790e81cde84348737aae8212ef`, with source identity
+`f6aef6fe246341995996075bcdef03dc60040c6fe8c5c607dd8dc50bf3eacafd`.
+Both variants are ineligible. Progress reporting changes the executable identity;
+the current executable has no matching calibration authorization and rejects
+these historical inputs for calibration, freeze, pilot and operational looks.
+The artifact test compares all retained evidence and pool bytes with that commit
+and runs its unchanged artifact verifier in a temporary local checkout.
+The current evaluator separately reproduces the two full-bootstrap check cells
+and passes observed/unobserved equality tests. These bounded checks do not claim
+that the full grid was rerun on the current source or transfer qualification.
+Future qualification requires fresh current-source validation and calibration;
+preserve the historical files before following the write-once evidence workflow.
 
 `CALIBRATION_INELIGIBLE` excludes a variant from qualification work.
 If neither variant is eligible, the complete diagnostic calibration remains available and `freeze` refuses authorization.

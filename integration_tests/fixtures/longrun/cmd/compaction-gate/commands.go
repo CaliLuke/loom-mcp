@@ -14,6 +14,7 @@ import (
 	"example.com/longrun"
 	"example.com/longrun/fake"
 	suite "example.com/longrun/gate"
+	"example.com/longrun/internal/calibrationprogress"
 	"example.com/longrun/scenarios"
 	"github.com/CaliLuke/loom-mcp/v2/agenttest"
 	"github.com/CaliLuke/loom-mcp/v2/eval"
@@ -90,7 +91,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	case "validate":
 		result, err = validate(ctx, o, stderr)
 	case "calibrate":
-		err = calibrate(ctx, o)
+		err = calibrate(ctx, o, stderr)
 	case "freeze":
 		result, err = freeze(ctx, o)
 	case "pilot", "look", "report":
@@ -150,7 +151,10 @@ func validate(ctx context.Context, o options, progress io.Writer) (suite.Validat
 	}
 	return v, errors.Join(runErr, suite.WriteValidation(o.dir, v))
 }
-func calibrate(ctx context.Context, o options) error {
+func calibrate(ctx context.Context, o options, output io.Writer) (runErr error) {
+	progress := calibrationprogress.Start(ctx, output)
+	defer func() { runErr = progress.Close(runErr) }()
+	ctx = gate.WithCalibrationProgress(progress.Context(), progress.Observe)
 	if o.config != "offline" && o.pilot == "" {
 		return fmt.Errorf("live calibration requires a complete --pilot")
 	}
@@ -200,7 +204,7 @@ func calibrate(ctx context.Context, o options) error {
 			return err
 		}
 	}
-	return suite.Calibrate(ctx, o.dir, o.config, cfg, pilot)
+	return suite.Calibrate(ctx, o.dir, o.config, cfg, pilot, progress.Phase)
 }
 func freeze(ctx context.Context, o options) (gate.Freeze, error) {
 	f, err := suite.BuildVerifiedFreeze(ctx, o.dir, o.config, o.inventory)

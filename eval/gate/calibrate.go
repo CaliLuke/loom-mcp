@@ -49,20 +49,18 @@ func calibrate(ctx context.Context, cfg CalibrationConfig, cells []Cell, count i
 	for _, s := range cfg.Gate.Scenarios {
 		out.Baselines[s] = baselineRates(cfg, s)
 	}
+	ctx = startCalibrationProgress(ctx, []CalibrationConfig{cfg}, cells, count)
 	jobs := make(chan int)
 	errs := make([]error, len(cells))
 	var wg sync.WaitGroup
 	for range max(1, cfg.Workers) {
 		wg.Go(func() {
 			for i := range jobs {
-				n := count
-				if n == 0 {
-					n = 400
-					if calibrationDecisionCell(cells[i], cfg.Gate.Policy) {
-						n = 2000
-					}
-				}
+				n := calibrationSimulationCount(cfg, cells[i], count)
 				out.Cells[i], errs[i] = simulateCell(ctx, cfg, cells[i], n, eval)
+				if errs[i] == nil {
+					advanceCalibrationProgress(ctx, 1, 0)
+				}
 			}
 		})
 	}
@@ -100,6 +98,7 @@ func simulateCell(ctx context.Context, cfg CalibrationConfig, c Cell, n int, eva
 		if err := simulateLooks(table, cfg.Gate, &out, eval); err != nil {
 			return out, err
 		}
+		advanceCalibrationProgress(ctx, 0, 1)
 	}
 	normalizeCell(&out, float64(n))
 	return out, nil

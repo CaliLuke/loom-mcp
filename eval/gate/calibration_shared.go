@@ -44,6 +44,7 @@ func simulateCandidateCell(ctx context.Context, configs []CalibrationConfig, cel
 				}
 			}
 		}
+		advanceCalibrationProgress(ctx, 0, 1)
 	}
 	for i := range reports {
 		normalizeCell(&reports[i], float64(counts[i]))
@@ -69,6 +70,7 @@ func calibrateCandidates(ctx context.Context, cfg CalibrationConfig, cells []Cel
 		return nil, err
 	}
 	configs, output := prepareCandidateReports(cfg, len(cells))
+	ctx = startCalibrationProgress(ctx, configs, cells, count)
 	jobs := make(chan int)
 	errors := make([]error, len(cells))
 	var workers sync.WaitGroup
@@ -76,6 +78,9 @@ func calibrateCandidates(ctx context.Context, cfg CalibrationConfig, cells []Cel
 		workers.Go(func() {
 			for index := range jobs {
 				errors[index] = calibrateCandidateIndex(ctx, configs, output, cells[index], index, count, evaluate)
+				if errors[index] == nil {
+					advanceCalibrationProgress(ctx, 1, 0)
+				}
 			}
 		})
 	}
@@ -191,13 +196,7 @@ func prepareCandidateReports(cfg CalibrationConfig, cells int) ([]CalibrationCon
 func calibrateCandidateIndex(ctx context.Context, configs []CalibrationConfig, output []CandidateReport, cell Cell, index, count int, evaluate evaluator) error {
 	counts := make([]int, len(configs))
 	for i, candidate := range configs {
-		counts[i] = count
-		if count == 0 {
-			counts[i] = 400
-			if calibrationDecisionCell(cell, candidate.Gate.Policy) {
-				counts[i] = 2000
-			}
-		}
+		counts[i] = calibrationSimulationCount(candidate, cell, count)
 	}
 	reports, err := simulateCandidateCell(ctx, configs, cell, counts, evaluate)
 	if err == nil {

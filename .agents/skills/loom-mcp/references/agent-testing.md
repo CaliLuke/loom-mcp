@@ -260,3 +260,24 @@ Run the child agent directly to test its responder flow. There is no Temporal ha
 - Regenerate generated agents with make regen-longrun-fixture. Never hand-edit
   pools or generated files. Keep dry structural proof separate from calibration
   eligibility and live qualification. The shipped qualification table stays empty.
+
+### Calibration progress
+
+The calibration CLI emits phase changes and a 30-second stderr heartbeat with
+cell/simulation counts, elapsed time, throughput and an explicitly approximate
+phase ETA. Shared candidate populations count once; infeasible cells add no
+simulations. Progress advances within cells and does not enter deterministic
+artifacts or stdout. Completion follows successful evidence verification and
+artifact writes. `gate.WithCalibrationProgress` provides serialized per-call
+library observations without adding observer state to evidence configuration.
+
+The retained offline evidence belongs to commit
+88eabc2283bc4d790e81cde84348737aae8212ef and source
+f6aef6fe246341995996075bcdef03dc60040c6fe8c5c607dd8dc50bf3eacafd.
+Both variants are ineligible. It is historical diagnostic evidence, not current
+source authorization. The artifact test verifies exact retained bytes and the
+original verifier in a temporary local checkout; current code reproduces both
+full-bootstrap check cells and tests progress equivalence. No new full grid or
+qualification is claimed. Keep production source matching strict: changed code
+refuses historical calibration/freeze/pilot/look inputs before opening stores.
+Future qualification requires fresh source-bound validation and calibration.
