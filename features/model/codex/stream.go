@@ -211,7 +211,7 @@ func (s *codexStreamer) Recv() (model.Chunk, error) { //nolint:gocyclo,maintidx 
 		return nil, io.EOF
 	}
 	if s.state.terminal {
-		s.response = s.builder.Response()
+		s.response = s.terminalResponse()
 		s.eof = true
 		return nil, io.EOF
 	}
@@ -257,7 +257,7 @@ func (s *codexStreamer) Recv() (model.Chunk, error) { //nolint:gocyclo,maintidx 
 			return chunk, nil
 		}
 		if s.state.terminal {
-			s.response = s.builder.Response()
+			s.response = s.terminalResponse()
 			s.eof = true
 			return nil, io.EOF
 		}

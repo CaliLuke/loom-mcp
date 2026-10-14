@@ -6484,3 +6484,8 @@ schedule, including start and resume time-budget finalization.
 Continuation carry removes reasoning-only message containers after stripping
 reasoning. It retains canonical entry provenance and original source evidence;
 remaining text and tool calls keep their order without empty provider messages.
+
+Codex streaming presents text deltas immediately, but its terminal response
+reconstructs each completed provider message as one message. Delta boundaries
+do not become replay-message boundaries. Distinct output items remain separate;
+reasoning indexes and encrypted bytes, tools, and usage retain their stream contract.

@@ -978,3 +978,5 @@ preserve the previous head, and stores lacking continuation support start fresh.
 Both backend corpora contain ten v19 histories and reject v18/future/missing inputs
 before effects. Structural templates stay 5. Retired policy APIs have no aliases; use Context and registered ContextModel.
 No production qualifications or live-provider gates are introduced here.
+
+- Codex terminal responses must retain completed provider message boundaries. Never replay individual streaming text deltas as separate assistant messages.
