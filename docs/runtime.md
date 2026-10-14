@@ -6489,3 +6489,7 @@ Codex streaming presents text deltas immediately, but its terminal response
 reconstructs each completed provider message as one message. Delta boundaries
 do not become replay-message boundaries. Distinct output items remain separate;
 reasoning indexes and encrypted bytes, tools, and usage retain their stream contract.
+
+The Codex adapter defaults to compatibility revision `0.162.1`, validated with
+`gpt-6-luna`. Older revision headers can reject newer catalog models. An explicit
+`ClientVersion` still overrides the default. Model availability remains account-specific.

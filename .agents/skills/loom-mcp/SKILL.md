@@ -980,3 +980,5 @@ before effects. Structural templates stay 5. Retired policy APIs have no aliases
 No production qualifications or live-provider gates are introduced here.
 
 - Codex terminal responses must retain completed provider message boundaries. Never replay individual streaming text deltas as separate assistant messages.
+
+- Codex defaults to client compatibility revision `0.162.1` (live-validated with `gpt-6-luna`). Treat a catalog model rejection as potentially revision-dependent; use the supported `ClientVersion` option only with verified compatibility.

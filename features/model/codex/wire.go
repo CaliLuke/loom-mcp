@@ -6,7 +6,7 @@ const (
 	codexProvider         = "codex"
 	codexResponsesURL     = "https://chatgpt.com/backend-api/codex/responses"
 	codexResponsesWSURL   = "wss://chatgpt.com/backend-api/codex/responses"
-	defaultClientVersion  = "0.144.1"
+	defaultClientVersion  = "0.162.1"
 	defaultIdleTimeout    = 5 * time.Minute
 	maxStreamEventBytes   = 16 << 20
 	maxHTTPErrorBodyBytes = 64 << 10
