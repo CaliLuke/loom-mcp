@@ -68,6 +68,8 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 
 ## Current Product Rules
 
+- Transcript projection must never fabricate signed or encrypted reasoning. Unsigned thinking is presentation-only; replay genuine provider bytes unchanged.
+
 - Every workflow-code change must bump `api.WorkflowProtocolVersion` and add a
   recorded-history replay test. Drain running workflows before deploying the
   new version; mismatched and unstamped inputs fail before workflow effects.

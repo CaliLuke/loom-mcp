@@ -279,7 +279,7 @@ func TestPlannerContextModelClientAndConsumeStreamDoNotDuplicateTranscriptOrUsag
 	require.Equal(t, expectedUsage, out.Usage)
 	require.Len(t, testStoredTranscript(t, rt, out, "root"), 1)
 	require.Equal(t, "hello", agentMessageText(testStoredTranscript(t, rt, out, "root")[0]))
-	require.Len(t, testStoredTranscript(t, rt, out, "root")[0].Parts, 2)
+	require.Len(t, testStoredTranscript(t, rt, out, "root")[0].Parts, 1)
 	var textParts, thinkingParts int
 	for _, part := range testStoredTranscript(t, rt, out, "root")[0].Parts {
 		switch part.(type) {
@@ -290,7 +290,7 @@ func TestPlannerContextModelClientAndConsumeStreamDoNotDuplicateTranscriptOrUsag
 		}
 	}
 	require.Equal(t, 1, textParts)
-	require.Equal(t, 1, thinkingParts)
+	require.Zero(t, thinkingParts, "unsigned thinking must not become invented replay ciphertext")
 	require.Equal(t, 1, inner.closeCalls)
 }
 

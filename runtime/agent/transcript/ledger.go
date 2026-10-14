@@ -417,28 +417,16 @@ func buildModelMessage(m Message) *model.Message {
 		Parts: make([]model.Part, 0, len(m.Parts)),
 		Meta:  m.Meta,
 	}
-	hadThinking, emittedThinking := appendLedgerParts(msg, m.Parts)
-	if hadThinking && !emittedThinking {
-		msg.Parts = append([]model.Part{redactedThinkingPart()}, msg.Parts...)
+	for _, part := range m.Parts {
+		appendLedgerPart(msg, part)
 	}
 	return msg
 }
 
-func appendLedgerParts(msg *model.Message, parts []Part) (bool, bool) {
-	var hadThinking bool
-	var emittedThinking bool
-	for _, p := range parts {
-		had, emitted := appendLedgerPart(msg, p)
-		hadThinking = hadThinking || had
-		emittedThinking = emittedThinking || emitted
-	}
-	return hadThinking, emittedThinking
-}
-
-func appendLedgerPart(msg *model.Message, p Part) (bool, bool) {
+func appendLedgerPart(msg *model.Message, p Part) {
 	switch v := p.(type) {
 	case ThinkingPart:
-		return true, appendLedgerThinkingPart(msg, v)
+		appendLedgerThinkingPart(msg, v)
 	case TextPart:
 		msg.Parts = append(msg.Parts, model.TextPart{Text: v.Text})
 	case CitationsPart:
@@ -448,17 +436,16 @@ func appendLedgerPart(msg *model.Message, p Part) (bool, bool) {
 	case ToolResultPart:
 		msg.Parts = append(msg.Parts, model.ToolResultPart{ToolUseID: v.ToolUseID, Content: v.Content, IsError: v.IsError})
 	}
-	return false, false
 }
 
-func appendLedgerThinkingPart(msg *model.Message, v ThinkingPart) bool {
+func appendLedgerThinkingPart(msg *model.Message, v ThinkingPart) {
 	if len(v.Redacted) > 0 {
 		msg.Parts = append(msg.Parts, model.ThinkingPart{
 			Redacted: append([]byte(nil), v.Redacted...),
 			Index:    v.Index,
 			Final:    v.Final,
 		})
-		return true
+		return
 	}
 	if v.Text != "" && v.Signature != "" {
 		msg.Parts = append(msg.Parts, model.ThinkingPart{
@@ -467,15 +454,7 @@ func appendLedgerThinkingPart(msg *model.Message, v ThinkingPart) bool {
 			Index:     v.Index,
 			Final:     v.Final,
 		})
-		return true
-	}
-	return false
-}
-
-func redactedThinkingPart() model.ThinkingPart {
-	return model.ThinkingPart{
-		Redacted: []byte("redacted"),
-		Final:    true,
+		return
 	}
 }
 

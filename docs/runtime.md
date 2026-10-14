@@ -1317,6 +1317,11 @@ Question and external-tool answers are full JSON tool results, and confirmation
 decisions appear as observed authorization steps.
 
 Record-derived model, tool and stored-answer steps have `Verified=true`.
+Transcript projection replays only provider-issued signed or encrypted reasoning.
+Unsigned thinking summaries remain presentation data. The runtime never fabricates
+reasoning ciphertext; a provider that requires signed thinking must reject a
+transcript when that required evidence is missing.
+
 Thinking, notes, retry hints, policy decisions, await prompts, phase changes,
 prompt-rendering events, confirmation decisions and completion status are observed
 fields. Set `EventsUnverified` whenever an application has a `BeforeEvent`

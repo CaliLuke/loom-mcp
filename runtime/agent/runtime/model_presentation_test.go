@@ -120,7 +120,7 @@ func TestModelPresentationStreamsLiveThenAcceptsCanonicalContent(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, out.Recovery)
 	require.True(t, out.Result.Streamed)
-	require.Len(t, testStoredTranscript(t, rt, out, "test-root"), 2)
+	require.Len(t, testStoredTranscript(t, rt, out, "test-root"), 1, "unsigned thinking remains presentation-only")
 
 	events := sink.snapshot()
 	require.Len(t, events, 5)

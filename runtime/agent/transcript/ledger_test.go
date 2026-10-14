@@ -220,44 +220,28 @@ func TestBuildMessagesFromEventsPreservesEveryToolResultInOrder(t *testing.T) {
 }
 
 func TestBuildMessages_ThinkingSignatureLost(t *testing.T) {
-	// When the Bedrock stream emits intermediate thinking (text only, no
-	// signature) and the final signature delta is lost, BuildMessages must
-	// still include a redacted ThinkingPart placeholder so the assistant
-	// message satisfies the thinking→content ordering contract.
 	l := NewLedger()
-	// Append intermediate thinking: text but no signature (simulates lost delta).
-	l.AppendThinking(ThinkingPart{Text: "let me think about this", Index: 0, Final: false})
+	l.AppendThinking(ThinkingPart{Text: "unsigned summary", Index: 0})
 	l.AppendText("calling tool")
 	l.DeclareToolUse("tu1", "search", map[string]any{"q": "test"})
 	l.FlushAssistant()
-	l.AppendUserToolResults([]ToolResultSpec{{
-		ToolUseID: "tu1",
-		Content:   map[string]any{"ok": true},
-	}})
+	l.AppendUserToolResults([]ToolResultSpec{{ToolUseID: "tu1", Content: map[string]any{"ok": true}}})
+	messages := l.BuildMessages()
+	require.Len(t, messages, 2)
+	require.Equal(t, []model.Part{model.TextPart{Text: "calling tool"}, model.ToolUsePart{ID: "tu1", Name: "search", Input: map[string]any{"q": "test"}}}, messages[0].Parts)
+	require.Error(t, ValidateBedrock(messages, true), "missing signed reasoning must not be disguised with invented ciphertext")
+}
 
-	msgs := l.BuildMessages()
-	if len(msgs) != 2 {
-		t.Fatalf("expected 2 messages, got %d", len(msgs))
-	}
-	// The assistant message must start with a redacted thinking placeholder.
-	asstMsg := msgs[0]
-	if asstMsg.Role != model.ConversationRoleAssistant {
-		t.Fatalf("first role = %s, want assistant", asstMsg.Role)
-	}
-	tp, ok := asstMsg.Parts[0].(model.ThinkingPart)
-	if !ok {
-		t.Fatalf("assistant first part should be ThinkingPart, got %T", asstMsg.Parts[0])
-	}
-	if len(tp.Redacted) == 0 {
-		t.Fatalf("expected redacted placeholder, got text=%q sig=%q", tp.Text, tp.Signature)
-	}
-	if !tp.Final {
-		t.Fatalf("expected Final=true on placeholder")
-	}
-	// Validate Bedrock should pass with the placeholder.
-	if err := ValidateBedrock(msgs, true); err != nil {
-		t.Fatalf("validate failed: %v", err)
-	}
+func TestBuildMessagesPreservesOnlyProviderIssuedReasoning(t *testing.T) {
+	l := NewLedger()
+	l.AppendThinking(ThinkingPart{Text: "presentation summary", Final: true})
+	l.FlushAssistant()
+	l.AppendThinking(ThinkingPart{Redacted: []byte("provider-encrypted-content"), Index: 1, Final: true})
+	l.DeclareToolUse("call", "search", map[string]any{})
+	l.FlushAssistant()
+	messages := l.BuildMessages()
+	require.Len(t, messages, 1)
+	require.Equal(t, []model.Part{model.ThinkingPart{Redacted: []byte("provider-encrypted-content"), Index: 1, Final: true}, model.ToolUsePart{ID: "call", Name: "search", Input: map[string]any{}}}, messages[0].Parts)
 }
 
 func TestBuildMessages_NoThinkingNoop(t *testing.T) {
