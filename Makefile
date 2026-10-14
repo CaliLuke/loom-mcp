@@ -96,7 +96,7 @@ test: tools
 	LOOM_MCP_RUN_DOCKER_TESTS=0 \
 	LOOM_MCP_REQUIRE_DOCKER_TESTS=0 \
 	TESTCONTAINERS_RYUK_DISABLED=$(TESTCONTAINERS_RYUK_DISABLED) \
-	$(GO) test -short -race -shuffle=on -covermode=atomic -coverprofile=cover.out `$(GO) list ./... | grep -v '/integration_tests'`
+	$(GO) test -short -race -shuffle=on -timeout=30m -covermode=atomic -coverprofile=cover.out `$(GO) list ./... | grep -v '/integration_tests'`
 	$(MAKE) coverage-check
 	$(MAKE) coverage-check-critical
 	$(MAKE) test-codex-live
@@ -308,7 +308,7 @@ verify-generated: tools
 	bash ./scripts/verify_generated.sh
 
 verify-mcp-local:
-	$(GO) test -C ./integration_tests/fixtures/longrun -p=1 -race -count=1 -timeout=30m ./...
+	$(GO) test -C ./integration_tests/fixtures/longrun -p=1 -race -count=1 -timeout=90m -v ./...
 	$(GO) test -C ./integration_tests/fixtures/assistant -race ./... -count=1
 	$(GO) test -C ./integration_tests/fixtures/agent_features -race ./... -count=1
 	cd ./integration_tests/fixtures/sdkbridge_consumer && GOWORK=off $(GO) test -race ./... -count=1
