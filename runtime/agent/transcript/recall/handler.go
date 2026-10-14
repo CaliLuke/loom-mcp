@@ -48,6 +48,7 @@ type (
 		NextOffset  *int                          `json:"next_offset,omitzero"`
 		Entries     []Line                        `json:"entries,omitzero"`
 		Matches     []Match                       `json:"matches,omitzero"`
+		ReadHint    string                        `json:"read_hint,omitzero"`
 		Cursor      string                        `json:"cursor,omitzero"`
 		Format      string                        `json:"format,omitzero"`
 		Bytes       int                           `json:"bytes,omitzero"`
@@ -61,13 +62,14 @@ type (
 		Bytes int    `json:"bytes,omitzero"`
 		Error bool   `json:"error,omitzero"`
 	}
-	// Match locates literal eligible text by read part and original byte offset.
+	// Match locates literal eligible text and its bounded surrounding excerpt.
 	Match struct {
-		ID      string `json:"id"`
-		Part    Part   `json:"part"`
-		Run     string `json:"run,omitzero"`
-		Offset  int    `json:"offset"`
-		Snippet string `json:"snippet"`
+		ID            string `json:"id"`
+		Part          Part   `json:"part"`
+		Run           string `json:"run,omitzero"`
+		Offset        int    `json:"offset"`
+		SnippetOffset int    `json:"snippet_offset"`
+		Snippet       string `json:"snippet"`
 	}
 	callReader struct {
 		handler   Handler

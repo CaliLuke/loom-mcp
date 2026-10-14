@@ -1333,7 +1333,14 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   no rN resolution until K18.
 - Read pages are max(512, ProtectRecentToolTokens) bytes with UTF-8 offsets;
   find scans 8 MB/ten matches with 160-byte snippets. Each match includes its
-  read part (result or arguments); read with the returned id, run, part and offset.
+  read part (result or arguments), exact match offset and snippet_offset. Snippets
+  include up to 64 preceding bytes while reserving room for a literal that fits;
+  longer literals retain a bounded leading excerpt. Boundaries are UTF-8 aligned.
+  Read with returned id/run/part and offset=snippet_offset for surrounding evidence;
+  follow next_offset or read earlier offsets as needed. An absent snippet fact is
+  not proof of absence from the source. Nonempty find results include read_hint
+  with this guidance; tool definitions and workflow commands are unchanged.
+  Excerpt bounds never move scan cursors.
   Find cursors anchor to run, immutable entry, text/call chunk and byte offset,
   so compaction cannot shift continuation. Start a fresh search for newly hidden
   content ahead of the anchor. Invalid anchors and legacy unanchored find cursors

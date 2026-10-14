@@ -4,6 +4,7 @@ import (
 	"context"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 )
@@ -167,7 +168,8 @@ func (scan *findScan) append(chunk scanText, needle string) bool {
 		hit := strings.Index(chunk.text[offset:end], needle)
 		if hit >= 0 {
 			hit += offset
-			scan.response.Matches = append(scan.response.Matches, Match{ID: chunk.id, Run: chunk.run, Part: chunk.part, Offset: hit, Snippet: chunk.text[hit:snap(chunk.text, min(hit+160, len(chunk.text)))]})
+			scan.response.Matches = append(scan.response.Matches, contextualMatch(chunk, hit, len(needle)))
+			scan.response.ReadHint = "Snippets are partial excerpts. offset locates the exact match; snippet_offset locates the excerpt. For surrounding evidence, read id/run/part with offset=snippet_offset, then follow next_offset; read earlier offsets if needed. A fact missing from a snippet may still be in the source."
 			consumed := hit + len(needle) - offset
 			scan.scanned += consumed
 			offset += consumed
@@ -192,6 +194,18 @@ func (scan *findScan) append(chunk scanText, needle string) bool {
 	}
 	scan.position = 0
 	return false
+}
+
+// contextualMatch retains preceding evidence without displacing a literal that
+// fits the snippet. Match and scan offsets remain independent of excerpt bounds.
+func contextualMatch(chunk scanText, hit, literalBytes int) Match {
+	before := min(64, 160-min(literalBytes, 160))
+	start := max(0, hit-before)
+	for start < hit && !utf8.RuneStart(chunk.text[start]) {
+		start++
+	}
+	end := snap(chunk.text, min(start+160, len(chunk.text)))
+	return Match{ID: chunk.id, Run: chunk.run, Part: chunk.part, Offset: hit, SnippetOffset: start, Snippet: chunk.text[start:end]}
 }
 
 func (r *callReader) scanChunks(ctx context.Context, node recordNode, entry index.MessageEntry) ([]scanText, error) {

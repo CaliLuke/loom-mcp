@@ -6132,10 +6132,18 @@ boundaries. Follow next_offset. Find scans hidden eligible entries and results
 covered by `ClearedThrough`, `PreviewThrough` or `ForceClearThrough`, including
 recovery-projected results in the retained tail. It scans the current run then
 From runs, newest first, up to 8 MB or ten matches; each match contains id, run,
-part (`result` or `arguments`), original byte offset and a snippet of at most 160
-bytes. Read using the returned id, run, part and offset so argument matches
-retrieve arguments, while message and result matches retrieve their original
-text.
+part (`result` or `arguments`), original match byte offset, `snippet_offset` and
+a snippet of at most 160 bytes. The snippet includes up to 64 preceding bytes,
+reserving space for the complete literal when it fits. Longer literals retain
+a bounded leading excerpt. Both snippet boundaries are UTF-8 aligned.
+Read using the returned id, run, part and `offset=snippet_offset` to include
+surrounding evidence; `offset` itself still locates the exact match. Follow
+`next_offset` for subsequent pages, or read an earlier offset for more preceding
+context. A snippet is partial evidence: a fact absent from it may still exist
+in the original source. Argument matches retrieve arguments, while message and
+result matches retrieve their original text. Snippet bounds do not alter search
+cursor positions or allowances. Nonempty find responses include `read_hint` with
+this guidance. Tool definitions and workflow commands remain unchanged.
 
 Follow the same literal selector with its cursor. Find cursors anchor to a run,
 immutable entry, text/call chunk and byte offset within that chunk. Compaction
