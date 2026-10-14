@@ -6480,3 +6480,7 @@ wrapper. Seal inputs carry only the optional continuation projection, with no
 duplicate index head or pending entries. Ordinary agents retain their prior seal
 payload. Overflow attempts retain adopted usage when an expired retry cannot
 schedule, including start and resume time-budget finalization.
+
+Continuation carry removes reasoning-only message containers after stripping
+reasoning. It retains canonical entry provenance and original source evidence;
+remaining text and tool calls keep their order without empty provider messages.

@@ -97,3 +97,29 @@ func TestContinuationWriterMeasurements(t *testing.T) {
 	require.Len(t, entries, 1)
 	assert.Equal(t, 5, entries[0].Bytes)
 }
+
+func TestContinuationReasoningOnlyMessagesDoNotReachProvider(t *testing.T) {
+	for _, parts := range [][]model.Part{nil, {model.TextPart{Text: "answer"}}, {model.ToolUsePart{ID: "call", Name: "tool", Input: map[string]any{}}}} {
+		rt := New()
+		messages := []*model.Message{{Role: model.ConversationRoleAssistant, Parts: []model.Part{model.ThinkingPart{Redacted: []byte("provider-issued")}}}}
+		if len(parts) > 0 {
+			messages = append(messages, &model.Message{Role: model.ConversationRoleAssistant, Parts: parts})
+		}
+		plan, err := continuation.Carry([]continuation.Entry{{Entry: index.MessageEntry{ID: 1, Kind: index.Assistant, Role: model.ConversationRoleAssistant}, Messages: messages}}, index.ViewRef{}, 10000, 100)
+		require.NoError(t, err)
+		require.Len(t, plan.Tail, 1)
+		carried, err := rt.storeCarried(t.Context(), &api.SealRecordInput{RootRunID: "run", RunID: "run", Pos: 1}, plan.Tail[0])
+		require.NoError(t, err)
+		rendered, err := index.Render(t.Context(), []index.MessageEntry{carried.Entry}, func(ctx context.Context, h runstore.Hash) ([]byte, error) {
+			return rt.RunStore.Get(ctx, "run", h)
+		})
+		require.NoError(t, err)
+		if len(parts) == 0 {
+			assert.Empty(t, rendered)
+		} else {
+			require.Len(t, rendered, 1)
+			assert.Equal(t, parts, rendered[0].Parts)
+		}
+		assert.Len(t, messages[0].Parts, 1)
+	}
+}

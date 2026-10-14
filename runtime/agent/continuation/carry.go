@@ -116,6 +116,7 @@ func dropUncarriedParts(entry *Entry) {
 		projection.Parts = ""
 		entry.Entry.Result = &projection
 	}
+	retained := entry.Messages[:0]
 	for _, message := range entry.Messages {
 		parts := make([]model.Part, 0, len(message.Parts))
 		for number, part := range message.Parts {
@@ -137,7 +138,11 @@ func dropUncarriedParts(entry *Entry) {
 		}
 		message.Parts = parts
 		message.Meta = nil
+		if len(parts) > 0 {
+			retained = append(retained, message)
+		}
 	}
+	entry.Messages = retained
 }
 
 func prepareCarry(entries []Entry, view index.ViewRef) (Plan, []index.MessageEntry, error) {
