@@ -15,11 +15,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCommittedPoolsReproduce(t *testing.T) {
+func TestK19cImmutablePools(t *testing.T) {
 	root, err := os.OpenRoot("../testdata/pools")
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, root.Close()) })
-	data, err := os.ReadFile("../gate/freeze_default.json")
+	archives, err := filepath.Glob("../gate/archive/v1/offline/*/freeze_default.json")
+	require.NoError(t, err)
+	require.Len(t, archives, 1)
+	archiveRoot, err := os.OpenRoot(filepath.Dir(archives[0]))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, archiveRoot.Close()) })
+	data, err := archiveRoot.ReadFile("freeze_default.json")
 	require.NoError(t, err)
 	var frozen gate.Freeze
 	require.NoError(t, json.Unmarshal(data, &frozen))

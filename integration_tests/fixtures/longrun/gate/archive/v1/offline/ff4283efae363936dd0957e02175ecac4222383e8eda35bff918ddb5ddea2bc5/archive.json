@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "configuration": "offline",
+  "freeze_sha256": "ff4283efae363936dd0957e02175ecac4222383e8eda35bff918ddb5ddea2bc5",
+  "inventory_sha256": "6de5f2ce6b4358b3ff6349740f9810146978b30ccc8583da77fbe753de92df79",
+  "original_revision": "8d30b51d118fa7b408827ba03574865043eaee2c",
+  "original_dirty": true,
+  "retained_revision": "1d5373721058f8df787bc795dc37a98b315a2178",
+  "files": {
+    "calibration_default.json": "ad168a13eca73b81b8ced49b14f0b80e9d4b5894f6036a52bf2befd46261c4d5",
+    "calibration_default.txt": "b3db2cb6bbbe730b51383b519d84c5c473f6112ded7bdeb86c40e84b7e21629f",
+    "freeze_default.json": "5933238b4465476a1ad62d23949a81830677b16733b54d37413e012af612388d",
+    "freeze_default.sha256": "08d107462b684c55278e0dc2344beb1dea806d676970e4c167ddd8e3f5408ace",
+    "validation.json": "72e183159e216a131f733797c8de74653d900ef27815d8815417a87721f1ee5c"
+  },
+  "explanation": "Historical v1 evidence is not a v2 qualification. Reproduce its verification using the retained source commit; archived pools remain locked."
+}

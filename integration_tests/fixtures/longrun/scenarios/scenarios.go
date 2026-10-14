@@ -81,9 +81,6 @@ func ContextFor(id string) ScenarioContext {
 	if id == "recall_pressure" {
 		settings = ScenarioContext{PretendWindow: 8000, RecallDiscoveryCalls: 3, RecallReadCalls: 3}
 	}
-	if strings.HasPrefix(id, "multimodal_") {
-		settings.ProtectRecentToolTokens = 2000
-	}
 	return settings
 }
 

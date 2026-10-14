@@ -201,7 +201,7 @@ func newReport(cfg Config, plan []plannedAttempt) *Report {
 		variants[i].Policy = clonePolicy(variants[i].Policy)
 		variants[i].Options = slices.Clone(variants[i].Options)
 	}
-	r := &Report{Variants: variants, Selection: Selection{Variants: slices.Clone(cfg.Select.Variants), Scenarios: slices.Clone(cfg.Select.Scenarios), Tags: slices.Clone(cfg.Select.Tags), Items: slices.Clone(cfg.Select.Items)}, Repeats: cfg.Repeats, Concurrency: cfg.Concurrency, MaxTokens: cfg.MaxTokens, Started: time.Now(), Attempts: make([]*AttemptRecord, len(plan))}
+	r := &Report{Variants: variants, Selection: Selection{Variants: slices.Clone(cfg.Select.Variants), Scenarios: slices.Clone(cfg.Select.Scenarios), Tags: slices.Clone(cfg.Select.Tags), Items: slices.Clone(cfg.Select.Items), Keys: slices.Clone(cfg.Select.Keys)}, Repeats: cfg.Repeats, Concurrency: cfg.Concurrency, MaxTokens: cfg.MaxTokens, Started: time.Now(), Attempts: make([]*AttemptRecord, len(plan))}
 	if r.Repeats == 0 {
 		r.Repeats = 1
 	}

@@ -47,8 +47,6 @@ var _ = Service("longrun", func() {
 				RunPolicy(func() {
 					DefaultCaps(MaxToolCalls(300), MaxRecoveryTurns(10))
 					Context(func() {
-						TriggerAt(0.5)
-						KeepRecentTokens(1000)
 						if suffix != "_nosum" {
 							Summarize(func() {
 								instructions := "Keep planted key = value lines verbatim in order. Later corrections override earlier values."

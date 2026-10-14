@@ -1,6 +1,7 @@
 package suite
 
 import (
+	"context"
 	"encoding/json"
 	jsonv2 "encoding/json/v2"
 	"fmt"
@@ -8,37 +9,14 @@ import (
 	"reflect"
 	"slices"
 	"strings"
-	"time"
 
 	"example.com/longrun/env"
 	"example.com/longrun/scenarios"
-	"github.com/CaliLuke/loom-mcp/v2/eval"
 	"github.com/CaliLuke/loom-mcp/v2/eval/gate"
 )
 
 // BootstrapSeed is fixed before calibration and all held-out looks.
 const BootstrapSeed uint64 = 190017
-
-// BuildFreeze binds the exact input bytes and assumed-rate calibration.
-func BuildFreeze(dir, config string, calibration []byte, source eval.VCS) (gate.Freeze, error) {
-	_, pools, err := Inputs(dir)
-	if err != nil {
-		return gate.Freeze{}, err
-	}
-	policies := map[string]json.RawMessage{}
-	for _, v := range scenarios.Variants() {
-		b, err := jsonv2.Marshal(v.Policy, jsonv2.Deterministic(true))
-		if err != nil {
-			return gate.Freeze{}, err
-		}
-		policies[v.ID] = b
-	}
-	contexts, err := scenarioContexts(config)
-	if err != nil {
-		return gate.Freeze{}, err
-	}
-	return gate.Freeze{ScenarioContexts: contexts, Dirty: source.Modified, Format: gate.FreezeFormat, Version: 1, Configuration: config, Margins: gate.DefaultMargins(), Alpha: .05, Looks: []int{12, 24, 48}, Repeats: 2, Bootstrap: gate.Bootstrap{Resamples: 10000, Seed: BootstrapSeed}, Guard: -.10, GatedScenarios: env.GatedScenarios(config), ReportedScenarios: env.ReportedScenarios(), Policies: policies, Pools: pools, MaterializerVersion: env.MaterializerVersion, CalibrationSHA256: gate.Digest(calibration), SimulatorVersion: gate.SimulatorVersion, GitRevision: source.Revision, Created: time.Now().UTC()}, nil
-}
 
 // WriteFreeze persists a write-once contract and a separate trusted hash sidecar.
 func WriteFreeze(dir string, f gate.Freeze) error {
@@ -68,23 +46,33 @@ func VerifyFreeze(dir, config string) (gate.Freeze, error) {
 	if err := json.Unmarshal(data, &f); err != nil {
 		return f, err
 	}
+	if f.Version != 2 {
+		return f, fmt.Errorf("historical freeze v1 cannot authorize v2 work; use its retained source")
+	}
 	hash, err := readFile(dir, filepath.Join("gate", strings.TrimSuffix(filepath.Base(path), ".json")+".sha256"))
 	if err != nil {
 		return f, err
 	}
-	in, _, err := Inputs(dir)
+	evidence, err := readFreezeEvidence(context.Background(), dir, config)
 	if err != nil {
 		return f, err
 	}
-	if err := f.Verify(strings.TrimSpace(string(hash)), in); err != nil {
-		return f, err
-	}
-	calibration, err := readFile(dir, filepath.Join("gate", filepath.Base(CalibrationPath(dir, config))))
+	return verifyFreezeEvidence(f, strings.TrimSpace(string(hash)), evidence, config)
+}
+
+func verifyFreezeEvidence(f gate.Freeze, hash string, evidence freezeEvidence, config string) (gate.Freeze, error) {
+	expected, err := buildEvidenceFreeze(config, evidence)
 	if err != nil {
 		return f, err
 	}
-	if gate.Digest(calibration) != f.CalibrationSHA256 {
-		return f, fmt.Errorf("calibration report hash mismatch")
+	if !reflect.DeepEqual(f.Policy, expected.Policy) {
+		return f, fmt.Errorf("freeze policy differs from selected calibration")
+	}
+	if err := f.Verify(hash, evidence.inputs); err != nil {
+		return f, err
+	}
+	if !reflect.DeepEqual(f.Pools, evidence.pools) || !reflect.DeepEqual(f.Selections, evidence.calibration.Selections) {
+		return f, fmt.Errorf("freeze omits pools or changes selected calibration evidence")
 	}
 	if f.Configuration != config {
 		return f, fmt.Errorf("freeze configuration mismatch")

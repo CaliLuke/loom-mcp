@@ -40,7 +40,7 @@ func TestQualificationRequiresCommittedEvidence(t *testing.T) {
 // Attestations bind the canonical Freeze.Hash and raw calibration/report hashes.
 // Stored reports use gate/report_<config>.json; gate/evidence_<config> contains
 // the existing eval store layout. Verify a temporary copy: eval.Open initializes
-// store metadata. K19c must resync these checks with its versioned gate contract.
+// store metadata. V2 qualification belongs to the selected variant, independently of siblings.
 func verifyQualificationEvidence(t *testing.T, dir string, q compaction.Qualification) error {
 	t.Helper()
 	if q.Config == "" || q.Config == "offline" || filepath.Base(q.Config) != q.Config || len(q.Models) == 0 || (q.Tier != compaction.Evict && q.Tier != compaction.Summary) {
@@ -90,7 +90,7 @@ func verifyQualificationEvidence(t *testing.T, dir string, q compaction.Qualific
 	if err != nil {
 		return err
 	}
-	if !reflect.DeepEqual(committed, verified) || len(verified.Decisions) == 0 || verified.Decisions[len(verified.Decisions)-1].Status != gate.Pass {
+	if !reflect.DeepEqual(committed, verified) || !qualifiedVariantPassed(verified.Decisions, q.Tier) {
 		return fmt.Errorf("qualification requires matching verified PASS report")
 	}
 	return verifyQualificationModels(root, q, freeze, store)
@@ -150,4 +150,36 @@ func collectQualificationModels(record *runrecord.RunRecord, config string, obse
 		}
 	}
 	return nil
+}
+
+// qualifiedVariantPassed reads only the requested tier's retained terminal evidence.
+func qualifiedVariantPassed(decisions []gate.Decision, tier compaction.Tier) bool {
+	if len(decisions) == 0 {
+		return false
+	}
+	variant := "receipt_only"
+	if tier == compaction.Summary {
+		variant = "hybrid"
+	} else if tier != compaction.Evict {
+		return false
+	}
+	for _, decision := range decisions[len(decisions)-1].Variants {
+		if decision.Variant == variant {
+			return decision.Status == gate.Pass
+		}
+	}
+	return false
+}
+
+func TestQualificationUsesIndividualVariantPass(t *testing.T) {
+	for _, sibling := range []gate.Status{gate.Fail, gate.Incomplete, gate.Continue, gate.CalibrationIneligible} {
+		decisions := []gate.Decision{{Status: gate.Complete, Variants: []gate.VariantDecision{
+			{Variant: "receipt_only", Status: gate.Pass},
+			{Variant: "hybrid", Status: sibling},
+		}}}
+		require.True(t, qualifiedVariantPassed(decisions, compaction.Evict))
+		require.False(t, qualifiedVariantPassed(decisions, compaction.Summary))
+	}
+	require.False(t, qualifiedVariantPassed(nil, compaction.Evict))
+	require.False(t, qualifiedVariantPassed([]gate.Decision{{Status: gate.Pass}}, compaction.Summary))
 }

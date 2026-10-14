@@ -11,7 +11,10 @@ import (
 )
 
 // Summariser retains planted facts in order within the declared output budget.
-type Summariser struct{ Faults Faults }
+type Summariser struct {
+	Faults  Faults
+	Profile *ModelProfile
+}
 
 // RejectOnTrigger decorates offline and live summarisers with deterministic rejection.
 type RejectOnTrigger struct{ Client model.Client }
@@ -36,7 +39,11 @@ func Reject(client model.Client) model.Client {
 	if value, ok := client.(model.ToolResultPartsInfo); ok {
 		parts = value
 	}
-	return model.WithCapabilitySet(RejectOnTrigger{Client: client}, model.Capabilities{Counter: counter, Info: info, ToolResultParts: parts})
+	var configuration model.ProviderConfigurationInfo
+	if value, ok := client.(model.ProviderConfigurationInfo); ok {
+		configuration = value
+	}
+	return model.WithCapabilitySet(RejectOnTrigger{Client: client}, model.Capabilities{Counter: counter, Info: info, ToolResultParts: parts, ProviderConfiguration: configuration})
 }
 
 // Complete returns the evidence lines that fit, or drops them under a fault.

@@ -1,17 +1,29 @@
-# Offline model attachment contract
+# Offline model profiles
 
-Reader and Summariser implement model.ToolResultPartsInfo for PNG and PDF byte
-uploads. model.NewClient and Reject preserve this capability for all three
-registered offline model IDs. No live provider capability is invented.
+Reader and Summariser use explicit configuration profiles on workflow protocol 19.
+Profiles bind raw and normalized model identities for all three roles.
+The fake constructors never create live providers.
+Unknown configurations and missing model identities fail before harness construction.
 
-Reader follows find with a text read at offset zero for asset locators. That
-page lists attachment descriptors with the original 1-based part index. Reader
-then requests part "attachment", index, offset zero, preserving the discovered
-message and run. It uses only the bytes returned in ToolResultPart.Parts.
-RequestText decodes those bytes through the same PNG/PDF decoder used for
-original caller inputs. It never reads the scoring specification or asset files.
+Anthropic and Bedrock Anthropic profiles declare their attachment support.
+OpenAI and Gemini profiles declare no non-text tool-result support.
+The offline profile supports PNG and PDF bytes.
+`model.NewClient` and `Reject` preserve these capabilities.
 
-Multimodal scenarios allow 2,000 protected tool tokens because K22b charges 1,500
-for an image. Tests require both assets to be absent at the need point, recovered
-through recall, and used in the final action. Descriptor-only responses cannot
-satisfy the evidence classifier. The workflow protocol remains 18.
+Reader reads an asset descriptor at text offset zero, then requests the original attachment by its one-based part index.
+It uses only returned bytes and never reads the scoring specification.
+Descriptor-only responses cannot satisfy evidence scoring.
+Supporting profiles must recover both attachments through recall.
+Zero-support profiles must retain their evidence with one residency event and no threshold compactions.
+
+The fixture uses shipped compaction defaults with explicit non-text residency protection.
+There is no special 2,000-token retention allowance for multimodal scenarios.
+Named window and recall-pressure stresses remain in scenario configuration.
+Synthetic model windows are 1,000,000 tokens for planner, 128,000 for small planner, and 200,000 for summarizer.
+These windows preserve a smaller-model transition and accommodate the uncompacted baseline.
+Each actual baseline request must contain fewer than 128,000 input tokens.
+
+Materializer `k19c-v4` expands historical base workloads without changing raw pool files.
+Ordinary runs double the stored step count. Model-change runs quadruple it.
+This workload provides repeated compaction coverage under shipped defaults.
+The retained v1 source reproduces the old materialization.

@@ -23,15 +23,13 @@ type Table []Row
 
 // Config identifies the gated populations. Items, when supplied, is the complete
 // cumulative manifest; without it, the union of observed items defines the plan.
-// Alpha is family alpha (default .05), split across three looks. Production
-// bootstrap size is fixed at 10,000. Seed is the frozen bootstrap seed.
+// Policy is required and owns alpha, bootstrap identity and decision margins.
 type Config struct {
+	Policy              *Policy
 	Baseline            string
 	Variants, Scenarios []string
 	Items               map[string][]string
 	Repeats             int
-	Seed                uint64
-	Alpha               float64
 }
 
 // Interval is a point estimate and a two-sided confidence interval.
@@ -53,6 +51,9 @@ type RecallResult struct {
 
 // VariantResult holds all four criteria and scenario success differences.
 type VariantResult struct {
+	Missing                        []Key
+	GuardFailures                  []string
+	ScenarioIntervals              map[string]Interval
 	Variant                        string
 	Success, Unsupported, Evidence CriterionResult
 	Recall                         RecallResult
@@ -61,6 +62,8 @@ type VariantResult struct {
 
 // Evaluation contains one cumulative look's estimates and missing run keys.
 type Evaluation struct {
+	Policy        *Policy
+	Baseline      string
 	Look          int
 	Variants      []VariantResult
 	Missing       []Key
@@ -72,6 +75,8 @@ type Status string
 
 // Decision is the stopping result for a cumulative look.
 type Decision struct {
+	Policy       *Policy
+	Variants     []VariantDecision
 	Look         int
 	Status       Status
 	Reason       string

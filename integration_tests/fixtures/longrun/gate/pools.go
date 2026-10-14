@@ -24,8 +24,12 @@ func WriteItems(dir string, seed uint64) error {
 	if err != nil {
 		return err
 	}
+	archived, err := filepath.Glob(filepath.Join(dir, "gate/archive/v1/*/*/freeze_*.json"))
+	if err != nil {
+		return err
+	}
 	var frozen *gate.Freeze
-	if len(freezes) > 0 {
+	if len(freezes)+len(archived) > 0 {
 		frozen = &gate.Freeze{}
 	}
 	if err := gate.CanGenerateItems(frozen); err != nil {

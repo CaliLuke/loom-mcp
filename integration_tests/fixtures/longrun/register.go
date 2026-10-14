@@ -23,17 +23,21 @@ import (
 
 // Harness builds fresh clients and an isolated runtime for each attempt.
 func Harness(config string, faults fake.Faults) eval.HarnessFunc {
+	if config == "offline" {
+		profile, err := ResolveProfile(config)
+		if err != nil {
+			return func(context.Context, eval.Variant, ...agenttest.Option) (*agenttest.Harness, error) {
+				return nil, err
+			}
+		}
+		return ProfileHarness(profile, faults)
+	}
 	return func(ctx context.Context, _ eval.Variant, opts ...agenttest.Option) (*agenttest.Harness, error) {
 		opts = append(opts, agenttest.WithRunTimeout(2*time.Minute))
 		if config != "offline" {
 			for _, id := range []string{"planner", "planner_small", "summariser"} {
 				opts = append(opts, agenttest.LiveModel(id))
 			}
-		}
-		if config == "offline" {
-			opts = append(opts, agenttest.WithRuntimeOptions(runtime.WithContextLimits(map[string]model.ContextLimits{
-				"planner": {ContextWindow: 1000000}, "planner_small": {ContextWindow: 16000}, "summariser": {ContextWindow: 200000},
-			})))
 		}
 		return agenttest.NewHarness(ctx, func(ctx context.Context, rt *runtime.Runtime) error {
 			configuration, err := ProviderConfiguration(config, faults)

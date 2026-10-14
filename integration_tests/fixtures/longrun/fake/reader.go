@@ -19,7 +19,10 @@ import (
 type Faults struct{ NoRecall, Fabricate, DropFacts, PreferDecoy bool }
 
 // Reader follows NEXT and NEED directives using only the current model request.
-type Reader struct{ Faults Faults }
+type Reader struct {
+	Faults  Faults
+	Profile *ModelProfile
+}
 
 // Complete executes one deterministic model turn.
 func (r *Reader) Complete(ctx context.Context, req *model.Request) (*model.Response, error) {

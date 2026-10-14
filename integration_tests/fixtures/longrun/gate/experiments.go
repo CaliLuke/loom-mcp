@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -18,6 +19,9 @@ import (
 
 // Report is a reproducible stored-only evaluation plus informational costs.
 type Report struct {
+	// Variants presents the latest decisions, including ineligible siblings.
+	// Decisions remains the eligible-only prefix used by operational scheduling.
+	Variants    []gate.VariantDecision `json:"variants"`
 	Evaluations []gate.Evaluation      `json:"evaluations"`
 	Decisions   []gate.Decision        `json:"decisions"`
 	Diagnostics map[string]Diagnostics `json:"diagnostics"`
@@ -63,6 +67,11 @@ func reportLooks(dir, config string, store *eval.Store, f gate.Freeze, ids []str
 	var attempts []eval.StoredAttempt
 	for i, id := range ids {
 		look := i + 1
+		work, err := PlanLook(f.Policy, look, out.Decisions)
+		if err != nil {
+			return out, err
+		}
+		planInformational(out.Diagnostics, f, work)
 		current, err := Overlay(store, id, f, look)
 		if err != nil {
 			return out, err
@@ -77,8 +86,10 @@ func reportLooks(dir, config string, store *eval.Store, f gate.Freeze, ids []str
 		if err != nil {
 			return out, err
 		}
-		cfg := GateConfig(f.GatedScenarios)
-		cfg.Seed = f.Bootstrap.Seed
+		cfg := GateConfig(f.GatedScenarios, f.Policy)
+		cfg.Variants = slices.DeleteFunc(slices.Clone(work.Variants), func(id string) bool {
+			return id == "baseline" || id == "clear_only"
+		})
 		cfg.Items = manifest
 		evaluation, decision, err := Analyze(attempts, cfg, look, out.Decisions)
 		if err != nil {
@@ -88,7 +99,15 @@ func reportLooks(dir, config string, store *eval.Store, f gate.Freeze, ids []str
 		out.Decisions = append(out.Decisions, decision)
 	}
 	diagnostics, err := Describe(attempts)
-	out.Diagnostics = diagnostics
+	maps.Copy(out.Diagnostics, diagnostics)
+	if len(out.Decisions) > 0 {
+		out.Variants = slices.Clone(out.Decisions[len(out.Decisions)-1].Variants)
+	}
+	for _, selection := range f.Selections {
+		if selection.Status == gate.CalibrationIneligible {
+			out.Variants = append(out.Variants, gate.VariantDecision{Variant: selection.Variant, Status: selection.Status})
+		}
+	}
 	return out, err
 }
 
@@ -112,33 +131,23 @@ func Look(ctx context.Context, dir, config, binding string, store *eval.Store, l
 			return prior, err
 		}
 	}
-	var parent string
-	var selection eval.Selection
-	if look <= len(ids) {
-		d := prior.Decisions[look-1]
-		if d.Status != gate.Incomplete {
-			return prior, fmt.Errorf("look already decided: %s", d.Status)
-		}
+	work, err := PlanLook(f.Policy, look, prior.Decisions)
+	if err != nil {
+		return prior, err
+	}
+	parent := ""
+	selection := eval.Selection{Keys: work.Keys}
+	if work.Rerun {
 		parent = ids[look-1]
-		for _, key := range d.Rerun {
-			selection.Variants = append(selection.Variants, key.Variant)
-			selection.Items = append(selection.Items, key.Scenario+"/"+key.Item)
-		}
-		slices.Sort(selection.Variants)
-		selection.Variants = slices.Compact(selection.Variants)
-		slices.Sort(selection.Items)
-		selection.Items = slices.Compact(selection.Items)
-	} else if len(prior.Decisions) > 0 && prior.Decisions[len(prior.Decisions)-1].Status != gate.Continue {
-		return prior, fmt.Errorf("later look refused after %s", prior.Decisions[len(prior.Decisions)-1].Status)
 	}
 	ss, err := Scenarios(dir, config, fmt.Sprintf("look%d", look))
 	if err != nil {
 		return prior, err
 	}
 	variants := scenarios.Variants()
-	if look > 1 {
-		variants = slices.DeleteFunc(variants, func(v eval.Variant) bool { return v.ID == "clear_only" })
-	}
+	variants = slices.DeleteFunc(variants, func(v eval.Variant) bool {
+		return !slices.Contains(work.Variants, v.ID)
+	})
 	label, err := f.Label(look)
 	if err != nil {
 		return prior, err
@@ -161,9 +170,24 @@ func Look(ctx context.Context, dir, config, binding string, store *eval.Store, l
 	return out, errors.Join(runErr, reportErr)
 }
 
-// GateConfig returns the fixed paired criteria; callers must add the planned Items.
-func GateConfig(ids []string) gate.Config {
-	return gate.Config{Baseline: "baseline", Variants: []string{"receipt_only", "hybrid"}, Scenarios: slices.Clone(ids), Repeats: 2, Seed: BootstrapSeed, Alpha: .05}
+// GateConfig binds explicit policy; callers add the exact planned Items.
+func GateConfig(ids []string, policy *gate.Policy) gate.Config {
+	variants := []string{}
+	if policy != nil {
+		for _, id := range []string{"receipt_only", "hybrid"} {
+			if _, ok := policy.Unsupported[id]; ok {
+				variants = append(variants, id)
+			}
+		}
+	}
+	return gate.Config{Policy: policy, Baseline: "baseline", Variants: variants, Scenarios: slices.Clone(ids), Repeats: 2}
+}
+
+// ProposedOfflinePolicy supplies explicit unselected margins for offline proofs.
+// It never authorizes a qualifying look; those require a verified v2 freeze.
+func ProposedOfflinePolicy() *gate.Policy {
+	p := gate.ProposedPolicy(map[string]float64{"receipt_only": .02, "hybrid": .02}, BootstrapSeed)
+	return &p
 }
 func verifyAttempts(dir string, attempts []eval.StoredAttempt) error {
 	items := map[string]eval.Item{}

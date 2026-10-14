@@ -6,33 +6,36 @@ import (
 	"strings"
 )
 
-// Render produces a deterministic text report without conflating inconclusive
-// criteria with passing criteria. Missing keys are an exact rerun manifest.
-func Render(e Evaluation, d Decision) string {
+// Render reports scheduling separately from qualification, using each variant's
+// own immutable stopping snapshot. Missing keys are an exact rerun manifest.
+func Render(_ Evaluation, d Decision) string {
 	var out strings.Builder
-	out.WriteString(fmt.Sprintf("Look %d: %s\n", d.Look, d.Status))
-	if d.Reason != "" {
-		out.WriteString(d.Reason + "\n")
-	}
-	for _, v := range e.Variants {
+	fmt.Fprintf(&out, "Look %d scheduling: %s (COMPLETE is not qualification)\n", d.Look, d.Status)
+	for _, decision := range d.Variants {
+		v := decision.Evidence
+		fmt.Fprintf(&out, "%s: %s at look %d\n", decision.Variant, decision.Status, decision.Look)
+		if decision.Reason != "" {
+			out.WriteString(decision.Reason + "\n")
+		}
 		for _, c := range criteria(v) {
-			out.WriteString(fmt.Sprintf("%s/%s: %s estimate=%.6f interval=[%.6f, %.6f]\n", v.Variant, c.name, c.result.Status, c.result.Estimate, c.result.Lo, c.result.Hi))
+			fmt.Fprintf(&out, "%s/%s: %s estimate=%.6f interval=[%.6f, %.6f]\n", v.Variant, c.name, c.result.Status, c.result.Estimate, c.result.Lo, c.result.Hi)
 			if c.result.Reason != "" {
 				out.WriteString(c.result.Reason + "\n")
 			}
 		}
-		out.WriteString(fmt.Sprintf("%s/recall: n=%d effective_n=%.6f rho=%.6f deff=%.6f\n", v.Variant, v.Recall.N, v.Recall.EffectiveN, v.Recall.Rho, v.Recall.Deff))
-		names := make([]string, 0, len(v.Scenarios))
-		for s := range v.Scenarios {
-			names = append(names, s)
+		fmt.Fprintf(&out, "%s/recall: n=%d effective_n=%.6f rho=%.6f deff=%.6f\n", v.Variant, v.Recall.N, v.Recall.EffectiveN, v.Recall.Rho, v.Recall.Deff)
+		names := make([]string, 0, len(v.ScenarioIntervals))
+		for name := range v.ScenarioIntervals {
+			names = append(names, name)
 		}
 		slices.Sort(names)
-		for _, s := range names {
-			out.WriteString(fmt.Sprintf("%s/%s: success difference %.6f\n", v.Variant, s, v.Scenarios[s]))
+		for _, name := range names {
+			i := v.ScenarioIntervals[name]
+			fmt.Fprintf(&out, "%s/%s: success difference %.6f interval=[%.6f, %.6f] (guard veto only; crossing does not certify scenario)\n", v.Variant, name, i.Estimate, i.Lo, i.Hi)
 		}
 	}
-	for _, k := range d.Rerun {
-		out.WriteString(fmt.Sprintf("rerun: %s/%s/%s repeat=%d\n", k.Variant, k.Scenario, k.Item, k.Repeat))
+	for _, key := range d.Rerun {
+		fmt.Fprintf(&out, "rerun: %s/%s/%s repeat=%d\n", key.Variant, key.Scenario, key.Item, key.Repeat)
 	}
 	return out.String()
 }

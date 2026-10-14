@@ -17,7 +17,7 @@ import (
 // DryGate evaluates disjoint smoke items; their outcomes never enter production looks.
 // Stored-only equivalence and export verification have separate acceptance tests.
 func DryGate(ctx context.Context, dir string, faults fake.Faults, workers int) (Report, error) {
-	cfg := GateConfig(env.GatedScenarios("offline"))
+	cfg := GateConfig(env.GatedScenarios("offline"), ProposedOfflinePolicy())
 	cfg.Items = map[string][]string{}
 	variants := slices.DeleteFunc(scenarios.Variants(), func(v eval.Variant) bool { return v.ID == "clear_only" })
 	var rows []eval.StoredAttempt
@@ -61,7 +61,11 @@ func DryGate(ctx context.Context, dir string, faults fake.Faults, workers int) (
 			}
 			key := a.Variant + "/" + a.Scenario
 			diag := diagnostics[key]
+			diag.Available = true
 			diag.Attempts++
+			if a.Verdict() == eval.VerdictPassed {
+				diag.Passed++
+			}
 			if diag.Scores == nil {
 				diag.Scores = map[string]float64{}
 			}
@@ -76,5 +80,5 @@ func DryGate(ctx context.Context, dir string, faults fake.Faults, workers int) (
 	if err != nil {
 		return Report{}, err
 	}
-	return Report{Evaluations: []gate.Evaluation{evaluation}, Decisions: []gate.Decision{decision}, Diagnostics: diagnostics}, nil
+	return Report{Variants: slices.Clone(decision.Variants), Evaluations: []gate.Evaluation{evaluation}, Decisions: []gate.Decision{decision}, Diagnostics: diagnostics}, nil
 }

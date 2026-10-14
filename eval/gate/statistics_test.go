@@ -10,7 +10,8 @@ import (
 )
 
 func testConfig() Config {
-	return Config{Baseline: "baseline", Variants: []string{"receipt_only", "hybrid"}, Scenarios: []string{"a", "b"}, Repeats: 2, Seed: 42}
+	policy := ProposedPolicy(map[string]float64{"receipt_only": .02, "hybrid": .02}, 42)
+	return Config{Policy: &policy, Baseline: "baseline", Variants: []string{"receipt_only", "hybrid"}, Scenarios: []string{"a", "b"}, Repeats: 2}
 }
 func testTable(n int) Table {
 	var out Table
@@ -104,26 +105,32 @@ func TestLooks(t *testing.T) {
 	cfg := testConfig()
 	e, err := Evaluate(testTable(48), cfg, 2)
 	require.NoError(t, err)
-	d, err := Decide(e, nil)
+	d, err := DecideMode(e, nil, Offline)
 	require.NoError(t, err)
-	assert.Equal(t, Pass, d.Status)
+	assert.Equal(t, Complete, d.Status)
+	for _, v := range d.Variants {
+		assert.Equal(t, Pass, v.Status)
+	}
 	_, err = Decide(e, []Decision{d})
 	require.Error(t, err)
 	e.Variants[0].Success.Status = Inconclusive
 	e.Look = 3
-	d, err = Decide(e, nil)
+	d, err = DecideMode(e, nil, Offline)
 	require.NoError(t, err)
-	assert.Equal(t, NotPassed, d.Status)
-	assert.Contains(t, d.Reason, "precision")
-	e.Missing = []Key{{Variant: "hybrid", Scenario: "a", Item: "missing", Repeat: 1}}
-	d, err = Decide(e, nil)
+	assert.Equal(t, NotPassed, d.Variants[0].Status)
+	assert.Contains(t, d.Variants[0].Reason, "precision")
+	missing := Key{Variant: "hybrid", Scenario: "a", Item: "missing", Repeat: 1}
+	e.Variants[1].Missing = []Key{missing}
+	d, err = DecideMode(e, nil, Offline)
 	require.NoError(t, err)
 	assert.Equal(t, Incomplete, d.Status)
-	assert.Equal(t, e.Missing, d.Rerun)
-	e.Missing = nil
-	e.GuardFailures = []string{"hybrid/a"}
+	assert.Equal(t, []Key{missing}, d.Rerun)
+	e.Variants[1].Missing = nil
+	e.Variants[1].ScenarioIntervals["a"] = Interval{Estimate: -.3, Lo: -.4, Hi: -.2}
 	e.Look = 1
 	d, err = Decide(e, nil)
 	require.NoError(t, err)
-	assert.Equal(t, Fail, d.Status)
+	assert.Equal(t, Fail, d.Variants[1].Status)
+	assert.Equal(t, Continue, d.Variants[0].Status)
+	assert.Equal(t, Continue, d.Status)
 }

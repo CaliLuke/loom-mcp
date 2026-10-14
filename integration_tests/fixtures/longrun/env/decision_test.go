@@ -2,6 +2,7 @@ package env_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"example.com/longrun/env"
@@ -26,5 +27,6 @@ func TestDecisionEvidenceCanLeaveCallerHistory(t *testing.T) {
 	input, err := json.Marshal(m.Inputs)
 	require.NoError(t, err)
 	assert.NotContains(t, string(input), m.Spec.Answer[0], "the caller history must not permanently pin the decision evidence")
-	assert.Contains(t, m.Results["r1.17"], "choice = "+m.Spec.Answer[0], "the last result supplies a grounded choice for the prose decision")
+	lastResult := fmt.Sprintf("r1.%d", m.Parameters.Steps-1)
+	assert.Contains(t, m.Results[lastResult], "choice = "+m.Spec.Answer[0], "the last result supplies a grounded choice for the prose decision")
 }

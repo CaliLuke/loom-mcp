@@ -22,13 +22,24 @@ import (
 )
 
 type options struct {
-	dir, config, out, pilot string
-	offline, verify         bool
-	seed                    uint64
-	workers                 int
+	dir, config, out, pilot, inventory, base string
+	offline, verify, declareComplete         bool
+	seed                                     uint64
+	workers                                  int
 }
 
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	// This probe is deliberately before flag parsing and all fixture/provider paths.
+	if len(args) == 1 && args[0] == "_source-executable" {
+		id, err := suite.SourceExecutableID(ctx)
+		if err != nil {
+			return fail(stderr, err)
+		}
+		if _, err := fmt.Fprintln(stdout, id); err != nil {
+			return fail(stderr, err)
+		}
+		return 0
+	}
 	if len(args) == 0 {
 		return fail(stderr, fmt.Errorf("commands: items validate pilot calibrate freeze look N report run show compare list"))
 	}
@@ -41,10 +52,13 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	flags.StringVar(&o.config, "config", "offline", "provider configuration")
 	flags.StringVar(&o.out, "out", "", "experiment store")
 	flags.StringVar(&o.pilot, "pilot", "", "baseline pilot experiment ID")
+	flags.StringVar(&o.inventory, "inventory", "", "complete historical store inventory")
+	flags.StringVar(&o.base, "base", "origin/main", "retained source base revision")
+	flags.BoolVar(&o.declareComplete, "declare-complete-store", false, "declare --out as the complete historical store")
 	flags.BoolVar(&o.offline, "offline", false, "use Reader under the selected configuration")
 	flags.BoolVar(&o.verify, "verify", false, "recompute stored measures from exports")
 	flags.Uint64Var(&o.seed, "seed", 19, "pool generation seed")
-	flags.IntVar(&o.workers, "workers", 10, "parallel attempts or calibration cells")
+	flags.IntVar(&o.workers, "workers", 4, "parallel attempts or calibration cells")
 	look := 0
 	if command == "look" && len(args) > 0 {
 		n, err := strconv.Atoi(args[0])
@@ -63,12 +77,14 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if flags.NArg() != 0 || o.workers < 1 {
 		return fail(stderr, fmt.Errorf("unexpected arguments or invalid worker count"))
 	}
-	if _, err := longrun.ProviderConfiguration(o.config, fake.Faults{}); err != nil {
+	if err := evidencePreflight(command, o); err != nil {
 		return fail(stderr, err)
 	}
 	var result any
 	var err error
 	switch command {
+	case "inventory", "archive-v1", "source":
+		result, err = evidence(ctx, command, o)
 	case "items":
 		err = suite.WriteItems(o.dir, o.seed)
 	case "validate":
@@ -76,7 +92,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	case "calibrate":
 		err = calibrate(ctx, o)
 	case "freeze":
-		result, err = freeze(o)
+		result, err = freeze(ctx, o)
 	case "pilot", "look", "report":
 		result, err = experiment(ctx, command, look, o)
 	default:
@@ -117,20 +133,51 @@ func storeFor(o options) (*eval.Store, error) {
 	return eval.Open(o.out)
 }
 func validate(ctx context.Context, o options, progress io.Writer) (suite.Validation, error) {
-	v, runErr := suite.Validate(ctx, o.dir, o.workers, progress)
-	data, err := json.MarshalIndent(v, "", "  ")
+	before, err := suite.ReadSource(ctx, o.dir, o.config)
 	if err != nil {
-		return v, err
+		return suite.Validation{}, err
 	}
-	return v, errors.Join(runErr, os.WriteFile(filepath.Join(o.dir, "gate", "validation.json"), append(data, '\n'), 0600))
+	if err := suite.VerifyEvidenceExecutable(ctx, o.dir); err != nil {
+		return suite.Validation{}, err
+	}
+	v, runErr := suite.ValidateConfiguration(ctx, o.dir, o.config, before.Identity.SHA256, o.workers, progress)
+	after, err := suite.ReadSource(ctx, o.dir, o.config)
+	if err != nil {
+		return v, errors.Join(runErr, err)
+	}
+	if before.SHA256 != after.SHA256 {
+		return v, errors.Join(runErr, fmt.Errorf("source changed during validation"))
+	}
+	return v, errors.Join(runErr, suite.WriteValidation(o.dir, v))
 }
 func calibrate(ctx context.Context, o options) error {
-	v, err := suite.ReadValidation(o.dir)
+	if o.config != "offline" && o.pilot == "" {
+		return fmt.Errorf("live calibration requires a complete --pilot")
+	}
+	v, err := suite.ReadValidationFor(o.dir, o.config)
 	if err != nil {
 		return err
 	}
 	cfg := suite.CalibrationConfig(o.config, v, o.workers)
+	var pilot *suite.PilotEvidence
 	if o.pilot != "" {
+		source, err := suite.ReadSource(ctx, o.dir, o.config)
+		if err != nil {
+			return err
+		}
+		if source.Identity.SHA256 != v.SourceSHA256 {
+			return fmt.Errorf("validation source mismatch")
+		}
+		if err := suite.VerifyEvidenceExecutable(ctx, o.dir); err != nil {
+			return err
+		}
+		storePath := o.out
+		if storePath == "" {
+			storePath = filepath.Join(o.dir, ".loom-evals")
+		}
+		if _, err := os.Stat(storePath); err != nil {
+			return err
+		}
 		store, err := storeFor(o)
 		if err != nil {
 			return err
@@ -143,41 +190,77 @@ func calibrate(ctx context.Context, o options) error {
 		if err != nil {
 			return err
 		}
-		cfg.Pilot, err = suite.PilotRates(exp, o.config)
+		evidence, err := suite.ReadPilotEvidence(o.dir, o.config, exp, v.Profile, source.Identity.SHA256)
+		if err != nil {
+			return err
+		}
+		pilot = &evidence
+		cfg.Pilot, err = suite.VerifyPilot(o.dir, o.config, evidence, v.Profile, source.Identity.SHA256)
 		if err != nil {
 			return err
 		}
 	}
-	return suite.Calibrate(ctx, o.dir, o.config, cfg)
+	return suite.Calibrate(ctx, o.dir, o.config, cfg, pilot)
 }
-func freeze(o options) (gate.Freeze, error) {
-	data, err := os.ReadFile(suite.CalibrationPath(o.dir, o.config))
-	if err != nil {
-		return gate.Freeze{}, err
-	}
-	var artifact suite.CalibrationArtifact
-	if err := json.Unmarshal(data, &artifact); err != nil {
-		return gate.Freeze{}, err
-	}
-	if len(artifact.Report.Cells) != 972 || artifact.Report.Version != gate.SimulatorVersion {
-		return gate.Freeze{}, fmt.Errorf("freeze requires the full production calibration")
-	}
-	identity := eval.DetectIdentity(context.Background(), o.dir)
-	f, err := suite.BuildFreeze(o.dir, o.config, data, identity.Source)
+func freeze(ctx context.Context, o options) (gate.Freeze, error) {
+	f, err := suite.BuildVerifiedFreeze(ctx, o.dir, o.config, o.inventory)
 	if err != nil {
 		return f, err
 	}
 	return f, suite.WriteFreeze(o.dir, f)
 }
 func experiment(ctx context.Context, command string, look int, o options) (any, error) {
-	store, err := storeFor(o)
-	if err != nil {
-		return nil, err
+	if command == "look" && (look < 1 || look > 3) {
+		return nil, fmt.Errorf("out-of-order look %d", look)
 	}
 	if command == "report" {
+		if _, err := suite.VerifyFreeze(o.dir, o.config); err != nil {
+			return nil, err
+		}
+		if err := suite.VerifyEvidenceExecutable(ctx, o.dir); err != nil {
+			return nil, err
+		}
+		store, err := storeFor(o)
+		if err != nil {
+			return nil, err
+		}
 		return suite.StoredReport(o.dir, o.config, store, o.verify)
 	}
 	bind, err := binding(o)
+	if err != nil {
+		return nil, err
+	}
+	profile, err := longrun.ResolveProfile(o.config)
+	if err != nil {
+		return nil, err
+	}
+	source, err := suite.ReadSource(ctx, o.dir, o.config)
+	if err != nil {
+		return nil, err
+	}
+	validation, err := suite.ReadValidationFor(o.dir, o.config)
+	if err != nil {
+		return nil, err
+	}
+	if source.Identity.SHA256 != validation.SourceSHA256 {
+		return nil, fmt.Errorf("validation source mismatch")
+	}
+	if err := suite.VerifyLiveProfile(o.config, validation.Profile.Roles); err != nil {
+		return nil, err
+	}
+	if err := suite.VerifyEvidenceExecutable(ctx, o.dir); err != nil {
+		return nil, err
+	}
+	if command == "look" {
+		f, err := suite.VerifyFreeze(o.dir, o.config)
+		if err != nil {
+			return nil, err
+		}
+		if err := suite.VerifyLiveProfile(o.config, f.Roles); err != nil {
+			return nil, err
+		}
+	}
+	store, err := storeFor(o)
 	if err != nil {
 		return nil, err
 	}
@@ -191,6 +274,19 @@ func experiment(ctx context.Context, command string, look int, o options) (any, 
 	cfg := eval.Config{Harness: longrun.Harness(bind, fake.Faults{}), Scenarios: ss, Variants: scenarios.Variants()[:1], Repeats: 2, Concurrency: o.workers}
 	exp, err := suite.RunExperiment(ctx, store, cfg, eval.ExperimentMeta{Label: "pilot/" + o.config})
 	if err != nil {
+		return nil, err
+	}
+	after, err := suite.ReadSource(ctx, o.dir, o.config)
+	if err != nil {
+		return nil, err
+	}
+	if after.SHA256 != source.SHA256 {
+		return nil, fmt.Errorf("source changed during pilot")
+	}
+	if err := suite.VerifyLiveProfile(o.config, profile.Roles); err != nil {
+		return nil, err
+	}
+	if _, err := suite.WritePilotEvidence(o.dir, o.config, exp, profile, source.Identity.SHA256); err != nil {
 		return nil, err
 	}
 	return exp.Header, nil

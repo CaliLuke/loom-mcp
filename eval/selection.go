@@ -9,7 +9,12 @@ import (
 
 // Selection combines selectors with OR within each kind and AND across kinds.
 // Items may be bare item IDs or qualified scenario/item IDs.
-type Selection struct{ Variants, Scenarios, Tags, Items []string }
+type Selection struct {
+	Variants, Scenarios, Tags, Items []string
+	// Keys selects exact expanded attempts. Nil uses ordinary selectors; a
+	// non-nil slice must be nonempty and cannot be mixed with other selectors.
+	Keys []AttemptKey
+}
 
 type plannedAttempt struct {
 	key      AttemptKey
@@ -60,6 +65,11 @@ func buildPlan(cfg Config) ([]plannedAttempt, error) {
 			a.key = AttemptKey{Variant: a.variant.ID, Scenario: a.scenario.ID, Item: a.item.ID, Repeat: n}
 			selected = append(selected, a)
 		}
+	}
+	if cfg.Select.Keys != nil {
+		var exactProblems []error
+		selected, exactProblems = selectExact(cfg.Select, selected)
+		problems = append(problems, exactProblems...)
 	}
 	if len(selected) == 0 {
 		problems = append(problems, errors.New("eval: empty plan"))
@@ -160,4 +170,37 @@ func matchesSelector(kind int, value string, a plannedAttempt) bool {
 }
 func selectorName(kind int) string {
 	return []string{"variant", "scenario", "tag", "item"}[kind]
+}
+
+// selectExact validates keys against the fully expanded matrix and retains its
+// declaration order. A missing key never widens the requested work.
+func selectExact(sel Selection, full []plannedAttempt) ([]plannedAttempt, []error) {
+	var problems []error
+	if len(sel.Keys) == 0 {
+		problems = append(problems, errors.New("eval: exact keys must be nonempty"))
+	}
+	if len(sel.Variants)+len(sel.Scenarios)+len(sel.Tags)+len(sel.Items) > 0 {
+		problems = append(problems, errors.New("eval: exact keys cannot mix with ordinary selectors"))
+	}
+	wanted := make(map[AttemptKey]bool, len(sel.Keys))
+	known := make(map[AttemptKey]bool, len(full))
+	for _, a := range full {
+		known[a.key] = true
+	}
+	for _, key := range sel.Keys {
+		if wanted[key] {
+			problems = append(problems, fmt.Errorf("eval: duplicate exact key %s", key.String()))
+		}
+		if !known[key] {
+			problems = append(problems, fmt.Errorf("eval: unknown exact key %s", key.String()))
+		}
+		wanted[key] = true
+	}
+	selected := make([]plannedAttempt, 0, len(sel.Keys))
+	for _, a := range full {
+		if wanted[a.key] {
+			selected = append(selected, a)
+		}
+	}
+	return selected, problems
 }

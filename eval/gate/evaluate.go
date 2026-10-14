@@ -30,14 +30,10 @@ func evaluate(table Table, cfg Config, look, b int) (Evaluation, error) {
 	if err != nil {
 		return Evaluation{}, err
 	}
-	alpha := cfg.Alpha
-	if alpha == 0 {
-		alpha = .05
-	}
-	alpha /= 3
-	result := Evaluation{Look: look, Missing: pop.missing, Variants: make([]VariantResult, len(cfg.Variants))}
+	alpha := cfg.Policy.Alpha / float64(len(cfg.Policy.Looks))
+	result := Evaluation{Policy: clonePolicy(cfg.Policy), Baseline: cfg.Baseline, Look: look, Missing: pop.missing, Variants: make([]VariantResult, len(cfg.Variants))}
 	point := averages(pop.scenarios, len(cfg.Variants))
-	samples := bootstrap(pop.scenarios, len(cfg.Variants), cfg.Seed, look, b)
+	samples, scenarioSamples := bootstrapIntervals(pop.scenarios, len(cfg.Variants), cfg.Policy.Bootstrap.Seed, look, b)
 	lo, hi := PercentileIndices(b, alpha)
 	for v, id := range cfg.Variants {
 		intervals := [3]Interval{}
@@ -45,12 +41,21 @@ func evaluate(table Table, cfg Config, look, b int) (Evaluation, error) {
 			slices.Sort(samples[v][m])
 			intervals[m] = Interval{point[v][m], samples[v][m][lo], samples[v][m][hi]}
 		}
-		r := VariantResult{Variant: id, Success: Criterion(intervals[0], -.05, true), Unsupported: Criterion(intervals[1], .02, false), Evidence: Criterion(intervals[2], -.05, true), Recall: Recall(pop.rows, id, cfg.Scenarios, alpha), Scenarios: map[string]float64{}}
+		r := VariantResult{Variant: id, Success: Criterion(intervals[0], cfg.Policy.Success, true), Unsupported: unsupportedCriterion(intervals[1], cfg.Policy, id), Evidence: Criterion(intervals[2], cfg.Policy.Evidence, true), Recall: Recall(pop.rows, id, cfg.Scenarios, alpha), Scenarios: map[string]float64{}, ScenarioIntervals: map[string]Interval{}}
 		for s, items := range pop.scenarios {
 			mean := scenarioMean(items, v, 0)
 			r.Scenarios[cfg.Scenarios[s]] = mean
-			if mean < -.10 {
+			draws := scenarioSamples[v][s]
+			slices.Sort(draws)
+			r.ScenarioIntervals[cfg.Scenarios[s]] = Interval{Estimate: mean, Lo: draws[lo], Hi: draws[hi]}
+			if draws[hi] < cfg.Policy.Guard {
+				r.GuardFailures = append(r.GuardFailures, cfg.Scenarios[s])
 				result.GuardFailures = append(result.GuardFailures, id+"/"+cfg.Scenarios[s])
+			}
+		}
+		for _, key := range pop.missing {
+			if key.Variant == cfg.Baseline || key.Variant == id {
+				r.Missing = append(r.Missing, key)
 			}
 		}
 		result.Variants[v] = r
@@ -58,8 +63,11 @@ func evaluate(table Table, cfg Config, look, b int) (Evaluation, error) {
 	return result, nil
 }
 func validateConfig(c Config, look int) error {
-	if look < 1 || look > 3 || c.Repeats != 2 || c.Baseline == "" || len(c.Variants) != 2 || len(c.Scenarios) == 0 || c.Alpha < 0 || c.Alpha >= 1 {
-		return fmt.Errorf("gate: invalid look or configuration (two variants and two repeats required)")
+	if err := c.Policy.Validate(c.Variants); err != nil {
+		return err
+	}
+	if look < 1 || look > 3 || c.Repeats != 2 || c.Baseline == "" || len(c.Variants) < 1 || len(c.Variants) > 2 || len(c.Scenarios) == 0 {
+		return fmt.Errorf("gate: invalid look or configuration (one or two variants and two repeats required)")
 	}
 	for _, list := range [][]string{append([]string{c.Baseline}, c.Variants...), c.Scenarios} {
 		seen := map[string]bool{}
@@ -158,39 +166,40 @@ func averages(scenarios [][]itemDelta, variants int) [][3]float64 {
 	}
 	return out
 }
-func bootstrap(scenarios [][]itemDelta, variants int, seed uint64, look, b int) [][3][]float64 {
-	out := make([][3][]float64, variants)
-	for v := range variants {
-		for m := range 3 {
-			out[v][m] = make([]float64, b)
-		}
-	}
+func bootstrapIntervals(scenarios [][]itemDelta, variants int, seed uint64, look, b int) ([][3][]float64, [][][]float64) {
+	out, scenarioSamples := allocateBootstrapSamples(len(scenarios), variants, b)
 	rng := newSimulationRandom(seed, []uint64{0, 1, 2, 3}[look])
 	for i := range b {
-		for _, items := range scenarios {
-			sums := make([][3]float64, variants)
-			counts := make([]int, variants)
+		for si, items := range scenarios {
+			// Configuration validation limits production evaluation to two variants.
+			var storage [2]struct {
+				sums  [3]float64
+				count int
+			}
+			accumulators := storage[:variants]
 			for range items {
 				d := items[rng.IntN(len(items))]
-				for v := range variants {
+				for v := range accumulators {
+					acc := &accumulators[v]
 					if d.counts[v] > 0 {
-						counts[v]++
-						for m := range 3 {
-							sums[v][m] += d.values[v][m]
+						acc.count++
+						for m := range acc.sums {
+							acc.sums[m] += d.values[v][m]
 						}
 					}
 				}
 			}
-			for v := range variants {
-				if counts[v] > 0 {
-					for m := range 3 {
-						out[v][m][i] += sums[v][m] / float64(counts[v]*len(scenarios))
+			for v, acc := range accumulators {
+				if acc.count > 0 {
+					scenarioSamples[v][si][i] = acc.sums[0] / float64(acc.count)
+					for m, sum := range acc.sums {
+						out[v][m][i] += sum / float64(acc.count*len(scenarios))
 					}
 				}
 			}
 		}
 	}
-	return out
+	return out, scenarioSamples
 }
 
 func indexRows(table Table, c Config) (map[Key]Row, map[string]map[string]bool, error) {
@@ -234,4 +243,22 @@ func pairedItem(p *population, rows map[Key]Row, missing map[Key]bool, c Config,
 		}
 	}
 	return d
+}
+
+// allocateBootstrapSamples allocates pooled and scenario intervals for shared draws.
+func allocateBootstrapSamples(scenarios, variants, b int) ([][3][]float64, [][][]float64) {
+	scenarioSamples := make([][][]float64, variants)
+	for v := range variants {
+		scenarioSamples[v] = make([][]float64, scenarios)
+		for s := range scenarios {
+			scenarioSamples[v][s] = make([]float64, b)
+		}
+	}
+	out := make([][3][]float64, variants)
+	for v := range variants {
+		for m := range 3 {
+			out[v][m] = make([]float64, b)
+		}
+	}
+	return out, scenarioSamples
 }

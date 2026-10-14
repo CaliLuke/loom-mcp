@@ -23,10 +23,11 @@ type wireScore struct {
 	Threshold *float64 `json:"threshold,omitempty"`
 }
 type wireSelection struct {
-	Variants  []string `json:"variants"`
-	Scenarios []string `json:"scenarios"`
-	Tags      []string `json:"tags"`
-	Items     []string `json:"items"`
+	Variants  []string     `json:"variants"`
+	Scenarios []string     `json:"scenarios"`
+	Tags      []string     `json:"tags"`
+	Items     []string     `json:"items"`
+	Keys      []AttemptKey `json:"keys,omitzero"`
 }
 type wireScenario struct {
 	ID            string        `json:"id"`

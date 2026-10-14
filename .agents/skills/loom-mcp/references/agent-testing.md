@@ -226,21 +226,37 @@ Run the child agent directly to test its responder flow. There is no Temporal ha
   `Evaluate` uses cumulative manifest items, paired repeats, equal scenario weights,
   and shared stratified PCG bootstrap draws. `Decide` enforces the stopping rule.
   Exact margin equality is inconclusive, including recall (Q17).
-- `Calibrate` uses the same evaluator for 972 cells and two sensitivity rows.
-  Qualification uses independent Bernoulli draws so recall retains its stated rate.
-  `CalibrateChecks` supplies the two 200-simulation production check cells.
-- Verify the trusted freeze hash, raw pool bytes, materialized bytes, and experiment
-  labels before a look or report. Refuse pool generation after a freeze exists.
-- The longrun fixture and compaction-gate CLI implement the release suite.
-  Regenerate generated agents with `make regen-longrun-fixture`; never hand-edit pools.
-  CI verifies committed freeze/validation and byte-for-byte seed reproduction of all pools.
-- Freeze verification binds gated/reported lists, scenario drive contexts, policies,
-  raw pools and materialized items. Record dirty provenance alongside the base revision.
-  Supply cumulative Config.Items and the prior look prefix; reject live-config --offline.
-- Protocol 18 Reader and Summariser support PNG/PDF attachment reads. Credit received
-  nested bytes, never descriptors alone; multimodal scenarios protect 2000 tool tokens.
-- Calibration reports every measured target and look-1 FAIL rates, including a labelled
-  guard lower bound when stored outputs lack joint causes. The K19b frozen guard blocks
-  equal-to-baseline variants; K19c must repair it before any live look. Keep the K19b
-  guard unchanged and preserve existing simulations when re-rendering reports.
-- Test 7 recomputes the full report's embedded check cells. See docs/agent_testing.md.
+- `CalibrateCandidates` uses the production evaluator and stopping rule for three
+  fixed unsupported margins (0.02/0.03/0.05), each with 1620 grid cells and two
+  sensitivity rows. Keep 2000 decision/400 other simulations and 10000 bootstrap
+  draws. `CalibrateChecks` supplies two 200-simulation reproduction cells.
+- Scenario guards use the upper success-interval bound strictly below -0.10.
+  Preserve per-variant terminal evidence. COMPLETE describes scheduling only.
+  Rerun exact missing keys through Selection.Keys without replacing valid rows.
+- Select the smallest eligible margin separately for each variant. Require worst
+  null PASS >= 0.80 and every worst boundary PASS <= 0.05. Preserve ineligibility
+  honestly. Neither eligible means diagnostic calibration without a freeze.
+- V2 provenance binds roles, capabilities, actual runtime-stamped settings,
+  pools/materialization, validation, calibration, inventory and executable owners.
+  Evidence commands require explicit CGO_ENABLED=0 and reject stale binaries.
+  Race gates retain cgo. Source bundles exclude evidence and protected go.work.sum.
+- Inventory the explicitly declared historical store before archiving v1. Unknown,
+  orphaned or consumed live evidence blocks migration. Archived v1 freezes retain
+  exact bytes and source and remain pool locks. Never reinterpret them as v2.
+- Complete offline profile validation precedes calibration. Missing/duplicate/
+  unexpected/failed structural rows block it. Zero observed q is valid; missing
+  q is not. Live rates require the exact complete two-repeat baseline pilot and
+  matching recorded roles/source. Stored reports need no model environment.
+- Protocol 19 profiles declare attachment support without live constructors.
+  Supporting profiles recall both assets; zero-support profiles retain evidence
+  with one residency event and zero threshold compactions. Use shipped defaults
+  and explicit KeepNonTextResident, without special multimodal retention budgets.
+- Materializer k19c-v4 preserves raw pools but expands base steps by two (model_change by four).
+  Current effective workloads are 36/72 steps. Keep three-compaction coverage and
+  actual baseline requests below 128k tokens. Synthetic planner windows of 1m/128k
+  and summarizer window of 200k apply consistently across offline variants. Compacted
+  model_change keeps its 8k pretend stress. Do not confuse aggregate multi-run
+  bytes with one request. Historical materialization requires retained v1 source.
+- Regenerate generated agents with make regen-longrun-fixture. Never hand-edit
+  pools or generated files. Keep dry structural proof separate from calibration
+  eligibility and live qualification. The shipped qualification table stays empty.

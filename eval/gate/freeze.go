@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"slices"
 	"time"
 )
 
@@ -40,6 +39,16 @@ type Pool struct {
 // running variants; keep that trusted hash separate from the mutable input.
 // Scenario weights are equal within GatedScenarios. Policies are exact JSON.
 type Freeze struct {
+	Policy             *Policy                      `json:"policy,omitempty"`
+	Selections         []CandidateSelection         `json:"selections,omitempty"`
+	Roles              map[string]RoleIdentity      `json:"roles,omitempty"`
+	Profiles           map[string]CapabilityProfile `json:"profiles,omitempty"`
+	EffectivePolicies  map[string]json.RawMessage   `json:"effective_policies,omitempty"`
+	SourceSHA256       string                       `json:"source_sha256,omitempty"`
+	SourceBundleSHA256 string                       `json:"source_bundle_sha256,omitempty"`
+	ValidationSHA256   string                       `json:"validation_sha256,omitempty"`
+	InventorySHA256    string                       `json:"inventory_sha256,omitempty"`
+
 	Format              string                     `json:"format"`
 	Version             int                        `json:"version"`
 	Configuration       string                     `json:"configuration"`
@@ -64,6 +73,15 @@ type Freeze struct {
 
 // FreezeInputs supplies current bytes for offline verification before look/report.
 type FreezeInputs struct {
+	SourceSHA256       string                       `json:"source_sha256"`
+	SourceBundleSHA256 string                       `json:"source_bundle_sha256"`
+	ValidationSHA256   string                       `json:"validation_sha256"`
+	InventorySHA256    string                       `json:"inventory_sha256"`
+	CalibrationSHA256  string                       `json:"calibration_sha256"`
+	Roles              map[string]RoleIdentity      `json:"roles"`
+	Profiles           map[string]CapabilityProfile `json:"profiles"`
+	EffectivePolicies  map[string]json.RawMessage   `json:"effective_policies"`
+
 	Pools               map[string][]byte `json:"pools"`
 	Materialized        map[string][]byte `json:"materialized"`
 	MaterializerVersion string            `json:"materializer_version"`
@@ -108,8 +126,8 @@ func (f Freeze) Verify(expected string, in FreezeInputs) error {
 	if expected == "" || hash != expected {
 		return fmt.Errorf("gate: freeze hash mismatch")
 	}
-	if f.Format != FreezeFormat || f.Version != 1 || f.Margins != DefaultMargins() || f.Alpha != .05 || !slices.Equal(f.Looks, []int{12, 24, 48}) || f.Repeats != 2 || f.Bootstrap.Resamples != 10000 || f.Guard != -.10 {
-		return fmt.Errorf("gate: unsupported freeze contract")
+	if err := f.verifyV2(in); err != nil {
+		return err
 	}
 	if in.MaterializerVersion != f.MaterializerVersion {
 		return fmt.Errorf("gate: materializer version mismatch")

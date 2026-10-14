@@ -39,7 +39,7 @@ func TestStoredOnlyMatchesInMemory(t *testing.T) {
 		require.NoError(t, a.Outcome.Err)
 		memory = append(memory, eval.StoredAttempt{AttemptKey: a.AttemptKey, Checks: a.Outcome.Checks, Scores: a.Outcome.Scores})
 	}
-	c := gate.Config{Baseline: "baseline", Variants: []string{"receipt_only", "hybrid"}, Scenarios: []string{"fact_early"}, Repeats: 2, Seed: 19, Items: map[string][]string{"fact_early": {item.ID}}}
+	c := gate.Config{Baseline: "baseline", Variants: []string{"receipt_only", "hybrid"}, Scenarios: []string{"fact_early"}, Repeats: 2, Policy: suite.ProposedOfflinePolicy(), Items: map[string][]string{"fact_early": {item.ID}}}
 	actual, decision, err := suite.Analyze(stored, c, 1, nil)
 	require.NoError(t, err)
 	want, expected, err := suite.Analyze(memory, c, 1, nil)

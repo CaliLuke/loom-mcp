@@ -51,6 +51,14 @@ func Materialize(item eval.Item) (*Materialized, error) {
 	if domain == nil || p.Wording < 0 || p.Wording > 2 || p.Steps < 12 || p.ResultBytes < 1000 {
 		return nil, fmt.Errorf("invalid materializer parameters for %s", item.ID)
 	}
+	// V4 expands the historical base workload for repeated compaction coverage
+	// under shipped defaults. Raw pools and their historical interpretation stay
+	// unchanged; materialized parameters expose the actual executed length.
+	if p.Scenario == "model_change" {
+		p.Steps *= 4
+	} else {
+		p.Steps *= 2
+	}
 	m := &Materialized{Parameters: p, Results: map[string]string{}, Action: toolName(p.Template, domain.Action), Spec: evidence.Spec{Evidence: map[evidence.EvidenceID]evidence.Evidence{}, Grammar: TokenGrammar}}
 	token := func(key string) string {
 		sum := sha256.Sum256([]byte(fmt.Sprintf("%d/%s/%s/%s", p.Seed, p.Scenario, p.Template, key)))

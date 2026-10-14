@@ -9,7 +9,7 @@ import (
 )
 
 // ScenarioContext changes only explicitly threshold-enabled variants.
-type ScenarioContext struct{ PretendWindow, RecallDiscoveryCalls, RecallReadCalls, ProtectRecentToolTokens int }
+type ScenarioContext struct{ PretendWindow, RecallDiscoveryCalls, RecallReadCalls int }
 
 // Variants returns fresh, recorded policy configurations.
 func Variants() []eval.Variant {
@@ -19,7 +19,7 @@ func Variants() []eval.Variant {
 		id   string
 		tier compaction.Tier
 	}{{"clear_only", compaction.Clear}, {"receipt_only", compaction.Evict}, {"hybrid", compaction.Summary}} {
-		c := &api.ContextOverrides{Threshold: ptr(true), MaxTier: ptr(spec.tier), ContextWindow: ptr(24000), KeepRecentTokens: ptr(1000), KeepUserTokens: ptr(600), ProtectRecentToolTokens: ptr(512), MinSavingTokens: ptr(100), MaxSummaryTokens: ptr(800)}
+		c := &api.ContextOverrides{Threshold: ptr(true), MaxTier: ptr(spec.tier), KeepNonTextResident: ptr(true)}
 		if spec.id == "clear_only" {
 			c.DisableRecall = ptr(true)
 		}
@@ -44,9 +44,6 @@ func (s ScenarioContext) Apply() agenttest.RunOption {
 		}
 		if s.RecallReadCalls > 0 {
 			c.RecallReadCalls = ptr(s.RecallReadCalls)
-		}
-		if s.ProtectRecentToolTokens > 0 {
-			c.ProtectRecentToolTokens = ptr(s.ProtectRecentToolTokens)
 		}
 		in.Policy.Context = &c
 	}

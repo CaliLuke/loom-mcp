@@ -33,6 +33,8 @@ func TestBootstrapGoldenAndEqualWeights(t *testing.T) {
 	assert.InDelta(t, -.25, e.Variants[0].Success.Lo, 1e-12)
 	assert.InDelta(t, .375, e.Variants[0].Success.Hi, 1e-12)
 	assert.Equal(t, e.Variants[0].Success, e.Variants[1].Success)
+	assert.Equal(t, Interval{Estimate: -.25, Lo: -.5, Hi: 0}, e.Variants[0].ScenarioIntervals["a"])
+	assert.Equal(t, e.Variants[0].ScenarioIntervals, e.Variants[1].ScenarioIntervals)
 	duplicated := append(Table(nil), rows...)
 	for _, r := range rows {
 		if r.Scenario == "a" {
@@ -52,7 +54,7 @@ func TestBootstrapGoldenAndEqualWeights(t *testing.T) {
 	assert.Equal(t, e, same)
 }
 func TestGuardBoundaryAndMissingRepeat(t *testing.T) {
-	for _, failed := range []int{10, 11} {
+	for _, failed := range []int{10, 11, 30} {
 		rows := testTable(100)
 		for i := range rows {
 			r := &rows[i]
@@ -76,14 +78,19 @@ func TestGuardBoundaryAndMissingRepeat(t *testing.T) {
 		}
 		e, err := Evaluate(rows, cfg, 1)
 		require.NoError(t, err)
-		assert.Equal(t, Pass, e.Variants[0].Success.Status)
-		if failed == 10 {
+		if failed <= 11 {
+			assert.Equal(t, Pass, e.Variants[0].Success.Status)
+		}
+		if failed <= 11 {
 			assert.Empty(t, e.GuardFailures)
 		} else {
 			assert.Len(t, e.GuardFailures, 2)
 			d, err := Decide(e, nil)
 			require.NoError(t, err)
-			assert.Equal(t, Fail, d.Status)
+			assert.Equal(t, Complete, d.Status)
+			for _, v := range d.Variants {
+				assert.Equal(t, Fail, v.Status)
+			}
 		}
 	}
 	rows := testTable(2)

@@ -5,11 +5,14 @@ import (
 	"slices"
 
 	"github.com/CaliLuke/loom-mcp/v2/eval"
+	"github.com/CaliLuke/loom-mcp/v2/eval/gate"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/callrecord"
 )
 
 // Diagnostics contains informational, never gated, per-scenario costs and events.
 type Diagnostics struct {
+	Available        bool               `json:"available"`
+	Passed           int                `json:"passed"`
 	Attempts         int                `json:"attempts"`
 	MedianSeconds    float64            `json:"median_seconds"`
 	P90Seconds       float64            `json:"p90_seconds"`
@@ -25,7 +28,11 @@ func Describe(attempts []eval.StoredAttempt) (map[string]Diagnostics, error) {
 	for _, a := range attempts {
 		key := a.Variant + "/" + a.Scenario
 		d := out[key]
+		d.Available = true
 		d.Attempts++
+		if a.Verdict == eval.VerdictPassed {
+			d.Passed++
+		}
 		if d.Scores == nil {
 			d.Scores = map[string]float64{}
 		}
@@ -69,4 +76,21 @@ func Describe(attempts []eval.StoredAttempt) (map[string]Diagnostics, error) {
 		out[key] = d
 	}
 	return out, nil
+}
+
+// planInformational retains wholly missing planned observations in the report.
+// Work already excludes ineligible/stopped variants and limits clear_only to look one.
+func planInformational(out map[string]Diagnostics, frozen gate.Freeze, work LookWork) {
+	for _, variant := range work.Variants {
+		scenarios := frozen.ReportedScenarios
+		if variant == "clear_only" {
+			scenarios = append(slices.Clone(scenarios), frozen.GatedScenarios...)
+		}
+		for _, scenario := range scenarios {
+			key := variant + "/" + scenario
+			if _, exists := out[key]; !exists {
+				out[key] = Diagnostics{}
+			}
+		}
+	}
 }

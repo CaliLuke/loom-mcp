@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "configuration": "offline",
+  "store": "/Users/luca/code/loom-mono/loom-mcp/integration_tests/fixtures/longrun/.loom-evals",
+  "declared_complete": true,
+  "absent": true,
+  "files": null,
+  "entries": null,
+  "unknown": false,
+  "consumed": false,
+  "limitation": "This declaration covers only the named store; undeclared external stores cannot be discovered. A fresh worktree alone is not historical inventory.",
+  "sha256": "6de5f2ce6b4358b3ff6349740f9810146978b30ccc8583da77fbe753de92df79"
+}

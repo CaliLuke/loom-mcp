@@ -7,11 +7,11 @@ type targetRange struct {
 	low, high float64
 }
 
-// CalibrationTargets renders measured targets from saved simulation outcomes.
+// LegacyCalibrationTargets renders historical v1 measured targets from saved simulation outcomes.
 // Guard attribution is a lower bound: old cells retain criterion marginals at
 // stopping, not joint guard causes. Their union bound safely bounds non-guard
 // failures, including failures at later looks. No simulations are rerun here.
-func CalibrationTargets(cells []CellReport) []string {
+func LegacyCalibrationTargets(cells []CellReport) []string {
 	ranges := map[string]*targetRange{}
 	look1, guard := targetRange{}, targetRange{}
 	best := 0.0

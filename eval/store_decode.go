@@ -93,3 +93,10 @@ func decodeUniqueAttempt(data []byte, seen map[int]bool, keys map[AttemptKey]boo
 	seen[a.Index], keys[a.AttemptKey] = true, true
 	return a, nil
 }
+
+// DecodeExperimentHeader strictly decodes a persisted header without opening or
+// creating a store. Offline inventory tools use the same format and nested wire
+// validation as Store.Load, including the expected experiment ID.
+func DecodeExperimentHeader(data []byte, id string) (*ExperimentHeader, error) {
+	return decodeExperiment(data, id)
+}

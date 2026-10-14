@@ -1,35 +1,126 @@
-package suite_test
+package suite
 
 import (
 	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
-	suite "example.com/longrun/gate"
-	"github.com/CaliLuke/loom-mcp/v2/eval"
+	"example.com/longrun/env"
 	"github.com/CaliLuke/loom-mcp/v2/eval/gate"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestCommittedFreezeAndValidation(t *testing.T) {
-	_, err := suite.VerifyFreeze("..", "offline")
+func TestK19cCommittedArtifacts(t *testing.T) {
+	t.Setenv("CGO_ENABLED", "0")
+	evidence, err := readFreezeEvidence(t.Context(), "..", "offline")
 	require.NoError(t, err)
-	v, err := suite.ReadValidation("..")
+	assert.Equal(t, 2940, evidence.validation.Attempts)
+	assert.Empty(t, evidence.validation.Failures)
+	assert.Equal(t, env.MaterializerVersion, evidence.validation.MaterializerVersion)
+	assert.True(t, evidence.source.Dirty, "retained source bundle identifies the uncommitted implementation")
+	require.Len(t, evidence.calibration.Candidates, 3)
+	for _, candidate := range evidence.calibration.Candidates {
+		assert.Len(t, candidate.Report.Cells, 1620)
+		assert.Len(t, candidate.Report.Sensitivity, 2)
+	}
+	data, err := os.ReadFile("calibration_default.txt")
 	require.NoError(t, err)
-	assert.Equal(t, 3852, v.Attempts)
-	assert.Empty(t, v.Failures)
+	assert.Equal(t, CalibrationText("offline", evidence.calibration), string(data))
+	eligible := false
+	for _, selection := range evidence.calibration.Selections {
+		eligible = eligible || selection.Status == gate.CalibrationEligible
+	}
+	if eligible {
+		f, err := VerifyFreeze("..", "offline")
+		require.NoError(t, err)
+		assert.Equal(t, evidence.calibration.Selections, f.Selections)
+	} else {
+		_, err := os.Stat("freeze_default.json")
+		require.ErrorIs(t, err, os.ErrNotExist)
+		_, err = os.Stat("freeze_default.sha256")
+		require.ErrorIs(t, err, os.ErrNotExist)
+		_, err = buildEvidenceFreeze("offline", evidence)
+		require.ErrorContains(t, err, "no calibration-eligible variant")
+	}
+}
+
+func TestK19cArchiveIntegrity(t *testing.T) {
+	paths, err := filepath.Glob("archive/v1/offline/*/archive.json")
+	require.NoError(t, err)
+	require.Len(t, paths, 1)
+	root, err := os.OpenRoot(filepath.Dir(paths[0]))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, root.Close()) })
+	data, err := root.ReadFile("archive.json")
+	require.NoError(t, err)
+	var archive V1Archive
+	require.NoError(t, decodeArtifact(data, &archive))
+	require.Equal(t, 1, archive.Version)
+	require.Equal(t, "offline", archive.Configuration)
+	require.Len(t, archive.Files, 5)
+	for name, digest := range archive.Files {
+		data, err := root.ReadFile(name)
+		require.NoError(t, err)
+		assert.Equal(t, digest, gate.Digest(data), name)
+		original, err := sourceGit(t.Context(), "../../../..", "show", archive.RetainedRevision+":integration_tests/fixtures/longrun/gate/"+name)
+		require.NoError(t, err)
+		assert.Equal(t, original, data, name)
+	}
+	data, err = root.ReadFile("freeze_default.json")
+	require.NoError(t, err)
+	var frozen gate.Freeze
+	require.NoError(t, json.Unmarshal(data, &frozen))
+	hash, err := frozen.Hash()
+	require.NoError(t, err)
+	assert.Equal(t, archive.FreezeSHA256, hash)
+	assert.Equal(t, archive.OriginalRevision, frozen.GitRevision)
+	assert.Equal(t, archive.OriginalDirty, frozen.Dirty)
+	data, err = os.ReadFile("inventory_offline.json")
+	require.NoError(t, err)
+	var inventory StoreInventory
+	require.NoError(t, decodeArtifact(data, &inventory))
+	assert.Equal(t, inventory.SHA256, archive.InventorySHA256)
+	temp := t.TempDir()
+	require.NoError(t, WriteFreeze(temp, frozen))
+	_, err = VerifyFreeze(temp, "offline")
+	require.ErrorContains(t, err, "historical freeze v1")
+	// Copy only the archive into a temporary directory: its presence alone locks pools.
+	require.NoError(t, os.CopyFS(filepath.Join(temp, "gate/archive"), os.DirFS("archive")))
+	require.NoError(t, os.Remove(filepath.Join(temp, "gate/freeze_default.json")))
+	require.Error(t, WriteItems(temp, 19))
+	_, err = os.Stat(filepath.Join(temp, "testdata"))
+	require.ErrorIs(t, err, os.ErrNotExist)
+}
+
+func TestK19cDiagnosticWithoutFreeze(t *testing.T) {
+	_, evidence := frozenEvidenceFixture(t)
+	for i := range evidence.calibration.Selections {
+		evidence.calibration.Selections[i] = gate.CandidateSelection{Variant: evidence.calibration.Selections[i].Variant, Status: gate.CalibrationIneligible}
+	}
+	_, err := buildEvidenceFreeze("offline", evidence)
+	require.ErrorContains(t, err, "no calibration-eligible variant")
+	text := CalibrationText("offline", evidence.calibration)
+	assert.Contains(t, text, string(gate.CalibrationIneligible))
+	assert.Contains(t, text, "cells: 1620")
 }
 
 func TestFreezeBindsScenarioContract(t *testing.T) {
-	for _, kind := range []string{"gated", "reported", "allowance", "dataset_hash"} {
+	for _, kind := range []string{"gated", "reported", "allowance", "dataset_hash", "profile", "source", "validation"} {
 		t.Run(kind, func(t *testing.T) {
-			dir := t.TempDir()
-			require.NoError(t, suite.WriteItems(dir, 19))
-			f, err := suite.BuildFreeze(dir, "offline", []byte("calibration"), eval.VCS{Revision: "test"})
+			f, evidence := frozenEvidenceFixture(t)
+			hash, err := f.Hash()
 			require.NoError(t, err)
+			_, err = verifyFreezeEvidence(f, hash, evidence, "offline")
+			require.NoError(t, err)
+			// Copy through the wire so mutation cannot also change the trusted inputs.
+			data, err := json.Marshal(f)
+			require.NoError(t, err)
+			f = gate.Freeze{}
+			require.NoError(t, json.Unmarshal(data, &f))
 			switch kind {
 			case "gated":
 				f.GatedScenarios = f.GatedScenarios[1:]
@@ -38,80 +129,40 @@ func TestFreezeBindsScenarioContract(t *testing.T) {
 			case "dataset_hash":
 				f.Pools[0].DatasetHash = "flipped"
 			case "allowance":
-				b, err := json.Marshal(f)
+				var context map[string]int
+				require.NoError(t, json.Unmarshal(f.ScenarioContexts["recall_pressure"], &context))
+				context["RecallReadCalls"]++
+				f.ScenarioContexts["recall_pressure"], err = json.Marshal(context)
 				require.NoError(t, err)
-				var raw map[string]json.RawMessage
-				require.NoError(t, json.Unmarshal(b, &raw))
-				require.NotEmpty(t, raw["scenario_contexts"], "freeze must bind drive settings")
-				var contexts map[string]map[string]int
-				require.NoError(t, json.Unmarshal(raw["scenario_contexts"], &contexts))
-				contexts["recall_pressure"]["RecallReadCalls"]++
-				raw["scenario_contexts"], err = json.Marshal(contexts)
-				require.NoError(t, err)
-				b, err = json.Marshal(raw)
-				require.NoError(t, err)
-				require.NoError(t, json.Unmarshal(b, &f))
+			case "profile":
+				delete(f.Profiles, "multimodal_offline")
+			case "source":
+				f.SourceSHA256 = strings.Repeat("f", 64)
+			case "validation":
+				f.ValidationSHA256 = strings.Repeat("f", 64)
 			}
-			require.NoError(t, suite.WriteFreeze(dir, f))
-			require.NoError(t, os.WriteFile(filepath.Join(dir, "gate/calibration_default.json"), []byte("calibration"), 0600))
-			_, err = suite.VerifyFreeze(dir, "offline")
-			assert.Error(t, err, "trusted hash cannot authorize changed scenario contract")
-		})
-	}
-}
-
-func TestCommittedDirtyProvenance(t *testing.T) {
-	b, err := os.ReadFile("freeze_default.json")
-	require.NoError(t, err)
-	var raw map[string]json.RawMessage
-	require.NoError(t, json.Unmarshal(b, &raw))
-	var dirty bool
-	require.NoError(t, json.Unmarshal(raw["dirty"], &dirty))
-	assert.True(t, dirty, "uncommitted fixture must identify dirty provenance")
-}
-
-func TestCommittedArtifactsRejectCorruption(t *testing.T) {
-	source, err := os.OpenRoot(".")
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, source.Close()) })
-	for _, kind := range []string{"dataset_hash", "pool_row"} {
-		t.Run(kind, func(t *testing.T) {
-			dir := t.TempDir()
-			require.NoError(t, os.MkdirAll(filepath.Join(dir, "testdata"), 0750))
-			require.NoError(t, os.CopyFS(filepath.Join(dir, "testdata/pools"), os.DirFS("../testdata/pools")))
-			require.NoError(t, os.Mkdir(filepath.Join(dir, "gate"), 0750))
-			root, err := os.OpenRoot(dir)
+			hash, err = f.Hash()
 			require.NoError(t, err)
-			t.Cleanup(func() { require.NoError(t, root.Close()) })
-			for _, name := range []string{"freeze_default.json", "freeze_default.sha256", "calibration_default.json", "validation.json"} {
-				data, err := source.ReadFile(name)
-				require.NoError(t, err)
-				require.NoError(t, root.WriteFile("gate/"+name, data, 0600))
-			}
-			if kind == "dataset_hash" {
-				data, err := root.ReadFile("gate/freeze_default.json")
-				require.NoError(t, err)
-				var f gate.Freeze
-				require.NoError(t, json.Unmarshal(data, &f))
-				f.Pools[0].DatasetHash = "flipped"
-				data, err = json.Marshal(f)
-				require.NoError(t, err)
-				require.NoError(t, root.WriteFile("gate/freeze_default.json", data, 0600))
-				hash, err := f.Hash()
-				require.NoError(t, err)
-				require.NoError(t, root.WriteFile("gate/freeze_default.sha256", []byte(hash+"\n"), 0600))
-			} else {
-				path := "testdata/pools/fact_early/look1.jsonl"
-				data, err := root.ReadFile(path)
-				require.NoError(t, err)
-				edited := bytes.Replace(data, []byte("Audit"), []byte("Alter"), 1)
-				require.NotEqual(t, data, edited)
-				require.NoError(t, root.WriteFile(path, edited, 0600))
-				_, err = suite.ReadValidation(dir)
-				require.Error(t, err)
-			}
-			_, err = suite.VerifyFreeze(dir, "offline")
-			require.Error(t, err)
+			_, err = verifyFreezeEvidence(f, hash, evidence, "offline")
+			require.Error(t, err, "resealing cannot authorize changed evidence")
 		})
 	}
+}
+
+func TestCommittedPoolCorruptionRefusesValidation(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.CopyFS(filepath.Join(dir, "testdata/pools"), os.DirFS("../testdata/pools")))
+	root, err := os.OpenRoot(dir)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, root.Close()) })
+	v, err := ReadValidationFor("..", "offline")
+	require.NoError(t, err)
+	require.NoError(t, VerifyValidation(dir, "offline", v))
+	path := "testdata/pools/fact_early/look1.jsonl"
+	data, err := root.ReadFile(path)
+	require.NoError(t, err)
+	edited := bytes.Replace(data, []byte("Audit"), []byte("Alter"), 1)
+	require.NotEqual(t, data, edited)
+	require.NoError(t, root.WriteFile(path, edited, 0600))
+	require.ErrorContains(t, VerifyValidation(dir, "offline", v), "pool identity mismatch")
 }

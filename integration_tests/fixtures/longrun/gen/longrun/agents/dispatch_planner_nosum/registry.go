@@ -15,7 +15,6 @@ import (
 
 	specs "example.com/longrun/gen/longrun/agents/dispatch_planner_nosum/specs"
 	dispatch_planner "example.com/longrun/gen/longrun/toolsets/dispatch_planner"
-	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextmeasure"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	agentsruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
@@ -71,9 +70,7 @@ func RegisterDispatchPlannerNosumAgent(ctx context.Context, rt *agentsruntime.Ru
 			MaxToolCalls:     300,
 			MaxRecoveryTurns: 10,
 			ContextCompaction: &agentsruntime.ContextCompaction{
-				TriggerAt:        contextmeasure.Rate{Tokens: 5, Bytes: 10},
-				KeepRecentTokens: 1000,
-				ContextModel:     cfg.ContextModel,
+				ContextModel: cfg.ContextModel,
 			},
 		},
 	}); err != nil {

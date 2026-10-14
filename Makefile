@@ -308,7 +308,7 @@ verify-generated: tools
 	bash ./scripts/verify_generated.sh
 
 verify-mcp-local:
-	$(GO) test -C ./integration_tests/fixtures/longrun -race -count=1 -timeout=30m ./...
+	$(GO) test -C ./integration_tests/fixtures/longrun -p=1 -race -count=1 -timeout=30m ./...
 	$(GO) test -C ./integration_tests/fixtures/assistant -race ./... -count=1
 	$(GO) test -C ./integration_tests/fixtures/agent_features -race ./... -count=1
 	cd ./integration_tests/fixtures/sdkbridge_consumer && GOWORK=off $(GO) test -race ./... -count=1

@@ -184,7 +184,7 @@ execution plan assigns each proof to a ticket.
 | P4 | **Exposure.** Compaction never shows a model anything that was not model-facing in the session it came from. A continued run does show earlier runs' model-facing tool results, which callers never pass back (4.16); it never shows anything else. Summariser input, recall output, checkpoints, previews and carried entries are all built from eligible evidence (4.4), which is chosen by what content is, never by its size: no `ServerData`, no injected argument values, no hidden bookkeeping calls, and no reasoning blocks outside the current run's tail. | One fixture proves both sides: a 5 MB result holds a planted fact in its middle and has a marker in its `ServerData`; markers also go in an injected field and a hidden bookkeeping call. After compacting with a summariser, recalling every ID, listing every handle and searching for the fact, the fact reaches the summariser and `find`, and no model request in the call record contains a marker. |
 | P5 | **Discoverability.** Every model-visible message behind the checkpoint (user text, assistant text, tool calls, tool results) can be reached from what the checkpoint renders, by a finite sequence of `recall_context` calls starting at a pin, an index line, a receipt line or a handle. P5 is about access paths only. Whether the agent can afford the path *now* depends on its allowances (4.18), which are measured, not guaranteed (7.4). | With allowances disabled, a scripted agent reaches every evicted message of a 1,000-step run from the rendered checkpoint and the tool description alone, at a 200k and an 8k window, including assistant text with no tool call; the test records the number of calls needed at each window. |
 | P6 | **Session.** For an agent with threshold compaction, a continued session starts with the previous run's final view, bounded by the continuation cap: the checkpoint, its pins and the tail after it, with every entry in the form it rendered in, or a smaller one when the tail exceeds the cap. The *view* is carried within the cap; everything it no longer shows stays *retrievable* from the earlier run's record (P1, P5). Only the run that holds the session's latest continuation can publish the next one (4.16). | A decision made after the last compaction of run 1 is in the first request of run 2; across three runs, pins, cleared results, checkpoint coverage and recalled evidence all resolve to the run that holds them; an oversized `KeepResultInContext` result cleared at seal stays a placeholder in runs 2 and 3 and is recalled in full from run 1; two overlapping root runs and a late-finishing older run publish at most one successor. |
-| P7 | **Quality.** Compaction meets the non-inferiority margins of 7.4 against an uncompacted baseline: task success and evidence use no more than 5 points lower, unsupported claims no more than 2 points higher, at the gate's calibrated confidence. This is an eval result, not a structural property, and it gates turning threshold compaction on by default (7.4). | Release criteria (7.4). |
+| P7 | **Quality.** Compaction meets the non-inferiority margins of 7.4 against an uncompacted baseline: task success and evidence use no more than 5 points lower, unsupported claims within the independently selected calibrated margin (2, 3, or 5 points), at the gate's calibrated confidence. This is an eval result, not a structural property, and it gates turning threshold compaction on by default (7.4). | Release criteria (7.4). |
 
 Also:
 
@@ -2017,7 +2017,7 @@ recoveries. Long-running scenarios use the pretend window.
   pools, and per-run evidence classification from the record (present in the
   view or absent when needed).
   K19a completed these library APIs in `eval/gate` and `eval/evidence`.
-  K19b supplies the longrun fixture and CLI on protocol 18, including attachment
+  K19c supplies the longrun fixture and CLI on protocol 19, including attachment
   recall and record-derived evidence scoring. Validation precedes full calibration
   and the write-once freeze. See 7.4.1.
 
@@ -2063,8 +2063,9 @@ receipt-only variant (the default without a `ContextModel`) and the hybrid
 - a summariser whose output is rejected (forced by a test prompt);
 - a session continued across three runs, with a decision made after the last
   compaction of the first run, needed in the third;
-- a model change mid-run to a smaller window (reported, not gated: no
-  uncompacted baseline can hold the run in the smaller window).
+- a model change mid-run to a smaller real window (reported, not gated).
+  The synthetic small model still holds the uncompacted baseline. Compacted
+  variants retain their explicit 8k pretend window.
 
 **Items.** Each scenario has at least 12 independent items drawn from at
 least three task templates that differ in domain, tools and wording. Items
@@ -2093,8 +2094,8 @@ set by the looks below.
 - **Success:** the interval of the success-rate difference (variant minus
   baseline) has its lower bound above −5 percentage points.
 - **Unsupported claims:** the interval of the difference in the rate of
-  runs with an unsupported claim has its upper bound below +2 percentage
-  points.
+  runs with an unsupported claim has its upper bound below the independently
+  selected +2, +3, or +5 percentage-point margin for that variant.
 - **Evidence use:** the interval of the evidence-use difference has its lower
   bound above −5 percentage points.
 - **Recall:** the lower bound of the recall success rate is at least 80%.
@@ -2106,41 +2107,52 @@ size, the number of qualifying runs divided by the design effect estimated
 from the agreement between an item's repeats (at least 1), so a rate of 100%
 on few runs still has a wide interval.
 
-A guard runs beside the interval criteria: no gated scenario's point estimate
-of the success difference may be below −10 points, so a pooled pass cannot
-hide one broken scenario. The guard can only fail.
+A scenario guard uses the success interval from the same stratified item draws
+as the pooled criteria. It stops a variant only when the upper bound is less
+than −0.10. A point estimate alone cannot stop a variant.
 
-**Calibration.** The gate's operating characteristics are measured, not
-asserted. Before any real run, K19 simulates the complete gate (every
-criterion, the guard, the three looks and the stopping rule) on clustered
-synthetic outcomes: per-item random effects, correlated repeats, and success,
-claim and recall outcomes drawn jointly. It reports the probability that the
-whole gate passes under stated assumptions:
+**Calibration.** The simulator uses the same evaluator, policy, and stopping rule
+as operational and stored evaluations. All three candidate unsupported margins
+(0.02, 0.03, 0.05) receive the full 1,620-cell grid:
 
-- true success difference 0, −3, −5 and −8 points;
-- true unsupported-claim difference 0, +1 and +2 points;
-- discordance from 0.1 to 0.3, and within-item correlation from 0.3 to 0.7;
-- true evidence-use difference 0, −3 and −5 points, and true recall success
-  rate 0.75, 0.80 and 0.90;
-- baseline rates from a pilot of the baseline variant only.
+- success differences 0, −0.03, −0.05, −0.08;
+- unsupported differences 0, 0.01, 0.02, 0.03, 0.05;
+- evidence differences 0, −0.03, −0.05;
+- discordance 0.1, 0.2, 0.3 and within-item correlation 0.3, 0.5, 0.7;
+- recall success rates 0.75, 0.80, 0.90.
 
-The margins (−5 and +2 points), the item counts and the looks are fixed from
-that report before any variant runs, and are not changed afterwards. The
-target is a pass probability of at least 80% for a variant equal to the
-baseline, and at most 5% for one at either margin. If no item count up to the
-pool's size meets the target (the 2-point claims margin is the likely limit),
-the report says so, and the release decision is made knowing that the gate
-cannot certify that margin. The suite never relabels inconclusive as pass.
+Each candidate uses 2,000 simulations for its null and boundary cells, and 400
+for other grid cells. Bootstrap size remains 10,000. Two sensitivity cells use
+copula coupling 0 and 0.8. Two additional 200-simulation cells provide exact
+reproduction checks. Tuple-based seeds remain stable across worker counts.
+Reports retain per-variant uncertainty, stopping costs, and joint failure causes.
 
-**Outcome.** Each criterion is *pass* when its interval clears the margin,
-*fail* when the interval lies entirely on the wrong side of it, and
-*inconclusive* otherwise. The suite starts at 12 items per scenario and adds
-held-out items at two fixed later looks (24 and 48). The three looks share
-the error rate, so each uses a two-sided 1 − 0.05/3 interval. A fail at any
-look is final and stops the suite. K21 proceeds only when every criterion
-passes for both gated variants and the guard holds. A criterion still
-inconclusive at 48 items counts as not passed. The report then says that
-precision, not a measured regression, blocked it.
+Each variant selects its smallest candidate whose worst null PASS is at least
+0.80 and whose worst boundary PASS is at most 0.05 for every criterion.
+Infeasible cells cannot authorize selection. Missing decision evidence is an error.
+A variant with no eligible candidate is `CALIBRATION_INELIGIBLE`.
+If neither variant is eligible, the complete calibration remains diagnostic and
+no qualification-authorizing freeze is created. The suite never converts an
+unmeasured or inconclusive outcome to PASS.
+
+Assumed baseline rates are restricted to the offline configuration. Live
+calibration requires a complete baseline-only pilot: six pilot items per gated
+scenario, two repeats each, and matching recorded source and role identities.
+Failed agent outcomes remain observed rates. Missing or infrastructure-failed
+attempts cannot supply rates. Offline structural validation supplies observed
+recall-qualifying fractions, including zero-valued strata.
+
+**Outcome.** The fixed cumulative looks contain 12, 24, and 48 items per scenario.
+Repeats remain clustered within items. Each look uses a two-sided
+1 − 0.05/3 interval. PASS, FAIL, and final-look NOT_PASSED stop only their own
+variant and retain its exact terminal evidence. An active sibling continues.
+INCOMPLETE requires exact missing keys from the same look before any later
+partition starts. Reruns retain original repeat numbers and cannot replace
+valid observations. Shared missing baseline keys execute once.
+
+COMPLETE means that scheduling is finished, not that every variant qualified.
+Informational model_change and clear_only failures do not alter gated decisions.
+The shipped qualification table remains empty until separate live qualification.
 
 The session scenario is gated like the others, with today's behaviour as its
 baseline: an agent without compaction, a real window large enough for the
@@ -2154,27 +2166,34 @@ measure.
 
 ### 7.4.1 Operational definitions (K19)
 
-The committed K19b calibration exposes a guard problem: the gate as frozen
-cannot pass even a variant equal to baseline at the required 80% null-pass rate.
-Worst null PASS is 0%, and the best whole-gate PASS across all cells is 1.9%.
-Null cells FAIL at look 1 in 80.7%–99.55% of simulations. The stored criterion
-marginals prove a conservative guard-at-look-1 failure lower bound of
-80.45%–99.45%; exact joint guard counts were not retained. The report labels
-this bound and prints each null/margin target with its measured value.
+Historical K19b evidence used a point-estimate guard that rejected equal-to-baseline
+variants too frequently. V1 artifacts retain their exact bytes and source revision
+under the archive. They cannot authorize v2 work and continue to lock raw pools.
+The archive includes the declaration of the historical store boundary. Unknown,
+partial, orphaned, or consumed live evidence blocks migration.
 
-The cause is the point-estimate scenario guard (`D_s < -0.10`), which stops the
-whole gate early. K19b preserves this frozen rule and all simulation outcomes;
-its report revision only corrects the interpretation. **K19c must repair the
-guard before any live look**: design 7.4 amendment, interval guard, per-variant
-decision, and freeze v2. Low margin-cell PASS rates must be read alongside this
-near-universal early rejection. The fake dry gate remains a structural check.
+The v2 freeze binds the complete policy, selected candidates, role identities,
+capability profiles, actual effective settings, pools, materialized items, validation,
+calibration, inventory, and executable source. Its source bundle reconstructs the
+executable owners against a retained base. Source changes invalidate dependent
+evidence. Pure-Go evidence commands require `CGO_ENABLED=0` explicitly and refuse
+stale executables. Stored reports use recorded identities without provider I/O.
 
-The freeze also binds the exact gated/reported scenario lists and each
-scenario's drive context overrides. It records `dirty` with `git_revision` so
-an uncommitted calibration source is explicit. CI verifies the committed freeze
-and validation and regenerates all pool bytes in memory from their recorded
-seed provenance. CLI `--offline` is accepted for pilot/look only with
-`--config offline`.
+Complete structural validation precedes calibration. It records every expected
+item, variant, repeat, and actual runtime setting. Missing, duplicate, unexpected,
+infrastructure-failed, or structurally failed rows block calibration.
+Supporting profiles require attachment recall. Zero-support profiles instead
+require preserved evidence, zero threshold compactions, and one residency event.
+
+Materializer `k19c-v4` preserves raw pool bytes, IDs, seeds, partitions, and counts.
+It doubles the stored base step count, or quadruples it for model_change.
+Materialized parameters record the effective 36-step or 72-step workload.
+This explicit coverage revision preserves shipped compaction defaults and the
+three-compaction obligation. The named 24k/8k windows and recall-pressure 3/3
+allowances remain fixture stresses. Every actual baseline request stays below
+128,000 input tokens. Total bytes from separate runs remain separate accounting.
+The synthetic small model has a 128k real window, below the large model's 1m
+window. These fake capacities do not describe real provider limits.
 
 A need point is the first adopted planner request that contains the materialized
 trigger. Abandoned attempts do not establish need points. Missing need points
@@ -2201,10 +2220,10 @@ the copula and an item-level beta distribution. Sensitivity rows use kappa 0 and
 
 The longrun command and pools implement the operational boundary. Amendment 3
 sizes the large-result fixture below 60 KB, with its fact in the middle, so it
-survives the 64 KiB projection cap. Its regenerated smoke pools pass acceptance 15.
+survives the 64 KiB projection cap. Its raw pools retain their recorded seed provenance.
 K22b attachment reads recover evicted PNG/PDF evidence under the declared fake
-capabilities. The offline dry gate requires both gated variants to pass. Validation
-precedes the full calibration and freeze; none of these change the release criteria.
+capabilities. The offline dry proof checks ordinary and injected-fault outcomes separately
+from statistical eligibility. Complete validation precedes calibration and freeze.
 
 ## 8. Formal model
 

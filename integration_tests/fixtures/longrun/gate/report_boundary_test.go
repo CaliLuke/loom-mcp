@@ -1,4 +1,4 @@
-package suite_test
+package suite
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"example.com/longrun/env"
-	suite "example.com/longrun/gate"
 	"example.com/longrun/scenarios"
 	"github.com/CaliLuke/loom-mcp/v2/agenttest"
 	"github.com/CaliLuke/loom-mcp/v2/eval"
@@ -18,15 +17,14 @@ import (
 
 func TestReportNeedsNoHarnessAndChecksLabels(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, suite.WriteItems(dir, 29))
-	f, err := suite.BuildFreeze(dir, "offline", []byte("calibration"), eval.VCS{Revision: "test"})
-	require.NoError(t, err)
-	require.NoError(t, suite.WriteFreeze(dir, f))
+	require.NoError(t, WriteItems(dir, 19))
+	f, _ := frozenEvidenceFixture(t)
+	require.NoError(t, WriteFreeze(dir, f))
 	root, err := os.OpenRoot(dir)
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, root.Close()) })
 	require.NoError(t, root.WriteFile("gate/calibration_default.json", []byte("calibration"), 0600))
-	pools, err := env.Generate(29)
+	pools, err := env.Generate(19)
 	require.NoError(t, err)
 	calls := 0
 	cfg := eval.Config{Harness: func(context.Context, eval.Variant, ...agenttest.Option) (*agenttest.Harness, error) {
@@ -42,13 +40,13 @@ func TestReportNeedsNoHarnessAndChecksLabels(t *testing.T) {
 	data, err := json.Marshal([]string{writer.ID()})
 	require.NoError(t, err)
 	require.NoError(t, root.WriteFile("gate/looks_offline.json", data, 0600))
-	report, err := suite.StoredReport(dir, "offline", store, true)
+	report, err := reportLooks(dir, "offline", store, f, []string{writer.ID()}, true)
 	require.NoError(t, err)
 	require.Len(t, report.Decisions, 1)
 	assert.Equal(t, gate.Incomplete, report.Decisions[0].Status)
 	assert.Zero(t, calls)
 	wrong, err := store.Begin(t.Context(), cfg, eval.ExperimentMeta{Label: "unfrozen"})
 	require.NoError(t, err)
-	_, err = suite.Overlay(store, wrong.ID(), f, 1)
+	_, err = Overlay(store, wrong.ID(), f, 1)
 	assert.ErrorContains(t, err, "label mismatch")
 }

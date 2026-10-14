@@ -1,4 +1,4 @@
-package suite_test
+package checkcells_test
 
 import (
 	"encoding/json"
@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCommittedCheckCells(t *testing.T) {
-	data, err := os.ReadFile("calibration_default.json")
+func TestK19cCommittedCheckCells(t *testing.T) {
+	data, err := os.ReadFile("../calibration_default.json")
 	require.NoError(t, err)
 	var artifact suite.CalibrationArtifact
 	require.NoError(t, json.Unmarshal(data, &artifact))
@@ -26,9 +26,11 @@ func TestCommittedCheckCells(t *testing.T) {
 	expected, err := json.Marshal(artifact.Checks)
 	require.NoError(t, err)
 	assert.Equal(t, string(expected), string(actual), "production-bootstrap check cells must reproduce byte for byte")
-	if len(artifact.Report.Cells) > 0 {
-		assert.Len(t, artifact.Report.Cells, 972)
-		assert.Len(t, artifact.Report.Sensitivity, 2)
-		assert.NotEmpty(t, artifact.Report.Targets)
+	require.Equal(t, 2, artifact.Version)
+	require.Len(t, artifact.Candidates, 3)
+	for _, candidate := range artifact.Candidates {
+		assert.Len(t, candidate.Report.Cells, 1620)
+		assert.Len(t, candidate.Report.Sensitivity, 2)
+		assert.NotEmpty(t, candidate.Report.Targets)
 	}
 }

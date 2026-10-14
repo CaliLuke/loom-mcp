@@ -20,19 +20,21 @@ type CalibrationConfig struct {
 
 // CellReport stores probabilities, Monte Carlo uncertainty and stopping cost.
 type CellReport struct {
-	Cell          Cell                          `json:"cell"`
-	Simulations   int                           `json:"simulations"`
-	Infeasible    string                        `json:"infeasible"`
-	Pass          float64                       `json:"pass"`
-	NotPassed     float64                       `json:"not_passed"`
-	SE            float64                       `json:"se"`
-	ExpectedLooks float64                       `json:"expected_looks"`
-	ExpectedItems float64                       `json:"expected_items"`
-	VariantPass   map[string]float64            `json:"variant_pass"`
-	LookPass      [3]float64                    `json:"look_pass"`
-	LookFail      [3]float64                    `json:"look_fail"`
-	TruncatedPass [2]float64                    `json:"truncated_pass"`
-	Final         map[string]map[Status]float64 `json:"final"`
+	ExpectedAttempts float64                       `json:"expected_attempts"`
+	Variants         map[string]VariantSimulation  `json:"variants"`
+	Cell             Cell                          `json:"cell"`
+	Simulations      int                           `json:"simulations"`
+	Infeasible       string                        `json:"infeasible"`
+	Pass             float64                       `json:"pass"`
+	NotPassed        float64                       `json:"not_passed"`
+	SE               float64                       `json:"se"`
+	ExpectedLooks    float64                       `json:"expected_looks"`
+	ExpectedItems    float64                       `json:"expected_items"`
+	VariantPass      map[string]float64            `json:"variant_pass"`
+	LookPass         [3]float64                    `json:"look_pass"`
+	LookFail         [3]float64                    `json:"look_fail"`
+	TruncatedPass    [2]float64                    `json:"truncated_pass"`
+	Final            map[string]map[Status]float64 `json:"final"`
 }
 
 // CalibrationReport retains inputs and all cells in deterministic grid order.
@@ -48,13 +50,13 @@ type CalibrationReport struct {
 }
 
 // SimulatorVersion changes whenever synthetic sampling or reporting changes.
-const SimulatorVersion = "k19-v1-report2"
+const SimulatorVersion = "k19-v2-variant-interval"
 
-// CalibrationGrid returns all 972 cells in a stable order.
+// CalibrationGrid returns all 1620 cells in a stable order.
 func CalibrationGrid() []Cell {
-	out := make([]Cell, 0, 972)
+	out := make([]Cell, 0, 1620)
 	for _, y := range []float64{0, -.03, -.05, -.08} {
-		for _, u := range []float64{0, .01, .02} {
+		for _, u := range []float64{0, .01, .02, .03, .05} {
 			for _, d := range []float64{.1, .2, .3} {
 				for _, rho := range []float64{.3, .5, .7} {
 					for _, e := range []float64{0, -.03, -.05} {
@@ -90,4 +92,31 @@ func (c Cell) axis() string {
 		return measureRecall
 	}
 	return ""
+}
+
+// VariantSimulation records a variant's actual terminal outcomes and joint causes.
+type VariantSimulation struct {
+	Pass          float64            `json:"pass"`
+	NotPassed     float64            `json:"not_passed"`
+	SE            float64            `json:"se"`
+	LookPass      [3]float64         `json:"look_pass"`
+	LookFail      [3]float64         `json:"look_fail"`
+	GuardStop     float64            `json:"guard_stop"`
+	CriterionStop float64            `json:"criterion_stop"`
+	FailureMasks  map[string]float64 `json:"failure_masks"`
+}
+
+// CandidateReport preserves the complete result for one proposed unsupported margin.
+type CandidateReport struct {
+	Margin float64           `json:"margin"`
+	Report CalibrationReport `json:"report"`
+}
+
+// CandidateSelection reports eligibility separately for each variant.
+type CandidateSelection struct {
+	Variant       string             `json:"variant"`
+	Margin        float64            `json:"margin"`
+	Status        Status             `json:"status"`
+	WorstNull     float64            `json:"worst_null"`
+	WorstBoundary map[string]float64 `json:"worst_boundary"`
 }

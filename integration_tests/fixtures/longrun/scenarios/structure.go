@@ -17,12 +17,16 @@ func CheckStructure(scenario, variant string, rec *runrecord.RunRecord) error {
 	}
 	for _, r := range rec.Runs {
 		compactions := 0
+		residentEvents := 0
 		exhausted := false
 		unsupported := false
 		attachments := 0
 		refilled := false
 		previousDiscovery, previousReads := 3, 3
 		for _, event := range r.Events {
+			if event.Type == hooks.ContextNonTextResident {
+				residentEvents++
+			}
 			if event.Type == hooks.ContextRecalled {
 				var data hooks.ContextRecalledEvent
 				if err := json.Unmarshal(event.Payload, &data); err != nil {
@@ -50,20 +54,33 @@ func CheckStructure(scenario, variant string, rec *runrecord.RunRecord) error {
 		if r.WorkflowProtocolVersion != api.WorkflowProtocolVersion {
 			return fmt.Errorf("workflow protocol is %d", r.WorkflowProtocolVersion)
 		}
-		if variant == "baseline" {
+		switch {
+		case variant == "baseline":
+			for _, call := range r.Calls {
+				if call.Completion != nil {
+					usage := call.Completion.Usage
+					if usage.InputTokens+usage.CacheReadTokens+usage.CacheWriteTokens >= 128000 {
+						return fmt.Errorf("baseline request exceeds the strict 128000 input-token limit")
+					}
+				}
+			}
 			if compactions != 0 {
 				return fmt.Errorf("baseline recorded %d threshold compactions", compactions)
 			}
 			if r.ContextSettings != nil && r.ContextSettings.ContextWindow != 0 {
 				return fmt.Errorf("baseline has a pretend window")
 			}
-		} else if compactions < 3 {
+		case strings.HasPrefix(scenario, "multimodal_") && r.NonTextResident:
+			if compactions != 0 || residentEvents != 1 || r.ContextSettings == nil || !r.ContextSettings.KeepNonTextResident {
+				return fmt.Errorf("resident multimodal run requires zero threshold compactions and one residency event: compactions=%d events=%d", compactions, residentEvents)
+			}
+		case compactions < 3:
 			return fmt.Errorf("%s/%s: only %d threshold compactions", scenario, variant, compactions)
 		}
 		if scenario == "recall_pressure" && (variant == "receipt_only" || variant == "hybrid") && (!exhausted || !refilled) {
 			return fmt.Errorf("pressure must exhaust and refill: exhausted=%v refilled=%v", exhausted, refilled)
 		}
-		if strings.HasPrefix(scenario, "multimodal_") && (variant == "receipt_only" || variant == "hybrid") && (unsupported || attachments < 2) {
+		if strings.HasPrefix(scenario, "multimodal_") && (variant == "receipt_only" || variant == "hybrid") && !r.NonTextResident && (unsupported || attachments < 2) {
 			return fmt.Errorf("multimodal recall requires both attachments: unsupported=%v parts=%d", unsupported, attachments)
 		}
 		if scenario == "summariser_rejected" && variant == "hybrid" && r.Summary.Rejections == 0 {

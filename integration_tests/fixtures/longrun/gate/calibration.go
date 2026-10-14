@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 
 	"github.com/CaliLuke/loom-mcp/v2/eval/gate"
@@ -12,48 +14,80 @@ import (
 
 // CalibrationArtifact binds production results and the independently reproducible check cells.
 type CalibrationArtifact struct {
-	Config              gate.CalibrationConfig `json:"config"`
-	Report              gate.CalibrationReport `json:"report"`
-	Checks              gate.CalibrationReport `json:"checks"`
-	QualificationSource string                 `json:"qualification_source"`
-}
-
-// ReadValidation refuses q values derived from different pools or materialisation.
-func ReadValidation(dir string) (Validation, error) {
-	var v Validation
-	b, err := readFile(dir, "gate/validation.json")
-	if err != nil {
-		return v, err
-	}
-	if err := json.Unmarshal(b, &v); err != nil {
-		return v, err
-	}
-	in, pools, err := Inputs(dir)
-	if err != nil {
-		return v, err
-	}
-	data, err := json.Marshal(pools)
-	if err != nil {
-		return v, err
-	}
-	if v.PoolsSHA256 != gate.Digest(data) || v.MaterializerVersion != in.MaterializerVersion {
-		return v, fmt.Errorf("validation is stale; rerun validate")
-	}
-	if len(v.Failures) > 0 {
-		return v, fmt.Errorf("structural validation failed; production calibration is blocked")
-	}
-	return v, nil
+	Pilot               *PilotEvidence            `json:"pilot_evidence,omitempty"`
+	Version             int                       `json:"version"`
+	Configuration       string                    `json:"configuration"`
+	Candidates          []gate.CandidateReport    `json:"candidates,omitempty"`
+	Selections          []gate.CandidateSelection `json:"selections,omitempty"`
+	SourceSHA256        string                    `json:"source_sha256,omitempty"`
+	SourceBundleSHA256  string                    `json:"source_bundle_sha256,omitempty"`
+	ValidationSHA256    string                    `json:"validation_sha256,omitempty"`
+	Config              gate.CalibrationConfig    `json:"config"`
+	Report              gate.CalibrationReport    `json:"report"`
+	Checks              gate.CalibrationReport    `json:"checks"`
+	QualificationSource string                    `json:"qualification_source"`
 }
 
 // Calibrate computes the production report once, then persists it and its text rendering.
-func Calibrate(ctx context.Context, dir, config string, cfg gate.CalibrationConfig) error {
+func Calibrate(ctx context.Context, dir, config string, cfg gate.CalibrationConfig, pilot *PilotEvidence) error {
+	source, err := ReadSource(ctx, dir, config)
+	if err != nil {
+		return err
+	}
+	validation, err := ReadValidationFor(dir, config)
+	if err != nil {
+		return err
+	}
+	expected := CalibrationConfig(config, validation, cfg.Workers)
+	if pilot != nil {
+		expected.Pilot, err = VerifyPilot(dir, config, *pilot, validation.Profile, source.Identity.SHA256)
+		if err != nil {
+			return err
+		}
+	}
+	if validation.SourceSHA256 != source.Identity.SHA256 || !reflect.DeepEqual(expected, cfg) || (config != "offline" && cfg.Pilot == nil) {
+		return fmt.Errorf("calibration requires source-bound validation and complete rate inputs")
+	}
+	validationBytes, err := os.ReadFile(ValidationPath(dir, config))
+	if err != nil {
+		return err
+	}
+	if err := VerifyEvidenceExecutable(ctx, dir); err != nil {
+		return err
+	}
+	if _, err := os.Stat(CalibrationPath(dir, config)); err == nil {
+		return fmt.Errorf("calibration already exists; verify retained evidence before reuse")
+	} else if !os.IsNotExist(err) {
+		return err
+	}
 	checks, err := gate.CalibrateChecks(ctx, cfg)
 	if err != nil {
 		return err
 	}
-	artifact := CalibrationArtifact{Config: cfg, Checks: checks, QualificationSource: "offline validate"}
-	artifact.Report, err = gate.Calibrate(ctx, cfg)
+	artifact := CalibrationArtifact{Version: 2, Configuration: config, Config: cfg, Checks: checks, Pilot: pilot, QualificationSource: "offline structural validation; assumed baseline rates", SourceSHA256: source.Identity.SHA256, SourceBundleSHA256: source.BundleSHA256, ValidationSHA256: gate.Digest(validationBytes)}
+	if cfg.Pilot != nil {
+		artifact.QualificationSource = "offline structural validation; complete live baseline pilot"
+	}
+	artifact.Candidates, err = gate.CalibrateCandidates(ctx, cfg)
 	if err != nil {
+		return err
+	}
+	artifact.Selections, err = gate.SelectCandidates(artifact.Candidates, cfg.Gate.Variants)
+	if err != nil {
+		return err
+	}
+	after, err := ReadSource(ctx, dir, config)
+	if err != nil {
+		return err
+	}
+	currentValidation, err := os.ReadFile(ValidationPath(dir, config))
+	if err != nil {
+		return err
+	}
+	if after.SHA256 != source.SHA256 || gate.Digest(currentValidation) != artifact.ValidationSHA256 {
+		return fmt.Errorf("source or validation changed during calibration")
+	}
+	if err := VerifyCalibration(artifact, cfg, source, artifact.ValidationSHA256); err != nil {
 		return err
 	}
 	return WriteCalibration(dir, config, artifact)
@@ -75,6 +109,9 @@ func WriteCalibration(dir, config string, artifact CalibrationArtifact) error {
 
 // CalibrationText renders saved simulation outcomes without running models or sampling.
 func CalibrationText(config string, artifact CalibrationArtifact) string {
+	if artifact.Version == 2 {
+		return calibrationV2Text(config, artifact)
+	}
 	var text strings.Builder
 	report := artifact.Report
 	fmt.Fprintf(&text, "Configuration: %s\nQualification: %s\nRate source: %s\nSimulator: %s\nCells: %d (+ %d sensitivity)\n", config, artifact.QualificationSource, report.RateSource, gate.SimulatorVersion, len(report.Cells), len(report.Sensitivity))
@@ -84,6 +121,28 @@ func CalibrationText(config string, artifact CalibrationArtifact) string {
 	fmt.Fprintln(&text, "cell,dY,dU,dE,discordance,rho,recall,kappa,n,pass,mc_se,expected_looks,expected_items,not_passed")
 	for i, c := range report.Cells {
 		fmt.Fprintf(&text, "%d,%g,%g,%g,%g,%g,%g,%g,%d,%g,%g,%g,%g,%g\n", i, c.Cell.DY, c.Cell.DU, c.Cell.DE, c.Cell.Delta, c.Cell.Rho, c.Cell.Recall, c.Cell.Kappa, c.Simulations, c.Pass, c.SE, c.ExpectedLooks, c.ExpectedItems, c.NotPassed)
+	}
+	return text.String()
+}
+
+func calibrationV2Text(config string, artifact CalibrationArtifact) string {
+	var text strings.Builder
+	fmt.Fprintf(&text, "Configuration: %s\nEvidence: %s\nSimulator: %s\nSource: %s\nValidation: %s\n", config, artifact.QualificationSource, gate.SimulatorVersion, artifact.SourceSHA256, artifact.ValidationSHA256)
+	for _, selection := range artifact.Selections {
+		fmt.Fprintf(&text, "%s: %s; selected margin=%g; worst null PASS=%g; boundary PASS=%v\n", selection.Variant, selection.Status, selection.Margin, selection.WorstNull, selection.WorstBoundary)
+	}
+	for _, candidate := range artifact.Candidates {
+		fmt.Fprintf(&text, "\nCandidate margin: %g; cells: %d; sensitivity: %d\n", candidate.Margin, len(candidate.Report.Cells), len(candidate.Report.Sensitivity))
+		for _, target := range candidate.Report.Targets {
+			fmt.Fprintln(&text, target)
+		}
+		fmt.Fprintln(&text, "cell,variant,dY,dU,dE,discordance,rho,recall,kappa,n,pass,mc_se,expected_looks,expected_items,expected_attempts,not_passed,guard_stop,criterion_stop,infeasible")
+		for i, cell := range append(candidate.Report.Cells[:len(candidate.Report.Cells):len(candidate.Report.Cells)], candidate.Report.Sensitivity...) {
+			for _, variant := range artifact.Config.Gate.Variants {
+				v := cell.Variants[variant]
+				fmt.Fprintf(&text, "%d,%s,%g,%g,%g,%g,%g,%g,%g,%d,%g,%g,%g,%g,%g,%g,%g,%g,%q\n", i, variant, cell.Cell.DY, cell.Cell.DU, cell.Cell.DE, cell.Cell.Delta, cell.Cell.Rho, cell.Cell.Recall, cell.Cell.Kappa, cell.Simulations, v.Pass, v.SE, cell.ExpectedLooks, cell.ExpectedItems, cell.ExpectedAttempts, v.NotPassed, v.GuardStop, v.CriterionStop, cell.Infeasible)
+			}
+		}
 	}
 	return text.String()
 }

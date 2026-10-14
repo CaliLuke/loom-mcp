@@ -5,13 +5,14 @@ import (
 	"encoding/json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"strings"
 	"sync/atomic"
 	"testing"
 )
 
 func TestCalibrationGrid(t *testing.T) {
 	cells := CalibrationGrid()
-	require.Len(t, cells, 972)
+	require.Len(t, cells, 1620)
 	count := 0
 	for _, c := range cells {
 		if c.DecisionCell() {
@@ -45,5 +46,5 @@ func TestCalibrationSameEvaluatorDeterministic(t *testing.T) {
 	bj, err := json.Marshal(b)
 	require.NoError(t, err)
 	assert.Equal(t, string(aj), string(bj))
-	assert.Contains(t, a.Targets[0], "cannot certify")
+	assert.Contains(t, strings.Join(a.Targets, "\n"), "cannot certify")
 }

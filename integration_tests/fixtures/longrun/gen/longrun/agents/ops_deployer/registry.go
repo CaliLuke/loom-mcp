@@ -15,7 +15,6 @@ import (
 
 	specs "example.com/longrun/gen/longrun/agents/ops_deployer/specs"
 	ops_deployer "example.com/longrun/gen/longrun/toolsets/ops_deployer"
-	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextmeasure"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"
 	agentsruntime "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
@@ -71,9 +70,7 @@ func RegisterOpsDeployerAgent(ctx context.Context, rt *agentsruntime.Runtime, cf
 			MaxToolCalls:     300,
 			MaxRecoveryTurns: 10,
 			ContextCompaction: &agentsruntime.ContextCompaction{
-				TriggerAt:        contextmeasure.Rate{Tokens: 5, Bytes: 10},
-				KeepRecentTokens: 1000,
-				ContextModel:     cfg.ContextModel,
+				ContextModel: cfg.ContextModel,
 				Summary: agentsruntime.SummarySettings{
 					Instructions: "Keep planted key = value lines verbatim in order. Later corrections override earlier values.",
 					Prompt:       "",

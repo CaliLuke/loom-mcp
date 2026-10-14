@@ -10,6 +10,11 @@ import (
 
 type evaluator func(Table, Config, int) (Evaluation, error)
 
+const (
+	assumedRateSource = "assumed defaults"
+	pilotRateSource   = "pilot (clamped to [.02,.98])"
+)
+
 // Calibrate runs the full grid and two central-null copula sensitivity rows.
 // It uses Evaluate and Decide unchanged, including 10,000 frozen-seed resamples.
 // Worker count changes scheduling only; each cell/simulation owns its RNG.
@@ -34,12 +39,12 @@ func CalibrateChecks(ctx context.Context, cfg CalibrationConfig) (CalibrationRep
 }
 
 func calibrate(ctx context.Context, cfg CalibrationConfig, cells []Cell, count int, eval evaluator) (CalibrationReport, error) {
-	out := CalibrationReport{Version: SimulatorVersion, Seed: cfg.Seed, RateSource: "assumed defaults", Baselines: map[string]Rates{}, Qualifying: cfg.Qualifying, Cells: make([]CellReport, len(cells))}
+	out := CalibrationReport{Version: SimulatorVersion, Seed: cfg.Seed, RateSource: assumedRateSource, Baselines: map[string]Rates{}, Qualifying: cfg.Qualifying, Cells: make([]CellReport, len(cells))}
 	if err := validateCalibration(cfg); err != nil {
 		return out, err
 	}
 	if cfg.Pilot != nil {
-		out.RateSource = "pilot (clamped to [.02,.98])"
+		out.RateSource = pilotRateSource
 	}
 	for _, s := range cfg.Gate.Scenarios {
 		out.Baselines[s] = baselineRates(cfg, s)
@@ -53,7 +58,7 @@ func calibrate(ctx context.Context, cfg CalibrationConfig, cells []Cell, count i
 				n := count
 				if n == 0 {
 					n = 400
-					if cells[i].DecisionCell() {
+					if calibrationDecisionCell(cells[i], cfg.Gate.Policy) {
 						n = 2000
 					}
 				}
@@ -71,8 +76,9 @@ func calibrate(ctx context.Context, cfg CalibrationConfig, cells []Cell, count i
 			return out, err
 		}
 	}
-	out.Targets = CalibrationTargets(out.Cells)
-	return out, nil
+	var err error
+	out.Targets, err = CalibrationTargets(out.Cells, cfg.Gate.Policy)
+	return out, err
 }
 func simulateCell(ctx context.Context, cfg CalibrationConfig, c Cell, n int, eval evaluator) (CellReport, error) {
 	out := CellReport{Cell: c, Simulations: n, VariantPass: map[string]float64{}, Final: map[string]map[Status]float64{}}
@@ -103,6 +109,22 @@ func normalizeCell(r *CellReport, n float64) {
 	r.NotPassed /= n
 	r.ExpectedLooks /= n
 	r.ExpectedItems /= n
+	r.ExpectedAttempts /= n
+	for name, v := range r.Variants {
+		v.Pass /= n
+		v.NotPassed /= n
+		v.GuardStop /= n
+		v.CriterionStop /= n
+		v.SE = math.Sqrt(v.Pass * (1 - v.Pass) / n)
+		for i := range 3 {
+			v.LookPass[i] /= n
+			v.LookFail[i] /= n
+		}
+		for cause := range v.FailureMasks {
+			v.FailureMasks[cause] /= n
+		}
+		r.Variants[name] = v
+	}
 	r.SE = math.Sqrt(r.Pass * (1 - r.Pass) / n)
 	for i := range 3 {
 		r.LookPass[i] /= n
@@ -164,4 +186,13 @@ func cellSeed(c Cell) uint64 {
 		seed = splitmix(seed ^ math.Float64bits(v))
 	}
 	return seed
+}
+
+func calibrationDecisionCell(c Cell, p *Policy) bool {
+	for _, margin := range p.Unsupported {
+		if c.CandidateDecisionCell(margin) {
+			return true
+		}
+	}
+	return false
 }

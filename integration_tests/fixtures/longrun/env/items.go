@@ -27,7 +27,7 @@ type Domain struct {
 }
 
 // MaterializerVersion binds the pools to their exact interpretation.
-const MaterializerVersion = "k19b-v3"
+const MaterializerVersion = "k19c-v4"
 
 // Domains returns the three task templates.
 func Domains() []Domain {

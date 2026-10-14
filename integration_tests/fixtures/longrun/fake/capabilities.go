@@ -7,12 +7,18 @@ import (
 )
 
 // ToolResultParts declares the formats decoded from actual request bytes.
-func (*Reader) ToolResultParts(context.Context, *model.Request) model.ToolResultPartSupport {
+func (r *Reader) ToolResultParts(context.Context, *model.Request) model.ToolResultPartSupport {
+	if r.Profile != nil {
+		return r.Profile.Support.Intersect(r.Profile.Support)
+	}
 	return attachmentSupport()
 }
 
 // ToolResultParts keeps summary-model support in the observed intersection.
-func (*Summariser) ToolResultParts(context.Context, *model.Request) model.ToolResultPartSupport {
+func (s *Summariser) ToolResultParts(context.Context, *model.Request) model.ToolResultPartSupport {
+	if s.Profile != nil {
+		return s.Profile.Support.Intersect(s.Profile.Support)
+	}
 	return attachmentSupport()
 }
 

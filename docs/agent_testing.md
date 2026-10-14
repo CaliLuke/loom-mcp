@@ -400,7 +400,7 @@ Missing or nonbinary measures produce errors.
 Infrastructure failures remain missing pairs. Agent run errors remain quality outcomes.
 
 Call `gate.Evaluate(table, config, look)` on cumulative items.
-Supply two gated variant IDs, the baseline ID, scenario IDs, two repeats, and the frozen seed.
+Supply one or two active gated variant IDs, the baseline ID, scenario IDs, two repeats, and the explicit frozen Policy (including its bootstrap seed and alpha).
 Supply `Config.Items` from the cumulative freeze manifest to detect entirely missing items.
 Without a manifest, the observed item union defines the plan.
 Reported variants and scenarios do not enter the gate.
@@ -412,17 +412,19 @@ The estimate gives each scenario equal weight.
 Production uses 10,000 resamples and family alpha 0.05 divided across three looks.
 Recall uses the item agreement design effect and a Wilson interval.
 Exact margin equality is inconclusive for every criterion, including recall, as required by Q17.
-The scenario guard fails only below a success difference of -0.10.
+The scenario guard fails only when the upper success-interval bound is strictly below -0.10.
 
 Call `gate.Decide(evaluation, previous)` for the stopping decision.
-For ordered execution, supply the consecutive `CONTINUE` prefix.
-A terminal result refuses a later look. An incomplete look requires a rerun of that look.
-An empty prefix supports analysis of an isolated cumulative look.
+For ordered execution, supply the consecutive decision prefix.
+Each variant retains its terminal result while an active sibling continues.
+An incomplete look requires exact missing-key reruns before any later look.
+An empty operational prefix starts look 1. Use `DecideMode` with `Offline` for isolated offline analysis.
 `gate.Render` reports criteria, precision, scenario estimates, and exact missing run keys.
 
 ### Calibrate and freeze
 
-`gate.Calibrate(ctx, config)` runs all 972 cells plus two copula sensitivity rows.
+`gate.Calibrate(ctx, config)` runs all 1,620 cells plus two copula sensitivity rows.
+`gate.CalibrateCandidates` evaluates all three fixed margins while sharing identical bootstrap work.
 It uses the same evaluator and stopping rule as real experiments.
 Decision cells use 2,000 simulations. Other cells use 400.
 Qualification is an independent Bernoulli draw from the offline validated fraction.
@@ -432,6 +434,9 @@ Baseline rates come from the pilot or labelled assumed defaults.
 Worker count does not change the report bytes.
 `gate.CalibrateChecks` runs the two reference cells with 200 simulations and the production bootstrap.
 Only package tests can reduce the bootstrap count.
+`gate.VerifyCalibrationReport` checks population identity, feasibility, outcome totals,
+Monte Carlo uncertainty, failure causes, and scheduling cost without rerunning simulations.
+The fixture also verifies the full grid and required simulation counts.
 
 `gate.Freeze` stores the experiment identity, policies, margins, pool hashes, item hashes, and calibration provenance.
 Pool keys in `FreezeInputs` use `scenario/partition`.
@@ -443,6 +448,7 @@ Then call `Freeze.VerifyLabel` for each stored experiment.
 `Freeze.Label` creates `gate/<configuration>/<freeze-sha8>/look<N>`.
 Call `gate.CanGenerateItems` before pool generation.
 The library refuses regeneration when a freeze exists.
+The fixture also keeps archived v1 freezes as pool locks.
 The caller owns file creation, write-once enforcement, and storage of the trusted freeze hash.
 
 ## Release-criteria suite
@@ -463,77 +469,87 @@ The reported model-change scenario has no pilot pool.
 CI runs only the smoke items. Live runs require `LOOM_LIVE_MODEL=1`.
 Offline model results describe fixture structure, not model quality.
 
-From the fixture directory, prepare the suite in this order:
+The evidence commands require an explicit pure-Go build (`CGO_ENABLED=0`).
+The CLI refuses a stale executable or a different source identity before evidence writes.
+Race tests use their normal cgo environment.
+
+For an existing v1 fixture, declare the complete historical store before migration:
 
 ```sh
-go run ./cmd/compaction-gate items --seed 19
-go run ./cmd/compaction-gate validate --offline --workers 10
-nice -n 10 go run ./cmd/compaction-gate calibrate --workers 10
-go run ./cmd/compaction-gate freeze
+CGO_ENABLED=0 go run ./cmd/compaction-gate inventory --config offline --out .loom-evals --declare-complete-store
+CGO_ENABLED=0 go run ./cmd/compaction-gate archive-v1 --config offline --inventory gate/inventory_offline.json
+CGO_ENABLED=0 go run ./cmd/compaction-gate source --config offline --base origin/main
+CGO_ENABLED=0 go run ./cmd/compaction-gate validate --config offline --workers 4
+CGO_ENABLED=0 go run ./cmd/compaction-gate source --config offline --verify
+CGO_ENABLED=0 go run ./cmd/compaction-gate calibrate --config offline --workers 4
+CGO_ENABLED=0 go run ./cmd/compaction-gate freeze --config offline --inventory gate/inventory_offline.json
 ```
 
-`validate` runs all partitions under the offline models and records qualifying
-fractions. Its outcomes never enter a release decision.
-The full calibration uses 972 cells, two sensitivity rows, and production bootstrap settings.
-The full artifact includes the two 200-simulation check cells.
-`freeze` requires a full calibration report.
+The declaration covers the named store only. It cannot discover undeclared external stores.
+The inventory includes incomplete, orphaned, temporary, and malformed entries.
+Unknown or consumed live evidence blocks migration.
+The archive preserves exact v1 artifacts and their retained source revision.
+Archived freezes continue to lock their pools. V1 evidence cannot authorize v2 looks.
 
-The large-result scenario keeps its fact in the middle of a result below 60 KB,
-including JSON framing, so the full result survives transcript projection.
-Its five pools use seed `20261021`; recall-pressure pools use `20261022`, and
-other pools use `20261020`. Pressure facts sit beyond the summary prefix, with
-distinct middle and final need markers, so the fixture tests actual recall.
+`validate` uses offline clients with the selected configuration's recorded capability profile.
+It collects every required item, variant, and repeat, including failed structural obligations.
+Missing, duplicate, unexpected, or failed rows block calibration.
+Recorded runtime settings supply the effective policies, including rules that depend on the context window.
+Observed qualifying fractions of zero are valid. Missing observations are errors.
+These fake outcomes describe structure, not live model quality.
 
-On protocol 18, offline Reader and Summariser clients declare PNG/PDF support.
-The Reader reads attachment descriptors at text offset zero, then requests each
-original part with `part: "attachment"` and its 1-based `index`. Multimodal
-scenarios allow 2,000 protected tool tokens to fit the 1,500-token image. The
-baseline policy remains unchanged. Evidence classification credits received
-attachment bytes, never a descriptor alone.
+The materializer version is `k19c-v4`. Raw pool bytes, item IDs, seeds, and partitions retain their historical values.
+Stored `steps` describes the base workload. Materialization doubles that length, or quadruples it for `model_change`.
+The current inputs therefore execute 36 steps per run, or 72 for `model_change`.
+Materialized parameters record this effective length.
+Each baseline request must contain fewer than 128,000 input tokens. Total bytes across separate runs do not represent one request.
+The retained v1 source reproduces the historical workload.
 
-Run the full calibration only after validation and all checks pass. It embeds
-both 200-simulation check cells in `calibration_default.json`; test 7 recomputes
-them exactly. Generate the write-once freeze afterwards.
+Runtime compaction defaults remain unchanged. Named fixture stresses use 24k windows, or 8k for model change and recall pressure.
+Recall pressure retains its three discovery and three read allowances.
+Offline profiles declare synthetic windows of 1,000,000, 128,000, and 200,000 tokens for planner, small planner, and summarizer.
+These capacities are fixture inputs, not claims about live providers.
+Supporting profiles must recall both attachments. Zero-support profiles retain the evidence, record one residency event, and perform no threshold compaction.
 
+Calibration measures all three unsupported-claim margins: 0.02, 0.03, and 0.05.
+Each candidate includes 1,620 grid cells, two sensitivity cells, and the fixed 10,000-resample bootstrap.
+Decision cells use 2,000 simulations. Other grid cells use 400.
+Two additional 200-simulation cells provide reproducible checks.
+Each variant selects its smallest eligible margin independently.
+Eligibility requires worst null PASS of at least 0.80 and every worst boundary PASS of at most 0.05.
+Reports retain uncertainty, stopping costs, and joint failure causes.
+Identical bootstrap work can be shared without changing a candidate's counts or decisions.
+Calibration files are write-once. Freeze and report verification reuse complete results after checking their identities and counts.
+A repeated `calibrate` command refuses to overwrite them; that refusal does not verify their contents.
+Report-only changes do not require new simulations.
 
-The committed K19b calibration exposes a guard problem: the gate as frozen
-cannot pass even a variant equal to baseline at the required 80% null-pass rate.
-Worst null PASS is 0%, and the best whole-gate PASS across all cells is 1.9%.
-Null cells FAIL at look 1 in 80.7%–99.55% of simulations. The stored criterion
-marginals prove a conservative guard-at-look-1 failure lower bound of
-80.45%–99.45%; exact joint guard counts were not retained. The report labels
-this bound and prints each null/margin target with its measured value.
+`CALIBRATION_INELIGIBLE` excludes a variant from qualification work.
+If neither variant is eligible, the complete diagnostic calibration remains available and `freeze` refuses authorization.
+Offline assumed rates never qualify a live configuration.
+Live calibration requires a complete baseline pilot with two repeats, matching roles, source, and pilot partitions.
 
-The cause is the point-estimate scenario guard (`D_s < -0.10`), which stops the
-whole gate early. K19b preserves this frozen rule and all simulation outcomes;
-its report revision only corrects the interpretation. **K19c must repair the
-guard before any live look**: design 7.4 amendment, interval guard, per-variant
-decision, and freeze v2. Low margin-cell PASS rates must be read alongside this
-near-universal early rejection. The fake dry gate remains a structural check.
-
-The freeze also binds the exact gated/reported scenario lists and each
-scenario's drive context overrides. It records `dirty` with `git_revision` so
-an uncommitted calibration source is explicit. CI verifies the committed freeze
-and validation and regenerates all pool bytes in memory from their recorded
-seed provenance. CLI `--offline` is accepted for pilot/look only with
-`--config offline`.
-
-For a frozen configuration, run the held-out looks in order:
+For an eligible frozen configuration, run held-out looks in order:
 
 ```sh
-go run ./cmd/compaction-gate look 1 --config offline
-go run ./cmd/compaction-gate report --config offline --verify
+CGO_ENABLED=0 go run ./cmd/compaction-gate look 1 --config offline
+CGO_ENABLED=0 go run ./cmd/compaction-gate report --config offline --verify
 ```
 
-Only `CONTINUE` permits the next look. `PASS`, `FAIL`, and `NOT_PASSED` stop the gate.
-`INCOMPLETE` reports missing keys. The same look reruns missing groups with a recorded `Parent`.
-Every decision uses the complete cumulative item manifest, including items with no stored attempts.
+A scenario guard stops a variant only when the success interval's upper bound is less than −0.10.
+Each variant stops independently. Its terminal evidence remains unchanged.
+`INCOMPLETE` requires an exact missing-key rerun of the same look, with original repeat numbers and a recorded `Parent`.
+Valid observations cannot be replaced. A missing baseline runs once for its active dependants.
+`COMPLETE` means that scheduling is finished. It does not mean that all variants passed.
+The report’s `variants` list includes the latest eligible decisions and explicit `CALIBRATION_INELIGIBLE` siblings. Its `decisions` list retains the eligible-only operational prefix.
+Informational failures cannot block gated advancement. Planned informational results with no stored attempts have `available: false` in `diagnostics`; observed results have `available: true`, regardless of their quality verdict.
 
-`report` uses stored experiments without a harness or model client.
-With `--verify`, it rebuilds reserved measures from the exported records.
-Both commands check the freeze hash, raw pool bytes, materialized item hashes, policies, and experiment labels.
-The separate `.sha256` file records the trusted freeze identity for review and version control.
-`items` refuses to regenerate pools after any freeze exists.
+`report` uses stored evidence and recorded model identities, without model environment variables or provider construction.
+With `--verify`, it recomputes measures from exported records.
+V2 verification binds policy, roles, capabilities, effective settings, pools, materialized items, validation, calibration, inventory, and executable source.
+The source bundle reconstructs executable owners against a retained base revision.
+Protected auxiliary sums and evidence outputs do not become executable source owners.
+
+`items` refuses to regenerate pools after an active or archived freeze exists.
 The embedded `run`, `show`, `compare`, and `list` commands use `evalcli.Main`.
 Their ordinary `run` command uses the disjoint smoke pool.
 
