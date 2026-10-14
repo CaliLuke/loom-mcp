@@ -400,7 +400,8 @@ func (b *toolSpecBuilder) ensureNestedLocalTransportTypes(scope *codegen.NameSco
 		// Alias primitives (e.g. type Time string) must validate as values, otherwise
 		// Goa’s ValidationCode will emit nil checks and dereferences that can’t compile.
 		httpctx := codegen.NewAttributeContext(!goaexpr.IsPrimitive(ut), false, false, "", scope)
-		vcode := codegen.ValidationCode(ut.AttributeExpr, ut, httpctx, true, goaexpr.IsAlias(ut), false, "body")
+		validator := codegen.NamedValidationFunction(&goaexpr.AttributeExpr{Type: ut}, httpctx, "body")
+		vcode := codegen.ValidationCode(ut.AttributeExpr, ut, validator.Context(httpctx), true, goaexpr.IsAlias(ut), false, "body")
 		var vlines []string
 		if strings.TrimSpace(vcode) != "" {
 			vlines = strings.Split(vcode, "\n")
@@ -418,6 +419,7 @@ func (b *toolSpecBuilder) ensureNestedLocalTransportTypes(scope *codegen.NameSco
 			TransportDef:           name + " " + scope.GoTypeDef(ut.AttributeExpr, true, false),
 			TransportImports:       shared.GatherAttributeImports(b.genpkg, ut.AttributeExpr),
 			TransportValidationSrc: vlines,
+			TransportValidator:     validator,
 			TransportTypeRef:       tref,
 			TransportPointer:       strings.HasPrefix(tref, "*"),
 		}

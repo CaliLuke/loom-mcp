@@ -13,7 +13,7 @@ type (
 		// Projected lookup query
 		Query string `json:"query"`
 		// Opaque continuation cursor
-		Cursor *string `json:"cursor,omitempty"`
+		Cursor *string `json:"cursor,omitzero"`
 		// Verified server-owned session identifier
 		SessionID *string `json:"-"`
 	}
@@ -29,11 +29,11 @@ type (
 		// Projected lookup query
 		Query string `json:"query"`
 		// Optional machine-sized count
-		Count *int `json:"count,omitempty"`
+		Count *int `json:"count,omitzero"`
 		// Optional signed 64-bit value
-		Signed *int64 `json:"signed,omitempty"`
+		Signed *int64 `json:"signed,omitzero"`
 		// Optional unsigned 64-bit value
-		Unsigned *uint64 `json:"unsigned,omitempty"`
+		Unsigned *uint64 `json:"unsigned,omitzero"`
 	}
 
 	// ProjectedLookupToolResult defines the JSON result for the projected.projected_lookup_tool tool.

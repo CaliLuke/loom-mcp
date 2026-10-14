@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/redis/go-redis/v9"
+	"github.com/CaliLuke/go-redis/v9"
 
 	clientspulse "github.com/CaliLuke/loom-mcp/v2/features/stream/pulse/clients/pulse"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/toolregistry"

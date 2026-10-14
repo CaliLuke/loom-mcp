@@ -100,7 +100,7 @@ type ProjectedLookupResult struct {
 // StatusPayload is the payload type of the catalog service status method.
 type StatusPayload struct {
 	// Status scope
-	Scope *string `json:"scope,omitempty"`
+	Scope *string `json:"scope,omitzero"`
 }
 
 // StatusResult is the result type of the catalog service status method.

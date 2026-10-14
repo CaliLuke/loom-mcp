@@ -2,12 +2,8 @@ package codegen
 
 import (
 	"bytes"
-	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"fmt"
-	"math"
-	"math/big"
-	"strconv"
 
 	"github.com/CaliLuke/loom/expr"
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -63,7 +59,7 @@ func numericCanonical(attr *expr.AttributeExpr, primitive expr.Primitive) any {
 		if v := current.Validation; v != nil {
 			enums = append(enums, v.Values...)
 			for _, bound := range []struct {
-				value     *float64
+				value     *expr.NumericBound
 				lower     bool
 				exclusive bool
 			}{
@@ -71,7 +67,7 @@ func numericCanonical(attr *expr.AttributeExpr, primitive expr.Primitive) any {
 				{v.Maximum, false, false}, {v.ExclusiveMaximum, false, true},
 			} {
 				if bound.value != nil {
-					bounds = append(bounds, canonicalNumericBound(primitive, *bound.value, bound.lower, bound.exclusive))
+					bounds = append(bounds, canonicalNumericBounds(primitive, *bound.value, bound.lower, bound.exclusive)...)
 				}
 			}
 		}
@@ -90,41 +86,25 @@ func numericCanonical(attr *expr.AttributeExpr, primitive expr.Primitive) any {
 	panic(fmt.Sprintf("cannot synthesize a numeric recovery example for %s", attr.Type.Name()))
 }
 
-func canonicalNumericBound(primitive expr.Primitive, bound float64, lower, exclusive bool) any {
-	direction := math.Inf(-1)
-	if lower {
-		direction = math.Inf(1)
+// canonicalNumericBounds prefers short tokens but also offers the exact native
+// value when shortest-roundtrip JSON would cross the schema's exact endpoint.
+func canonicalNumericBounds(primitive expr.Primitive, bound expr.NumericBound, lower, exclusive bool) []any {
+	projection := expr.ProjectNumericBound(primitive.Kind(), bound, lower, exclusive)
+	if projection.Empty {
+		return nil
 	}
-	if primitive == expr.Float32 {
-		value := float32(bound)
-		if (lower && float64(value) < bound) || (!lower && float64(value) > bound) || (exclusive && float64(value) == bound) {
-			value = math.Nextafter32(value, float32(direction))
-		}
-		// Preserve the actual float32 value on the wire. Its shortest float32
-		// decimal can lie outside the bound even when the binary value does not.
-		return float64(value)
+	value := projection.Value
+	if single, ok := value.(float32); ok {
+		value = float64(single)
 	}
-	if primitive == expr.Float64 {
-		if exclusive {
-			return math.Nextafter(bound, direction)
-		}
-		return bound
+	if _, ok := value.(float64); !ok {
+		return []any{value}
 	}
-	// Match the decimal bound advertised in JSON, which can differ from the
-	// exact binary float value. Integer arithmetic also preserves units above 2^53.
-	rational, ok := new(big.Rat).SetString(strconv.FormatFloat(bound, 'g', -1, 64))
-	if !ok {
-		panic(fmt.Sprintf("invalid numeric recovery bound: %v", bound))
+	exact, err := expr.NewNumericBound(value)
+	if err != nil {
+		panic(fmt.Errorf("encode projected recovery bound: %w", err))
 	}
-	integer, remainder := new(big.Int), new(big.Int)
-	integer.QuoRem(rational.Num(), rational.Denom(), remainder)
-	if lower && (remainder.Sign() > 0 || (exclusive && remainder.Sign() == 0)) {
-		integer.Add(integer, big.NewInt(1))
-	}
-	if !lower && (remainder.Sign() < 0 || (exclusive && remainder.Sign() == 0)) {
-		integer.Sub(integer, big.NewInt(1))
-	}
-	return jsontext.Value(integer.String())
+	return []any{value, exact}
 }
 
 // firstValidCanonicalValue validates the actual JSON representation, preserving

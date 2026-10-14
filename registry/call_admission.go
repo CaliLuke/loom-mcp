@@ -16,7 +16,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/redis/go-redis/v9"
+	"github.com/CaliLuke/go-redis/v9"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/toolregistry"
 )

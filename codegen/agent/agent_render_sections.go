@@ -60,18 +60,8 @@ func toolTransportValidateSection(data toolTransportTypesFileData) gocodegen.Sec
 				continue
 			}
 			fmt.Fprintf(&b, "// Validate%s runs the validations defined on %s.\n", t.TransportTypeName, t.TransportTypeName)
-			fmt.Fprintf(&b, "func Validate%s(body %s) (err error) {\n", t.TransportTypeName, t.TransportTypeRef)
-			for _, line := range t.TransportValidationSrc {
-				if strings.TrimSpace(line) == "" {
-					b.WriteString("\n")
-					continue
-				}
-				b.WriteString("\t")
-				b.WriteString(line)
-				b.WriteString("\n")
-			}
-			b.WriteString("\treturn\n")
-			b.WriteString("}\n\n")
+			b.WriteString(t.TransportValidator.Definition(strings.Join(t.TransportValidationSrc, "\n")))
+			b.WriteString("\n")
 		}
 		return b.String()
 	})
@@ -82,15 +72,30 @@ func toolTransformsSection(data transformsFileData) gocodegen.Section {
 		var b strings.Builder
 		for _, fn := range data.Functions {
 			fmt.Fprintf(&b, "// %s converts %s to %s.\n", fn.Name, fn.ParamTypeRef, fn.ResultTypeRef)
-			fmt.Fprintf(&b, "func %s(in %s) %s {\n", fn.Name, fn.ParamTypeRef, fn.ResultTypeRef)
+			if fn.ErrorAware {
+				fmt.Fprintf(&b, "func %s(in %s) (%s, error) {\n", fn.Name, fn.ParamTypeRef, fn.ResultTypeRef)
+			} else {
+				fmt.Fprintf(&b, "func %s(in %s) %s {\n", fn.Name, fn.ParamTypeRef, fn.ResultTypeRef)
+			}
 			if fn.NilInputReturnsNil {
 				b.WriteString("\tif in == nil {\n")
-				b.WriteString("\t\treturn nil\n")
+				if fn.ErrorAware {
+					b.WriteString("\t\treturn nil, nil\n")
+				} else {
+					b.WriteString("\t\treturn nil\n")
+				}
 				b.WriteString("\t}\n")
 			}
 			fmt.Fprintf(&b, "\tvar out %s\n", fn.ResultTypeRef)
+			if fn.ErrorAware {
+				b.WriteString("\tvar conversionErr error\n\ttransformErr := &conversionErr\n")
+			}
 			writeIndentedBlock(&b, fn.Body, 1)
-			b.WriteString("\treturn out\n")
+			if fn.ErrorAware {
+				fmt.Fprintf(&b, "\tif conversionErr != nil {\n\t\tvar zero %s\n\t\treturn zero, conversionErr\n\t}\n\treturn out, nil\n", fn.ResultTypeRef)
+			} else {
+				b.WriteString("\treturn out\n")
+			}
 			b.WriteString("}\n\n")
 		}
 		b.WriteString("// Helper transform functions\n")
@@ -98,7 +103,11 @@ func toolTransformsSection(data transformsFileData) gocodegen.Section {
 			if helper == nil {
 				continue
 			}
-			fmt.Fprintf(&b, "func %s(v %s) %s {\n", helper.Name, helper.ParamTypeRef, helper.ResultTypeRef)
+			if helper.ErrorAware {
+				fmt.Fprintf(&b, "func %s(v %s, transformErr *error) %s {\n", helper.Name, helper.ParamTypeRef, helper.ResultTypeRef)
+			} else {
+				fmt.Fprintf(&b, "func %s(v %s) %s {\n", helper.Name, helper.ParamTypeRef, helper.ResultTypeRef)
+			}
 			writeIndentedBlock(&b, helper.Code, 1)
 			b.WriteString("\treturn res\n")
 			b.WriteString("}\n\n")

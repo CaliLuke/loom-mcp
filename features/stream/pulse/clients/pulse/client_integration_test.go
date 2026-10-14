@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/redis/go-redis/v9"
+	"github.com/CaliLuke/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
@@ -85,6 +85,8 @@ func TestClientRedisStreamRoundTrip(t *testing.T) {
 		require.FailNow(t, "timed out waiting for Pulse event")
 	}
 
+	// Stop local repair before intentionally deleting the shared stream.
+	require.NoError(t, sink.Close(ctx))
 	require.NoError(t, stream.Destroy(ctx))
 	exists, err := rdb.Exists(ctx, "pulse:stream:events").Result()
 	require.NoError(t, err)

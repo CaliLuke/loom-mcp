@@ -18,7 +18,7 @@ type (
 		// Identifier
 		ID string `json:"id"`
 		// Name
-		Name *string `json:"name,omitempty"`
+		Name *string `json:"name,omitzero"`
 		// Address
 		Address *Address `json:"address"`
 	}
@@ -36,7 +36,7 @@ type (
 		// Identifier
 		ID string `json:"id"`
 		// Name
-		Name *string `json:"name,omitempty"`
+		Name *string `json:"name,omitzero"`
 		// Address
 		Address *Address `json:"address"`
 	}

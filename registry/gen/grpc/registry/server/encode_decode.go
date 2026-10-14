@@ -44,7 +44,11 @@ func DecodeRegisterRequest(ctx context.Context, v any, md metadata.MD) (any, err
 	}
 	var payload *registry.RegisterPayload
 	{
-		payload = NewRegisterPayload(message)
+		converted, err := NewRegisterPayload(message)
+		if err != nil {
+			return nil, err
+		}
+		payload = converted
 	}
 	return payload, nil
 }
@@ -172,7 +176,10 @@ func EncodeListToolsetsResponse(ctx context.Context, v any, hdr, trlr *metadata.
 	if !ok {
 		return nil, loomgrpc.ErrInvalidType("registry", "ListToolsets", "*registry.ListToolsetsResult", v)
 	}
-	resp := NewProtoListToolsetsResponse(result)
+	resp, err := NewProtoListToolsetsResponse(result)
+	if err != nil {
+		return nil, err
+	}
 	return resp, nil
 }
 
@@ -202,7 +209,10 @@ func EncodeGetToolsetResponse(ctx context.Context, v any, hdr, trlr *metadata.MD
 	if !ok {
 		return nil, loomgrpc.ErrInvalidType("registry", "GetToolset", "*registry.Toolset", v)
 	}
-	resp := NewProtoGetToolsetResponse(result)
+	resp, err := NewProtoGetToolsetResponse(result)
+	if err != nil {
+		return nil, err
+	}
 	return resp, nil
 }
 
@@ -235,7 +245,10 @@ func EncodeSearchResponse(ctx context.Context, v any, hdr, trlr *metadata.MD) (a
 	if !ok {
 		return nil, loomgrpc.ErrInvalidType("registry", "Search", "*registry.SearchResult", v)
 	}
-	resp := NewProtoSearchResponse(result)
+	resp, err := NewProtoSearchResponse(result)
+	if err != nil {
+		return nil, err
+	}
 	return resp, nil
 }
 

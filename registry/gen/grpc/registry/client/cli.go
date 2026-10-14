@@ -8,6 +8,7 @@
 package client
 
 import (
+	"errors"
 	"fmt"
 
 	registrypb "github.com/CaliLuke/loom-mcp/v2/registry/gen/grpc/registry/pb"
@@ -32,6 +33,7 @@ func BuildRegisterPayload(registryRegisterMessage string) (*registry.RegisterPay
 			return zero, err
 		}
 	}
+	transformErr := new(error)
 	v := &registry.RegisterPayload{
 		Name:                  *message.Name,
 		Description:           message.Description,
@@ -51,6 +53,10 @@ func BuildRegisterPayload(registryRegisterMessage string) (*registry.RegisterPay
 	if message.Tools != nil {
 		v.Tools = make([]*registry.ToolSchema, len(message.Tools))
 		for i, val := range message.Tools {
+			if val == nil {
+				*transformErr = errors.New("gRPC conversion: nil message collection element")
+				continue
+			}
 			v.Tools[i] = &registry.ToolSchema{
 				Name:          *val.Name,
 				Description:   val.Description,
@@ -65,6 +71,10 @@ func BuildRegisterPayload(registryRegisterMessage string) (*registry.RegisterPay
 		}
 	}
 
+	if *transformErr != nil {
+		var zero *registry.RegisterPayload
+		return zero, *transformErr
+	}
 	return v, nil
 }
 

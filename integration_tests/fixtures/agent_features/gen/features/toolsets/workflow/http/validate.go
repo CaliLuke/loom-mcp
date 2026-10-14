@@ -12,92 +12,169 @@ import (
 )
 
 // ValidateDraftPayloadTransport runs the validations defined on DraftPayloadTransport.
-func ValidateDraftPayloadTransport(body *DraftPayloadTransport) (err error) {
+func ValidateDraftPayloadTransport(body *DraftPayloadTransport, validationContext ...string) (err error) {
+	validationPath := "body"
+	if len(validationContext) > 0 {
+		validationPath = ""
+		for _, validationPart := range validationContext {
+			validationPath += validationPart
+		}
+	}
 	if body.Topic == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("topic", "body"))
+		err = loom.MergeErrors(err, loom.MissingFieldError("topic", validationPath))
 	}
 	return
 }
 
 // ValidateDraftResultTransport runs the validations defined on DraftResultTransport.
-func ValidateDraftResultTransport(body *DraftResultTransport) (err error) {
+func ValidateDraftResultTransport(body *DraftResultTransport, validationContext ...string) (err error) {
+	validationPath := "body"
+	if len(validationContext) > 0 {
+		validationPath = ""
+		for _, validationPart := range validationContext {
+			validationPath += validationPart
+		}
+	}
 	if body.OK == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("ok", "body"))
+		err = loom.MergeErrors(err, loom.MissingFieldError("ok", validationPath))
 	}
 	return
 }
 
 // ValidateFinalizePayloadTransport runs the validations defined on FinalizePayloadTransport.
-func ValidateFinalizePayloadTransport(body *FinalizePayloadTransport) (err error) {
+func ValidateFinalizePayloadTransport(body *FinalizePayloadTransport, validationContext ...string) (err error) {
+	validationPath := "body"
+	if len(validationContext) > 0 {
+		validationPath = ""
+		for _, validationPart := range validationContext {
+			validationPath += validationPart
+		}
+	}
 	if body.Reason == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("reason", "body"))
+		err = loom.MergeErrors(err, loom.MissingFieldError("reason", validationPath))
 	}
 	return
 }
 
 // ValidateFinalizeResultTransport runs the validations defined on FinalizeResultTransport.
-func ValidateFinalizeResultTransport(body *FinalizeResultTransport) (err error) {
+func ValidateFinalizeResultTransport(body *FinalizeResultTransport, validationContext ...string) (err error) {
+	validationPath := "body"
+	if len(validationContext) > 0 {
+		validationPath = ""
+		for _, validationPart := range validationContext {
+			validationPath += validationPart
+		}
+	}
 	if body.OK == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("ok", "body"))
+		err = loom.MergeErrors(err, loom.MissingFieldError("ok", validationPath))
 	}
 	return
 }
 
 // ValidateMethodEchoPayloadTransport runs the validations defined on MethodEchoPayloadTransport.
-func ValidateMethodEchoPayloadTransport(body *MethodEchoPayloadTransport) (err error) {
+func ValidateMethodEchoPayloadTransport(body *MethodEchoPayloadTransport, validationContext ...string) (err error) {
+	validationPath := "body"
+	if len(validationContext) > 0 {
+		validationPath = ""
+		for _, validationPart := range validationContext {
+			validationPath += validationPart
+		}
+	}
 	if body.Topic == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("topic", "body"))
+		err = loom.MergeErrors(err, loom.MissingFieldError("topic", validationPath))
 	}
 	return
 }
 
 // ValidateMethodEchoResultTransport runs the validations defined on MethodEchoResultTransport.
-func ValidateMethodEchoResultTransport(body *MethodEchoResultTransport) (err error) {
+func ValidateMethodEchoResultTransport(body *MethodEchoResultTransport, validationContext ...string) (err error) {
+	validationPath := "body"
+	if len(validationContext) > 0 {
+		validationPath = ""
+		for _, validationPart := range validationContext {
+			validationPath += validationPart
+		}
+	}
 	if body.OK == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("ok", "body"))
+		err = loom.MergeErrors(err, loom.MissingFieldError("ok", validationPath))
 	}
 	if body.Message == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("message", "body"))
+		err = loom.MergeErrors(err, loom.MissingFieldError("message", validationPath))
 	}
 	return
 }
 
 // ValidatePublishResultTransport runs the validations defined on PublishResultTransport.
-func ValidatePublishResultTransport(body *PublishResultTransport) (err error) {
+func ValidatePublishResultTransport(body *PublishResultTransport, validationContext ...string) (err error) {
+	validationPath := "body"
+	if len(validationContext) > 0 {
+		validationPath = ""
+		for _, validationPart := range validationContext {
+			validationPath += validationPart
+		}
+	}
 	if body.OK == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("ok", "body"))
+		err = loom.MergeErrors(err, loom.MissingFieldError("ok", validationPath))
 	}
 	return
 }
 
 // ValidateRetryResultTransport runs the validations defined on RetryResultTransport.
-func ValidateRetryResultTransport(body *RetryResultTransport) (err error) {
+func ValidateRetryResultTransport(body *RetryResultTransport, validationContext ...string) (err error) {
+	validationPath := "body"
+	if len(validationContext) > 0 {
+		validationPath = ""
+		for _, validationPart := range validationContext {
+			validationPath += validationPart
+		}
+	}
 	if body.OK == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("ok", "body"))
+		err = loom.MergeErrors(err, loom.MissingFieldError("ok", validationPath))
 	}
 	return
 }
 
 // ValidateReviewPayloadTransport runs the validations defined on ReviewPayloadTransport.
-func ValidateReviewPayloadTransport(body *ReviewPayloadTransport) (err error) {
+func ValidateReviewPayloadTransport(body *ReviewPayloadTransport, validationContext ...string) (err error) {
+	validationPath := "body"
+	if len(validationContext) > 0 {
+		validationPath = ""
+		for _, validationPart := range validationContext {
+			validationPath += validationPart
+		}
+	}
 	if body.Strict == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("strict", "body"))
+		err = loom.MergeErrors(err, loom.MissingFieldError("strict", validationPath))
 	}
 	return
 }
 
 // ValidateReviewResultTransport runs the validations defined on ReviewResultTransport.
-func ValidateReviewResultTransport(body *ReviewResultTransport) (err error) {
+func ValidateReviewResultTransport(body *ReviewResultTransport, validationContext ...string) (err error) {
+	validationPath := "body"
+	if len(validationContext) > 0 {
+		validationPath = ""
+		for _, validationPart := range validationContext {
+			validationPath += validationPart
+		}
+	}
 	if body.OK == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("ok", "body"))
+		err = loom.MergeErrors(err, loom.MissingFieldError("ok", validationPath))
 	}
 	return
 }
 
 // ValidateReviseResultTransport runs the validations defined on ReviseResultTransport.
-func ValidateReviseResultTransport(body *ReviseResultTransport) (err error) {
+func ValidateReviseResultTransport(body *ReviseResultTransport, validationContext ...string) (err error) {
+	validationPath := "body"
+	if len(validationContext) > 0 {
+		validationPath = ""
+		for _, validationPart := range validationContext {
+			validationPath += validationPart
+		}
+	}
 	if body.OK == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("ok", "body"))
+		err = loom.MergeErrors(err, loom.MissingFieldError("ok", validationPath))
 	}
 	return
 }

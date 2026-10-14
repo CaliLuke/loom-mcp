@@ -12,44 +12,79 @@ import (
 )
 
 // ValidateProjectedBoundedLookupToolPayloadTransport runs the validations defined on ProjectedBoundedLookupToolPayloadTransport.
-func ValidateProjectedBoundedLookupToolPayloadTransport(body *ProjectedBoundedLookupToolPayloadTransport) (err error) {
+func ValidateProjectedBoundedLookupToolPayloadTransport(body *ProjectedBoundedLookupToolPayloadTransport, validationContext ...string) (err error) {
+	validationPath := "body"
+	if len(validationContext) > 0 {
+		validationPath = ""
+		for _, validationPart := range validationContext {
+			validationPath += validationPart
+		}
+	}
 	if body.Query == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("query", "body"))
+		err = loom.MergeErrors(err, loom.MissingFieldError("query", validationPath))
 	}
 	return
 }
 
 // ValidateProjectedBoundedLookupToolResultTransport runs the validations defined on ProjectedBoundedLookupToolResultTransport.
-func ValidateProjectedBoundedLookupToolResultTransport(body *ProjectedBoundedLookupToolResultTransport) (err error) {
+func ValidateProjectedBoundedLookupToolResultTransport(body *ProjectedBoundedLookupToolResultTransport, validationContext ...string) (err error) {
+	validationPath := "body"
+	if len(validationContext) > 0 {
+		validationPath = ""
+		for _, validationPart := range validationContext {
+			validationPath += validationPart
+		}
+	}
 	if body.Hits == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("hits", "body"))
+		err = loom.MergeErrors(err, loom.MissingFieldError("hits", validationPath))
 	}
 	return
 }
 
 // ValidateProjectedLookupToolPayloadTransport runs the validations defined on ProjectedLookupToolPayloadTransport.
-func ValidateProjectedLookupToolPayloadTransport(body *ProjectedLookupToolPayloadTransport) (err error) {
+func ValidateProjectedLookupToolPayloadTransport(body *ProjectedLookupToolPayloadTransport, validationContext ...string) (err error) {
+	validationPath := "body"
+	if len(validationContext) > 0 {
+		validationPath = ""
+		for _, validationPart := range validationContext {
+			validationPath += validationPart
+		}
+	}
 	if body.Query == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("query", "body"))
+		err = loom.MergeErrors(err, loom.MissingFieldError("query", validationPath))
 	}
 	return
 }
 
 // ValidateProjectedLookupToolResultTransport runs the validations defined on ProjectedLookupToolResultTransport.
-func ValidateProjectedLookupToolResultTransport(body *ProjectedLookupToolResultTransport) (err error) {
+func ValidateProjectedLookupToolResultTransport(body *ProjectedLookupToolResultTransport, validationContext ...string) (err error) {
+	validationPath := "body"
+	if len(validationContext) > 0 {
+		validationPath = ""
+		for _, validationPart := range validationContext {
+			validationPath += validationPart
+		}
+	}
 	if body.Answer == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("answer", "body"))
+		err = loom.MergeErrors(err, loom.MissingFieldError("answer", validationPath))
 	}
 	if body.Source == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("source", "body"))
+		err = loom.MergeErrors(err, loom.MissingFieldError("source", validationPath))
 	}
 	return
 }
 
 // ValidateProjectedStatusToolResultTransport runs the validations defined on ProjectedStatusToolResultTransport.
-func ValidateProjectedStatusToolResultTransport(body *ProjectedStatusToolResultTransport) (err error) {
+func ValidateProjectedStatusToolResultTransport(body *ProjectedStatusToolResultTransport, validationContext ...string) (err error) {
+	validationPath := "body"
+	if len(validationContext) > 0 {
+		validationPath = ""
+		for _, validationPart := range validationContext {
+			validationPath += validationPart
+		}
+	}
 	if body.Status == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("status", "body"))
+		err = loom.MergeErrors(err, loom.MissingFieldError("status", validationPath))
 	}
 	return
 }

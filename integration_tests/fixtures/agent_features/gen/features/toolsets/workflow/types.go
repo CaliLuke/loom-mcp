@@ -19,7 +19,7 @@ type (
 		// Whether the operation succeeded
 		OK bool `json:"ok"`
 		// Whether the operation was approved
-		Approved *bool `json:"approved,omitempty"`
+		Approved *bool `json:"approved,omitzero"`
 	}
 
 	// FinalizePayload defines the JSON payload for the workflow.finalize tool.
@@ -33,7 +33,7 @@ type (
 		// Whether the operation succeeded
 		OK bool `json:"ok"`
 		// Whether the operation was approved
-		Approved *bool `json:"approved,omitempty"`
+		Approved *bool `json:"approved,omitzero"`
 	}
 
 	// MethodEchoPayload defines the JSON payload for the workflow.method_echo tool.
@@ -61,7 +61,7 @@ type (
 		// Whether the operation succeeded
 		OK bool `json:"ok"`
 		// Whether the operation was approved
-		Approved *bool `json:"approved,omitempty"`
+		Approved *bool `json:"approved,omitzero"`
 	}
 
 	// RetryPayload defines the JSON payload for the workflow.retry tool.
@@ -73,7 +73,7 @@ type (
 		// Whether the operation succeeded
 		OK bool `json:"ok"`
 		// Whether the operation was approved
-		Approved *bool `json:"approved,omitempty"`
+		Approved *bool `json:"approved,omitzero"`
 	}
 
 	// ReviewPayload defines the JSON payload for the workflow.review tool.
@@ -87,7 +87,7 @@ type (
 		// Whether the operation succeeded
 		OK bool `json:"ok"`
 		// Whether the operation was approved
-		Approved *bool `json:"approved,omitempty"`
+		Approved *bool `json:"approved,omitzero"`
 	}
 
 	// RevisePayload defines the JSON payload for the workflow.revise tool.
@@ -99,6 +99,6 @@ type (
 		// Whether the operation succeeded
 		OK bool `json:"ok"`
 		// Whether the operation was approved
-		Approved *bool `json:"approved,omitempty"`
+		Approved *bool `json:"approved,omitzero"`
 	}
 )

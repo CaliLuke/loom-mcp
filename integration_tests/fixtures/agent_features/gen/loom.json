@@ -1,4 +1,5 @@
 {
-  "loom_version": "v1.10.0-alpha.8",
-  "design_digest": "fd1b599773c5dce393412f71685f731bf27690b3d219e6cd21f7b725d98c5bb2"
+  "loom_version": "v1.10.0-alpha.10",
+  "design_package": "example.com/agentfeatures/design",
+  "design_digest": "e6e32833ac0e1680c08becc9da984bae858dc5f5310a40e131afad5f37087e52"
 }

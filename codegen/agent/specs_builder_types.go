@@ -176,6 +176,8 @@ type (
 		// TransportValidationSrc is validation code (as lines) that validates a
 		// pointer to the transport type (variable name: "body").
 		TransportValidationSrc []string
+		// TransportValidator owns the declaration and runtime diagnostic path.
+		TransportValidator codegen.ValidationFunction
 		// TransportTypeRef is the reference type used by Validate{{TransportTypeName}}.
 		// It matches Goa's conventions: pointers for composite types, values for
 		// primitive/alias types.
@@ -184,10 +186,12 @@ type (
 		TransportPointer bool
 		// DecodeTransform is Go code that initializes "out" (public type) from "in"
 		// (transport type) using Goa's GoTransform conventions.
-		DecodeTransform string
+		DecodeTransform  string
+		DecodeErrorAware bool
 		// EncodeTransform is Go code that initializes "out" (transport type) from "in"
 		// (public type) using Goa's GoTransform conventions.
-		EncodeTransform string
+		EncodeTransform  string
+		EncodeErrorAware bool
 		// Whether to generate a type definition.
 		NeedType bool
 		// IsToolType is true when this entry represents a top-level tool-facing

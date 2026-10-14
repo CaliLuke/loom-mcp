@@ -40,6 +40,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/CaliLuke/go-redis/v9"
 	clientspulse "github.com/CaliLuke/loom-mcp/v2/features/stream/pulse/clients/pulse"
 	registrypb "github.com/CaliLuke/loom-mcp/v2/registry/gen/grpc/registry/pb"
 	grpcserver "github.com/CaliLuke/loom-mcp/v2/registry/gen/grpc/registry/server"
@@ -47,7 +48,6 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/toolregistry"
 	"github.com/CaliLuke/loom/pulse/rmap"
-	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 )
 

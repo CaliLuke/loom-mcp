@@ -599,6 +599,8 @@ type (
 		MethodPayloadTypeRef string
 		// MethodResultTypeRef is the fully-qualified reference for the bound method result type.
 		MethodResultTypeRef string
+		// TransformErrors records fallibility by generated transform name.
+		TransformErrors map[string]bool
 		// MethodPayloadLoc is the Goa location for the payload user type when specified via
 		// Meta("struct:pkg:path", ...). Nil when the payload is local to the service package
 		// or is not a user type.

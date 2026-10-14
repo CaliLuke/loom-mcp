@@ -10,9 +10,9 @@ Verified on 2026-10-08:
 | Dependency | Version |
 | --- | --- |
 | Go | 1.27.2 |
-| Loom | v1.10.0-alpha.8 (verified 2026-10-10) |
+| Loom | v1.10.0-alpha.10 (verified 2026-10-14) |
 | MongoDB server / Go driver | 9.0.2 / v2.9.2 |
-| Redis server / Go client | 8.10.2 / v9.23.0 |
+| Redis server / Go client | 8.10.2 / CaliLuke/go-redis v9.23.1-0.20261014134601-1073297e76ea (client verified 2026-10-14) |
 | OpenAI Go SDK | v3.74.0 |
 | Anthropic Go SDK | v1.79.1 |
 | Google GenAI | v1.73.0 |
@@ -24,7 +24,7 @@ The OpenAI provider's `ResponseClient` interface now uses types from
 update imports and client construction together. Skill frontmatter uses the
 maintained `go.yaml.in/yaml/v3` package.
 
-Regenerate code when adopting Loom alpha.8. Protobuf scalar presence is
+Regenerate code when adopting Loom alpha.10. Protobuf scalar presence is
 represented by pointer fields; handwritten protobuf request construction must
 set those fields explicitly (for example with `proto.String`). The tool union
 renderer owns its private metadata types and does not depend on Loom's service
@@ -32,7 +32,7 @@ renderer metadata representation.
 
 Explicit exceptions:
 
-- Loom uses the published alpha.8 release by agreement for this upgrade.
+- Loom uses the published alpha.10 release for this upgrade.
 - The MCP Go SDK remains at `v1.8.1-0.20260922085944-8075fb3cf313`.
   Its merged request-summary fix is newer than stable v1.8.0 and is required by
   the SDK bridge. Keep the root, fixtures, quickstart and workspace override aligned.
@@ -50,3 +50,30 @@ transactional behavior.
 Staticcheck v0.8.1 is built with the stable `golang.org/x/tools v0.51.0` importer
 for Go 1.27.2 export-data support. `make tools` verifies both versions. Its check
 selection and existing documented `lint:ignore` directives remain unchanged.
+
+## Loom alpha.10 migration
+
+Regenerate service, client, and server code together. Custom String conversions
+can return errors, and generated defaults now distinguish absent values from
+explicit zero and empty values. Tool adapter transforms that can fail now return
+`(value, error)`; callers must handle that error. Infallible transform signatures
+remain unchanged. Generated providers reject failed payload conversions before
+calling the service and reject failed result or server-data conversions before
+publication. Nested validation retains the full field path.
+
+Pulse client and registry APIs now use `github.com/CaliLuke/go-redis/v9`. Change
+Redis client and hook imports together; upstream client types are not compatible.
+The version is the immutable fork revision selected by the published Loom module.
+
+Pulse sink-group filters and pool protocol 4 require coordinated migration of
+existing deployments. Follow the [Pulse migration guide](https://github.com/CaliLuke/loom/blob/v1.10.0-alpha.10/docs/pulse.md)
+before changing Redis state or mixing participants from different versions.
+
+Close active Pulse sinks before intentionally destroying shared streams; active
+sinks repair missing consumer groups. Transport validation messages are sanitized;
+inspect the typed error name and status instead of parsing diagnostic text.
+
+Authored MCP SDK retry-validation errors explicitly own their public repair messages under
+Loom's error contract. Custom invalid-input errors need `LoomErrorName` or a safe
+error remedy to expose repair text; the marker alone does not publish diagnostics.
+Wrapped serialization failures retain private diagnostics only in the original error.
