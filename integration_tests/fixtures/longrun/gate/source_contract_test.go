@@ -180,17 +180,13 @@ func TestK19cContractSourceActualClosure(t *testing.T) {
 }
 
 func TestK19cContractSourceBundleRecovery(t *testing.T) {
-	t.Setenv("CGO_ENABLED", "0")
-	root, err := filepath.Abs("../../../..")
-	require.NoError(t, err)
-	command := exec.CommandContext(t.Context(), "git", "rev-parse", "HEAD")
-	command.Dir = root
-	base, err := command.Output()
-	require.NoError(t, err)
-	manifest, bundle, err := suite.BuildSourceManifest(t.Context(), root, "offline", strings.TrimSpace(string(base)))
+	root := sourceFixture(t)
+	base := sourceCommitFixture(t, root)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "library/prompt.tmpl"), []byte("changed prompt"), 0600))
+	manifest, bundle, err := suite.BuildSourceManifest(t.Context(), root, "offline", base)
 	require.NoError(t, err)
 	require.NotEmpty(t, manifest.BundleSHA256)
-	assert.Contains(t, string(bundle), "gate/source.go")
+	assert.Contains(t, string(bundle), "library/prompt.tmpl")
 	assert.NotContains(t, manifest.BundlePaths, "go.work.sum")
 	require.NoError(t, suite.VerifySourceManifest(t.Context(), root, manifest, bundle))
 	corrupted := append(append([]byte(nil), bundle...), []byte("corruption")...)
