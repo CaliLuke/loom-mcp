@@ -47,7 +47,19 @@ func (b *migrationBarrier) Open(name string) (fs.File, error) {
 func testApp(t *testing.T, db string, options ...sv.Option) *sv.App {
 	t.Helper()
 	opts := make([]sv.Option, 0, 9+len(options))
-	opts = append(opts, []sv.Option{sv.WithDatabase(db), sv.WithMaxPollInterval(50 * time.Millisecond), sv.WithActivityPollInterval(10 * time.Millisecond), sv.WithWaitPollInterval(10 * time.Millisecond), sv.WithTimerCheckInterval(10 * time.Millisecond), sv.WithWorkflowResumptionInterval(10 * time.Millisecond), sv.WithLeaderHeartbeatInterval(20 * time.Millisecond), sv.WithLeaderLeaseDuration(100 * time.Millisecond), sv.WithShutdownTimeout(5 * time.Second)}...)
+	// Local notifications drive normal delivery. Keep fallback polling and
+	// leader renewal below the SQLite workload's race-instrumented capacity.
+	opts = append(opts, []sv.Option{
+		sv.WithDatabase(db),
+		sv.WithMaxPollInterval(100 * time.Millisecond),
+		sv.WithActivityPollInterval(100 * time.Millisecond),
+		sv.WithWaitPollInterval(100 * time.Millisecond),
+		sv.WithTimerCheckInterval(100 * time.Millisecond),
+		sv.WithWorkflowResumptionInterval(100 * time.Millisecond),
+		sv.WithLeaderHeartbeatInterval(250 * time.Millisecond),
+		sv.WithLeaderLeaseDuration(3 * time.Second),
+		sv.WithShutdownTimeout(5 * time.Second),
+	}...)
 	return sv.NewApp(append(opts, options...)...)
 }
 
