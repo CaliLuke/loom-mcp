@@ -78,13 +78,27 @@ make verify-mcp-local
 make lint
 make test
 make test-docker
-make itest
+make ci-integration
 make ci
+make qualification
 make test-stress
 ```
 
-`make ci` uses the same complete contract as hosted CI. It checks generated
-output, builds, lints, and runs all required test lanes.
+`make ci` runs the same routine checks as hosted CI: generated output, build,
+lint, full short unit/coverage tests, engine and generated application integration,
+and Docker contracts/coverage. GitHub runs static, race, coverage, integration and Docker checks in separate
+jobs; all five must pass for release eligibility. Race detection and atomic
+coverage run the same short unit suite separately to avoid combined instrumentation
+overhead; no tests or coverage floors are removed.
+`make ci-integration` runs the routine integration checks alone.
+
+`make qualification` runs exhaustive longrun scenarios, statistical evidence,
+and 1,000-step payload/recall acceptance. The **Exhaustive qualification** workflow
+runs it weekly or on manual dispatch, independently of per-push release eligibility.
+Run it when changing compaction qualification, statistical evaluation, or growth
+contracts. It preserves the full workloads and does not rerun the calibration CLI.
+`make itest` remains the combined routine and exhaustive integration command;
+`make verify-mcp-local` also retains the complete longrun module.
 `make verify-generated` regenerates current surfaces and verifies the frozen
 external SDK bridge consumer without rewriting it. Increment
 `sdkbridge.CompatibilityVersion` before you regenerate the consumer. You can
@@ -97,7 +111,8 @@ The Makefile pins `protoc` and both Go protobuf plugins. Run
 starting containers. It also pins exact floors for the agent runtime, Bedrock,
 and Gemini so broader package groups cannot hide regressions in those owners.
 The 1,000-step recall acceptance test skips under `make test` (`-short`).
-`make itest` runs it with race detection and a 30-minute timeout.
+`make qualification` (and the combined `make itest`) runs it with race detection
+and a 30-minute timeout.
 `make test-docker` runs the Mongo, Pulse, and registry contracts once under
 race detection and enforces an exact floor for each package.
 The scheduled stress workflow repeats race-enabled lifecycle tests and requires

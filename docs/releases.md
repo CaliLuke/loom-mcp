@@ -50,9 +50,22 @@ that the selected source belongs to remote `main`.
 New publication requires the latest main-push run of `ci.yml` for the exact
 source. Every job must succeed, including the aggregate **Release eligibility**
 job. Failed, canceled, skipped, missing, or wrong-source evidence is rejected.
-Pending CI waits up to 45 minutes. `ci.yml` runs the complete `make ci` contract:
-generation checks, release regression tests, build, lint, unit/coverage tests,
-integration fixtures, and Docker tests. Weekly stress tests remain independent.
+Pending CI waits up to 45 minutes. `ci.yml` runs the routine `make ci` contract
+as five parallel jobs: static checks (generation, release regression tests,
+build and lint), the complete short unit suite under race detection, the same
+suite with atomic coverage and unchanged floors, engine/generated application
+integration, and Docker contracts/coverage. Release eligibility requires all five.
+Separating race and coverage avoids instrumenting coverage counters with the race
+detector; both passes retain the full short suite.
+Each job has a 40-minute ceiling; this is a failure bound, not an expected duration.
+
+Exhaustive longrun scenarios, statistical evidence reproduction, and 1,000-step
+payload/recall acceptance run in `qualification.yml` weekly or on manual dispatch
+(`make qualification` locally). They retain their full workloads but do not block
+every PR, main push or alpha. Run qualification when changing the corresponding
+compaction, statistical or growth contracts. Routine CI success alone does not
+establish statistical or live-provider qualification. Weekly stress remains
+independent. `make itest` retains the combined integration and qualification suite.
 
 The publisher creates an annotated tag, a draft GitHub Release, and a
 `release-evidence.json` asset recording the source and successful CI run and

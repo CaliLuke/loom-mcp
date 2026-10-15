@@ -20,7 +20,22 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    name: Verify (${{ matrix.lane }})
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - lane: static
+            target: ci-static
+          - lane: race
+            target: ci-race
+          - lane: coverage
+            target: ci-coverage
+          - lane: integration
+            target: ci-integration
+          - lane: docker
+            target: ci-docker
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -52,16 +67,16 @@ jobs:
           go install github.com/CaliLuke/loom/cmd/loom@"${LOOM_VERSION}"
           echo "$(go env GOPATH)/bin" >> "${GITHUB_PATH}"
 
-      - name: Run complete CI contract
+      - name: Run ${{ matrix.lane }} checks
         env:
           VERIFY_GENERATED_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: make ci
+        run: make ${{ matrix.target }}
 
       - name: Preserve coverage report
-        if: always()
+        if: always() && (matrix.lane == 'coverage' || matrix.lane == 'docker')
         uses: actions/upload-artifact@v7
         with:
-          name: unit-coverage-${{ github.sha }}
+          name: ${{ matrix.lane }}-coverage-${{ github.sha }}
           path: |
             cover.out
             docker-cover.out
