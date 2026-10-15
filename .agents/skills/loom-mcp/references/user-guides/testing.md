@@ -168,6 +168,16 @@ The 1,000-step recall acceptance test skips under `make test` (`-short`).
 generated Temporal/Mongo replacement gate. It writes `docker-cover.out` and
 enforces a floor for each root-module Docker owner.
 
+`make ci` and hosted release eligibility additionally require at least 90.1%
+whole-framework fast-suite statement coverage. `make ci-coverage` instruments
+root packages and the existing fast integration entry point; only framework
+packages contribute from fixture modules. `make ci-docker` supplies the Docker
+and worker-replacement profiles. `make coverage-fast-check` unions these profiles
+by source block into `.cache/coverage-fast/combined.out`, counting each statement
+once and retaining generated/support code. Missing or inconsistent profiles fail.
+This aggregate does not replace any unit or Docker owner floor and never includes
+exhaustive qualification. Race-enabled integration remains independently required.
+
 Run the repeated lifecycle lane after concurrency or shutdown changes:
 
 ```bash

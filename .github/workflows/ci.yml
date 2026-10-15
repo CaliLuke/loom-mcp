@@ -80,7 +80,9 @@ jobs:
           path: |
             cover.out
             docker-cover.out
-          if-no-files-found: warn
+            .cache/coverage-fast/*.out
+          include-hidden-files: true
+          if-no-files-found: error
           retention-days: 14
 
   release-ready:
@@ -93,3 +95,21 @@ jobs:
         env:
           RESULTS: ${{ toJSON(needs) }}
         run: jq -e 'length > 0 and all(.[]; .result == "success")' <<< "$RESULTS"
+
+      - name: Checkout coverage sources
+        uses: actions/checkout@v7
+
+      - name: Set up Go for coverage verification
+        uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+
+      - name: Download fast-suite coverage
+        uses: actions/download-artifact@v8
+        with:
+          pattern: '*-coverage-${{ github.sha }}'
+          merge-multiple: true
+
+      - name: Require whole-framework fast coverage
+        run: make coverage-fast-check

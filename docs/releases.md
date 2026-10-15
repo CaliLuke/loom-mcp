@@ -53,8 +53,16 @@ job. Failed, canceled, skipped, missing, or wrong-source evidence is rejected.
 Pending CI waits up to 45 minutes. `ci.yml` runs the routine `make ci` contract
 as five parallel jobs: static checks (generation, release regression tests,
 build and lint), the complete short unit suite under race detection, the same
-suite with atomic coverage and unchanged floors, engine/generated application
-integration, and Docker contracts/coverage. Release eligibility requires all five.
+suite with atomic coverage, engine/generated application
+integration, and Docker contracts/coverage. Release eligibility requires all five
+and at least 90.1% whole-framework fast-suite statement coverage. The aggregate
+unions root, Docker, and fast fixture profiles by source block; each statement
+counts once. Generated and support code remain in the denominator. The coverage
+job also runs the fast integration entry point without race instrumentation to
+measure framework code reached from consumer modules. Existing unit package-group
+and exact-owner floors, plus Docker owner floors, remain separate gates.
+`make coverage-fast-check` verifies the saved profiles locally and writes
+`.cache/coverage-fast/combined.out`. Missing or inconsistent profiles fail.
 Separating race and coverage avoids instrumenting coverage counters with the race
 detector; both passes retain the full short suite.
 Each job has a 40-minute ceiling; this is a failure bound, not an expected duration.

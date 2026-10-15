@@ -54,7 +54,11 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   Golden output alone is not sufficient proof for a generated contract.
 - `make test` runs the complete short suite separately under race detection and
   atomic coverage, avoiding combined instrumentation overhead. Hosted CI requires
-  both passes. It enforces global and critical package-group coverage floors plus
+  both passes. `make ci` also requires at least 90.1% whole-framework fast-suite
+  coverage: union root, Docker and instrumented fast fixture profiles by source
+  block, keeping generated/support code in the denominator. Run
+  `make coverage-fast-check` to check the collected profiles. It preserves unit
+  global and critical package-group coverage floors plus
   exact owner floors for `runtime/agent/runtime`, Bedrock, and Gemini. Docker
   coverage likewise matches the Mongo infrastructure, Pulse client, and root
   registry packages exactly. Use `make test-stress` for concurrency and
