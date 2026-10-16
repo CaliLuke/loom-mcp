@@ -152,8 +152,13 @@ func requestSummary(request *model.Request) string {
 func messageText(message *model.Message) string {
 	var text strings.Builder
 	for _, part := range message.Parts {
-		if value, ok := part.(model.TextPart); ok {
+		switch value := part.(type) {
+		case model.TextPart:
 			text.WriteString(value.Text)
+		case *model.TextPart:
+			if value != nil {
+				text.WriteString(value.Text)
+			}
 		}
 	}
 	return text.String()
@@ -171,9 +176,17 @@ func lastToolResult(request *model.Request, name tools.Ident) *model.ToolResultP
 			switch value := part.(type) {
 			case model.ToolUsePart:
 				calls[value.ID] = value.Name
+			case *model.ToolUsePart:
+				if value != nil {
+					calls[value.ID] = value.Name
+				}
 			case model.ToolResultPart:
 				if calls[value.ToolUseID] == string(name) {
 					result = &value
+				}
+			case *model.ToolResultPart:
+				if value != nil && calls[value.ToolUseID] == string(name) {
+					result = value
 				}
 			}
 		}

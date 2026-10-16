@@ -30,6 +30,10 @@ application registers the named client. Undeclared application clients are not
 blocked, so the variable is not a universal network guard. Default tests use
 scripted clients; real providers need explicit opt-in.
 
+`LastUserContains`, `LastToolResult` and `LastToolResultParts` accept value parts
+and non-nil pointer parts equally for text and tool-use/result lookups.
+Script diagnostics use the same text lookup.
+
 ## Wiring recipe
 
 The generated assistant fixture uses `guideRegister` to register toolsets and the

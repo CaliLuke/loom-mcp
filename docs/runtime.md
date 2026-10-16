@@ -4290,6 +4290,10 @@ errors. `NewScript` also rejects malformed turn shapes and stream failure offset
 beyond the turn's chunk count. Responses pass the real `model.NewClient`
 validation against each request.
 `HasTool`, `LacksTool`, and `LastToolResult` accept typed descriptors or `tools.Ident`.
+`LastUserContains` joins text parts in the last user message.
+`LastToolResult` and `LastToolResultParts` find the latest named result through its preceding tool use.
+These lookups accept value parts and non-nil pointer parts equally.
+Script diagnostics use the same text lookup.
 Scripts consume turns in FIFO order, with optional `When` matchers;
 `AnyOrder()` selects the first unconsumed
 matching turn. `Requests()` and `Remaining()` expose progress, and `ScriptClient`
