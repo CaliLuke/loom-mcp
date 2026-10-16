@@ -14,11 +14,12 @@ type callsSubject struct {
 }
 
 type callExpectation struct {
-	name       string
-	tool       tools.Ident
-	match      func([]byte) error
-	execution  func(*trajectory.ToolStep) error
-	failedOnly bool
+	name              string
+	tool              tools.Ident
+	match             func([]byte) error
+	execution         func(*trajectory.ToolStep) error
+	failedOnly        bool
+	verifiedExecution bool
 }
 
 type forbidExpectation struct {
@@ -194,6 +195,9 @@ func (e exactExpectation) eval(s *subject) Check {
 // matchCall reports successful executions separately for failure subsequences,
 // so they cannot hide a failed execution's diagnostic. Exact remains positional.
 func (e callExpectation) matchCall(call normalizedCall, exact bool) (error, bool) {
+	if e.verifiedExecution && call.execution != nil && !call.verified {
+		return fmt.Errorf("evidence unverified: execution"), false
+	}
 	var err error
 	if e.match != nil {
 		err = e.match(call.Payload)

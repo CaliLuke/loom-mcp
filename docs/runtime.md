@@ -1658,6 +1658,18 @@ argument codec. Codec failures quote the original error. Call expectations bind
 greedily to the first later satisfying call. Wrap them in `Exact` for one-to-one
 matching; `Forbid` checks every call and cannot be nested in `Exact`.
 
+For dynamic tools without a typed descriptor, `RawCall(name, args, result)` and
+`RawFailed(name, args, failure)` accept a `tools.Named` identifier. JSON predicates
+receive owned `rawjson.Message` bytes without number conversion or reformatting.
+Both validate arguments even when `args` is nil. A nil `RawCall` result predicate
+checks arguments only, including on model-choice `Calls` subjects; it does not
+assert execution success. A non-nil result predicate requires a verified successful
+execution and a recorded, valid JSON result. `RawFailed` requires a verified failed
+execution; a nil failure predicate accepts any recorded tool error. Missing results,
+malformed JSON and unverified execution produce tool-specific diagnostics.
+Raw expectations share ordering, `Exact`, child selection and `TopLevel` semantics
+with typed expectations. Prefer `Call` and `Failed` when a descriptor exists.
+
 `Failed`, `Bounds` and `Await` inspect recorded structured errors, result bounds
 and planner await items. `Completed` checks every selected run's successful
 terminal status; `AllAttemptsSuccessful` includes earlier failed attempts.

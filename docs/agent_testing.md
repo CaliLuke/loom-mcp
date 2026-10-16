@@ -95,6 +95,14 @@ normal payload validation, AfterTool interceptors and result materialization.
 A RawStub response rejected by the registered result decoder is a `*StubError`,
 reported by Run and Close and retained in both stub and harness call records.
 
+For dynamic tool names without generated descriptors, use `expect.RawCall` to
+inspect raw JSON arguments and results, or `expect.RawFailed` to inspect a recorded
+tool error. JSON predicates receive copied original bytes, preserving large numbers.
+A result predicate requires verified successful execution; a nil result predicate
+checks arguments only. Raw failure checks require verified failed execution.
+These expectations support the same ordered matching, `Exact` and child selection
+as typed calls. Prefer typed descriptors when available.
+
 ## Prove selection
 
 A wiring test scripts the chosen tool. To test the model's choice, capture its

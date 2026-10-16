@@ -57,6 +57,13 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   matching; `Decoded` uses an explicit argument codec. Nil `Call` predicates
   skip decoding. `Exact` matches one-to-one and rejects nested `Forbid` at
   construction. `Forbid` inspects every selected call. Codec errors are quoted.
+- `RawCall` and `RawFailed` accept named dynamic tools and validate argument JSON
+  even with nil predicates. JSON predicates receive owned original bytes. A nil
+  `RawCall` result predicate asserts arguments only; non-nil results require
+  verified successful execution and valid recorded JSON. `RawFailed` requires
+  verified failed execution. Both reuse ordering, Exact and child selection;
+  missing results, invalid JSON and unverified execution remain distinct diagnostics.
+  Prefer typed descriptors when available; existing typed semantics are unchanged.
 - Model-choice `Calls` subjects cannot supply execution or run evidence:
   result, error, bounds, await, completion and budget checks fail with
   `not applicable to a model-call subject`.
