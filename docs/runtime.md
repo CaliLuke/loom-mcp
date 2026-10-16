@@ -2222,9 +2222,53 @@ Exit codes describe command execution, not quality:
 - `1`: storage, load, comparison or run failure, including cancellation and disabled live models.
 - `2`: invalid command, flag, value, selection, reference, environment value or configuration.
 
-The store stays local and self-gitignored. The CLI uploads nothing and stores no
-provider credentials. Application runs still use the clients that the application
-registers. Replay, export integrations and retention are separate work.
+The store stays local and self-gitignored and stores no provider credentials.
+The built-in `run` command never uploads stored experiments. Application runs
+still use the clients that the application registers. Optional export extensions
+require an explicit command, as described below. Replay and retention remain
+separate work.
+
+### Explicit Opik export
+
+The optional `features/opik` adapter publishes stored experiments. Construct it
+with `opik.New(opik.Config{Endpoint: ..., Project: ..., Policy: ...})`; Endpoint
+is the REST base URL ending in `/api`. Workspace, APIKey and HTTPClient are
+optional. Supply a named, versioned `runrecord.ProjectionPolicy` explicitly.
+Register `client.Extension()` in `evalcli.Config.Extensions` to enable
+`opik-export <experiment>`. Put common `--out` before this extension command.
+The command also works without harnesses or scenarios. `run` never invokes it.
+Applications can call `client.ExportStored(ctx, store, ref)` directly to merge
+completed attempt rows with durable captures, including captures with no final
+attempt line. `client.Export(ctx, experiment)` exports only the supplied snapshot.
+
+The export retains experiment, scenario/item, variant/repeat, dataset and agent
+provenance, judgments, checks and scores. Run content crosses the boundary only
+through the selected public projection. Additional policy candidates classify
+stored evaluation content as `evaluation` and feedback explanations as
+`feedback_reason`; approved feedback reasons must remain JSON strings.
+Structural identities, outcomes, score values, provenance hashes, recorded source
+revision/modified state, build/module versions and original OTel trace IDs remain
+visible. Applications must authorize sharing those fields.
+This does not perform automatic PII detection.
+
+The adapter creates dedicated Opik traces and correlates their original OTel
+trace IDs in metadata. A durable target/policy manifest under the local experiment
+allocates UUIDv7 identities before network I/O. Retrying after partial failure
+reuses those identities and verifies existing remote associations. A conflicting
+remote object or changed source-content digest is an error; retries never allocate
+replacement attempt IDs. A server UUID timestamp-window rejection stays explicit.
+Local source evidence remains available after a remote error.
+
+Remote experiment status follows the recorded local lifecycle: running stays
+running, stopped maps to cancelled, and complete maps to completed. The original
+status and stop reason remain in metadata.
+
+Missing runs and incomplete calls have explicit warnings and incomplete markers.
+Capture alone never implies a successful evaluation; recorded quality verdicts
+remain separate from evidence-completeness markers. Unlinked runs remain explicit.
+Capture read errors are returned alongside any visibly partial published result.
+Projection errors fail before upload. This operation does not run agents, import datasets, provision Opik,
+enroll queues or choose promotion policy.
 
 ### Eval judge
 

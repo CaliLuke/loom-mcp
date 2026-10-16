@@ -15,10 +15,12 @@ import (
 
 // Config supplies application scenarios, isolated harnesses and CLI destinations.
 // Exactly one of Harness and AttemptHarness, and Scenarios are required except
-// for help. Empty Name means "evals".
+// for help and registered extension commands. Empty Name means "evals".
 // Empty StoreDir uses eval.DefaultStoreDir(Dir); empty Dir uses os.Getwd.
 // Nil output writers use os.Stdout and os.Stderr.
 type Config struct {
+	// Extensions enables only explicitly supplied application commands.
+	Extensions []Extension
 	// Compaction enables offline summary evaluation independently of Harness and Scenarios.
 	Compaction     *summaryeval.Config
 	Name           string
@@ -42,11 +44,12 @@ type commandError struct {
 }
 
 const (
-	commandHelp    = "help"
-	commandRun     = "run"
-	commandShow    = "show"
-	commandCompare = "compare"
-	commandList    = "list"
+	commandHelp       = "help"
+	commandRun        = "run"
+	commandShow       = "show"
+	commandCompare    = "compare"
+	commandList       = "list"
+	commandCompaction = "compaction"
 )
 
 // Main runs args (normally os.Args[1:]) without installing signal handlers.
@@ -82,10 +85,13 @@ func dispatch(ctx context.Context, args []string, cfg Config) error {
 	root := newFlags(cfg.Name, &common)
 	if root.Parse(args) == nil {
 		rest := root.Args()
-		if len(rest) > 0 && rest[0] == "compaction" {
+		if handled, err := dispatchExtension(ctx, rest, cfg, common); handled {
+			return err
+		}
+		if len(rest) > 0 && rest[0] == commandCompaction {
 			return compactionCommand(ctx, rest[1:], cfg, common)
 		}
-		if len(rest) == 2 && rest[0] == commandHelp && rest[1] == "compaction" {
+		if len(rest) == 2 && rest[0] == commandHelp && rest[1] == commandCompaction {
 			return compactionCommand(ctx, nil, cfg, common)
 		}
 	}
@@ -121,12 +127,12 @@ func usage(err error) error {
 	return &commandError{code: 2, err: err}
 }
 
-func openStore(cfg Config, f flags, options ...eval.StoreOption) (*eval.Store, error) {
+func openStore(cfg Config, f flags) (*eval.Store, error) {
 	dir, err := storeDir(cfg, f)
 	if err != nil {
 		return nil, err
 	}
-	return eval.Open(dir, options...)
+	return eval.Open(dir)
 }
 
 func storeDir(cfg Config, f flags) (string, error) {

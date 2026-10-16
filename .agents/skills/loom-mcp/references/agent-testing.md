@@ -222,6 +222,19 @@ Missing/corrupt captures return explicit errors; do not infer a quality verdict.
   stderr notice and continues without judging, leaving gating claims pending.
   Normal exit rules apply; other factory errors return 1 before Begin.
 
+## Explicit Opik export
+
+Use optional features/opik with an explicit named runrecord.ProjectionPolicy.
+Register Client.Extension in evalcli.Config.Extensions for opik-export <ref>, or
+call ExportStored(ctx, store, ref) to include durable precompletion captures.
+Export(ctx, experiment) uses the supplied snapshot only. Evaluation never uploads.
+The policy also receives evaluation and feedback_reason candidates. Structural
+identity, source/build provenance, score values and original OTel IDs remain
+visible. See docs/runtime.md for the complete disclosure boundary and retry rules.
+Stable UUIDv7 identities live in the local target/policy manifest before I/O;
+retries verify remote lifecycle, content identity and provenance. Missing/corrupt
+captures, unlinked runs and incomplete calls stay explicit; never infer success.
+
 ## Diagnose failures
 
 Inspect Run's harness error before its populated Result. `RunErr` is the agent

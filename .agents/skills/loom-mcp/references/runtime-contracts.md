@@ -88,6 +88,24 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   `Evaluate` gives checks unique names, and `Require` fails once with all failed
   diagnostics in declaration order. Requiring no expectations fails.
 
+## Explicit Opik export
+
+- Optional features/opik exports stored evidence only. ExportStored merges final
+  rows with durable captures; Export takes a supplied snapshot. Register the
+  explicit opik-export extension to expose it through evalcli without importing
+  the adapter into core. run never uploads.
+- Require a named ProjectionPolicy. Run data uses Project; evaluation text and
+  feedback_reason use the same policy. Structural identities, quality values,
+  source/build provenance and OTel trace correlations are disclosed explicitly.
+- Persist target/policy/source-bound UUIDv7 identity before network I/O. Retries
+  verify existing remote links, lifecycle and all exported provenance metadata;
+  changed source content or expired timestamp rejection remains an error, never
+  a reason to allocate duplicate attempts. Raw local evidence remains intact.
+- Map running/complete/stopped to Opik running/completed/cancelled and retain the
+  original lifecycle. Missing evidence, unlinked runs and capture read errors
+  remain explicit. Projection errors fail before upload; no agent execution,
+  provider recovery, dataset import, provisioning or curation policy is added.
+
 ## Durable local harness evidence
 
 - WithEvidenceDir selects a fresh harness-owned SQLite database for runstore and
@@ -384,7 +402,8 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   a judge: gating claims remain pending and normal run exit rules apply.
   Other factory errors return 1 before Begin, with no stored experiment.
   Persist Report.Judge with Writer.SetJudge before Finish.
-  Replay, exporter and retention remain outside this CLI layer.
+  Replay and retention remain outside this CLI layer. Optional exporters use
+  explicit application-registered extensions; run never invokes them.
 
 ## Planner Streaming
 
