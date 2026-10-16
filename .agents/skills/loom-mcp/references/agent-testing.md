@@ -140,6 +140,11 @@ Re-capture when planner decoration changes tool definitions.
 
 ## Durable local evidence
 
+Ordinary runtime consumers use public evidence.Create/Open/Read, explicitly pair
+the same store through runtime.WithRunStore and WithRunEventStore, and close it
+after producers stop. The harness reader delegates to this public implementation.
+See evidence/example_test.go for an executed example without agenttest imports.
+
 Use WithEvidenceDir with a fresh capture database to persist the harness-owned
 canonical stores. ReadEvidence reopens root Records and Unlinked call runs after
 process exit, including incomplete calls. Keep captures private; Project applies

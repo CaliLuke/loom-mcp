@@ -1511,6 +1511,36 @@ v1 JSON); Render prints `Trace: <id>` after `Agent:` when present. The caller ow
 the provider's export configuration and shutdown. No live model is enabled by
 default, and the harness has no Temporal mode.
 
+### Durable local runtime evidence
+
+Ordinary applications can import `github.com/CaliLuke/loom-mcp/v2/evidence`
+without depending on `agenttest`. `evidence.Create(ctx, dir)` creates a fresh
+SQLite capture and rejects an existing database with `os.ErrExist`. Pass its
+returned store explicitly to both `runtime.WithRunStore(store)` and
+`runtime.WithRunEventStore(store)` when constructing the runtime. The public
+store uses the same backend as harness capture; it does not replace either store
+in an already configured runtime or mirror another application's stores.
+
+The caller owns the store. Stop and wait for all runs and evidence producers
+before `store.Close()`. Storage failures remain execution errors.
+`evidence.Open(ctx, dir)` reopens storage access; it does not resume a workflow
+or retry a provider request. `evidence.Read(ctx, dir)` opens and closes its own
+reader and returns a `Snapshot` plus any reconstruction errors. `Records` contains
+root run trees; `Unlinked` contains recorded call runs without a committed child
+link. Readable records remain available alongside errors. Interrupted calls stay
+incomplete, and completed, failed and cancelled calls retain their recorded
+identity and lifecycle.
+
+The [executed ordinary-runtime example](../evidence/example_test.go) creates the
+store, registers a model and agent, runs the agent, closes the owner, and reads
+its evidence again. Its deterministic provider and planner are in the
+[public runtime tests](../evidence/runtime_test.go).
+
+These snapshots contain raw canonical evidence. Apply an explicit
+`runrecord.ProjectionPolicy` through `RunRecord.Project` before sharing; capture does
+not upload evidence automatically. Harness capture and `agenttest.ReadEvidence`
+use this same public backend and reader.
+
 ### Durable local harness evidence
 
 `agenttest.WithEvidenceDir(dir)` stores canonical content, model calls and events

@@ -6,18 +6,14 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/CaliLuke/loom-mcp/v2/internal/localevidence"
-	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runrecord"
+	"github.com/CaliLuke/loom-mcp/v2/evidence"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"
 )
 
 // EvidenceSnapshot contains raw canonical records from a private local capture.
 // Unlinked preserves call runs without a committed link in any root tree.
 // These records are replay evidence, not filtered artifacts for sharing.
-type EvidenceSnapshot struct {
-	Records  []*runrecord.RunRecord
-	Unlinked []*runrecord.RunRecord
-}
+type EvidenceSnapshot = evidence.Snapshot
 
 // WithEvidenceDir persists canonical evidence in a fresh harness-owned capture.
 // The directory can exist, but its evidence database must not already exist.
@@ -39,25 +35,8 @@ func WithEvidenceDir(dir string) Option {
 // ReadEvidence reopens a private capture without requiring a completed run or eval.
 // Canonical adoption determines incomplete/abandoned classes; no success is inferred.
 // It returns any readable records alongside explicit reconstruction errors.
-func ReadEvidence(ctx context.Context, dir string) (snapshot *EvidenceSnapshot, err error) {
-	store, err := localevidence.Open(ctx, dir)
-	if err != nil {
-		return nil, fmt.Errorf("agenttest: open evidence: %w", err)
-	}
-	defer func() {
-		err = errors.Join(err, store.Close())
-	}()
-	snapshot = &EvidenceSnapshot{}
-	roots, err := store.Roots(ctx)
-	if err != nil {
-		return snapshot, err
-	}
-	for _, root := range roots {
-		if readErr := readEvidenceRoot(ctx, store, root, snapshot); readErr != nil {
-			err = errors.Join(err, fmt.Errorf("read evidence root %s: %w", root, readErr))
-		}
-	}
-	return snapshot, err
+func ReadEvidence(ctx context.Context, dir string) (*EvidenceSnapshot, error) {
+	return evidence.Read(ctx, dir)
 }
 
 // EvidenceDir returns the selected private capture directory, or empty by default.
@@ -65,41 +44,11 @@ func (h *Harness) EvidenceDir() string {
 	return h.evidenceDir
 }
 
-func readEvidenceRoot(ctx context.Context, store *localevidence.Store, root string, snapshot *EvidenceSnapshot) error {
-	record, err := runrecord.Read(ctx, store, store, root, root)
-	if err != nil {
-		return err
-	}
-	snapshot.Records = append(snapshot.Records, record)
-	seen := make(map[string]bool)
-	for _, run := range record.Runs {
-		seen[run.RunID] = true
-	}
-	runs, err := store.RunIDs(ctx, root)
-	if err != nil {
-		return err
-	}
-	for _, id := range runs {
-		if seen[id] {
-			continue
-		}
-		unlinked, err := runrecord.Read(ctx, store, store, root, id)
-		if err != nil {
-			return err
-		}
-		snapshot.Unlinked = append(snapshot.Unlinked, unlinked)
-		for _, run := range unlinked.Runs {
-			seen[run.RunID] = true
-		}
-	}
-	return nil
-}
-
 func (h *Harness) configureEvidence(ctx context.Context, dir string, options *runtime.Options) error {
 	if dir == "" {
 		return nil
 	}
-	store, err := localevidence.Create(ctx, dir)
+	store, err := evidence.Create(ctx, dir)
 	if err != nil {
 		return fmt.Errorf("agenttest: create evidence: %w", err)
 	}

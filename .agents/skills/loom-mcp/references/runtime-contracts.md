@@ -106,6 +106,17 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   remain explicit. Projection errors fail before upload; no agent execution,
   provider recovery, dataset import, provisioning or curation policy is added.
 
+## Durable local runtime evidence
+
+- Public evidence.Create/Open exposes the existing SQLite backend as a caller-owned
+  store. Pass the same store to runtime.WithRunStore and WithRunEventStore; no
+  runtime option silently replaces caller stores. Stop producers before Close.
+- evidence.Read reconstructs raw Records and Unlinked runs with explicit errors;
+  interrupted calls stay incomplete. Open/Read do not resume execution. The
+  agenttest reader delegates to it. Public-only runtime tests and ExampleCreate
+  cover close/reopen, child identity, failure, cancellation and process interruption.
+- Keep raw evidence private and apply explicit sharing projections before export.
+
 ## Durable local harness evidence
 
 - WithEvidenceDir selects a fresh harness-owned SQLite database for runstore and
