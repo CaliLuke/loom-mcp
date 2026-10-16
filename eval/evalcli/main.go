@@ -14,16 +14,18 @@ import (
 )
 
 // Config supplies application scenarios, isolated harnesses and CLI destinations.
-// Harness and Scenarios are required except for help. Empty Name means "evals".
+// Exactly one of Harness and AttemptHarness, and Scenarios are required except
+// for help. Empty Name means "evals".
 // Empty StoreDir uses eval.DefaultStoreDir(Dir); empty Dir uses os.Getwd.
 // Nil output writers use os.Stdout and os.Stderr.
 type Config struct {
 	// Compaction enables offline summary evaluation independently of Harness and Scenarios.
-	Compaction *summaryeval.Config
-	Name       string
-	Harness    eval.HarnessFunc
-	Scenarios  []eval.Scenario
-	Variants   []eval.Variant
+	Compaction     *summaryeval.Config
+	Name           string
+	Harness        eval.HarnessFunc
+	AttemptHarness eval.AttemptHarnessFunc
+	Scenarios      []eval.Scenario
+	Variants       []eval.Variant
 	// NewJudge optionally constructs the judge using the store's calibration cache.
 	// --no-judge skips the factory; ErrLiveModelDisabled runs without judging.
 	NewJudge       func(cache judge.Cache) (*judge.Judge, error)
@@ -92,8 +94,8 @@ func dispatch(ctx context.Context, args []string, cfg Config) error {
 	if invocation.help {
 		return help(cfg, invocation.command)
 	}
-	if cfg.Harness == nil || len(cfg.Scenarios) == 0 {
-		return usage(errors.New("Harness and Scenarios are required"))
+	if (cfg.Harness == nil) == (cfg.AttemptHarness == nil) || len(cfg.Scenarios) == 0 {
+		return usage(errors.New("exactly one of Harness and AttemptHarness, and Scenarios are required"))
 	}
 	command, f, positions := invocation.command, invocation.flags, invocation.positions
 	if err := f.validate(command, positions); err != nil {

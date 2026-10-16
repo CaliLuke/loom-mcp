@@ -17,7 +17,10 @@ import (
 // OnAttempt runs serially once per record; callbacks must not mutate configuration.
 // A callback panic stops new attempts and disables subsequent callbacks.
 type Config struct {
-	Harness                         HarnessFunc
+	Harness HarnessFunc
+	// AttemptHarness receives owned attempt metadata before harness construction.
+	// Exactly one of Harness and AttemptHarness must be set.
+	AttemptHarness                  AttemptHarnessFunc
 	Scenarios                       []Scenario
 	Variants                        []Variant
 	Select                          Selection
@@ -57,7 +60,7 @@ func Run(ctx context.Context, cfg Config) (*Report, error) {
 	jobs := make(chan runnerJob)
 	completed := make(chan *AttemptRecord, concurrency)
 	owners := &harnessOwners{seen: make(map[*agenttest.Harness]bool)}
-	factory := cfg.Harness
+	factory := harnessFactory(cfg)
 	var workers sync.WaitGroup
 	for range concurrency {
 		workers.Go(func() {
@@ -228,7 +231,7 @@ func newReport(cfg Config, plan []plannedAttempt) *Report {
 }
 
 // runAttempt closes each newly owned harness exactly once, including error paths.
-func runAttempt(ctx context.Context, factory HarnessFunc, owners *harnessOwners, job runnerJob) *AttemptRecord {
+func runAttempt(ctx context.Context, factory AttemptHarnessFunc, owners *harnessOwners, job runnerJob) *AttemptRecord {
 	a := job.attempt
 	if ctx.Err() != nil {
 		return &AttemptRecord{AttemptKey: a.key, Index: job.index, NotRun: StopCanceled}
@@ -238,7 +241,7 @@ func runAttempt(ctx context.Context, factory HarnessFunc, owners *harnessOwners,
 		r.Duration = time.Since(r.Started)
 	}()
 	opts := append(slices.Clone(a.variant.Options), agenttest.WithDefaultRunOptions(variantRunOptions(a.variant)...))
-	h, err := callFactory(ctx, factory, a.variant, opts)
+	h, err := callFactory(ctx, factory, attemptInfo(a), opts)
 	r.HarnessErr = err
 	if h == nil {
 		if err == nil {
@@ -265,13 +268,13 @@ func runAttempt(ctx context.Context, factory HarnessFunc, owners *harnessOwners,
 	return r
 }
 
-func callFactory(ctx context.Context, factory HarnessFunc, v Variant, opts []agenttest.Option) (h *agenttest.Harness, err error) {
+func callFactory(ctx context.Context, factory AttemptHarnessFunc, info AttemptInfo, opts []agenttest.Option) (h *agenttest.Harness, err error) {
 	defer func() {
 		if value := recover(); value != nil {
 			err = fmt.Errorf("eval: harness factory panic: %v\n%s", value, debug.Stack())
 		}
 	}()
-	return factory(ctx, v, opts...)
+	return factory(ctx, info, opts...)
 }
 
 func (o *harnessOwners) claim(h *agenttest.Harness) bool {

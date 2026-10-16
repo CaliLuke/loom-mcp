@@ -34,7 +34,7 @@ func run(ctx context.Context, cfg Config, f flags) error {
 	if err != nil {
 		return err
 	}
-	runner := eval.Config{Harness: cfg.Harness, Scenarios: cfg.Scenarios, Variants: cfg.Variants, Select: f.selection, Repeats: f.repeat, Concurrency: f.concurrency, MaxTokens: f.maxTokens}
+	runner := eval.Config{Harness: cfg.Harness, AttemptHarness: cfg.AttemptHarness, Scenarios: cfg.Scenarios, Variants: cfg.Variants, Select: f.selection, Repeats: f.repeat, Concurrency: f.concurrency, MaxTokens: f.maxTokens}
 	parent, err := rerunConfig(store, f, &runner)
 	if errors.Is(err, eval.ErrNothingToRerun) {
 		return nothingToRerun(cfg, f)

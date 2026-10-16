@@ -136,6 +136,11 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   variant/scenario/item/repeat keys. eval.Run creates one fresh harness per attempt
   and closes it once. HarnessFunc forwards options; NewHarnessFunc applies base
   options before variant options and closes failed or panicking setup.
+- `AttemptHarness` is the alternative factory in eval.Config and evalcli.Config.
+  Exactly one factory is required. AttemptInfo owns item/variant metadata and carries
+  the planned AttemptKey before construction; item defaults resolve later in Execute.
+  Factory mutations cannot change datasets, plans or sibling attempts. Option
+  closures remain caller-owned. Fresh-harness, cancellation and cleanup rules remain.
 - A nil variant Policy preserves earlier WithDefaultRunOptions policy defaults.
   Non-nil policies still override defaults and are cloned per run.
 - Variants carry labels, per-run cloned Policy and agenttest Options for models

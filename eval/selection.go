@@ -82,8 +82,8 @@ func buildPlan(cfg Config) ([]plannedAttempt, error) {
 
 func validateConfig(cfg Config, variants []Variant) []error {
 	var problems []error
-	if cfg.Harness == nil {
-		problems = append(problems, errors.New("eval: Harness is required"))
+	if (cfg.Harness == nil) == (cfg.AttemptHarness == nil) {
+		problems = append(problems, errors.New("eval: exactly one of Harness and AttemptHarness is required"))
 	}
 	if len(cfg.Scenarios) == 0 {
 		problems = append(problems, errors.New("eval: no scenarios"))

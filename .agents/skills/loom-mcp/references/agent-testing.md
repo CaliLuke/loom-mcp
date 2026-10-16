@@ -143,6 +143,13 @@ Re-capture when planner decoration changes tool definitions.
 - Run matrices with `eval.Run` and `eval.NewHarnessFunc(register, setup, base...)`.
   Factories receive the variant and supplied options, forward options and return
   fresh harnesses. Use ScriptedModel for per-harness scripts; never share scripts.
+- For per-item scripts or fixtures, set `AttemptHarness` instead of `Harness` in
+  eval.Config or evalcli.Config. It receives `AttemptInfo{Key, Item, Variant}`
+  before construction; Key includes scenario and repeat. Item and mutable variant
+  metadata are owned snapshots; option closures remain application-owned. Item
+  values precede scenario task/reference defaults. Choose registration/scripts,
+  forward opts to NewHarness, and retain normal sealing. Exactly one factory field
+  is required. See the assistant fixture's `attempt_factory_test.go`.
 - Put labels and cloned run policy on Variant; put model and context runtime
   settings in Variant.Options. A nil variant Policy preserves earlier policy
   defaults. WithDefaultRunOptions precedes caller options on

@@ -14,7 +14,7 @@ func TestRunAttemptCanceledAtDispatch(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	var built int
-	factory := func(context.Context, Variant, ...agenttest.Option) (*agenttest.Harness, error) {
+	factory := func(context.Context, AttemptInfo, ...agenttest.Option) (*agenttest.Harness, error) {
 		built++
 		return nil, errors.New("unexpected factory call")
 	}

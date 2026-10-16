@@ -1802,6 +1802,18 @@ base options before variant options, runs optional setup and closes failed setup
 A custom factory receives `(ctx, variant, opts...)`, must forward `opts` to
 `NewHarness`, and must return a new harness each time. Use `ScriptedModel` to build
 fresh scripts; sharing a `ScriptedModelFrom` script breaks attempt isolation.
+When scripts or fixtures depend on the item, set `AttemptHarness` instead of
+`Harness` in `eval.Config` or `evalcli.Config`. Its signature is
+`func(context.Context, eval.AttemptInfo, ...agenttest.Option) (*agenttest.Harness, error)`.
+`AttemptInfo.Key` supplies scenario, item, variant and one-based repeat identity;
+`Item` and `Variant` are independently owned snapshots. The item contains dataset
+values before scenario task/reference defaults are resolved. Choose scripts and
+the registration callback from this metadata, then construct the harness and
+forward the supplied options. Registration still seals during construction.
+Exactly one factory field must be set. Option closures remain application-owned.
+The [compiled factory example](../integration_tests/fixtures/assistant/agenttest/attempt_factory_test.go)
+uses distinct item scripts across repeats under one runner configuration.
+
 `agenttest.WithDefaultRunOptions` applies labels/policy before caller run options
 on Run, RunSession and CaptureFirstRequest; `WithRunID` stays reserved.
 
