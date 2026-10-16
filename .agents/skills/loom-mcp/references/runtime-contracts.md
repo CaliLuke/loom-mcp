@@ -377,6 +377,11 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   use stdout/stderr. The caller owns signal handling and cancellation.
 - Stdlib flags support repeated/comma selectors and flags after positional
   arguments. --out overrides Config.StoreDir, then DefaultStoreDir(Dir).
+- Registered extensions reserve --out DIR/--out=DIR (also -out) for store
+  selection before the command or anywhere before --. Repeated values must match
+  exactly; conflicting, missing or empty values are usage errors. Unknown args
+  retain order/content. -- passes following tokens literally, including --out.
+  help <extension> documents these rules; other suffix flags belong to extensions.
   Empty Dir uses the working directory. Read commands use the same store rules.
 - Run checks LiveModelEnabled before storage, applies RerunSelection when asked,
   validates Plan, then Begin/Run/Finish. WithOnError cancels the run context.

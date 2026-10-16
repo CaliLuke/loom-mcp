@@ -2190,6 +2190,15 @@ Store precedence is `--out`, then `Config.StoreDir`, then
 The default store requires an ancestor `go.mod`. Full experiment IDs appear in
 output because short UUIDv7 prefixes can be ambiguous.
 
+Registered extensions accept `--out DIR` or `--out=DIR` before the command or
+anywhere among its arguments before `--`. For example, `evals --out ./scratch
+opik-export last`, `evals opik-export --out ./scratch last`, and `evals opik-export
+last --out ./scratch` select the same store. Only store selection belongs to the
+CLI within extension arguments; other arguments keep their order and content.
+Use `--` after the extension name to pass subsequent arguments literally,
+including a literal `--out`. Repeated store values must match exactly; conflicting,
+missing, or empty values are usage errors. The existing `-out` spelling also works.
+
 A run validates its plan before it creates an experiment. Each completed append
 produces one stderr line: `[done/planned] verdict key duration tokens tok`.
 There are no ANSI codes or carriage returns. `--quiet` suppresses these lines.
@@ -2244,7 +2253,8 @@ with `opik.New(opik.Config{Endpoint: ..., Project: ..., Policy: ...})`; Endpoint
 is the REST base URL ending in `/api`. Workspace, APIKey and HTTPClient are
 optional. Supply a named, versioned `runrecord.ProjectionPolicy` explicitly.
 Register `client.Extension()` in `evalcli.Config.Extensions` to enable
-`opik-export <experiment>`. Put common `--out` before this extension command.
+`opik-export <experiment>`. Common `--out` may appear before the command or among its arguments before `--`;
+see [Eval CLI](#eval-cli) for flag ownership and delimiter rules.
 The command also works without harnesses or scenarios. `run` never invokes it.
 Applications can call `client.ExportStored(ctx, store, ref)` directly to merge
 completed attempt rows with durable captures, including captures with no final

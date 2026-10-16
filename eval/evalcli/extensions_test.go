@@ -24,7 +24,8 @@ func TestExplicitExtensionWithoutHarness(t *testing.T) {
 	assert.Empty(t, diagnostic)
 	code, out, diagnostic = invoke(t.Context(), cfg, "help", "publish")
 	assert.Equal(t, 0, code)
-	assert.Equal(t, "publish help\n", out)
+	assert.Contains(t, out, "publish help\n")
+	assert.Contains(t, out, "--out")
 	assert.Empty(t, diagnostic)
 }
 

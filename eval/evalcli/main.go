@@ -81,13 +81,13 @@ func Main(ctx context.Context, args []string, cfg Config) int {
 }
 
 func dispatch(ctx context.Context, args []string, cfg Config) error {
+	if handled, err := dispatchRegisteredExtension(ctx, args, cfg); handled {
+		return err
+	}
 	var common flags
 	root := newFlags(cfg.Name, &common)
 	if root.Parse(args) == nil {
 		rest := root.Args()
-		if handled, err := dispatchExtension(ctx, rest, cfg, common); handled {
-			return err
-		}
 		if len(rest) > 0 && rest[0] == commandCompaction {
 			return compactionCommand(ctx, rest[1:], cfg, common)
 		}

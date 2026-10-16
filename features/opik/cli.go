@@ -10,7 +10,7 @@ import (
 
 // Extension enables the explicit `opik-export <experiment>` application command.
 // Register it in evalcli.Config.Extensions; evaluation never invokes it itself.
-// Common --out selects the store when placed before the command name.
+// Common --out selects the store before the command or before -- in its arguments.
 func (c *Client) Extension() evalcli.Extension {
 	return evalcli.Extension{Name: "opik-export", Help: "opik-export <experiment>: explicitly publish stored evidence using the configured target and application projection policy", Run: func(ctx context.Context, request evalcli.ExtensionRequest) error {
 		if len(request.Args) != 1 {

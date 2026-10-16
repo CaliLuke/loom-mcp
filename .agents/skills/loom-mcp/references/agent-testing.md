@@ -228,6 +228,9 @@ Missing/corrupt captures return explicit errors; do not infer a quality verdict.
 
 ## Explicit Opik export
 
+Select the extension store with --out DIR before opik-export or among its arguments
+before --; -- passes the rest literally. Other arguments remain extension-owned.
+
 Use optional features/opik with an explicit named runrecord.ProjectionPolicy.
 Register Client.Extension in evalcli.Config.Extensions for opik-export <ref>, or
 call ExportStored(ctx, store, ref) to include durable precompletion captures.
