@@ -20,12 +20,17 @@ func TestAttemptHarnessSelectsItemScriptsFixture(t *testing.T) {
 		eval.Item{ID: "second", Input: "second", ExpectedTools: &expect.ExpectedTools{Exact: true}},
 	)
 	var built []*agenttest.Harness
-	factory := func(ctx context.Context, info eval.AttemptInfo, opts ...agenttest.Option) (*agenttest.Harness, error) {
+	factory := eval.NewAttemptHarnessFunc(func(_ context.Context, info eval.AttemptInfo) (eval.AttemptHarnessConfig, error) {
 		turn := agenttest.Respond(agenttest.Text(info.Item.ID)).When(agenttest.LastUserContains(info.Item.Input))
-		h, err := eval.NewHarnessFunc(registerScenarioFixture, nil, agenttest.ScriptedModel("fixture", turn))(ctx, info.Variant, opts...)
-		built = append(built, h)
-		return h, err
-	}
+		return eval.AttemptHarnessConfig{
+			Register: registerScenarioFixture,
+			Options:  []agenttest.Option{agenttest.ScriptedModel("fixture", turn)},
+			Setup: func(h *agenttest.Harness) error {
+				built = append(built, h)
+				return nil
+			},
+		}, nil
+	})
 	report, err := eval.Run(t.Context(), eval.Config{AttemptHarness: factory, Scenarios: []eval.Scenario{scenario}, Repeats: 2})
 	require.NoError(t, err)
 	require.Len(t, report.Attempts, 4)

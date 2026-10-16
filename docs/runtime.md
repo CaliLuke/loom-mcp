@@ -1864,10 +1864,19 @@ When scripts or fixtures depend on the item, set `AttemptHarness` instead of
 `func(context.Context, eval.AttemptInfo, ...agenttest.Option) (*agenttest.Harness, error)`.
 `AttemptInfo.Key` supplies scenario, item, variant and one-based repeat identity;
 `Item` and `Variant` are independently owned snapshots. The item contains dataset
-values before scenario task/reference defaults are resolved. Choose scripts and
-the registration callback from this metadata, then construct the harness and
-forward the supplied options. Registration still seals during construction.
-Exactly one factory field must be set. Option closures remain application-owned.
+values before scenario task/reference defaults are resolved. Prefer
+`eval.NewAttemptHarnessFunc(configure, base...)`: `configure(ctx, info)` returns
+an `eval.AttemptHarnessConfig` with required `Register`, application `Options`,
+and optional `Setup func(*agenttest.Harness) error`. It receives no infrastructure
+options to forward. The builder applies base options, per-attempt options, then
+runner options before registration. This includes `CaptureEvidence` storage;
+conflicting evidence directories fail before registration or model dispatch.
+Setup runs after registration and closes the harness on an error or panic.
+The callback must cooperate with cancellation and support concurrent attempts.
+Custom `AttemptHarnessFunc` factories remain supported and must forward supplied
+options; ignored capture settings still fail explicitly. Registration still seals
+during construction. Exactly one factory field must be set. Option closures
+remain application-owned.
 The [compiled factory example](../integration_tests/fixtures/assistant/agenttest/attempt_factory_test.go)
 uses distinct item scripts across repeats under one runner configuration.
 

@@ -165,9 +165,13 @@ Missing/corrupt captures return explicit errors; do not infer a quality verdict.
   eval.Config or evalcli.Config. It receives `AttemptInfo{Key, Item, Variant}`
   before construction; Key includes scenario and repeat. Item and mutable variant
   metadata are owned snapshots; option closures remain application-owned. Item
-  values precede scenario task/reference defaults. Choose registration/scripts,
-  forward opts to NewHarness, and retain normal sealing. Exactly one factory field
-  is required. See the assistant fixture's `attempt_factory_test.go`.
+  values precede scenario task/reference defaults. Prefer NewAttemptHarnessFunc:
+  configure returns AttemptHarnessConfig{Register, Options, Setup}; it does not
+  receive infrastructure options. The builder applies base/application/runner
+  options before registration, rejects capture conflicts and closes failed setup.
+  Custom factories still forward opts to NewHarness and retain normal sealing.
+  Exactly one factory field is required. See `attempt_factory_test.go` in the
+  assistant fixture for the compiled builder example.
 - Put labels and cloned run policy on Variant; put model and context runtime
   settings in Variant.Options. A nil variant Policy preserves earlier policy
   defaults. WithDefaultRunOptions precedes caller options on

@@ -178,6 +178,11 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   the planned AttemptKey before construction; item defaults resolve later in Execute.
   Factory mutations cannot change datasets, plans or sibling attempts. Option
   closures remain caller-owned. Fresh-harness, cancellation and cleanup rules remain.
+- NewAttemptHarnessFunc receives per-attempt application declarations through
+  AttemptHarnessConfig{Register, Options, Setup}. It applies base, application,
+  then runner options before registration; callbacks never forward capture options.
+  Conflicting evidence configuration fails before registration. Setup errors/panics
+  close the harness. Legacy factories retain their ignored-capture diagnostic.
 - A nil variant Policy preserves earlier WithDefaultRunOptions policy defaults.
   Non-nil policies still override defaults and are cloned per run.
 - Variants carry labels, per-run cloned Policy and agenttest Options for models
