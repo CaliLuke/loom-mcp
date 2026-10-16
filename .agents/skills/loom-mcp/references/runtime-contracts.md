@@ -112,6 +112,10 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   and item locations. Claim IDs match `[a-z0-9_]{1,64}`, are unique and have
   non-empty UTF-8 text. eval never imports eval/judge; eval/judging adapts claims to the judge.
 - Execute resolves item Task/Reference before defaults, then runs one session.
+  BuildInputs returns ordered typed agenttest.Input turns to the standard RunSession
+  driver. It receives the resolved, cloned Item; system messages and attachments
+  retain their input shape. BuildInputs and Drive are mutually exclusive. Without
+  BuildInputs, text defaults remain; no implicit transcript copying is added.
   Drive replaces RunSession; Assert receives Attempt.Subject and the last
   trajectory's Final. Checks order runs_succeeded, Expect, ExpectedTools, Assert.
   Scores prepend model_calls (adopted), tool_calls, failed_tool_calls and
@@ -126,7 +130,7 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   ErrNoAssertions requires a user check or claim beyond the built-in health
   check. Passed checks have no diagnostic; failed checks have one. Names are
   non-empty and score values finite.
-- Timeout covers Drive and Assert cooperatively; callbacks/predicates must be
+- Timeout covers BuildInputs, Drive and Assert cooperatively; callbacks/predicates must be
   concurrency-safe. Runner selection, repeats, variants, storage and judging
   remain separate from single-attempt Execute.
 

@@ -1772,8 +1772,25 @@ when the list is empty.
 Call `eval.Execute(ctx, h, scenario, item)` to drive one attempt. Item `Task` and
 `Reference` override scenario defaults; `Attempt.Item` receives the resolved
 values. The default driver uses `RunSession` for both single and multiple turns.
-`Drive` replaces it and must return the session evidence; `Assert` receives an
-`Attempt` with `Subject()` and the last trajectory's `Final()` message.
+Set `Scenario.BuildInputs` to reuse application prompt assembly. The callback
+receives the resolved, attempt-local item and returns ordered `[]agenttest.Input`
+turns, including system messages and image or document parts. The standard
+`RunSession` driver executes these inputs without copying earlier transcripts
+into later turns. See the compiled assistant fixture's
+`input_builder_fixture_test.go` for the same prompt builder used by direct runs
+and evals. With no builder, dataset text retains its existing behavior.
+
+<!-- snippet: eval-input-builder -->
+```go
+s.BuildInputs = func(_ context.Context, item eval.Item) ([]agenttest.Input, error) {
+    return []agenttest.Input{figmaPromptInput(item.Input)}, nil
+}
+out, err := eval.Execute(t.Context(), h, s, s.Items.Items()[0])
+```
+
+`Drive` replaces the standard driver and must return session evidence. Declaring
+both `BuildInputs` and `Drive` is invalid. `Assert` receives an `Attempt` with
+`Subject()` and the last trajectory's `Final()` message.
 
 Checks appear in order: mandatory `runs_succeeded`, scenario `Expect`, item
 `expected_tools` (with the `tool_correctness` score), then `Assert` results.
@@ -1787,8 +1804,9 @@ A failed quality check leaves `Outcome.Err` nil. Harness/Drive errors preserve
 the session prefix, leave checks and scores empty, and skip Assert. Assertion
 errors, recovered callback panics (with stack), timeouts and invalid assertion
 results populate `Outcome.Err`. The separate error return is only for invalid
-scenario/item arguments or a nil harness. Scenario `Timeout` covers both Drive
-and Assert; callbacks must cooperate with context cancellation. Concurrent
+scenario/item arguments or a nil harness. Builder errors are operational failures
+in `Outcome.Err`, and builder panics are recovered by the driver. Scenario
+`Timeout` covers BuildInputs, Drive and Assert; callbacks must cooperate with context cancellation. Concurrent
 Execute calls may share a harness; callbacks and predicates must be safe for
 concurrent use. Selection, repeats, variants, storage and judging are separate
 layers.
@@ -1847,8 +1865,8 @@ error. All scenarios are validated, including unselected ones.
 Keys are `variant:scenario:item:repeat` with repeats starting at one; records and
 zero-based `Index` values keep variant, scenario, dataset item, repeat declaration
 order. Starts use descending scenario timeout, with zero longest and stable ties.
-Scenario timeout covers Drive and Assert, not factory setup or future judging.
-Factories, Drive, Assert and predicates must cooperate with cancellation and be
+Scenario timeout covers BuildInputs, Drive and Assert, not factory setup or judging.
+Factories, BuildInputs, Drive, Assert and predicates must cooperate with cancellation and be
 safe for concurrent calls. Every newly built harness is closed once; reuse is an
 error. Run/session IDs can repeat across attempts, so use `AttemptKey` as identity.
 

@@ -15,7 +15,7 @@ import (
 )
 
 // Scenario shares defaults, assertions and optional driving code across items.
-// Drive, Assert and expectation predicates must be safe for concurrent calls.
+// BuildInputs, Drive, Assert and expectation predicates must be safe for concurrent calls.
 type Scenario struct {
 	// ID uniquely identifies the scenario in a suite.
 	ID string
@@ -27,7 +27,7 @@ type Scenario struct {
 	Reference string
 	// Tags label the scenario for selection.
 	Tags []string
-	// Timeout bounds Drive and Assert; zero uses the caller's context.
+	// Timeout bounds BuildInputs, Drive and Assert; zero uses the caller's context.
 	Timeout time.Duration
 	// Items contains the immutable dataset executed for this scenario.
 	Items Dataset
@@ -35,6 +35,9 @@ type Scenario struct {
 	Claims []Claim
 	// Expect contains deterministic expectations evaluated against each session.
 	Expect []expect.Expectation
+	// BuildInputs constructs ordered turns for the standard sequential driver.
+	// It receives the resolved item and must honor ctx; it cannot be used with Drive.
+	BuildInputs func(ctx context.Context, item Item) ([]agenttest.Input, error)
 	// Drive replaces the default sequential RunSession driver when non-nil.
 	Drive func(ctx context.Context, h *agenttest.Harness, item Item) (*agenttest.SessionResult, error)
 	// Assert adds checks, scores and claims after the declared expectations.
@@ -75,9 +78,7 @@ func Validate(scenarios ...Scenario) error {
 			add(errors.New("duplicate scenario ID"))
 		}
 		seen[s.ID] = true
-		if s.Agent == "" && s.Drive == nil {
-			add(errors.New("Agent is required unless Drive is set"))
-		}
+		add(validateDriver(s))
 		if s.Timeout < 0 {
 			add(errors.New("Timeout must be non-negative"))
 		}
@@ -100,6 +101,18 @@ func Validate(scenarios ...Scenario) error {
 		if len(s.Claims) == 0 && len(s.Expect) == 0 && s.Assert == nil && !allTools {
 			add(ErrNoAssertions)
 		}
+	}
+	return errors.Join(problems...)
+}
+
+// validateDriver keeps standard input building distinct from custom execution.
+func validateDriver(s Scenario) error {
+	var problems []error
+	if s.Agent == "" && s.Drive == nil {
+		problems = append(problems, errors.New("Agent is required unless Drive is set"))
+	}
+	if s.BuildInputs != nil && s.Drive != nil {
+		problems = append(problems, errors.New("BuildInputs and Drive cannot both be set"))
 	}
 	return errors.Join(problems...)
 }

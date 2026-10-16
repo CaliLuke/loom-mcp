@@ -43,7 +43,7 @@ var ErrNoAssertions = errors.New("eval: no assertions")
 
 // Execute drives one item and evaluates its session. Only invalid arguments return
 // a non-nil error; infrastructure failures are retained in Outcome.Err. Timeout
-// covers Drive and Assert, whose callbacks must cooperate with cancellation.
+// covers BuildInputs, Drive and Assert, whose callbacks must cooperate with cancellation.
 // Callbacks and expectation predicates must be safe for concurrent execution.
 func Execute(ctx context.Context, h *agenttest.Harness, s Scenario, item Item) (*Outcome, error) {
 	if h == nil {
@@ -114,6 +114,21 @@ func drive(ctx context.Context, h *agenttest.Harness, s Scenario, item Item) (se
 	if s.Drive != nil {
 		return s.Drive(ctx, h, item)
 	}
+	inputs, err := scenarioInputs(ctx, s, item)
+	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return h.RunSession(ctx, s.Agent, inputs...)
+}
+
+// scenarioInputs leaves prompt assembly to the application when configured.
+func scenarioInputs(ctx context.Context, s Scenario, item Item) ([]agenttest.Input, error) {
+	if s.BuildInputs != nil {
+		return s.BuildInputs(ctx, item)
+	}
 	turns := item.Turns
 	if item.Input != "" {
 		turns = []string{item.Input}
@@ -122,7 +137,7 @@ func drive(ctx context.Context, h *agenttest.Harness, s Scenario, item Item) (se
 	for n, turn := range turns {
 		inputs[n] = agenttest.User(turn)
 	}
-	return h.RunSession(ctx, s.Agent, inputs...)
+	return inputs, nil
 }
 
 // evaluate preserves declared ordering and separates broken assertions from failures.

@@ -140,6 +140,12 @@ Re-capture when planner decoration changes tool definitions.
 
 ## Eval runner
 
+- Reuse application prompt assembly through Scenario.BuildInputs(ctx, item),
+  returning ordered []agenttest.Input for the standard session driver. System
+  messages and attachments need no custom Drive. Do not declare both callbacks.
+  The builder receives resolved item defaults, shares the scenario timeout and
+  must cooperate with cancellation. See input_builder_fixture_test.go in the
+  assistant fixture for compiled reuse of FixtureImplementationPrompt.
 - Run matrices with `eval.Run` and `eval.NewHarnessFunc(register, setup, base...)`.
   Factories receive the variant and supplied options, forward options and return
   fresh harnesses. Use ScriptedModel for per-harness scripts; never share scripts.
