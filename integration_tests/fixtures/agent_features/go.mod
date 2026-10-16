@@ -133,7 +133,7 @@ require (
 	modernc.org/libc v1.66.10 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
-	modernc.org/sqlite v1.40.1 // indirect
+	modernc.org/sqlite v1.42.2 // indirect
 )
 
 replace github.com/CaliLuke/loom-mcp/v2 => ../../..
