@@ -88,6 +88,21 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   `Evaluate` gives checks unique names, and `Require` fails once with all failed
   diagnostics in declaration order. Requiring no expectations fails.
 
+## Durable local harness evidence
+
+- WithEvidenceDir selects a fresh harness-owned SQLite database for runstore and
+  runlog. Existing captures reject reuse. WAL/FULL transactions retain exact
+  canonical bytes and lifecycle transitions; engine/session ownership stays local.
+- ReadEvidence reopens root records plus unlinked call runs independently of
+  completion. It returns readable records and explicit errors. Pre-adoption call
+  settings are verified in isolation and never become adopted run settings.
+- Writer.CaptureHarness binds planned attempt identity before factory entry and
+  requires the supplied WithEvidenceDir option to be honored. Binding failures and
+  ignored capture options are sticky writer errors; factory initialization errors
+  remain attempt-local. Store.ReadEvidence exposes bound AttemptEvidence rows
+  without requiring final attempts.jsonl entries. evalcli.Config.CaptureEvidence
+  adapts either factory. Raw capture is private, and does not resume execution.
+
 ## Eval Scenarios
 
 - `eval.Items` and `eval.JSONL` own immutable datasets and defer errors to Err;

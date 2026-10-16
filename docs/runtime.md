@@ -1511,6 +1511,23 @@ v1 JSON); Render prints `Trace: <id>` after `Agent:` when present. The caller ow
 the provider's export configuration and shutdown. No live model is enabled by
 default, and the harness has no Temporal mode.
 
+### Durable local harness evidence
+
+`agenttest.WithEvidenceDir(dir)` stores canonical content, model calls and events
+in a private SQLite capture. The harness still owns its engine and stores; the
+default remains in memory. Each capture requires a fresh database, so reuse of an
+existing capture fails instead of mixing harness-local run IDs. Close the harness
+to release the database after run cleanup.
+
+`agenttest.ReadEvidence(ctx, dir)` reopens this evidence in another process,
+including requests whose provider call never completed. `Records` contains root
+run trees; `Unlinked` preserves recorded call runs without a committed parent
+link. Errors remain explicit, alongside any readable records. Incomplete and
+abandoned calls retain their canonical classifications. A pre-adoption call's
+captured context is verified independently; it does not establish adopted run
+settings. This is raw evidence and needs an explicit projection before sharing.
+Reading it does not resume execution or retry a provider call.
+
 ### Capturing and deciding
 
 `h.CaptureFirstRequest(ctx, agent, input, opts...)` returns an immutable
@@ -1949,6 +1966,21 @@ return errors.Join(runErr, writer.Finish(report, runErr))
 `Begin` validates the plan, label, and optional parent ID. It writes and syncs both
 headers in a hidden staging directory before the rename to the final UUID directory.
 It then syncs the store root. Readers ignore hidden staging directories left by failures.
+
+To capture before an attempt finishes, wrap your `eval.AttemptHarnessFunc` with
+`writer.CaptureHarness(factory)` and assign it to `cfg.AttemptHarness` after
+`Begin`; clear `cfg.Harness` when adapting a legacy factory. Forward all supplied
+options to `agenttest.NewHarness`. The writer publishes the planned attempt
+binding before factory entry and requires the returned harness to use that
+capture. Binding failures and ignored capture options become sticky writer errors;
+factory initialization errors remain attempt-local operational failures.
+
+`store.ReadEvidence(ctx, experimentID)` reads these bindings independently of
+`attempts.jsonl`. Each `AttemptEvidence` retains its planned `Key`, `Index`, raw
+`Snapshot` and any reconstruction `Error`; missing or corrupt captures also
+contribute to the returned error. No quality verdict is inferred from a partial
+capture. Embedded CLI applications can set `evalcli.Config.CaptureEvidence` to
+enable the same path with either supported harness factory.
 
 `ExperimentMeta.Identity` can supply exact source provenance.
 Otherwise, detection reads build metadata,

@@ -138,6 +138,18 @@ by comparing the full request to its canonical re-encoding before verifying the
 digest. JSON whitespace and object member order remain flexible.
 Re-capture when planner decoration changes tool definitions.
 
+## Durable local evidence
+
+Use WithEvidenceDir with a fresh capture database to persist the harness-owned
+canonical stores. ReadEvidence reopens root Records and Unlinked call runs after
+process exit, including incomplete calls. Keep captures private; Project applies
+an explicit sharing policy. Reopening evidence never resumes an agent.
+
+For evals, wrap the attempt factory with Writer.CaptureHarness after Begin and
+forward its options. Store.ReadEvidence reads attempt bindings even without final
+attempt lines. Config.CaptureEvidence enables this for either evalcli factory.
+Missing/corrupt captures return explicit errors; do not infer a quality verdict.
+
 ## Eval runner
 
 - Reuse application prompt assembly through Scenario.BuildInputs(ctx, item),

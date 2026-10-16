@@ -59,8 +59,24 @@ func run(ctx context.Context, cfg Config, f flags) error {
 	if err != nil {
 		return err
 	}
+	if cfg.CaptureEvidence {
+		captureEvidence(writer, &runner)
+	}
 	runner.OnAttempt = writer.OnAttempt(progress(cfg, f, writer, len(keys), cancel))
 	return executeRun(ctx, cfg, f, store, writer, runner)
+}
+
+// captureEvidence binds either supported factory before the runner constructs a harness.
+func captureEvidence(writer *eval.Writer, runner *eval.Config) {
+	factory := runner.AttemptHarness
+	if factory == nil {
+		legacy := runner.Harness
+		factory = func(ctx context.Context, info eval.AttemptInfo, opts ...agenttest.Option) (*agenttest.Harness, error) {
+			return legacy(ctx, info.Variant, opts...)
+		}
+	}
+	runner.Harness = nil
+	runner.AttemptHarness = writer.CaptureHarness(factory)
 }
 
 func executeRun(ctx context.Context, cfg Config, f flags, store *eval.Store, writer *eval.Writer, runner eval.Config) error {

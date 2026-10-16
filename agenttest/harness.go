@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/CaliLuke/loom-mcp/v2/internal/agenttesthook"
+	"github.com/CaliLuke/loom-mcp/v2/internal/localevidence"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
@@ -81,6 +82,9 @@ type Harness struct {
 	runCounter        uint64
 	closed            bool
 	runs              map[string]*harnessRun
+	evidence          *localevidence.Store
+	evidenceDir       string
+	evidenceReaders   sync.WaitGroup
 }
 
 type harnessOptions struct {
@@ -92,6 +96,7 @@ type harnessOptions struct {
 	responder         Responder
 	provider          trace.TracerProvider
 	passthroughAll    bool
+	evidenceDir       string
 }
 
 type harnessRun struct {
@@ -257,11 +262,12 @@ func (h *Harness) Close() error {
 		}
 	}
 	diagnostics = append(diagnostics, h.stubDiagnostics(true))
+	diagnostics = append(diagnostics, h.closeEvidence())
 	return errors.Join(diagnostics...)
 }
 
 // newHarness exposes the gate-to-seal boundary to deterministic package tests.
-func newHarness(ctx context.Context, register Register, beforeSeal func(*runtime.Runtime), opts ...Option) (*Harness, error) {
+func newHarness(ctx context.Context, register Register, beforeSeal func(*runtime.Runtime), opts ...Option) (result *Harness, err error) {
 	options, err := validatedHarnessOptions(opts)
 	if err != nil {
 		return nil, err
@@ -278,6 +284,10 @@ func newHarness(ctx context.Context, register Register, beforeSeal func(*runtime
 			passthrough: make(map[tools.Ident]bool), passthroughAll: options.passthroughAll,
 		},
 	}
+	if err := h.configureEvidence(ctx, options.evidenceDir, &probe); err != nil {
+		return nil, err
+	}
+	defer h.closeEvidenceOnFailure(&result, &err)
 	probe.Interceptors = append([]runtime.Interceptor{runtime.ToolInterceptorFuncs{BeforeToolFunc: h.beforeStub}}, probe.Interceptors...)
 	agenttesthook.SetModelWrapper(&probe, h.gateModel)
 	rt := runtime.New(func(options *runtime.Options) {
@@ -290,16 +300,7 @@ func newHarness(ctx context.Context, register Register, beforeSeal func(*runtime
 	if err := h.registerModels(options); err != nil {
 		return nil, err
 	}
-	h.mu.Lock()
-	expectedGates := maps.Clone(h.gates)
-	h.mu.Unlock()
-	if beforeSeal != nil {
-		beforeSeal(rt)
-	}
-	if err := rt.Seal(ctx); err != nil {
-		return nil, fmt.Errorf("agenttest: seal registration after installing capture gates: %w", err)
-	}
-	if err := h.verifyGates(expectedGates); err != nil {
+	if err := h.sealRegistration(ctx, beforeSeal); err != nil {
 		return nil, err
 	}
 	h.eventsUnverified = rt.HasEventInterceptors()
@@ -397,7 +398,25 @@ func (h *Harness) run(ctx context.Context, id agent.Ident, sessionID string, inp
 	return h.runCapture(ctx, id, sessionID, input, nil, opts...)
 }
 
+// sealRegistration verifies capture gates survive application sealing.
+func (h *Harness) sealRegistration(ctx context.Context, beforeSeal func(*runtime.Runtime)) error {
+	h.mu.Lock()
+	expectedGates := maps.Clone(h.gates)
+	h.mu.Unlock()
+	if beforeSeal != nil {
+		beforeSeal(h.rt)
+	}
+	if err := h.rt.Seal(ctx); err != nil {
+		return fmt.Errorf("agenttest: seal registration after installing capture gates: %w", err)
+	}
+	return h.verifyGates(expectedGates)
+}
+
 func (h *Harness) runCapture(ctx context.Context, id agent.Ident, sessionID string, input Input, capture *captureState, opts ...RunOption) (*Result, error) {
+	if err := h.beginEvidenceRead(); err != nil {
+		return nil, err
+	}
+	defer h.endEvidenceRead()
 	if capture != nil {
 		ctx = context.WithValue(ctx, captureContextKey{harness: h}, capture)
 	}
@@ -430,7 +449,12 @@ func (h *Harness) runCapture(ctx context.Context, id agent.Ident, sessionID stri
 		return nil, err
 	}
 
-	record, err := runrecord.Read(runCtx, h.rt.RunStore, h.rt.RunEventStore, runID, runID)
+	return h.captureResult(runCtx, runID, sessionID, traceID, run)
+}
+
+// captureResult projects canonical evidence while the harness evidence lease is held.
+func (h *Harness) captureResult(ctx context.Context, runID, sessionID, traceID string, run *harnessRun) (*Result, error) {
+	record, err := runrecord.Read(ctx, h.rt.RunStore, h.rt.RunEventStore, runID, runID)
 	if err != nil {
 		return nil, fmt.Errorf("agenttest: read %s: %w", runID, err)
 	}
@@ -475,6 +499,11 @@ func (h *Harness) startRun(ctx context.Context, client runtime.AgentClient, sess
 	}
 	h.runCounter++
 	runID := fmt.Sprintf("agenttest-r%d", h.runCounter)
+	if h.evidence != nil {
+		if err := h.evidence.RegisterRoot(ctx, runID); err != nil {
+			return "", nil, fmt.Errorf("agenttest: record run identity: %w", err)
+		}
+	}
 	options := append(slices.Clone(opts), runtime.WithRunID(runID))
 	worker, err := h.subscribeAwaits(ctx, runID)
 	if err != nil {

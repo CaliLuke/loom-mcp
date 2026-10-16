@@ -24,8 +24,10 @@ type Config struct {
 	Name           string
 	Harness        eval.HarnessFunc
 	AttemptHarness eval.AttemptHarnessFunc
-	Scenarios      []eval.Scenario
-	Variants       []eval.Variant
+	// CaptureEvidence durably captures canonical evidence before model dispatch.
+	CaptureEvidence bool
+	Scenarios       []eval.Scenario
+	Variants        []eval.Variant
 	// NewJudge optionally constructs the judge using the store's calibration cache.
 	// --no-judge skips the factory; ErrLiveModelDisabled runs without judging.
 	NewJudge       func(cache judge.Cache) (*judge.Judge, error)
