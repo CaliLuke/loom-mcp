@@ -19,7 +19,7 @@ type flags struct {
 	repeat, concurrency, maxTokens, limit  int
 	repeatSet                              bool
 	noJudge                                bool
-	label, rerun, baseline                 string
+	label, rerun, baseline, policy         string
 }
 
 type listValue []string
@@ -43,7 +43,7 @@ func parseCommand(name string, args []string) (*invocation, error) {
 	}
 	args = root.Args()
 	if len(args) == 0 {
-		return nil, usage(errors.New("expected run, show, compare, list or help"))
+		return nil, usage(errors.New("expected run, check, show, compare, list or help"))
 	}
 	if args[0] == commandHelp {
 		if len(args) > 2 {
@@ -104,6 +104,8 @@ func commandFlags(name, command string, f *flags) (*flag.FlagSet, error) {
 	case commandShow:
 		fs.BoolVar(&f.full, "full", false, "render without trajectory limits")
 		fs.BoolVar(&f.export, "export", false, "include raw exports in JSON")
+	case commandCheck:
+		fs.StringVar(&f.policy, "policy", "", "quality policy (required: strict)")
 	case commandCompare:
 		fs.Var((*listValue)(&f.variants), "variants", "compare variants in one experiment (first is baseline)")
 		fs.BoolVar(&f.mergeParent, "merge-parent", false, "overlay candidate rerun on its parent")
@@ -142,7 +144,7 @@ func parseAnywhere(fs *flag.FlagSet, args []string) ([]string, error) {
 
 func help(cfg Config, command string) error {
 	if command == "" {
-		_, err := fmt.Fprintf(cfg.Stdout, "Usage: %s <run|show|compare|list|compaction|help> [flags]\nUse %s help <command> for flags. --out and --json apply to every command.\n", cfg.Name, cfg.Name)
+		_, err := fmt.Fprintf(cfg.Stdout, "Usage: %s <run|check|show|compare|list|compaction|help> [flags]\nUse %s help <command> for flags. --out and --json apply to every command.\n", cfg.Name, cfg.Name)
 		return err
 	}
 	var f flags
@@ -150,7 +152,7 @@ func help(cfg Config, command string) error {
 	if err != nil {
 		return err
 	}
-	suffix := map[string]string{commandRun: "", commandShow: " <experiment>[/<attempt>]", commandCompare: " <base> <candidate> | <experiment> --variants a,b[,c]", commandList: ""}[command]
+	suffix := map[string]string{commandRun: "", commandCheck: " <experiment> --policy strict", commandShow: " <experiment>[/<attempt>]", commandCompare: " <base> <candidate> | <experiment> --variants a,b[,c]", commandList: ""}[command]
 	var out strings.Builder
 	fmt.Fprintf(&out, "Usage: %s %s%s [flags]\n", cfg.Name, command, suffix)
 	fs.SetOutput(&out)
@@ -172,24 +174,14 @@ func (f flags) validate(command string, positions []string) error {
 	count := len(positions)
 	switch command {
 	case commandRun:
-		if f.repeat < 0 || f.concurrency < 0 || f.maxTokens < 0 {
-			return errors.New("repeat, concurrency and max-tokens must be non-negative")
-		}
-		if count != 0 {
-			return errors.New("run accepts flags only")
-		}
-		if f.mergeParent && (f.rerun == "" || f.baseline == "") {
-			return errors.New("run --merge-parent requires --rerun-failed and --compare")
-		}
-		if f.rerun != "" && (len(f.selection.Variants)+len(f.selection.Scenarios)+len(f.selection.Tags)+len(f.selection.Items) > 0) {
-			return errors.New("selection flags cannot be combined with --rerun-failed")
-		}
-		if !utf8.ValidString(f.label) || len(f.label) > 256 {
-			return errors.New("label must be valid UTF-8 and at most 256 bytes")
-		}
+		return f.validateRun(count)
 	case commandShow:
 		if count != 1 {
 			return errors.New("show requires one experiment[/attempt]")
+		}
+	case commandCheck:
+		if count != 1 || f.policy != "strict" {
+			return errors.New("check requires one experiment and --policy strict")
 		}
 	case commandList:
 		if count != 0 || f.limit < 0 {
@@ -203,6 +195,25 @@ func (f flags) validate(command string, positions []string) error {
 		} else if count != 2 {
 			return errors.New("compare requires baseline and candidate experiments")
 		}
+	}
+	return nil
+}
+
+func (f flags) validateRun(count int) error {
+	if f.repeat < 0 || f.concurrency < 0 || f.maxTokens < 0 {
+		return errors.New("repeat, concurrency and max-tokens must be non-negative")
+	}
+	if count != 0 {
+		return errors.New("run accepts flags only")
+	}
+	if f.mergeParent && (f.rerun == "" || f.baseline == "") {
+		return errors.New("run --merge-parent requires --rerun-failed and --compare")
+	}
+	if f.rerun != "" && (len(f.selection.Variants)+len(f.selection.Scenarios)+len(f.selection.Tags)+len(f.selection.Items) > 0) {
+		return errors.New("selection flags cannot be combined with --rerun-failed")
+	}
+	if !utf8.ValidString(f.label) || len(f.label) > 256 {
+		return errors.New("label must be valid UTF-8 and at most 256 bytes")
 	}
 	return nil
 }

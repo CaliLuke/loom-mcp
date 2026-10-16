@@ -822,9 +822,16 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   signal handling in the caller. Persist each attempt before stderr progress;
   Finish atomically replaces the attempt log from the final report so callback panic errors survive persistence,
   cancel on sticky store errors, and read the final summary from the store.
-  Exit 0 includes quality failures and token stops; 1 is operational failure;
+  For run, exit 0 includes quality failures and token stops; 1 is operational failure;
   2 is usage error. Never enable live models in the CLI. See
   references/agent-testing.md and references/runtime-contracts.md.
+- check <ref> --policy strict evaluates stored attempts without harness/scenarios,
+  model calls or reruns. eval.CheckQualityStrict is the pure reusable evaluator.
+  Strict requires status complete, at least one attempt, every planned index,
+  no truncated tail and all passed verdicts. Text/JSON include counts and stable
+  reason codes. Check exits: 0 pass, 3 reject, 2 usage/reference, 1 storage/decode/output.
+  last remains newest non-running, including stopped. Use a compiled binary in CI
+  so go run does not replace its exit status.
 - Config.NewJudge receives judge.NewDirCache(<store dir>/_calibration); wrap its
   result with judging.New and persist Report.Judge before Finish. --no-judge
   skips the factory. ErrLiveModelDisabled prints a notice and runs without a

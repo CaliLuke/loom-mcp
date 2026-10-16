@@ -384,7 +384,8 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 ## Eval CLI
 
 - eval/evalcli exposes Config and Main(ctx, args, cfg) int. Config requires
-  Harness and Scenarios except for help. Name defaults to evals. Nil writers
+  exactly one of Harness/AttemptHarness and Scenarios for run/show/compare/list.
+  Help, stored check and registered extensions need neither. Name defaults to evals. Nil writers
   use stdout/stderr. The caller owns signal handling and cancellation.
 - Stdlib flags support repeated/comma selectors and flags after positional
   arguments. --out overrides Config.StoreDir, then DefaultStoreDir(Dir).
@@ -409,10 +410,17 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - Run JSON is one loom-mcp.eval.run version-1 document containing a SummaryJSON
   experiment and a comparisons document or null. Progress and notices stay on
   stderr. No-op reruns use null fields. Storage failures add unsaved_groups.
-- Exit 0 means completion regardless of verdicts, including token stops.
+- Run exit 0 means completion regardless of verdicts, including token stops.
   Exit 1 covers store/load/compare/run errors, cancellation and disabled live
   models. Exit 2 covers usage, selection/Plan errors, invalid live env values,
   unknown/ambiguous refs and a missing default module root.
+- check <ref> --policy strict evaluates stored results through the pure
+  eval.CheckQualityStrict API. It requires complete status, nonempty attempts,
+  full planned index coverage, no truncated tail and all passed verdicts.
+  No harness/scenarios, model calls, judging or reruns occur. Text/JSON include
+  counts and stable reason codes. Exit 0 passes, 3 rejects, 2 is usage/reference,
+  1 is storage/decode/output failure. last stays newest non-running, even stopped.
+  Invoke a compiled binary in shell automation to retain these exit statuses.
 - The CLI never enables live models. Disabled variants retain a stopped
   live_model_disabled experiment and print the LOOM_LIVE_MODEL=1 hint.
 - Config.NewJudge func(cache judge.Cache) (*judge.Judge, error) receives

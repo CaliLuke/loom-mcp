@@ -2169,7 +2169,8 @@ are not modified.
 ### Eval CLI
 
 Embed `eval/evalcli` in an application-owned `cmd/evals` program. Supply a
-`Harness` factory and `Scenarios` in `evalcli.Config`. Optional fields select
+`Harness` or `AttemptHarness` factory and `Scenarios` in `evalcli.Config` for
+execution commands. The stored `check` command requires neither. Optional fields select
 variants, the program name, the store directory, and output writers.
 `Main(ctx, args, cfg) int` receives `os.Args[1:]`. It installs no signal handlers.
 Put this code in the application’s `main`, with `register` and `scenarios` defined
@@ -2211,6 +2212,7 @@ model configuration and the data sent to the judge provider.
 | `compare <base> <candidate>` | `--merge-parent` |
 | `compare <experiment> --variants a,b[,c]` | First variant is the baseline |
 | `list` | `--limit n` (default 20, `0` means all) |
+| `check <experiment> --policy strict` | Stored verdicts only; optional `--json` |
 | `help [command]` or `-h` | Usage and flags |
 
 `--out <dir>` and `--json` apply to each data command. Flags can precede or follow
@@ -2228,6 +2230,20 @@ CLI within extension arguments; other arguments keep their order and content.
 Use `--` after the extension name to pass subsequent arguments literally,
 including a literal `--out`. Repeated store values must match exactly; conflicting,
 missing, or empty values are usage errors. The existing `-out` spelling also works.
+
+`check <experiment> --policy strict` evaluates stored results without constructing
+a harness, invoking a model or judge, or rerunning attempts. It requires status
+`complete`, at least one attempt, every planned index present, no truncated attempt
+tail, and all verdicts `passed`. Running and stopped experiments reject even when
+their recorded attempts pass. Text and JSON output include verdict counts and
+stable rejection reason codes. Applications that already loaded an experiment
+can use the pure `eval.CheckQualityStrict(*eval.Experiment) eval.QualityCheck` API.
+Only the explicitly selected `strict` policy is supported.
+
+`check last` resolves the newest non-running experiment, including a stopped one.
+It does not search for the newest passing experiment. To preserve the exit code
+in shell automation, invoke the compiled application binary, for example
+`evals check last --policy strict`, rather than the `go run` wrapper.
 
 A run validates its plan before it creates an experiment. Each completed append
 produces one stderr line: `[done/planned] verdict key duration tokens tok`.
@@ -2264,11 +2280,13 @@ On a store write error, both fields are `null` and `unsaved_groups` contains
 in-memory counts. `list --json` returns a newest-first array of experiment headers.
 `show` and `compare` use the [stored report formats](#eval-show-and-compare).
 
-Exit codes describe command execution, not quality:
+`run` preserves its exit behavior regardless of verdicts. `check` adds an explicit
+quality decision:
 
-- `0`: completion with any verdicts, a token-limit stop, or nothing to rerun.
-- `1`: storage, load, comparison or run failure, including cancellation and disabled live models.
+- `0`: successful command; for `run`, any verdicts, a token-limit stop, or nothing to rerun; for `check`, a passing policy decision.
+- `1`: storage, decode, output, comparison or run failure, including cancellation and disabled live models.
 - `2`: invalid command, flag, value, selection, reference, environment value or configuration.
+- `3`: `check` rejected the stored experiment under the selected policy.
 
 The store stays local and self-gitignored and stores no provider credentials.
 The built-in `run` command never uploads stored experiments. Application runs

@@ -127,7 +127,7 @@ func validateExtensions(extensions []Extension) error {
 			return fmt.Errorf("invalid or duplicate extension %q", extension.Name)
 		}
 		switch extension.Name {
-		case commandHelp, commandRun, commandShow, commandCompare, commandList, commandCompaction:
+		case commandHelp, commandRun, commandCheck, commandShow, commandCompare, commandList, commandCompaction:
 			return fmt.Errorf("extension shadows built-in command %q", extension.Name)
 		}
 		seen[extension.Name] = true

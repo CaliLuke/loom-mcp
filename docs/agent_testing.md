@@ -280,10 +280,26 @@ calls these three commands through `Main`. The baseline passes three of five
 attempts. The candidate passes all five. The third command reads a failed baseline
 attempt and reconstructs its trajectory from the stored export.
 
-Failed checks do not change the command’s exit code. Read the summary to assess
+Failed checks do not change the `run` command’s exit code. Read the summary to assess
 quality. Use `--json` for one structured run document. Progress stays on stderr,
 and `--quiet` suppresses it. Cancellation and operational failures return `1`.
 Usage errors return `2`.
+
+To gate a saved experiment in shell automation, invoke the compiled binary so the
+shell receives its exit code directly:
+
+```sh
+go build -o ./evals ./cmd/evals
+./evals check last --policy strict
+./evals check <experiment> --policy strict --json
+```
+
+`check` needs no harness or scenarios and makes no model calls or reruns. Strict
+requires status `complete`, a nonempty and fully recorded plan, an intact attempt
+log, and all verdicts passed. Exit `0` means pass; `3` means policy rejection;
+`1` means a storage, decode or output failure; `2` means an invalid invocation or
+reference. Output includes verdict counts and rejection reasons. `last` remains
+the newest non-running experiment, which can be stopped and rejected by this gate.
 
 ```sh
 go run ./cmd/evals run --rerun-failed <experiment> --compare <experiment> --merge-parent
@@ -293,7 +309,7 @@ go run ./cmd/evals list --limit 20
 
 Reruns retain all repeats and inherit the parent’s repeat count unless overridden.
 Selection flags cannot accompany `--rerun-failed`. `--out <dir>` overrides the
-store for run, show, compare and list. Otherwise the default is `.loom-evals`
+store for run, show, compare, list and check. Otherwise the default is `.loom-evals`
 beside the nearest ancestor `go.mod`.
 
 For live variants, declare `agenttest.LiveModel("model-id")` and set

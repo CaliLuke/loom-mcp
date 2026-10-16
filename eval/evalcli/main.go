@@ -15,7 +15,7 @@ import (
 
 // Config supplies application scenarios, isolated harnesses and CLI destinations.
 // Exactly one of Harness and AttemptHarness, and Scenarios are required except
-// for help and registered extension commands. Empty Name means "evals".
+// for help, check, and registered extension commands. Empty Name means "evals".
 // Empty StoreDir uses eval.DefaultStoreDir(Dir); empty Dir uses os.Getwd.
 // Nil output writers use os.Stdout and os.Stderr.
 type Config struct {
@@ -46,6 +46,7 @@ type commandError struct {
 const (
 	commandHelp       = "help"
 	commandRun        = "run"
+	commandCheck      = "check"
 	commandShow       = "show"
 	commandCompare    = "compare"
 	commandList       = "list"
@@ -53,8 +54,9 @@ const (
 )
 
 // Main runs args (normally os.Args[1:]) without installing signal handlers.
-// It returns 0 for completed commands regardless of verdicts, 1 for operational
-// failures, and 2 for usage errors. The caller supplies cancellation through ctx.
+// It returns 0 for successful commands, 1 for operational failures, 2 for usage
+// errors, and 3 for rejected checks. Completed run commands return 0 regardless
+// of verdicts. The caller supplies cancellation through ctx.
 func Main(ctx context.Context, args []string, cfg Config) int {
 	if cfg.Name == "" {
 		cfg.Name = "evals"
@@ -99,13 +101,23 @@ func dispatch(ctx context.Context, args []string, cfg Config) error {
 	if err != nil {
 		return err
 	}
+	return dispatchParsed(ctx, cfg, invocation)
+}
+
+func dispatchParsed(ctx context.Context, cfg Config, invocation *invocation) error {
 	if invocation.help {
 		return help(cfg, invocation.command)
+	}
+	command, f, positions := invocation.command, invocation.flags, invocation.positions
+	if command == commandCheck {
+		if err := f.validate(command, positions); err != nil {
+			return usage(err)
+		}
+		return check(cfg, f, positions[0])
 	}
 	if (cfg.Harness == nil) == (cfg.AttemptHarness == nil) || len(cfg.Scenarios) == 0 {
 		return usage(errors.New("exactly one of Harness and AttemptHarness, and Scenarios are required"))
 	}
-	command, f, positions := invocation.command, invocation.flags, invocation.positions
 	if err := f.validate(command, positions); err != nil {
 		return usage(err)
 	}
