@@ -416,6 +416,8 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   validated clients enforce its exact bounds before accepting tool arguments.
 - A raw stream exposes its response only after literal `io.EOF`. `Close` is
   cleanup-only.
+- The stream ignores `response.metadata` bookkeeping events.
+  Unknown event types still fail.
 - Provider errors contain safe codes, status, request IDs, and retryability. They
   never contain credentials or response bodies.
 - The provider does not implement `model.TokenCounter`. Exact provider-native

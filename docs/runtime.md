@@ -4414,6 +4414,8 @@ Codex rejects structured output, temperature, numeric output limits, cache
 options, cache checkpoints, and numeric thinking budgets before network access.
 The provider does not implement `model.TokenCounter`. It returns `Response()`
 only after the caller receives literal `io.EOF`.
+The stream ignores `response.metadata` bookkeeping events.
+Unknown event types still fail.
 
 Codex sends the authored tool schemas with exact 64-bit integer bounds through
 both SSE and WebSocket transports. It explicitly sets `strict: false`, as the

@@ -302,7 +302,7 @@ func (s *codexStreamState) process(data []byte) ([]model.Chunk, error) { //nolin
 		return nil, s.acceptProgress(event.Response, "in_progress")
 	case "response.queued":
 		return nil, s.acceptProgress(event.Response, "queued")
-	case "codex.rate_limits", "codex.response.metadata", "responsesapi.websocket_timing":
+	case "codex.rate_limits", "codex.response.metadata", "response.metadata", "responsesapi.websocket_timing":
 		return nil, nil
 	case "response.output_item.added":
 		return nil, s.addItem(event)
