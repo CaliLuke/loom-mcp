@@ -37,7 +37,7 @@ func EncodeRegisterRequest(ctx context.Context, v any, md *metadata.MD) (any, er
 	if !ok {
 		return nil, loomgrpc.ErrInvalidType("registry", "Register", "*registry.RegisterPayload", v)
 	}
-	return NewProtoRegisterRequest(payload), nil
+	return NewProtoRegisterRequest(payload)
 }
 
 // DecodeRegisterResponse decodes responses from the registry Register endpoint.
@@ -182,7 +182,10 @@ func DecodeListToolsetsResponse(ctx context.Context, v any, hdr, trlr metadata.M
 	if err := ValidateListToolsetsResponse(message); err != nil {
 		return nil, err
 	}
-	res := NewListToolsetsResult(message)
+	res, err := NewListToolsetsResult(message)
+	if err != nil {
+		return nil, err
+	}
 	return res, nil
 }
 
@@ -220,7 +223,10 @@ func DecodeGetToolsetResponse(ctx context.Context, v any, hdr, trlr metadata.MD)
 	if err := ValidateGetToolsetResponse(message); err != nil {
 		return nil, err
 	}
-	res := NewGetToolsetResult(message)
+	res, err := NewGetToolsetResult(message)
+	if err != nil {
+		return nil, err
+	}
 	return res, nil
 }
 
@@ -256,7 +262,10 @@ func DecodeSearchResponse(ctx context.Context, v any, hdr, trlr metadata.MD) (an
 	if err := ValidateSearchResponse(message); err != nil {
 		return nil, err
 	}
-	res := NewSearchResult(message)
+	res, err := NewSearchResult(message)
+	if err != nil {
+		return nil, err
+	}
 	return res, nil
 }
 

@@ -27,9 +27,13 @@ func InitProjectedBoundedLookupToolToolResult(in *assistant.ProjectedBoundedLook
 	var out *ProjectedBoundedLookupToolResult
 	out = &ProjectedBoundedLookupToolResult{}
 	if in.Hits != nil {
-		out.Hits = make([]string, len(in.Hits))
-		for i, val := range in.Hits {
-			out.Hits[i] = val
+		if in.Hits != nil {
+			out.Hits = make([]string, len(in.Hits))
+			for i, val := range in.Hits {
+				out.Hits[i] = val
+			}
+		} else {
+			out.Hits = nil
 		}
 	} else {
 		out.Hits = []string{}

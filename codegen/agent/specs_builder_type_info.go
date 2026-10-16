@@ -208,19 +208,20 @@ func (b *toolSpecBuilder) buildTypeInfo(tool *ToolData, att *goaexpr.AttributeEx
 		transportDef = transportTypeName + " = " + scope.GoTypeDef(schemaAttr, true, false)
 	}
 	transportImports := shared.GatherAttributeImports(b.genpkg, schemaAttr)
-	httpctx := codegen.NewAttributeContext(!goaexpr.IsPrimitive(schemaAttr.Type), false, false, "", scope)
-	transportValidation := validationCodeWithContext(schemaAttr, nil, httpctx, true, false, false, "body", tool, usage, "transport")
-	var transportValidationSrc []string
-	if strings.TrimSpace(transportValidation) != "" {
-		transportValidationSrc = strings.Split(transportValidation, "\n")
-	}
-
 	src := &goaexpr.AttributeExpr{
 		Type: &goaexpr.UserTypeExpr{
 			AttributeExpr: schemaAttr,
 			TypeName:      transportTypeName,
 		},
 	}
+	httpctx := codegen.NewAttributeContext(!goaexpr.IsPrimitive(schemaAttr.Type), false, false, "", scope)
+	transportValidator := codegen.NamedValidationFunction(src, httpctx, "body")
+	transportValidation := validationCodeWithContext(schemaAttr, nil, transportValidator.Context(httpctx), true, false, false, "body", tool, usage, "transport")
+	var transportValidationSrc []string
+	if strings.TrimSpace(transportValidation) != "" {
+		transportValidationSrc = strings.Split(transportValidation, "\n")
+	}
+
 	dst := &goaexpr.AttributeExpr{
 		Type: &goaexpr.UserTypeExpr{
 			// Public tool types are local to the specs package: strip any root
@@ -242,16 +243,18 @@ func (b *toolSpecBuilder) buildTypeInfo(tool *ToolData, att *goaexpr.AttributeEx
 		// operates on collection values. Parentheses preserve indexing precedence.
 		sourceVar, targetVar = "(*in)", "(*out)"
 	}
-	decodeBody, decodeHelpers, err := codegen.GoTransform(src, dst, sourceVar, targetVar, srcCtx, tgtCtx, "decode", false)
+	decodePlan, err := codegen.GoTransform(src, dst, sourceVar, targetVar, srcCtx, tgtCtx, "decode", false)
 	if err != nil {
 		return nil, err
 	}
 	encSrcCtx := codegen.NewAttributeContextForConversion(false, false, true, "", scope)
 	encTgtCtx := codegen.NewAttributeContext(true, false, false, "toolhttp", scope)
-	encodeBody, encodeHelpers, err := codegen.GoTransform(dst, src, sourceVar, targetVar, encSrcCtx, encTgtCtx, "encode", false)
+	encodePlan, err := codegen.GoTransform(dst, src, sourceVar, targetVar, encSrcCtx, encTgtCtx, "encode", false)
 	if err != nil {
 		return nil, err
 	}
+	decodeBody, decodeHelpers := decodePlan.Code, decodePlan.Helpers
+	encodeBody, encodeHelpers := encodePlan.Code, encodePlan.Helpers
 	if collectionPayload {
 		decodeBody = fmt.Sprintf("out = new(%s)\n%s", scope.GoTypeName(dst), decodeBody)
 		encodeBody = fmt.Sprintf("out = new(toolhttp.%s)\n%s", scope.GoTypeName(src), encodeBody)
@@ -305,10 +308,13 @@ func (b *toolSpecBuilder) buildTypeInfo(tool *ToolData, att *goaexpr.AttributeEx
 		TransportDef:           transportDef,
 		TransportImports:       transportImports,
 		TransportValidationSrc: transportValidationSrc,
+		TransportValidator:     transportValidator,
 		TransportTypeRef:       scope.GoTypeRef(src),
 		TransportPointer:       strings.HasPrefix(scope.GoTypeRef(src), "*"),
 		DecodeTransform:        decodeBody,
+		DecodeErrorAware:       decodePlan.ErrorAware,
 		EncodeTransform:        encodeBody,
+		EncodeErrorAware:       encodePlan.ErrorAware,
 	}
 	if usage == usagePayload && len(exampleBytes) > 0 {
 		if eg, ok := exampleInputGoExpr(exampleBytes); ok {

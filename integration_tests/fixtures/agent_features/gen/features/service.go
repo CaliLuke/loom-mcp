@@ -82,7 +82,7 @@ type StatusResult struct {
 	// Whether the operation succeeded
 	OK bool `json:"ok"`
 	// Whether the operation was approved
-	Approved *bool `json:"approved,omitempty"`
+	Approved *bool `json:"approved,omitzero"`
 }
 
 type TopicPayload struct {

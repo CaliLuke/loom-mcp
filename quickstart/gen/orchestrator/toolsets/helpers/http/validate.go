@@ -12,17 +12,31 @@ import (
 )
 
 // ValidateAnswerPayloadTransport runs the validations defined on AnswerPayloadTransport.
-func ValidateAnswerPayloadTransport(body *AnswerPayloadTransport) (err error) {
+func ValidateAnswerPayloadTransport(body *AnswerPayloadTransport, validationContext ...string) (err error) {
+	validationPath := "body"
+	if len(validationContext) > 0 {
+		validationPath = ""
+		for _, validationPart := range validationContext {
+			validationPath += validationPart
+		}
+	}
 	if body.Question == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("question", "body"))
+		err = loom.MergeErrors(err, loom.MissingFieldError("question", validationPath))
 	}
 	return
 }
 
 // ValidateAnswerResultTransport runs the validations defined on AnswerResultTransport.
-func ValidateAnswerResultTransport(body *AnswerResultTransport) (err error) {
+func ValidateAnswerResultTransport(body *AnswerResultTransport, validationContext ...string) (err error) {
+	validationPath := "body"
+	if len(validationContext) > 0 {
+		validationPath = ""
+		for _, validationPart := range validationContext {
+			validationPath += validationPart
+		}
+	}
 	if body.Text == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("text", "body"))
+		err = loom.MergeErrors(err, loom.MissingFieldError("text", validationPath))
 	}
 	return
 }

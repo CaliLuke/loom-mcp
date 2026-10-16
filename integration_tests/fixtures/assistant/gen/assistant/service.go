@@ -94,7 +94,7 @@ type AnalyzeSentimentPayload struct {
 // analyze_sentiment method.
 type AnalyzeSentimentResult struct {
 	// Detected sentiment
-	Sentiment *string `json:"sentiment,omitempty"`
+	Sentiment *string `json:"sentiment,omitzero"`
 }
 
 type BarCmd struct {
@@ -119,22 +119,22 @@ type BuildFigmaImplementationPromptPayload struct {
 // conversation_history method.
 type ConversationHistoryPayload struct {
 	// Literal history query
-	QueryValue *string `json:"query-value,omitempty"`
+	QueryValue *string `json:"query-value,omitzero"`
 	// Literal history tags
-	Tags []string `json:"tags,omitempty"`
+	Tags []string `json:"tags,omitzero"`
 	// Max items
-	Limit *int `json:"limit,omitempty"`
+	Limit *int `json:"limit,omitzero"`
 	// Sample boolean flag
-	Flag *bool `json:"flag,omitempty"`
+	Flag *bool `json:"flag,omitzero"`
 	// Numbers array
-	Nums []float64 `json:"nums,omitempty"`
+	Nums []float64 `json:"nums,omitzero"`
 }
 
 // ConversationHistoryResult is the result type of the assistant service
 // conversation_history method.
 type ConversationHistoryResult struct {
 	// History items
-	Items []string `json:"items,omitempty"`
+	Items []string `json:"items,omitzero"`
 }
 
 type CreateAction struct {
@@ -245,7 +245,7 @@ type Documents struct {
 // elicitation_context method.
 type ElicitationContextResult struct {
 	// User-supplied context
-	Context *string `json:"context,omitempty"`
+	Context *string `json:"context,omitzero"`
 }
 
 // ExecuteCodePayload is the payload type of the assistant service execute_code
@@ -261,7 +261,7 @@ type ExecuteCodePayload struct {
 // method.
 type ExecuteCodeResult struct {
 	// Execution output
-	Output *string `json:"output,omitempty"`
+	Output *string `json:"output,omitzero"`
 }
 
 // ExtractKeywordsPayload is the payload type of the assistant service
@@ -275,12 +275,12 @@ type ExtractKeywordsPayload struct {
 // extract_keywords method.
 type ExtractKeywordsResult struct {
 	// Extracted keywords
-	Keywords []string `json:"keywords,omitempty"`
+	Keywords []string `json:"keywords,omitzero"`
 }
 
 type FooCmd struct {
 	// Foo label
-	Label *string `json:"label,omitempty"`
+	Label *string `json:"label,omitzero"`
 }
 
 // GenerateDpiSpecPayload is the payload type of the assistant service
@@ -297,7 +297,7 @@ type GenerateDpiSpecPayload struct {
 	// Ordered screen sections
 	Sections []string `json:"sections"`
 	// Whether to include implementation notes
-	IncludeDevNotes *bool `json:"include_dev_notes,omitempty"`
+	IncludeDevNotes *bool `json:"include_dev_notes,omitzero"`
 }
 
 // GeneratePromptsPayload is the payload type of the assistant service
@@ -311,7 +311,7 @@ type GeneratePromptsPayload struct {
 
 type ListAction struct {
 	// Maximum number of items to list
-	Limit *int `json:"limit,omitempty"`
+	Limit *int `json:"limit,omitzero"`
 }
 
 // MultiContentPayload is the payload type of the assistant service
@@ -325,7 +325,7 @@ type MultiContentPayload struct {
 // method.
 type MultiContentResult struct {
 	// Combined text result
-	Result *string `json:"result,omitempty"`
+	Result *string `json:"result,omitzero"`
 }
 
 // ProcessBatchPayload is the payload type of the assistant service
@@ -334,20 +334,20 @@ type ProcessBatchPayload struct {
 	// Items to process
 	Items []string `json:"items"`
 	// Output format
-	Format *string `json:"format,omitempty"`
+	Format *string `json:"format,omitzero"`
 	// Base64 blob
-	Blob *string `json:"blob,omitempty"`
+	Blob *string `json:"blob,omitzero"`
 	// Resource URI
-	URI *string `json:"uri,omitempty"`
+	URI *string `json:"uri,omitzero"`
 	// MIME type
-	MimeType *string `json:"mimeType,omitempty"`
+	MimeType *string `json:"mimeType,omitzero"`
 }
 
 // ProcessBatchResult is the result type of the assistant service process_batch
 // method.
 type ProcessBatchResult struct {
 	// Operation status
-	OK *bool `json:"ok,omitempty"`
+	OK *bool `json:"ok,omitzero"`
 }
 
 // ProjectedBoundedLookupPayload is the payload type of the assistant service
@@ -356,7 +356,7 @@ type ProjectedBoundedLookupPayload struct {
 	// Projected lookup query
 	Query string `json:"query"`
 	// Opaque continuation cursor
-	Cursor *string `json:"cursor,omitempty"`
+	Cursor *string `json:"cursor,omitzero"`
 	// Verified server-owned session identifier
 	SessionID string `json:"session_id"`
 }
@@ -369,20 +369,20 @@ type ProjectedBoundedLookupResult struct {
 	// Number of returned hits
 	Returned int `json:"returned"`
 	// Total matching hits
-	Total *int `json:"total,omitempty"`
+	Total *int `json:"total,omitzero"`
 	// Whether more hits are available
 	Truncated bool `json:"truncated"`
 	// Opaque continuation cursor
-	NextCursor *string `json:"next_cursor,omitempty"`
+	NextCursor *string `json:"next_cursor,omitzero"`
 	// Guidance for narrowing the query
-	RefinementHint *string `json:"refinement_hint,omitempty"`
+	RefinementHint *string `json:"refinement_hint,omitzero"`
 }
 
 type ProjectedBoundedLookupToolPayload struct {
 	// Projected lookup query
 	Query string `json:"query"`
 	// Opaque continuation cursor
-	Cursor *string `json:"cursor,omitempty"`
+	Cursor *string `json:"cursor,omitzero"`
 	// Verified server-owned session identifier
 	SessionID string `json:"session_id"`
 }
@@ -398,11 +398,11 @@ type ProjectedLookupPayload struct {
 	// Projected lookup query
 	Query string `json:"query"`
 	// Optional machine-sized count
-	Count *int `json:"count,omitempty"`
+	Count *int `json:"count,omitzero"`
 	// Optional signed 64-bit value
-	Signed *int64 `json:"signed,omitempty"`
+	Signed *int64 `json:"signed,omitzero"`
 	// Optional unsigned 64-bit value
-	Unsigned *uint64 `json:"unsigned,omitempty"`
+	Unsigned *uint64 `json:"unsigned,omitzero"`
 }
 
 // ProjectedLookupResult is the result type of the assistant service
@@ -418,11 +418,11 @@ type ProjectedLookupToolPayload struct {
 	// Projected lookup query
 	Query string `json:"query"`
 	// Optional machine-sized count
-	Count *int `json:"count,omitempty"`
+	Count *int `json:"count,omitzero"`
 	// Optional signed 64-bit value
-	Signed *int64 `json:"signed,omitempty"`
+	Signed *int64 `json:"signed,omitzero"`
 	// Optional unsigned 64-bit value
-	Unsigned *uint64 `json:"unsigned,omitempty"`
+	Unsigned *uint64 `json:"unsigned,omitzero"`
 }
 
 type ProjectedLookupToolResult struct {
@@ -458,9 +458,9 @@ type SearchPayload struct {
 	// Search query
 	Query string `json:"query"`
 	// Maximum number of results
-	Limit int `json:"limit,omitempty"`
+	Limit int `json:"limit"`
 	// Optional result sampling ratio
-	Ratio *float64 `json:"ratio,omitempty"`
+	Ratio *float64 `json:"ratio,omitzero"`
 	// Optional nullable limit
 	NullableLimit loom.Nullable[int] `json:"nullable_limit,omitzero"`
 }
@@ -469,22 +469,22 @@ type SearchPayload struct {
 // search_records method.
 type SearchRecordsPayload struct {
 	// Search query
-	Query *string `json:"query,omitempty"`
+	Query *string `json:"query,omitzero"`
 	// Maximum number of records
-	Limit int `json:"limit,omitempty"`
+	Limit int `json:"limit"`
 }
 
 // SearchRecordsResult is the result type of the assistant service
 // search_records method.
 type SearchRecordsResult struct {
 	// Record results
-	Results []string `json:"results,omitempty"`
+	Results []string `json:"results,omitzero"`
 }
 
 // SearchResult is the result type of the assistant service search method.
 type SearchResult struct {
 	// Search results
-	Results []string `json:"results,omitempty"`
+	Results []string `json:"results,omitzero"`
 }
 
 // SummarizeTextPayload is the payload type of the assistant service
@@ -498,16 +498,16 @@ type SummarizeTextPayload struct {
 // summarize_text method.
 type SummarizeTextResult struct {
 	// Summary
-	Summary *string `json:"summary,omitempty"`
+	Summary *string `json:"summary,omitzero"`
 }
 
 // SystemInfoResult is the result type of the assistant service system_info
 // method.
 type SystemInfoResult struct {
 	// System name
-	Name *string `json:"name,omitempty"`
+	Name *string `json:"name,omitzero"`
 	// System version
-	Version *string `json:"version,omitempty"`
+	Version *string `json:"version,omitzero"`
 }
 
 // BarCmdOrFooCmd is a sum-type union.

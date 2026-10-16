@@ -1,0 +1,55 @@
+name: Exhaustive qualification
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 9 * * 3'
+
+env:
+  GO_VERSION: '1.27.2'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qualification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: |
+            go.sum
+            integration_tests/fixtures/agent_features/go.sum
+            integration_tests/fixtures/longrun/go.sum
+
+      - name: Install pinned protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip
+          make install-protoc PROTOC_INSTALL_DIR="${RUNNER_TEMP}/protoc"
+          echo "${RUNNER_TEMP}/protoc/bin" >> "${GITHUB_PATH}"
+
+      - name: Install pinned developer tools
+        run: make tools
+
+      - name: Full payload and cache-growth acceptance
+        run: make test-payload-growth
+
+      - name: 1000-step recall acceptance
+        run: make test-recall-growth
+
+      - name: Complete longrun scenarios and statistical evidence
+        run: make test-longrun

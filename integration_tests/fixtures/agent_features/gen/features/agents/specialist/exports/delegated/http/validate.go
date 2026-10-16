@@ -12,20 +12,34 @@ import (
 )
 
 // ValidateSummarizePayloadTransport runs the validations defined on SummarizePayloadTransport.
-func ValidateSummarizePayloadTransport(body *SummarizePayloadTransport) (err error) {
+func ValidateSummarizePayloadTransport(body *SummarizePayloadTransport, validationContext ...string) (err error) {
+	validationPath := "body"
+	if len(validationContext) > 0 {
+		validationPath = ""
+		for _, validationPart := range validationContext {
+			validationPath += validationPart
+		}
+	}
 	if body.Topic == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("topic", "body"))
+		err = loom.MergeErrors(err, loom.MissingFieldError("topic", validationPath))
 	}
 	return
 }
 
 // ValidateSummarizeResultTransport runs the validations defined on SummarizeResultTransport.
-func ValidateSummarizeResultTransport(body *SummarizeResultTransport) (err error) {
+func ValidateSummarizeResultTransport(body *SummarizeResultTransport, validationContext ...string) (err error) {
+	validationPath := "body"
+	if len(validationContext) > 0 {
+		validationPath = ""
+		for _, validationPart := range validationContext {
+			validationPath += validationPart
+		}
+	}
 	if body.OK == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("ok", "body"))
+		err = loom.MergeErrors(err, loom.MissingFieldError("ok", validationPath))
 	}
 	if body.Message == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("message", "body"))
+		err = loom.MergeErrors(err, loom.MissingFieldError("message", validationPath))
 	}
 	return
 }

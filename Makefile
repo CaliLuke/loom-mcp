@@ -7,6 +7,13 @@ LOOM_MCP_MODULE ?= $(LOOM_CORE_MODULE)
 LOOM_CLI_PACKAGE ?= $(LOOM_CORE_MODULE)/cmd/loom
 MCP_GO_SDK_VERSION ?= v1.8.1-0.20260922085944-8075fb3cf313
 COVERAGE_MIN ?= 62.0
+FAST_COVERAGE_MIN ?= 90.1
+COVERAGE_PACKAGES ?= github.com/CaliLuke/loom-mcp/v2/...
+COVERAGE_DIR ?= $(CURDIR)/.cache/coverage-fast
+FAST_TEST_FLAGS ?= -race -count=1
+# Each independently compiled fixture gets its own profile; only framework code
+# is instrumented, so fixture implementation cannot inflate framework coverage.
+fast_cover_args = $(if $(FAST_COVERAGE_DIR),-covermode=atomic -coverpkg=$(COVERAGE_PACKAGES) -coverprofile=$(abspath $(FAST_COVERAGE_DIR))/$(1).out)
 COVERAGE_RUNTIME_MIN ?= 75.0
 COVERAGE_MCP_MIN ?= 78.0
 COVERAGE_CODEGEN_MIN ?= 70.0
@@ -92,16 +99,31 @@ lint-install-hook:
 	chmod +x .githooks/pre-commit
 	@echo "Installed repo hooks from .githooks"
 
+# Keep race instrumentation out of atomic coverage counters in numeric loops.
+# Both passes execute the complete short unit suite with the same exclusions.
+.PHONY: test-race test-coverage
 test: tools
+	$(MAKE) test-race
+	$(MAKE) test-coverage
+	$(MAKE) test-codex-live
+
+test-race: tools
 	LOOM_MCP_RUN_DOCKER_TESTS=0 \
 	LOOM_MCP_REQUIRE_DOCKER_TESTS=0 \
 	TESTCONTAINERS_RYUK_DISABLED=$(TESTCONTAINERS_RYUK_DISABLED) \
-	$(GO) test -short -race -shuffle=on -covermode=atomic -coverprofile=cover.out `$(GO) list ./... | grep -v '/integration_tests'`
+	$(GO) test -short -race -shuffle=on -timeout=30m `$(GO) list ./... | grep -v '/integration_tests'`
+
+test-coverage: tools
+	mkdir -p "$(COVERAGE_DIR)"
+	LOOM_MCP_RUN_DOCKER_TESTS=0 \
+	LOOM_MCP_REQUIRE_DOCKER_TESTS=0 \
+	TESTCONTAINERS_RYUK_DISABLED=$(TESTCONTAINERS_RYUK_DISABLED) \
+	$(GO) test -short -shuffle=on -timeout=30m -covermode=atomic -coverpkg=$(COVERAGE_PACKAGES) -coverprofile="$(COVERAGE_DIR)/unit.raw" `$(GO) list ./... | grep -v '/integration_tests'`
+	bash scripts/merge_coverage.sh "$(COVERAGE_DIR)/unit.raw" > cover.out
 	$(MAKE) coverage-check
 	$(MAKE) coverage-check-critical
-	$(MAKE) test-codex-live
 
-# Full payload and cache-growth acceptance; also part of the normal itest gate.
+# Full payload and cache-growth acceptance; part of exhaustive qualification.
 .PHONY: test-payload-growth
 test-payload-growth:
 	$(GO) test -count=1 -timeout=20m -v ./runtime/agent/runtime -run '^(TestIndexPayloadAcceptance|TestIndexLoaderGrowth|TestPlanActivityInputFixedFields|TestCallRecordGrowth)$$'
@@ -112,10 +134,12 @@ test-payload-growth:
 test-codex-live:
 	$(GO) test -count=1 -v -timeout=3m ./features/model/codex -run '^TestLiveCodex$$'
 
+PROFILE ?= cover.out
+
 coverage-check:
-	@coverage=$$($(GO) tool cover -func=cover.out | awk '/^total:/ { gsub("%", "", $$3); print $$3 }'); \
+	@coverage=$$($(GO) tool cover -func="$(PROFILE)" | awk '/^total:/ { gsub("%", "", $$3); print $$3 }'); \
 	if [ -z "$$coverage" ]; then \
-		echo "coverage total missing from cover.out"; \
+		echo "coverage total missing from $(PROFILE)"; \
 		exit 1; \
 	fi; \
 	awk -v actual="$$coverage" -v minimum="$(COVERAGE_MIN)" 'BEGIN { \
@@ -143,17 +167,20 @@ coverage-parser-test:
 	bash ./scripts/check_critical_coverage_test.sh
 
 test-docker: tools coverage-parser-test
+	mkdir -p "$(COVERAGE_DIR)"
 	TESTCONTAINERS_RYUK_DISABLED=$(TESTCONTAINERS_RYUK_DISABLED) \
 	LOOM_MCP_RUN_DOCKER_TESTS=1 \
 	LOOM_MCP_REQUIRE_DOCKER_TESTS=1 \
-	$(GO) test -tags=integration -race -shuffle=on -count=1 -covermode=atomic -coverprofile=docker-cover.out \
+	$(GO) test -tags=integration -race -shuffle=on -count=1 -covermode=atomic -coverpkg=$(COVERAGE_PACKAGES) -coverprofile="$(COVERAGE_DIR)/docker.raw" \
 		./features/mongo/clientinfra \
 		./features/stream/pulse/clients/pulse \
 		./registry
+	bash scripts/merge_coverage.sh "$(COVERAGE_DIR)/docker.raw" > docker-cover.out
 	TESTCONTAINERS_RYUK_DISABLED=$(TESTCONTAINERS_RYUK_DISABLED) \
 	LOOM_MCP_RUN_DOCKER_TESTS=1 \
 	LOOM_MCP_REQUIRE_DOCKER_TESTS=1 \
 	$(GO) test -C ./integration_tests/fixtures/agent_features -race -shuffle=on -count=1 \
+		-covermode=atomic -coverpkg=$(COVERAGE_PACKAGES) -coverprofile="$(COVERAGE_DIR)/worker-replacement.out" \
 		-run '^TestGeneratedFeatureRealTemporalMongoWorkerReplacement$$' .
 	COVERAGE_DOCKER_MONGO_MIN=$(COVERAGE_DOCKER_MONGO_MIN) \
 	COVERAGE_DOCKER_PULSE_MIN=$(COVERAGE_DOCKER_PULSE_MIN) \
@@ -214,19 +241,71 @@ test-fuzz:
 itest: tools
 	$(MAKE) test-engine-conformance
 	$(MAKE) test-payload-growth
-	$(GO) test -race -count=1 -timeout=30m ./runtime/agent/transcript/recall/ -run '^TestRecallScript1000Steps$$'
-	$(GO) test -race -count=1 ./codegen/agent/tests -run '^TestQuickstartGeneratesAndRuns$$'
+	$(MAKE) test-recall-growth
+	$(GO) test $(FAST_TEST_FLAGS) $(call fast_cover_args,quickstart) ./codegen/agent/tests -run '^TestQuickstartGeneratesAndRuns$$'
 	$(MAKE) verify-mcp-local
 
-# Canonical local and hosted CI contract. Keep the recursive steps explicit so
-# generation cannot race build or tests when callers enable parallel make.
-ci: verify-generated
+# Routine CI retains all short unit/coverage and generated integration contracts.
+# Hosted CI runs these five lanes on separate runners; local execution is serial.
+.PHONY: ci-static ci-race ci-coverage ci-integration ci-docker qualification test-recall-growth test-longrun verify-mcp-fixtures
+ci: ci-static
+	$(MAKE) ci-race
+	$(MAKE) ci-coverage
+	$(MAKE) ci-integration
+	$(MAKE) ci-docker
+	$(MAKE) coverage-fast-check
+
+ci-static: verify-generated
 	$(MAKE) release-test
 	$(MAKE) build
 	$(MAKE) lint
-	$(MAKE) test
-	$(MAKE) itest
+
+ci-race:
+	$(MAKE) test-race
+	$(MAKE) test-codex-live
+
+ci-coverage:
+	$(MAKE) test-coverage
+	$(MAKE) coverage-integration
+
+ci-integration: tools
+	$(MAKE) test-engine-conformance
+	$(GO) test $(FAST_TEST_FLAGS) $(call fast_cover_args,quickstart) ./codegen/agent/tests -run '^TestQuickstartGeneratesAndRuns$$'
+	$(MAKE) verify-mcp-fixtures
+
+ci-docker:
 	$(MAKE) test-docker
+
+# Reuse the same fast integration entry point without race instrumentation for
+# measurement. The separate integration job still requires its race-enabled run.
+.PHONY: coverage-integration coverage-fast-check coverage-merge-test
+coverage-integration: tools
+	mkdir -p "$(COVERAGE_DIR)"
+	$(MAKE) ci-integration FAST_TEST_FLAGS=-count=1 FAST_COVERAGE_DIR="$(COVERAGE_DIR)"
+
+coverage-merge-test:
+	bash scripts/merge_coverage_test.sh
+
+coverage-fast-check: coverage-merge-test
+	bash scripts/merge_coverage.sh cover.out docker-cover.out \
+		"$(COVERAGE_DIR)/engine.out" "$(COVERAGE_DIR)/quickstart.out" \
+		"$(COVERAGE_DIR)/assistant.out" "$(COVERAGE_DIR)/agent-features.out" \
+		"$(COVERAGE_DIR)/sdkbridge.out" "$(COVERAGE_DIR)/framework.out" \
+		"$(COVERAGE_DIR)/worker-replacement.out" > "$(COVERAGE_DIR)/combined.out"
+	$(MAKE) coverage-check PROFILE="$(COVERAGE_DIR)/combined.out" COVERAGE_MIN=$(FAST_COVERAGE_MIN)
+
+# Exhaustive acceptance is explicit and scheduled, not a per-push release gate.
+# Keep the full workloads unchanged and visible as separate workflow steps.
+qualification: tools
+	$(MAKE) test-payload-growth
+	$(MAKE) test-recall-growth
+	$(MAKE) test-longrun
+
+test-recall-growth:
+	$(GO) test -race -count=1 -timeout=30m ./runtime/agent/transcript/recall/ -run '^TestRecallScript1000Steps$$'
+
+test-longrun:
+	$(GO) test -C ./integration_tests/fixtures/longrun -p=1 -race -count=1 -timeout=90m -v ./...
 
 tools: ensure-golangci ensure-staticcheck ensure-protoc-plugins protoc-check
 
@@ -308,11 +387,14 @@ verify-generated: tools
 	bash ./scripts/verify_generated.sh
 
 verify-mcp-local:
-	$(GO) test -C ./integration_tests/fixtures/longrun -p=1 -race -count=1 -timeout=30m ./...
-	$(GO) test -C ./integration_tests/fixtures/assistant -race ./... -count=1
-	$(GO) test -C ./integration_tests/fixtures/agent_features -race ./... -count=1
-	cd ./integration_tests/fixtures/sdkbridge_consumer && GOWORK=off $(GO) test -race ./... -count=1
-	$(GO) test -race -count=1 ./integration_tests/framework
+	$(MAKE) test-longrun
+	$(MAKE) verify-mcp-fixtures
+
+verify-mcp-fixtures:
+	$(GO) test -C ./integration_tests/fixtures/assistant $(FAST_TEST_FLAGS) $(call fast_cover_args,assistant) ./...
+	$(GO) test -C ./integration_tests/fixtures/agent_features $(FAST_TEST_FLAGS) $(call fast_cover_args,agent-features) ./...
+	cd ./integration_tests/fixtures/sdkbridge_consumer && GOWORK=off $(GO) test $(FAST_TEST_FLAGS) $(call fast_cover_args,sdkbridge) ./...
+	$(GO) test $(FAST_TEST_FLAGS) $(call fast_cover_args,framework) ./integration_tests/framework
 
 regen-quickstart:
 	cd ./quickstart && GOWORK=off $(GO) run -mod=mod $(LOOM_CLI_PACKAGE) gen example.com/quickstart/design
@@ -336,12 +418,12 @@ regen-sdkbridge-consumer-fixture:
 	cd ./integration_tests/fixtures/sdkbridge_consumer && GOWORK=off $(GO) mod tidy
 
 verify-agent-feature-fixture:
-	$(GO) test -C ./integration_tests/fixtures/agent_features -race ./... -count=1
+	$(GO) test -C ./integration_tests/fixtures/agent_features $(FAST_TEST_FLAGS) $(call fast_cover_args,agent-features) ./...
 
 # Real backend conformance includes Temporal worker replacement and retries.
 .PHONY: test-engine-conformance
 test-engine-conformance:
-	$(GO) test -race -count=1 -timeout=5m -v ./runtime/agent/engine/inmem ./runtime/agent/engine/temporal ./runtime/agent/engine/selvedge -run '^TestConformance$$'
+	$(GO) test $(FAST_TEST_FLAGS) $(call fast_cover_args,engine) -timeout=5m -v ./runtime/agent/engine/inmem ./runtime/agent/engine/temporal ./runtime/agent/engine/selvedge -run '^TestConformance$$'
 
 .PHONY: selvedge-local selvedge-remote selvedge-status test-engine-conformance-postgres
 selvedge-local:

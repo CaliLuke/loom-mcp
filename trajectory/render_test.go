@@ -166,13 +166,13 @@ func renderFixtures(t *testing.T) map[string]trajectory.Session {
 		{hooks.AwaitExternalTools, `{"ID":"external","Items":[{"ToolName":"external.fetch","ToolCallID":"fetch","Payload":{"id":9007199254740993}}]}`},
 	} {
 		await.Steps = append(await.Steps, trajectory.Step{Kind: trajectory.StepAwait, Step: i + 1, Event: &trajectory.ObservedEvent{
-			Type: event.kind, EventKey: string(event.kind), Timestamp: time.Unix(int64(i+1), 0), Payload: rawjson.Message(event.payload),
+			Type: event.kind, EventKey: string(event.kind), Timestamp: time.Unix(int64(i+1), 0).UTC(), Payload: rawjson.Message(event.payload),
 		}})
 	}
 	await.Steps = append(await.Steps,
 		trajectory.Step{Kind: trajectory.StepAnswer, Step: 6, Verified: true, Answer: &trajectory.AnswerStep{Kind: index.Clarification, Content: []byte(`"The café in Paris"`)}},
 		trajectory.Step{Kind: trajectory.StepAnswer, Step: 6, Verified: true, Answer: &trajectory.AnswerStep{Kind: index.TypedInput, InputID: "typed", Content: []byte(`{"z":9007199254740993,"a":1.2300}`)}},
-		trajectory.Step{Kind: trajectory.StepAnswer, Step: 6, Event: &trajectory.ObservedEvent{Type: hooks.ToolAuthorization, Timestamp: time.Unix(7, 0), Payload: rawjson.Message(`{"ID":"confirm","Approved":true}`)}},
+		trajectory.Step{Kind: trajectory.StepAnswer, Step: 6, Event: &trajectory.ObservedEvent{Type: hooks.ToolAuthorization, Timestamp: time.Unix(7, 0).UTC(), Payload: rawjson.Message(`{"ID":"confirm","Approved":true}`)}},
 	)
 	return map[string]trajectory.Session{"tree": {tree}, "await": {await}, "session": {tree, await}}
 }

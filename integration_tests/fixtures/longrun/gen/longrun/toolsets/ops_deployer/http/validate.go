@@ -12,34 +12,55 @@ import (
 )
 
 // ValidateDeployPayloadTransport runs the validations defined on DeployPayloadTransport.
-func ValidateDeployPayloadTransport(body *DeployPayloadTransport) (err error) {
+func ValidateDeployPayloadTransport(body *DeployPayloadTransport, validationContext ...string) (err error) {
+	validationPath := "body"
+	if len(validationContext) > 0 {
+		validationPath = ""
+		for _, validationPart := range validationContext {
+			validationPath += validationPart
+		}
+	}
 	if body.Step == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("step", "body"))
+		err = loom.MergeErrors(err, loom.MissingFieldError("step", validationPath))
 	}
 	if body.Target == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("target", "body"))
+		err = loom.MergeErrors(err, loom.MissingFieldError("target", validationPath))
 	}
 	return
 }
 
 // ValidateListServicesPayloadTransport runs the validations defined on ListServicesPayloadTransport.
-func ValidateListServicesPayloadTransport(body *ListServicesPayloadTransport) (err error) {
+func ValidateListServicesPayloadTransport(body *ListServicesPayloadTransport, validationContext ...string) (err error) {
+	validationPath := "body"
+	if len(validationContext) > 0 {
+		validationPath = ""
+		for _, validationPart := range validationContext {
+			validationPath += validationPart
+		}
+	}
 	if body.Step == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("step", "body"))
+		err = loom.MergeErrors(err, loom.MissingFieldError("step", validationPath))
 	}
 	if body.Target == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("target", "body"))
+		err = loom.MergeErrors(err, loom.MissingFieldError("target", validationPath))
 	}
 	return
 }
 
 // ValidateReadServiceLogPayloadTransport runs the validations defined on ReadServiceLogPayloadTransport.
-func ValidateReadServiceLogPayloadTransport(body *ReadServiceLogPayloadTransport) (err error) {
+func ValidateReadServiceLogPayloadTransport(body *ReadServiceLogPayloadTransport, validationContext ...string) (err error) {
+	validationPath := "body"
+	if len(validationContext) > 0 {
+		validationPath = ""
+		for _, validationPart := range validationContext {
+			validationPath += validationPart
+		}
+	}
 	if body.Step == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("step", "body"))
+		err = loom.MergeErrors(err, loom.MissingFieldError("step", validationPath))
 	}
 	if body.Target == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("target", "body"))
+		err = loom.MergeErrors(err, loom.MissingFieldError("target", validationPath))
 	}
 	return
 }

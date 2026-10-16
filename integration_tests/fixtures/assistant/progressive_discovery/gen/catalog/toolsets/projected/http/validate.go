@@ -13,17 +13,31 @@ import (
 )
 
 // ValidateProjectedLookupPayloadTransport runs the validations defined on ProjectedLookupPayloadTransport.
-func ValidateProjectedLookupPayloadTransport(body *ProjectedLookupPayloadTransport) (err error) {
+func ValidateProjectedLookupPayloadTransport(body *ProjectedLookupPayloadTransport, validationContext ...string) (err error) {
+	validationPath := "body"
+	if len(validationContext) > 0 {
+		validationPath = ""
+		for _, validationPart := range validationContext {
+			validationPath += validationPart
+		}
+	}
 	if body.Query == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("query", "body"))
+		err = loom.MergeErrors(err, loom.MissingFieldError("query", validationPath))
 	}
 	return
 }
 
 // ValidateProjectedLookupResultTransport runs the validations defined on ProjectedLookupResultTransport.
-func ValidateProjectedLookupResultTransport(body *ProjectedLookupResultTransport) (err error) {
+func ValidateProjectedLookupResultTransport(body *ProjectedLookupResultTransport, validationContext ...string) (err error) {
+	validationPath := "body"
+	if len(validationContext) > 0 {
+		validationPath = ""
+		for _, validationPart := range validationContext {
+			validationPath += validationPart
+		}
+	}
 	if body.Value == nil {
-		err = loom.MergeErrors(err, loom.MissingFieldError("value", "body"))
+		err = loom.MergeErrors(err, loom.MissingFieldError("value", validationPath))
 	}
 	return
 }

@@ -76,7 +76,8 @@ func TestLocalMCPActivityRecordsExecutedPayload(t *testing.T) {
 				ToolCallID: "local", Payload: rawjson.Message(tc.payload),
 			})
 			require.NoError(t, err)
-			require.Contains(t, out.Error, "deliberate service failure")
+			require.Equal(t, "[internal_error] internal server error", out.Error)
+			assert.NotContains(t, out.Error, "deliberate service failure")
 			assert.Empty(t, out.Refs.Result)
 			payload, err := rt.RunStore.Get(t.Context(), "root", out.Refs.Payload)
 			require.NoError(t, err)

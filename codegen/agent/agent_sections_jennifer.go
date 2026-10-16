@@ -549,7 +549,7 @@ func emitToolProviderDispatchers(stmt *jen.Statement, data toolProviderFileData)
 					if tool.MethodPayloadTypeRef == "" {
 						eg.Id("methodIn").Op("=").Nil()
 					} else {
-						eg.Id("methodIn").Op("=").Id("Init" + tool.ConstName + "MethodPayload").Call(toolProviderPayloadArgument(tool, jen.Id("toolArgs").Assert(jen.Op("*").Id(tool.ConstName+"Payload"))))
+						eg.Add(toolTransformAssignment(tool, "methodIn", "=", "Init"+tool.ConstName+"MethodPayload", toolProviderPayloadArgument(tool, jen.Id("toolArgs").Assert(jen.Op("*").Id(tool.ConstName+"Payload"))), emitToolProviderDispatcherErrResult(tool)))
 					}
 				})
 				if len(tool.InjectedFields) > 0 {
@@ -624,9 +624,9 @@ func emitToolProviderDispatchers(stmt *jen.Statement, data toolProviderFileData)
 						jen.Id("result").Op("=").Id("value"),
 					).Else().BlockFunc(func(eg *jen.Group) {
 						if toolNeedsMethodResultProjection(tool) {
-							eg.Id("result").Op("=").Id("Init" + tool.ConstName + "ToolResult").Call(jen.Id("typedMethodOut"))
+							eg.Add(toolTransformAssignment(tool, "result", "=", "Init"+tool.ConstName+"ToolResult", jen.Id("typedMethodOut"), emitToolProviderDispatcherErrResult(tool)))
 						} else {
-							eg.Id("result").Op("=").Id("Init" + tool.ConstName + "ToolResult").Call(jen.Id("methodOut").Assert(gocodegen.TypeRef(tool.MethodResultTypeRef)))
+							eg.Add(toolTransformAssignment(tool, "result", "=", "Init"+tool.ConstName+"ToolResult", jen.Id("methodOut").Assert(gocodegen.TypeRef(tool.MethodResultTypeRef)), emitToolProviderDispatcherErrResult(tool)))
 						}
 					})
 					resultFields := jen.Dict{
@@ -697,7 +697,7 @@ func emitToolProviderDispatcherServerData(g *jen.Group, tool *ToolData) {
 		dataFunc := "Init" + tool.ConstName + gocodegen.Goify(sd.Kind, true) + "ServerData"
 		codecName := tool.ConstName + gocodegen.Goify(sd.Kind, true) + "ServerDataCodec"
 		g.Block(
-			jen.Id("data").Op(":=").Id(dataFunc).Call(jen.Id("typedMethodOut").Dot(gocodegen.Goify(sd.MethodResultField, true))),
+			toolTransformAssignment(tool, "data", ":=", dataFunc, jen.Id("typedMethodOut").Dot(gocodegen.Goify(sd.MethodResultField, true)), emitToolProviderDispatcherErrResult(tool)),
 			jen.List(jen.Id("dataJSON"), jen.Id("err")).Op(":=").Id(codecName).Dot("ToJSON").Call(jen.Id("data")),
 			jen.If(jen.Id("err").Op("!=").Nil()).Block(
 				jen.Return(jen.Op("&").Id("planner").Dot("ToolResult").Values(jen.Dict{
@@ -800,7 +800,7 @@ func emitToolProviderHandle(stmt *jen.Statement, data toolProviderFileData) {
 								),
 								jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessage").Call(jen.Id("msg").Dot("RegistrationToken"), jen.Id("msg").Dot("ToolUseID"), jen.Id("toolregistry").Dot("ToolErrorCodeInvalidArguments"), jen.Lit("tool arguments failed validation")), jen.Nil()),
 							)
-							cg.Id("methodIn").Op(":=").Id("Init" + tool.ConstName + "MethodPayload").Call(toolProviderPayloadArgument(tool, jen.Id("args")))
+							cg.Add(toolTransformAssignment(tool, "methodIn", ":=", "Init"+tool.ConstName+"MethodPayload", toolProviderPayloadArgument(tool, jen.Id("args")), toolProviderConversionError(true)))
 							for _, field := range tool.InjectedFields {
 								cg.Id("methodIn").Dot(gocodegen.Goify(field, true)).Op("=").Id("msg").Dot("Meta").Dot(gocodegen.Goify(field, true))
 							}
@@ -823,7 +823,7 @@ func emitToolProviderHandle(stmt *jen.Statement, data toolProviderFileData) {
 							jen.Return(jen.Id("toolregistry").Dot("NewToolResultServiceErrorMessage").Call(jen.Id("msg").Dot("RegistrationToken"), jen.Id("msg").Dot("ToolUseID"), jen.Id("msg").Dot("Tool"), jen.Id("toolErrorCode").Call(jen.Id("err")), jen.Id("err")), jen.Nil()),
 						)
 						if tool.HasResult {
-							cg.Id("result").Op(":=").Id("Init" + tool.ConstName + "ToolResult").Call(jen.Id("methodOut"))
+							cg.Add(toolTransformAssignment(tool, "result", ":=", "Init"+tool.ConstName+"ToolResult", jen.Id("methodOut"), toolProviderConversionError(false)))
 							cg.List(jen.Id("resultJSON"), jen.Id("err")).Op(":=").Id(tool.ConstName + "ResultCodec").Dot("ToJSON").Call(jen.Id("result"))
 							cg.If(jen.Id("err").Op("!=").Nil()).Block(
 								jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessage").Call(jen.Id("msg").Dot("RegistrationToken"), jen.Id("msg").Dot("ToolUseID"), jen.Lit("encode_failed"), jen.Lit("tool execution failed")), jen.Nil()),
@@ -839,7 +839,7 @@ func emitToolProviderHandle(stmt *jen.Statement, data toolProviderFileData) {
 								typeName := "Init" + tool.ConstName + gocodegen.Goify(sd.Kind, true) + "ServerData"
 								codecName := tool.ConstName + gocodegen.Goify(sd.Kind, true) + "ServerDataCodec"
 								cg.Block(
-									jen.Id("data").Op(":=").Id(typeName).Call(jen.Id("methodOut").Dot(gocodegen.Goify(sd.MethodResultField, true))),
+									toolTransformAssignment(tool, "data", ":=", typeName, jen.Id("methodOut").Dot(gocodegen.Goify(sd.MethodResultField, true)), toolProviderConversionError(false)),
 									jen.List(jen.Id("dataJSON"), jen.Id("err")).Op(":=").Id(codecName).Dot("ToJSON").Call(jen.Id("data")),
 									jen.If(jen.Id("err").Op("!=").Nil()).Block(
 										jen.Return(jen.Id("toolregistry").Dot("NewToolResultErrorMessage").Call(jen.Id("msg").Dot("RegistrationToken"), jen.Id("msg").Dot("ToolUseID"), jen.Lit("encode_failed"), jen.Lit("tool execution failed")), jen.Nil()),

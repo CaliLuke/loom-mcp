@@ -63,6 +63,7 @@ type (
 		// nil input as a valid empty value and return nil without attempting field
 		// conversion.
 		NilInputReturnsNil bool
+		ErrorAware         bool
 		Body               string
 		Helpers            []*codegen.TransformFunctionData
 	}

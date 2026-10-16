@@ -233,7 +233,7 @@ func toolsetSpecsFiles(data *GeneratorData, specsCache *toolSpecsDataCache) ([]*
 			out = append(out, f)
 		}
 
-		f, err := toolsetAdapterTransformsFile(data.Genpkg, ts, specsCache)
+		f, err := toolsetAdapterTransformsFile(data.Genpkg, resolvedToolset, specsCache)
 		if err != nil {
 			return nil, err
 		}

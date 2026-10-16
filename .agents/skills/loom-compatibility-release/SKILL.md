@@ -40,10 +40,7 @@ make regen-progressive-discovery-fixture
 make regen-agent-feature-fixture
 # Run this only after sdkbridge.CompatibilityVersion increments.
 make regen-sdkbridge-consumer-fixture
-make verify-mcp-local
-make lint
-make test
-make itest
+make ci
 ```
 
 Review the generated diff before accepting it. Every change must be explained
@@ -92,15 +89,18 @@ retain a Loom `replace`. Update README, docs, and repo-local skills when the new
 dependency or behavior changes their contract. Then run the published-module
 parity gates:
 ```bash
-make verify-mcp-local
-make lint
-make test
-make itest
-go test ./...
+make ci
 ```
 
 Inspect the final diff and verify each module resolves the released tag with
 `go list -m github.com/CaliLuke/loom` (using `-C` for nested modules).
+
+Run `make qualification` in addition only when the change affects compaction
+qualification, statistical evaluation or full growth contracts. The exhaustive
+`make itest` and `make verify-mcp-local` commands remain available; do not run them
+in addition to qualification and repeat the same workload. Ordinary non-short
+`go test ./...` also includes full acceptance tests and is not an extra routine
+parity requirement.
 
 ## 5. Release loom-mcp
 

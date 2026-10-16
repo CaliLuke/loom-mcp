@@ -4,7 +4,8 @@ go 1.27.2
 
 require (
 	cloud.google.com/go/auth v0.24.1
-	github.com/CaliLuke/loom v1.10.0-alpha.8
+	github.com/CaliLuke/go-redis/v9 v9.23.1-0.20261014134601-1073297e76ea
+	github.com/CaliLuke/loom v1.10.0-alpha.10
 	github.com/CaliLuke/selvedge v0.0.0-20261012194623-a33adedea054
 	github.com/anthropics/anthropic-sdk-go v1.79.1
 	github.com/aws/aws-sdk-go-v2 v1.47.2
@@ -18,7 +19,6 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.8.1-0.20260922085944-8075fb3cf313
 	github.com/nexus-rpc/sdk-go v0.7.0
 	github.com/openai/openai-go/v3 v3.74.0
-	github.com/redis/go-redis/v9 v9.23.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go v0.44.0

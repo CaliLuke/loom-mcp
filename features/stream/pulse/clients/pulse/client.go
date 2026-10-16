@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/CaliLuke/go-redis/v9"
 	"github.com/CaliLuke/loom/pulse/streaming"
 	streamopts "github.com/CaliLuke/loom/pulse/streaming/options"
-	"github.com/redis/go-redis/v9"
 )
 
 type (

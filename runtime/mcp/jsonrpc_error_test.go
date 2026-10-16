@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type unownedInvalidClientInputTestError struct{ error }
+
 type invalidClientInputTestError struct {
 	message string
 }
@@ -55,6 +57,18 @@ func TestNormalizeJSONRPCError(t *testing.T) {
 			err:         invalidClientInputTestError{"response count does not match pending request count"},
 			wantCode:    jsonrpc.CodeInvalidParams,
 			wantMessage: "response count does not match pending request count",
+		},
+		{
+			name:        "wrapped invalid client input omits diagnostic wrapper",
+			err:         fmt.Errorf("private transport detail: %w", invalidClientInputTestError{"Retry with the pending response."}),
+			wantCode:    jsonrpc.CodeInvalidParams,
+			wantMessage: "Retry with the pending response.",
+		},
+		{
+			name:        "marker alone does not publish private details",
+			err:         unownedInvalidClientInputTestError{errors.New("private validation detail")},
+			wantCode:    jsonrpc.CodeInvalidParams,
+			wantMessage: "internal server error",
 		},
 		{
 			name:        "resource not found uses public service message",
@@ -123,3 +137,9 @@ func (e invalidClientInputTestError) Error() string {
 }
 
 func (invalidClientInputTestError) InvalidClientInput() {}
+
+func (invalidClientInputTestError) LoomErrorName() string {
+	return "invalid_params"
+}
+
+func (unownedInvalidClientInputTestError) InvalidClientInput() {}

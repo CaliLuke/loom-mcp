@@ -20,7 +20,22 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    name: Verify (${{ matrix.lane }})
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - lane: static
+            target: ci-static
+          - lane: race
+            target: ci-race
+          - lane: coverage
+            target: ci-coverage
+          - lane: integration
+            target: ci-integration
+          - lane: docker
+            target: ci-docker
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -52,20 +67,22 @@ jobs:
           go install github.com/CaliLuke/loom/cmd/loom@"${LOOM_VERSION}"
           echo "$(go env GOPATH)/bin" >> "${GITHUB_PATH}"
 
-      - name: Run complete CI contract
+      - name: Run ${{ matrix.lane }} checks
         env:
           VERIFY_GENERATED_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: make ci
+        run: make ${{ matrix.target }}
 
       - name: Preserve coverage report
-        if: always()
+        if: always() && (matrix.lane == 'coverage' || matrix.lane == 'docker')
         uses: actions/upload-artifact@v7
         with:
-          name: unit-coverage-${{ github.sha }}
+          name: ${{ matrix.lane }}-coverage-${{ github.sha }}
           path: |
             cover.out
             docker-cover.out
-          if-no-files-found: warn
+            .cache/coverage-fast/*.out
+          include-hidden-files: true
+          if-no-files-found: error
           retention-days: 14
 
   release-ready:
@@ -78,3 +95,21 @@ jobs:
         env:
           RESULTS: ${{ toJSON(needs) }}
         run: jq -e 'length > 0 and all(.[]; .result == "success")' <<< "$RESULTS"
+
+      - name: Checkout coverage sources
+        uses: actions/checkout@v7
+
+      - name: Set up Go for coverage verification
+        uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+
+      - name: Download fast-suite coverage
+        uses: actions/download-artifact@v8
+        with:
+          pattern: '*-coverage-${{ github.sha }}'
+          merge-multiple: true
+
+      - name: Require whole-framework fast coverage
+        run: make coverage-fast-check

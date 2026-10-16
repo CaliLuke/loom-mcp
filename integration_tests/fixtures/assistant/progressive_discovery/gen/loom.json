@@ -1,4 +1,5 @@
 {
-  "loom_version": "v1.10.0-alpha.8",
-  "design_digest": "cd2548f698d774d0fb8e3856d0674b50c4023e8e47994feba95abe4c2c7b870f"
+  "loom_version": "v1.10.0-alpha.10",
+  "design_package": "example.com/assistant/progressive_discovery/design",
+  "design_digest": "8860e3e88f4a5132e1385489779d3403b02d27f4c209ed1ad28a474780bc9cd0"
 }

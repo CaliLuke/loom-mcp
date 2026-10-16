@@ -437,7 +437,7 @@ func TestServerValidationErrors(t *testing.T) {
 				ResultSchema:  []byte(`{"type":"object"}`),
 			}},
 		})
-		require.ErrorContains(t, err, "admission_revision")
+		assertTransportPatternError(t, err)
 	})
 
 	t.Run("malformed admission revision rejected", func(t *testing.T) {
@@ -453,7 +453,7 @@ func TestServerValidationErrors(t *testing.T) {
 				ResultSchema:  []byte(`{"type":"object"}`),
 			}},
 		})
-		require.ErrorContains(t, err, "admission_revision")
+		assertTransportPatternError(t, err)
 	})
 
 	t.Run("missing wire protocol version rejected", func(t *testing.T) {
@@ -476,7 +476,7 @@ func TestServerValidationErrors(t *testing.T) {
 			Name:                      "malformed-registration-token",
 			ExpectedRegistrationToken: "ABC123",
 		})
-		require.ErrorContains(t, err, "expected_registration_token")
+		assertTransportPatternError(t, err)
 	})
 }
 
@@ -679,4 +679,15 @@ func grpcRegisterRequest(
 
 func strPtr(s string) *string {
 	return &s
+}
+
+// assertTransportPatternError checks rejection without depending on private
+// validation diagnostics that the transport deliberately redacts.
+func assertTransportPatternError(t *testing.T, err error) {
+	t.Helper()
+	var serviceError *goa.ServiceError
+	require.ErrorAs(t, err, &serviceError)
+	assert.Equal(t, goa.InvalidPattern, serviceError.Name)
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+	assert.Equal(t, "validation error", serviceError.Message)
 }

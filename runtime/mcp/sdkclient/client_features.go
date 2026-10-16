@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
+	loom "github.com/CaliLuke/loom/pkg"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -156,7 +157,7 @@ func newInputRoundTrip(opts ClientFeaturesOptions) *inputRoundTrip {
 	}
 	roundTrip.requestStateAAD = aad
 	if len(opts.InputResponses) > 0 && opts.RequestState == "" {
-		roundTrip.err = invalidClientInput(errors.New("MCP input responses require server-issued requestState"))
+		roundTrip.err = invalidClientInput(loom.PermanentError("invalid_params", "MCP input responses require server-issued requestState"))
 		return roundTrip
 	}
 	if err := roundTrip.restoreRequestState(opts.RequestState); err != nil {
@@ -180,7 +181,7 @@ func (r *inputRoundTrip) restoreRequestState(requestState string) error {
 		return fmt.Errorf("decode MCP requestState payload: %w", err)
 	}
 	if state.Version != requestStateVersion {
-		return fmt.Errorf("unsupported MCP requestState version %d", state.Version)
+		return loom.PermanentError("invalid_params", "unsupported MCP requestState version %d", state.Version)
 	}
 	for id, response := range state.Responses {
 		r.responses[id] = response
@@ -190,10 +191,10 @@ func (r *inputRoundTrip) restoreRequestState(requestState string) error {
 	}
 	for _, id := range state.Pending {
 		if _, duplicate := r.pending[id]; duplicate {
-			return fmt.Errorf("MCP requestState contains duplicate pending request %q", id)
+			return loom.PermanentError("invalid_params", "MCP requestState contains duplicate pending request %q", id)
 		}
 		if _, ok := r.requests[id]; !ok {
-			return fmt.Errorf("MCP requestState pending request %q has no contract", id)
+			return loom.PermanentError("invalid_params", "MCP requestState pending request %q has no contract", id)
 		}
 		r.pending[id] = struct{}{}
 	}
@@ -202,23 +203,23 @@ func (r *inputRoundTrip) restoreRequestState(requestState string) error {
 
 func (r *inputRoundTrip) addInputResponses(responses mcp.InputResponseMap) error {
 	if len(responses) > maxInputResponses {
-		return fmt.Errorf("MCP input response count exceeds %d", maxInputResponses)
+		return loom.PermanentError("invalid_params", "MCP input response count exceeds %d", maxInputResponses)
 	}
 	if len(responses) != len(r.pending) {
-		return fmt.Errorf("MCP input response count %d does not match pending request count %d", len(responses), len(r.pending))
+		return loom.PermanentError("invalid_params", "MCP input response count %d does not match pending request count %d", len(responses), len(r.pending))
 	}
 	for id := range r.pending {
 		if _, ok := responses[id]; !ok {
-			return fmt.Errorf("MCP input response is missing pending request %q", id)
+			return loom.PermanentError("invalid_params", "MCP input response is missing pending request %q", id)
 		}
 	}
 	for id, response := range responses {
 		if _, ok := r.pending[id]; !ok {
-			return fmt.Errorf("MCP input response %q was not requested", id)
+			return loom.PermanentError("invalid_params", "MCP input response %q was not requested", id)
 		}
 		elicitation, ok := response.(*mcp.ElicitResult)
 		if !ok {
-			return fmt.Errorf("MCP input response %q has type %T; want *mcp.ElicitResult", id, response)
+			return loom.PermanentError("invalid_params", "MCP input response %q has type %T; want *mcp.ElicitResult", id, response)
 		}
 		if err := validateElicitResult(id, elicitation); err != nil {
 			return err
@@ -230,7 +231,7 @@ func (r *inputRoundTrip) addInputResponses(responses mcp.InputResponseMap) error
 		r.responses[id] = data
 	}
 	if len(r.responses) > maxInputResponses {
-		return fmt.Errorf("MCP input response count exceeds %d", maxInputResponses)
+		return loom.PermanentError("invalid_params", "MCP input response count exceeds %d", maxInputResponses)
 	}
 	if len(r.responses) == 0 {
 		return nil
@@ -250,14 +251,14 @@ func (r *inputRoundTrip) elicitationResponse(request mcp.InputRequest) (*mcp.Eli
 	}
 	pending, ok := r.requests[id]
 	if !ok {
-		return nil, false, invalidClientInput(fmt.Errorf("MCP input response %q has no pending request", id))
+		return nil, false, invalidClientInput(loom.PermanentError("invalid_params", "MCP input response %q has no pending request", id))
 	}
 	current, err := persistInputRequest(request)
 	if err != nil {
 		return nil, false, err
 	}
 	if pending.Method != current.Method || !bytes.Equal(pending.Params, current.Params) {
-		return nil, false, invalidClientInput(fmt.Errorf("MCP input response %q does not match the pending request", id))
+		return nil, false, invalidClientInput(loom.PermanentError("invalid_params", "MCP input response %q does not match the pending request", id))
 	}
 	var result mcp.ElicitResult
 	if err := json.Unmarshal(data, &result); err != nil {
@@ -449,17 +450,17 @@ func marshalCanonicalState(value any) ([]byte, error) {
 
 func validateElicitResult(id string, result *mcp.ElicitResult) error {
 	if result == nil {
-		return fmt.Errorf("MCP input response %q is nil; want *mcp.ElicitResult", id)
+		return loom.PermanentError("invalid_params", "MCP input response %q is nil; want *mcp.ElicitResult", id)
 	}
 	switch result.Action {
 	case elicitActionAccept:
 		return nil
 	case elicitActionDecline, elicitActionCancel:
 		if len(result.Content) > 0 {
-			return fmt.Errorf("MCP input response %q has content for %q action", id, result.Action)
+			return loom.PermanentError("invalid_params", "MCP input response %q has content for %q action", id, result.Action)
 		}
 		return nil
 	default:
-		return fmt.Errorf("MCP input response %q has invalid elicitation action %q", id, result.Action)
+		return loom.PermanentError("invalid_params", "MCP input response %q has invalid elicitation action %q", id, result.Action)
 	}
 }

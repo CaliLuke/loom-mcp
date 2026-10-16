@@ -16,21 +16,23 @@ import (
 )
 
 func TestHeartbeatRecorder(t *testing.T) {
+	// Allow real database renewals to run under race-enabled CI contention.
+	const heartbeatTimeout = 2 * time.Second
 	e := newTestEngine(t)
 	var calls atomic.Int32
 	healthy := make(chan struct{}, 1)
 	stopped := make(chan struct{}, 1)
-	require.NoError(t, e.RegisterExecuteToolActivity(t.Context(), "heartbeat", engine.ActivityOptions{StartToCloseTimeout: 3 * time.Second, HeartbeatTimeout: 150 * time.Millisecond, RetryPolicy: engine.RetryPolicy{MaxAttempts: 1}}, func(ctx context.Context, _ *api.ToolInput) (*api.ToolOutput, error) {
+	require.NoError(t, e.RegisterExecuteToolActivity(t.Context(), "heartbeat", engine.ActivityOptions{StartToCloseTimeout: 20 * time.Second, HeartbeatTimeout: heartbeatTimeout, RetryPolicy: engine.RetryPolicy{MaxAttempts: 1}}, func(ctx context.Context, _ *api.ToolInput) (*api.ToolOutput, error) {
 		defer func() {
 			stopped <- struct{}{}
 		}()
 		calls.Add(1)
-		if engine.ActivityHeartbeatTimeout(ctx) != 150*time.Millisecond || !engine.RecordActivityHeartbeat(ctx, "not persisted") {
+		if engine.ActivityHeartbeatTimeout(ctx) != heartbeatTimeout || !engine.RecordActivityHeartbeat(ctx, "not persisted") {
 			return nil, errors.New("missing heartbeat metadata or recorder")
 		}
-		ticker := time.NewTicker(20 * time.Millisecond)
+		ticker := time.NewTicker(100 * time.Millisecond)
 		defer ticker.Stop()
-		active := time.NewTimer(450 * time.Millisecond)
+		active := time.NewTimer(3 * heartbeatTimeout)
 		defer active.Stop()
 		for {
 			select {
@@ -45,7 +47,13 @@ func TestHeartbeatRecorder(t *testing.T) {
 			}
 		}
 	}))
-	err := runWorkflow(t, e, "heartbeat-run", toolWorkflow("heartbeat"))
+	require.NoError(t, e.RegisterWorkflow(t.Context(), engine.WorkflowDefinition{Name: "heartbeat-run", Handler: toolWorkflow("heartbeat")}))
+	require.NoError(t, e.SealRegistration(t.Context()))
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	defer cancel()
+	h, err := e.StartWorkflow(ctx, engine.WorkflowStartRequest{ID: "heartbeat-run", Workflow: "heartbeat-run", Input: &api.RunInput{RunID: "heartbeat-run"}})
+	require.NoError(t, err)
+	_, err = h.Wait(ctx)
 	var timeout *sv.ActivityTimeoutError
 	require.ErrorAs(t, err, &timeout)
 	assert.Equal(t, sv.TimeoutHeartbeat, timeout.Kind)

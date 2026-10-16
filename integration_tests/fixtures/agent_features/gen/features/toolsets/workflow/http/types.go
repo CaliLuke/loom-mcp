@@ -25,7 +25,7 @@ type (
 		// Whether the operation succeeded
 		OK *bool `json:"ok"`
 		// Whether the operation was approved
-		Approved *bool `json:"approved,omitempty"`
+		Approved *bool `json:"approved,omitzero"`
 	}
 
 	// FinalizePayloadTransport is the internal JSON transport type for FinalizePayload.
@@ -45,7 +45,7 @@ type (
 		// Whether the operation succeeded
 		OK *bool `json:"ok"`
 		// Whether the operation was approved
-		Approved *bool `json:"approved,omitempty"`
+		Approved *bool `json:"approved,omitzero"`
 	}
 
 	// MethodEchoPayloadTransport is the internal JSON transport type for MethodEchoPayload.
@@ -85,7 +85,7 @@ type (
 		// Whether the operation succeeded
 		OK *bool `json:"ok"`
 		// Whether the operation was approved
-		Approved *bool `json:"approved,omitempty"`
+		Approved *bool `json:"approved,omitzero"`
 	}
 
 	// RetryPayloadTransport is the internal JSON transport type for RetryPayload.
@@ -103,7 +103,7 @@ type (
 		// Whether the operation succeeded
 		OK *bool `json:"ok"`
 		// Whether the operation was approved
-		Approved *bool `json:"approved,omitempty"`
+		Approved *bool `json:"approved,omitzero"`
 	}
 
 	// ReviewPayloadTransport is the internal JSON transport type for ReviewPayload.
@@ -123,7 +123,7 @@ type (
 		// Whether the operation succeeded
 		OK *bool `json:"ok"`
 		// Whether the operation was approved
-		Approved *bool `json:"approved,omitempty"`
+		Approved *bool `json:"approved,omitzero"`
 	}
 
 	// RevisePayloadTransport is the internal JSON transport type for RevisePayload.
@@ -141,6 +141,6 @@ type (
 		// Whether the operation succeeded
 		OK *bool `json:"ok"`
 		// Whether the operation was approved
-		Approved *bool `json:"approved,omitempty"`
+		Approved *bool `json:"approved,omitzero"`
 	}
 )

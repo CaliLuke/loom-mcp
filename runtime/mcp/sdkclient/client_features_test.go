@@ -11,10 +11,13 @@ import (
 	"testing"
 
 	mcpruntime "github.com/CaliLuke/loom-mcp/v2/runtime/mcp"
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type privateResponseJSON struct{}
 
 var testRequestStateKey = []byte("0123456789abcdef0123456789abcdef")
 
@@ -279,6 +282,10 @@ func TestClientFeatureAdapterRejectsResponsesOutsidePendingRound(t *testing.T) {
 		_, err := elicitor.Elicit(ctx, firstRequest)
 		require.ErrorContains(t, err, "does not match pending request count")
 		require.True(t, mcpruntime.IsInvalidClientInput(err))
+		var protocolError *jsonrpc.Error
+		require.ErrorAs(t, mcpruntime.NormalizeJSONRPCError("tools/call", err), &protocolError)
+		assert.EqualValues(t, jsonrpc.CodeInvalidParams, protocolError.Code)
+		assert.Equal(t, "MCP input response count 2 does not match pending request count 1", protocolError.Message)
 	})
 
 	t.Run("wrong response ID", func(t *testing.T) {
@@ -488,4 +495,25 @@ func mustInputResponses(t *testing.T, data string) mcp.InputResponseMap {
 	var responses mcp.InputResponseMap
 	require.NoError(t, json.Unmarshal([]byte(data), &responses))
 	return responses
+}
+
+func TestClientFeatureAdapterDoesNotPublishSerializationDiagnostics(t *testing.T) {
+	request := mcpruntime.ElicitRequest{Message: "first"}
+	state := testPendingRequestState(t, request)
+	responses := mcp.InputResponseMap{
+		"loom-input-0": &mcp.ElicitResult{Action: elicitActionAccept, Content: map[string]any{"value": privateResponseJSON{}}},
+	}
+	ctx := WithClientFeatures(context.Background(), &mcp.ServerSession{}, testClientFeaturesOptions(responses, state))
+	elicitor, ok := mcpruntime.ElicitorFromContext(ctx)
+	require.True(t, ok)
+	_, err := elicitor.Elicit(ctx, request)
+	require.ErrorContains(t, err, "private serialization detail")
+	var protocolError *jsonrpc.Error
+	require.ErrorAs(t, mcpruntime.NormalizeJSONRPCError("tools/call", err), &protocolError)
+	assert.EqualValues(t, jsonrpc.CodeInvalidParams, protocolError.Code)
+	assert.NotContains(t, protocolError.Message, "private serialization detail")
+}
+
+func (privateResponseJSON) MarshalJSON() ([]byte, error) {
+	return nil, fmt.Errorf("private serialization detail")
 }

@@ -248,13 +248,13 @@ func genStringWithValidation() gopter.Gen {
 
 // genIntWithValidation generates integer attributes with min/max validations.
 func genIntWithValidation() gopter.Gen {
-	return gen.Float64Range(0, 100).Map(func(min float64) *expr.AttributeExpr {
+	return gen.IntRange(0, 100).Map(func(min int) *expr.AttributeExpr {
 		max := min + 100
 		return &expr.AttributeExpr{
 			Type: expr.Int,
 			Validation: &expr.ValidationExpr{
-				Minimum: &min,
-				Maximum: &max,
+				Minimum: testNumericBound(min),
+				Maximum: testNumericBound(max),
 			},
 		}
 	})

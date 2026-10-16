@@ -320,5 +320,6 @@ func TestProjectedInjectedToolRejectsMissingVerifiedContext(t *testing.T) {
 	require.Len(t, result.Content, 1)
 	content, ok := result.Content[0].(*sdkmcp.TextContent)
 	require.True(t, ok)
-	assert.Contains(t, content.Text, "requires verified request context")
+	assert.Equal(t, "[internal_error] internal server error", content.Text)
+	assert.NotContains(t, content.Text, "requires verified request context")
 }

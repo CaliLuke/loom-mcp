@@ -138,6 +138,6 @@ func (f fixture) event(t *testing.T, event hooks.Event, seconds int64) {
 	require.NoError(t, err)
 	// Fixture identities are repeatable across independently populated stores.
 	input.EventKey = fmt.Sprintf("%s:%s:%d", event.RunID(), event.Type(), seconds)
-	_, err = f.log.Append(t.Context(), &runlog.Event{RunID: event.RunID(), AgentID: agent.Ident(event.AgentID()), SessionID: "session", EventKey: input.EventKey, Type: event.Type(), Payload: input.Payload, Timestamp: time.Unix(seconds, 0)})
+	_, err = f.log.Append(t.Context(), &runlog.Event{RunID: event.RunID(), AgentID: agent.Ident(event.AgentID()), SessionID: "session", EventKey: input.EventKey, Type: event.Type(), Payload: input.Payload, Timestamp: time.Unix(seconds, 0).UTC()})
 	require.NoError(t, err)
 }

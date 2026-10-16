@@ -404,6 +404,8 @@ func MarshalProjectedBoundedLookupToolResult(v *ProjectedBoundedLookupToolResult
 		for i, val := range in.Hits {
 			out.Hits[i] = val
 		}
+	} else {
+		out.Hits = nil
 	}
 	return json.Marshal(out)
 }
@@ -426,9 +428,13 @@ func UnmarshalProjectedBoundedLookupToolResult(data []byte) (*ProjectedBoundedLo
 	_ = in
 	var out *ProjectedBoundedLookupToolResult
 	out = &ProjectedBoundedLookupToolResult{}
-	out.Hits = make([]string, len(in.Hits))
-	for i, val := range in.Hits {
-		out.Hits[i] = val
+	if in.Hits != nil {
+		out.Hits = make([]string, len(in.Hits))
+		for i, val := range in.Hits {
+			out.Hits[i] = val
+		}
+	} else {
+		out.Hits = nil
 	}
 	return out, nil
 }

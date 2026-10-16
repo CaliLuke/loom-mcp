@@ -43,18 +43,29 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   `runtime/mcp/skills`, and model-facing skill tools belong in
   `runtime/agent/runtime`.
 - Framework-scale DSL, codegen, runtime, or MCP feature work must include the
-  full repo gates expected by AGENTS.md: `make lint`, `make test`, `make itest`,
-  and `make verify-mcp-local`, with targeted package commands only as earlier
-  red-green checks.
+  routine repo gates expected by AGENTS.md: `make lint`, `make test`, and
+  `make ci-integration`, with targeted package commands only as earlier red-green
+  checks. `make ci` adds generated-output, build, publisher and Docker checks.
+  Exhaustive longrun/statistical and 1,000-step acceptance belongs to
+  `make qualification` for changes to those contracts; hosted qualification runs
+  weekly or manually and is separate from ordinary release eligibility.
+  `make itest` and `make verify-mcp-local` retain their exhaustive behavior.
 - Generator branch coverage must include executable compile or behavior tests.
   Golden output alone is not sufficient proof for a generated contract.
-- `make test` enforces global and critical package-group coverage floors plus
+- `make test` runs the complete short suite separately under race detection and
+  atomic coverage, avoiding combined instrumentation overhead. Hosted CI requires
+  both passes. `make ci` also requires at least 90.1% whole-framework fast-suite
+  coverage: union root, Docker and instrumented fast fixture profiles by source
+  block, keeping generated/support code in the denominator. Run
+  `make coverage-fast-check` to check the collected profiles. It preserves unit
+  global and critical package-group coverage floors plus
   exact owner floors for `runtime/agent/runtime`, Bedrock, and Gemini. Docker
   coverage likewise matches the Mongo infrastructure, Pulse client, and root
   registry packages exactly. Use `make test-stress` for concurrency and
   lifecycle changes.
 - `TestRecallScript1000Steps` skips under `-short` (`make test`). `make itest`
-  runs exactly this test with race detection, `-count=1`, and a 30-minute timeout.
+  and `make qualification` run exactly this test with race detection, `-count=1`,
+  and a 30-minute timeout; routine `make ci-integration` excludes this workload.
   Keep its 1,000-step workload and recall call-count golden unchanged.
 - Ordinary `go test` runs the seed corpora at dynamic JSON boundaries. Use
   `make test-fuzz` for bounded mutation of those corpora; change `FUZZ_TIME`
@@ -855,7 +866,7 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 ## Command Reminders
 
 ```bash
-go install github.com/CaliLuke/loom/cmd/loom@v1.10.0-alpha.8
+go install github.com/CaliLuke/loom/cmd/loom@v1.10.0-alpha.10
 loom version
 loom gen <module-import-path>/design
 loom example <module-import-path>/design

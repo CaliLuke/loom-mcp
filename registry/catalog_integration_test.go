@@ -17,12 +17,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/CaliLuke/go-redis/v9"
 	genregistry "github.com/CaliLuke/loom-mcp/v2/registry/gen/registry"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/toolregistry"
 	"github.com/CaliLuke/loom/pulse/rmap"
 	"github.com/CaliLuke/loom/pulse/streaming"
 	streamopts "github.com/CaliLuke/loom/pulse/streaming/options"
-	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"

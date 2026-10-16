@@ -71,7 +71,7 @@ Within each section, place main logic first and helpers last.
 - When bumping the forked `github.com/CaliLuke/loom`, pin a release tag (`vX.Y.Z`), not a branch. The fork cuts releases from its checkout via `make release VERSION=...`; resolve the freshest tag from actual refs (`git ls-remote --tags`, `gh release view`), update `REMOTE_VERSION` in `scripts/loom_core_mode.sh`, and run `make loom-remote` so root, fixture, and quickstart modules move together (bump `integration_tests/fixtures/agent_features` separately).
 - Do not use web search to verify whether a release exists. Check releases, tags, or published module versions from the authoritative source directly, such as `git ls-remote`, `gh release view`, or `go list -m -versions`.
 - Use local Loom checkout mode for iterative development and the pinned remote fork for CI. The standard toggle is `make loom-local` for local iteration and `make loom-remote` before CI-facing verification or commits. `make loom-status` shows the current mode.
-- After switching to local mode, use `make verify-mcp-local` for the default MCP fixture/framework verification ladder.
+- After switching to local mode, use `make ci-integration` for the routine MCP fixture/framework verification ladder. `make verify-mcp-local` additionally runs exhaustive longrun qualification.
 - Use `make regen-assistant-fixture` when the assistant MCP fixture design changes so generated churn is intentional and reproducible.
 - The canonical local core checkout for this repo is the peer folder `../loom` (loom-mono layout); `scripts/loom_core_mode.sh` resolves it relative to the repo root and honors a `LOOM_DIR` override. If local mode points somewhere else, treat that as drift and correct it before interpreting test results.
 - Do not compensate in `loom-mcp` for upstream `loom` regressions. If a bump breaks this repo, reproduce the failure, identify the owning code, and record a concrete upstream ticket. Fix the root cause in the owning repository within the authorized scope; never add a local shim or bypass verification. Keep the affected upgrade or release gated until its checks pass, but continue independent authorized work. Bound the investigation to evidence needed for a fix or actionable handoff; do not pursue unrelated rabbit holes. A failed upgrade is not an instruction to stop working or end the task. Escalate only when further progress requires unavailable access, a user decision, or an action outside the authorized scope.
@@ -83,19 +83,19 @@ Within each section, place main logic first and helpers last.
 - Name tests `TestXxx`.
 - Prefer `testify/assert`; use `testify/require` only when the test cannot continue after a failure.
 - Treat pre-commit and commit-time hooks as mandatory. If a hook fails for any reason, fix the problem before committing; do not bypass the hook, do not use `--no-verify`, and do not classify the failure as unrelated debt to avoid fixing it.
-- When bumping frameworks or dependencies, or when doing refactors or general improvement work, run the full verification suite rather than only targeted package checks. At minimum this means `make lint`, `make test`, and `make itest` before calling the work done.
+- When bumping frameworks or dependencies, or when doing refactors or general improvement work, run the full verification suite rather than only targeted package checks. At minimum this means `make lint`, `make test`, and `make ci-integration` before calling the work done. `make ci` adds generated-output, build, publisher and Docker checks. Run `make qualification` for changes to compaction qualification, statistical evaluation or full growth contracts; it is not required for every change. `make itest` remains the exhaustive combined integration command.
 - Normal verification flow:
   1. `make lint`
   2. fix issues
   3. `make test`
-  4. `make itest` when integration behavior changed
+  4. `make ci-integration` when integration behavior changed
 - For local Loom framework validation, verify in this order:
   1. Choose Loom source intentionally: `make loom-local` for iterative local feedback, `make loom-remote` for CI/parity checks.
   2. Regenerate all affected outputs intentionally:
      - run `make gen-registry` when registry design or upstream generation behavior changed
      - run `make regen-assistant-fixture` when the assistant fixture design or upstream generation behavior changed
-  3. Run `make verify-mcp-local`.
-  4. Run the full repo suite: `make lint`, `make test`, and `make itest`.
+  3. Run `make ci` once for generation, build, lint, unit/coverage, routine integration and Docker checks.
+  4. Run `make qualification` when the change affects compaction qualification, statistical evaluation or full growth contracts. Do not duplicate it through `make itest` or `make verify-mcp-local`.
 - If a new `loom` fork bump breaks only integration semantics, do not patch around it in `loom-mcp`; capture the failing scenarios and return upstream tickets with exact scenario file references.
 
 ## Safety

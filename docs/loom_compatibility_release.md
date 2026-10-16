@@ -59,16 +59,19 @@ Review the diff before testing. Each generated change must come from the Loom
 candidate. Investigate unexpected changes as compatibility failures. Never
 edit generated files by hand.
 
-Run the local framework/fixture ladder and the full repository gates:
+Run the routine repository gates, including generated application fixtures:
 
 ```bash
-make verify-mcp-local
-make lint
-make test
-make itest
+make ci
 ```
 
-All commands must pass. If a failure is caused by Loom, fix it in Loom and
+Run `make qualification` additionally when changing compaction qualification,
+statistical evaluation or full growth contracts. It preserves the complete
+longrun and 1,000-step workloads. Do not also run the exhaustive `make itest` or
+`make verify-mcp-local`, which would duplicate that acceptance work. Routine CI
+success does not establish statistical or live-provider qualification.
+
+All required checks must pass. If a failure is caused by Loom, fix it in Loom and
 repeat this section from regeneration. Do not add a `loom-mcp` workaround for
 an upstream regression. Record the failing command, package or scenario, and
 relevant test output in the Loom release issue or pull request.
@@ -121,10 +124,7 @@ Repeat the gates without local replacements so the result matches CI and a
 downstream user's module graph:
 
 ```bash
-make verify-mcp-local
-make lint
-make test
-make itest
+make ci
 ```
 
 Inspect the final diff and module graph:

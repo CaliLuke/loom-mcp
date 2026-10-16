@@ -220,7 +220,14 @@ func {{ .MarshalFunc }}(v {{ if .Pointer }}*{{ end }}{{ .FullRef }}) ([]byte, er
     in := v
     _ = in
     var out *toolhttp.{{ .TransportTypeName }}
+{{- if .EncodeErrorAware }}
+    var conversionErr error
+    transformErr := &conversionErr
+{{- end }}
 {{ .EncodeTransform }}
+{{- if .EncodeErrorAware }}
+    if conversionErr != nil { return nil, conversionErr }
+{{- end }}
     return json.Marshal(out)
     {{- else }}
     return json.Marshal(v)
@@ -261,7 +268,14 @@ func {{ .UnmarshalFunc }}(data []byte) ({{ if .Pointer }}*{{ end }}{{ .FullRef }
     in := &tv
     _ = in
     var out *{{ .FullRef }}
+{{- if .DecodeErrorAware }}
+    var conversionErr error
+    transformErr := &conversionErr
+{{- end }}
 {{ .DecodeTransform }}
+{{- if .DecodeErrorAware }}
+    if conversionErr != nil { return nil, conversionErr }
+{{- end }}
     return out, nil
     {{- else }}
     var v {{ .FullRef }}
@@ -285,7 +299,7 @@ func {{ .UnmarshalFunc }}(data []byte) ({{ if .Pointer }}*{{ end }}{{ .FullRef }
 {{- if .Helpers }}
 // Helper transform functions
 {{- range .Helpers }}
-func {{ .Name }}(v {{ .ParamTypeRef }}) {{ .ResultTypeRef }} {
+func {{ .Name }}(v {{ .ParamTypeRef }}{{ if .ErrorAware }}, transformErr *error{{ end }}) {{ .ResultTypeRef }} {
 {{ .Code }}
     return res
 }

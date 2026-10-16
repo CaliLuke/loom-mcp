@@ -1,4 +1,5 @@
 {
-  "loom_version": "v1.10.0-alpha.8",
-  "design_digest": "84c65985c0627995084a300fe5d7c2d309f90886f0edc450c658bbfd409c20c4"
+  "loom_version": "v1.10.0-alpha.10",
+  "design_package": "example.com/quickstart/design",
+  "design_digest": "0cfe2c45c925cf7328c94cd4bb3b56ce340a02bf2af692507ac2519f94007a2b"
 }

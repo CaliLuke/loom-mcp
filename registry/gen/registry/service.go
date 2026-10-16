@@ -211,14 +211,14 @@ type GetToolsetPayload struct {
 // method.
 type ListToolsetsPayload struct {
 	// Filter by tags (all must match)
-	Tags []string `json:"tags,omitempty"`
+	Tags []string `json:"tags,omitzero"`
 }
 
 // ListToolsetsResult is the result type of the registry service ListToolsets
 // method.
 type ListToolsetsResult struct {
 	// List of registered toolsets
-	Toolsets []*ToolsetInfo `json:"toolsets,omitempty"`
+	Toolsets []*ToolsetInfo `json:"toolsets,omitzero"`
 }
 
 // PongPayload is the payload type of the registry service Pong method.
@@ -280,11 +280,11 @@ type RegisterPayload struct {
 	// Unique name for the toolset
 	Name string `json:"name"`
 	// Human-readable description of the toolset
-	Description *string `json:"description,omitempty"`
+	Description *string `json:"description,omitzero"`
 	// Semantic version of the toolset.
-	Version *SemVer `json:"version,omitempty"`
+	Version *SemVer `json:"version,omitzero"`
 	// Tags for categorization and filtering
-	Tags []string `json:"tags,omitempty"`
+	Tags []string `json:"tags,omitzero"`
 	// Tool definitions with their schemas
 	Tools []*ToolSchema `json:"tools"`
 	// Stable identity of the provider process registering this toolset.
@@ -356,7 +356,7 @@ type SearchPayload struct {
 // SearchResult is the result type of the registry service Search method.
 type SearchResult struct {
 	// Matching toolsets
-	Toolsets []*ToolsetInfo `json:"toolsets,omitempty"`
+	Toolsets []*ToolsetInfo `json:"toolsets,omitzero"`
 }
 
 // Semantic version string (for example, "1.0.0" or "v1.0.0").
@@ -370,11 +370,11 @@ type ToolCallMeta struct {
 	// Chat session identifier used to scope tool behavior and persistence.
 	SessionID string `json:"session_id"`
 	// Turn identifier within the session.
-	TurnID *string `json:"turn_id,omitempty"`
+	TurnID *string `json:"turn_id,omitzero"`
 	// Tool call identifier used for correlation with model provider tool calls.
 	ToolCallID string `json:"tool_call_id"`
 	// Parent tool call identifier when the tool call is nested.
-	ParentToolCallID *string `json:"parent_tool_call_id,omitempty"`
+	ParentToolCallID *string `json:"parent_tool_call_id,omitzero"`
 }
 
 // Tool schema declaration for registration with the tool registry gateway.
@@ -382,15 +382,15 @@ type ToolSchema struct {
 	// Globally unique tool identifier of the form "toolset.tool".
 	Name string `json:"name"`
 	// Human-readable description of what the tool does.
-	Description *string `json:"description,omitempty"`
+	Description *string `json:"description,omitzero"`
 	// Optional tags used for policy, routing, or UI filtering.
-	Tags []string `json:"tags,omitempty"`
+	Tags []string `json:"tags,omitzero"`
 	// Canonical JSON schema for the tool payload.
 	PayloadSchema []byte `json:"payload_schema"`
 	// Canonical JSON schema for the tool result.
 	ResultSchema []byte `json:"result_schema"`
 	// Canonical JSON schema for the tool sidecar (UI-only), when present.
-	SidecarSchema []byte `json:"sidecar_schema,omitempty"`
+	SidecarSchema []byte `json:"sidecar_schema,omitzero"`
 }
 
 // Toolset is the result type of the registry service GetToolset method.
@@ -398,11 +398,11 @@ type Toolset struct {
 	// Unique name for the toolset
 	Name string `json:"name"`
 	// Human-readable description
-	Description *string `json:"description,omitempty"`
+	Description *string `json:"description,omitzero"`
 	// Semantic version of the toolset.
-	Version *SemVer `json:"version,omitempty"`
+	Version *SemVer `json:"version,omitzero"`
 	// Tags for categorization
-	Tags []string `json:"tags,omitempty"`
+	Tags []string `json:"tags,omitzero"`
 	// Tool schemas included in the toolset.
 	Tools []*ToolSchema `json:"tools"`
 	// ISO 8601 registration timestamp
@@ -414,11 +414,11 @@ type ToolsetInfo struct {
 	// Unique name for the toolset
 	Name string `json:"name"`
 	// Human-readable description
-	Description *string `json:"description,omitempty"`
+	Description *string `json:"description,omitzero"`
 	// Semantic version of the toolset.
-	Version *SemVer `json:"version,omitempty"`
+	Version *SemVer `json:"version,omitzero"`
 	// Tags for categorization
-	Tags []string `json:"tags,omitempty"`
+	Tags []string `json:"tags,omitzero"`
 	// Number of tools in the toolset
 	ToolCount int `json:"tool_count"`
 	// ISO 8601 registration timestamp

@@ -63,6 +63,7 @@ func toolsetAdapterTransformsFile(genpkg string, ts *ToolsetData, specsCache *to
 			continue
 		}
 
+		firstTransform := len(fns)
 		entry := toolEntries[t.QualifiedName]
 		if entry == nil {
 			panic(fmt.Sprintf("agent codegen: missing specs metadata for method-backed tool %q", t.QualifiedName))
@@ -90,7 +91,8 @@ func toolsetAdapterTransformsFile(genpkg string, ts *ToolsetData, specsCache *to
 			// Both the tool payload and service payload are service-level shapes.
 			srcCtx := codegen.NewAttributeContextForConversion(false, false, true, "", scope)
 			tgtCtx := codegen.NewAttributeContext(false, false, true, svcAlias, scope)
-			body, helpers, err := codegen.GoTransform(localArgAttr, t.MethodPayloadAttr, "in", "out", srcCtx, tgtCtx, "", false)
+			plan, err := codegen.GoTransform(localArgAttr, t.MethodPayloadAttr, "in", "out", srcCtx, tgtCtx, "", false)
+			body, helpers := plan.Code, plan.Helpers
 			if err != nil {
 				return nil, transformBuildError(t, "payload", t.Args, t.MethodPayloadAttr, err)
 			}
@@ -118,6 +120,7 @@ func toolsetAdapterTransformsFile(genpkg string, ts *ToolsetData, specsCache *to
 				ParamTypeRef:  paramRef,
 				ResultTypeRef: serviceRef,
 				Body:          body,
+				ErrorAware:    plan.ErrorAware,
 				Helpers:       nil,
 			})
 		}
@@ -149,7 +152,8 @@ func toolsetAdapterTransformsFile(genpkg string, ts *ToolsetData, specsCache *to
 			srcCtx := codegen.NewAttributeContext(false, false, true, svcAlias, scope)
 			targetAttr := toolResult.PublicType
 			tgtCtx := codegen.NewAttributeContextForConversion(false, false, true, "", scope)
-			body, helpers, err := codegen.GoTransform(t.MethodResultAttr, targetAttr, "in", "out", srcCtx, tgtCtx, "", false)
+			plan, err := codegen.GoTransform(t.MethodResultAttr, targetAttr, "in", "out", srcCtx, tgtCtx, "", false)
+			body, helpers := plan.Code, plan.Helpers
 			if err != nil {
 				return nil, transformBuildError(t, "result", t.MethodResultAttr, t.Return, err)
 			}
@@ -178,6 +182,7 @@ func toolsetAdapterTransformsFile(genpkg string, ts *ToolsetData, specsCache *to
 				ParamTypeRef:  serviceResRef,
 				ResultTypeRef: resRef,
 				Body:          body,
+				ErrorAware:    plan.ErrorAware,
 				Helpers:       nil,
 			})
 		}
@@ -235,7 +240,8 @@ func toolsetAdapterTransformsFile(genpkg string, ts *ToolsetData, specsCache *to
 			sourcePkg := typeRefDefaultPackage(svcAlias, sourceAttr)
 			srcCtx := codegen.NewAttributeContextForConversion(false, false, true, sourcePkg, scope)
 			tgtCtx := codegen.NewAttributeContextForConversion(false, false, true, "", scope)
-			body, helpers, err := codegen.GoTransform(sourceAttr, targetAttr, "in", "out", srcCtx, tgtCtx, "", false)
+			plan, err := codegen.GoTransform(sourceAttr, targetAttr, "in", "out", srcCtx, tgtCtx, "", false)
+			body, helpers := plan.Code, plan.Helpers
 			if err != nil || body == "" {
 				panic(fmt.Sprintf(
 					"agent codegen: failed to build server_data transform for tool %q kind %q: %v",
@@ -264,8 +270,13 @@ func toolsetAdapterTransformsFile(genpkg string, ts *ToolsetData, specsCache *to
 				ResultTypeRef:      resultRef,
 				NilInputReturnsNil: nilInputReturnsNil,
 				Body:               body,
+				ErrorAware:         plan.ErrorAware,
 				Helpers:            nil,
 			})
+		}
+		t.TransformErrors = make(map[string]bool)
+		for _, fn := range fns[firstTransform:] {
+			t.TransformErrors[fn.Name] = fn.ErrorAware
 		}
 	}
 
@@ -276,6 +287,12 @@ func toolsetAdapterTransformsFile(genpkg string, ts *ToolsetData, specsCache *to
 	// Assemble imports: service and any additional referenced packages.
 	imports := []*codegen.ImportSpec{
 		{Name: svcAlias, Path: svcImport},
+	}
+	for _, fn := range fns {
+		if fn.ErrorAware {
+			imports = append(imports, codegen.LoomImport(""))
+			break
+		}
 	}
 	usedAliases := map[string]struct{}{
 		svcAlias: {},

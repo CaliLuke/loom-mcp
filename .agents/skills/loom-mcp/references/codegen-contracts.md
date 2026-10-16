@@ -40,7 +40,9 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
 - Prefer `GoTypeRef` and `GoFullTypeRef` over string concatenation.
 - Preserve original attributes so locator metadata remains intact.
 - Let the shared type system own pointer and value semantics. Do not force pointer mode outside transport-validation cases.
-- Use `codegen.GoTransform(...)` with proper conversion contexts instead of post-processing emitted code.
+- Use `codegen.GoTransform(...)` with proper conversion contexts instead of post-processing emitted code. Consume the complete `TransformPlan`: Code, Helpers, and ErrorAware. Fallible plans and helper calls share a nonnil `transformErr *error`; check it before publishing values. Fallible tool adapter transforms return `(value, error)`, while infallible signatures stay unchanged. Provider and dispatcher paths must check payload, result, and server-data conversion errors.
+- Use `codegen.NamedValidationFunction` for transport validator contexts and definitions so nested diagnostics preserve occurrence paths.
+- Use `expr.ProjectNumericBound` for recovery-example endpoints. Preserve exact integer bounds and the full float32 value on the JSON wire.
 - Tool codecs use `NewAttributeContext` for the transport-side `toolhttp`
   contexts in both directions. `NewAttributeContextForConversion` describes
   same-package conversion and removes qualifiers required by collection
@@ -146,6 +148,9 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   converts untyped adapter errors into typed JSON-RPC errors. Preserve existing
   typed SDK errors. Map invalid parameters and missing resources to `-32602`.
   Map internal and unknown errors to `-32603` with only declared safe messages.
+  Retry-validation errors must explicitly own public repair text through
+  `LoomErrorName` or a safe remedy. `InvalidClientInput` alone classifies the
+  protocol error; it does not authorize disclosure of diagnostic text.
   The official SDK exclusively owns request envelopes and bodies. The bridge
   and generated code never read, buffer, replace, or parse request bodies and
   never parse or rewrite SDK response bodies.

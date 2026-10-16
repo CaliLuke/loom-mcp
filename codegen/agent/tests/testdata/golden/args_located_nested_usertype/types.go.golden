@@ -16,7 +16,7 @@ type (
 		// New step status.
 		Status types.Status `json:"status"`
 		// Optional note about progress.
-		Note *string `json:"note,omitempty"`
+		Note *string `json:"note,omitzero"`
 	}
 
 	// SetStepStatusResult defines the JSON result for the progress.set_step_status tool.

@@ -16,9 +16,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/CaliLuke/go-redis/v9"
 	genregistry "github.com/CaliLuke/loom-mcp/v2/registry/gen/registry"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/toolregistry"
-	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

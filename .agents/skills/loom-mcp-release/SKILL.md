@@ -36,7 +36,9 @@ Pending CI waits up to 45 minutes. Never substitute local tests for hosted CI.
 
 Keep the normal full verification requirements for code changes. To publish an
 unchanged green source, reuse its CI instead of rerunning local suites or adding
-a version-only commit. CI owns the full `make ci` contract. Regenerate only when
+a version-only commit. CI owns the routine `make ci` contract across five required parallel jobs.
+Exhaustive qualification is a separate weekly/manual workflow; do not describe
+routine CI success as statistical or live-provider qualification. Regenerate only when
 implementation/design changes require it; never edit generated output by hand.
 
 The publisher creates an immutable annotated tag, draft Release, deterministic
