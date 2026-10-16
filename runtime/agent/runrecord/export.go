@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/callrecord"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/rawjson"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
@@ -29,7 +30,7 @@ type Export struct {
 // from its included content and canonical records.
 func FromExport(data []byte) (*RunRecord, error) {
 	var exported Export
-	if err := json.Unmarshal(data, &exported, jsonopts.FormatDurationAsNano(true), json.RejectUnknownMembers(true), json.WithUnmarshalers(json.JoinUnmarshalers(json.UnmarshalFunc(decodeExportEvent), json.UnmarshalFunc(decodeExportSettings)))); err != nil {
+	if err := json.Unmarshal(data, &exported, jsonopts.FormatDurationAsNano(true), json.RejectUnknownMembers(true), json.WithUnmarshalers(json.JoinUnmarshalers(json.UnmarshalFunc(decodeExportEvent), json.UnmarshalFunc(decodeExportSettings), json.UnmarshalFunc(decodeExportMessage)))); err != nil {
 		return nil, fmt.Errorf("decode runrecord export: %w", err)
 	}
 	if exported.Version != 1 || exported.RootRunID == "" {
@@ -110,5 +111,15 @@ func decodeExportEvent(data []byte, event **runlog.Event) error {
 	}
 	value.wireEvent.Payload = rawjson.Message(value.Payload)
 	*event = (*runlog.Event)(value.wireEvent)
+	return nil
+}
+
+// decodeExportMessage preserves dynamic numeric tokens in rendered transcripts.
+func decodeExportMessage(data []byte, message **model.Message) error {
+	decoded, err := callrecord.DecodeMessage(data)
+	if err != nil {
+		return err
+	}
+	*message = decoded
 	return nil
 }

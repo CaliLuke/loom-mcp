@@ -169,14 +169,25 @@ func restorePartValues(message *model.Message, data jsontext.Value) error {
 	for position, part := range message.Parts {
 		switch value := part.(type) {
 		case model.ToolUsePart:
-			decoded, err := model.DecodeSchemaJSON(parts[position]["Input"])
+			input := parts[position]["Input"]
+			if len(input) == 0 {
+				input = parts[position]["Args"]
+			}
+			if len(input) == 0 {
+				continue
+			}
+			decoded, err := model.DecodeSchemaJSON(input)
 			if err != nil {
 				return fmt.Errorf("decode recorded tool input: %w", err)
 			}
 			value.Input = decoded
 			message.Parts[position] = value
 		case model.ToolResultPart:
-			decoded, err := model.DecodeSchemaJSON(parts[position]["Content"])
+			content := parts[position]["Content"]
+			if len(content) == 0 {
+				continue
+			}
+			decoded, err := model.DecodeSchemaJSON(content)
 			if err != nil {
 				return fmt.Errorf("decode recorded tool result: %w", err)
 			}
