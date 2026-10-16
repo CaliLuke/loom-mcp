@@ -1224,6 +1224,28 @@ The export decoder also accepts the pre-K17 flattened context settings, preservi
 their recorded values and empty fingerprint. Current settings and legacy settings
 each reject unknown members; loading old exports does not apply new defaults.
 
+For sharing, call `record.Project(runrecord.ProjectionPolicy{Name: "app/public/v1",
+Content: policy})`. The callback receives a `ProjectionContent` with category,
+source path, run ID, message role where applicable, and owned JSON. Return valid
+JSON with `include=true` to approve or transform it, or `include=false` to omit it.
+Categories distinguish messages, reasoning, metadata, attachments, tool arguments
+and results, server-only data, typed/await answers and diagnostic text. Applications
+own disclosure policy, including secrets inside otherwise public messages/results.
+The framework performs no automatic PII detection or authorization.
+
+The separate version-1 `loom-mcp.public-evidence` artifact retains structural
+run/call/tool identities, roles, outcomes and child links. Applications must authorize
+sharing those fields too. Raw content maps, configuration, indexes and opaque event
+envelopes are excluded; omissions are explicit. `Source.ExportSHA256` identifies the
+original raw export only and does not claim that filtered bytes retain its hashes
+or replay fidelity. `Projection.Marshal` and `runrecord.FromProjection` use this
+sharing schema; `FromExport` rejects it and raw replay exports remain unchanged.
+
+Projection errors return partial evidence with `Incomplete=true` and path/code
+failures that omit private error text. Check the returned error and incomplete
+marker before publishing or claiming complete evidence. Intentional policy omissions
+are recorded separately from failures.
+
 The 1,000-step recorder-write growth and real Temporal reconstruction proofs skip
 `-short` and run through `make test-payload-growth` (also invoked by `make itest`).
 The same proof includes real threshold compaction with stored receipt-only

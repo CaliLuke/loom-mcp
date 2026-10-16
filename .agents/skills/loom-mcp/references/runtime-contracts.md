@@ -990,6 +990,14 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   transcripts, original call/log bytes and addressed content, server-only bytes
   included. runrecord.FromExport restores identical evidence without a store or
   historical renderer. Exact request numeric tokens above 2^53 are preserved.
+  For sharing, Project(ProjectionPolicy{Name, Content}) builds a separate version-1
+  public-evidence DTO. The callback approves/transforms/omits owned JSON by category,
+  path, run and message role. Application policy owns disclosure; structural IDs,
+  roles and outcomes always remain. Raw maps/envelopes are omitted explicitly.
+  Source.ExportSHA256 references the original export only. FromProjection cannot
+  restore replay; FromExport rejects sharing artifacts. Partial projection errors
+  retain Incomplete and safe path/code failures; exporters must check both error and
+  marker. Intentional omissions do not imply projection failure or automatic PII safety.
   New 1000-step recorder-write growth and real Temporal P1 tests skip -short and are
   wired into test-payload-growth with explicit timeouts. Only off and real_compaction modes remain in the recorder-growth proof;
   keep their 1,000-step thresholds unchanged.
