@@ -14,7 +14,7 @@ require (
 	github.com/dave/jennifer v1.7.1
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
-	github.com/jackc/pgx/v5 v5.7.6
+	github.com/jackc/pgx/v5 v5.9.2
 	github.com/leanovate/gopter v0.2.11
 	github.com/modelcontextprotocol/go-sdk v1.8.1-0.20261016161459-3e9d812b1814
 	github.com/nexus-rpc/sdk-go v0.7.0
