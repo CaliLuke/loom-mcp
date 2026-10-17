@@ -28,6 +28,10 @@ type HTTPOptions struct {
 	ClientName    string
 	ClientVersion string
 	InitTimeout   time.Duration
+	// ElicitationHandler handles server requests for user input over streamable
+	// HTTP or SSE. Nil leaves elicitation unsupported. The handler owns user
+	// interaction and consent.
+	ElicitationHandler func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error)
 }
 
 // NewHTTPCaller creates an HTTP-based Caller and performs MCP initialize handshake.
@@ -50,7 +54,7 @@ func newHTTPTransportCaller(
 	client := mcp.NewClient(&mcp.Implementation{
 		Name:    mcpClientName(opts.ClientName),
 		Version: mcpClientVersion(opts.ClientVersion),
-	}, nil)
+	}, &mcp.ClientOptions{ElicitationHandler: opts.ElicitationHandler})
 
 	transport := newTransport(mcpHTTPClient(opts.Client))
 

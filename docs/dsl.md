@@ -540,7 +540,8 @@ form-mode user input during an MCP call. The generated handler returns an
 official MCP `InputRequiredResult` containing `elicitation/create`, then
 re-enters the implementation with the client's `inputResponses`. Code before
 the runtime call can therefore execute again and must be retry-safe. Sequential
-elicitations use one round trip each and require a `2026-07-28` client; carried
+elicitations use one round trip each; the SDK also supports them for legacy
+`2025-11-25` clients through its compatibility middleware. Carried
 `requestState` is AES-GCM protected, bound to the original logical request, and
 portable across processes that share the generated SDK server's stable 32-byte
 `RequestStateKey`. Its elicitation responses remain client assertions and are

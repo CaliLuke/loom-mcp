@@ -78,7 +78,7 @@ require (
 	github.com/moby/sys/user v0.4.1 // indirect
 	github.com/moby/sys/userns v0.2.1 // indirect
 	github.com/moby/term v0.5.2 // indirect
-	github.com/modelcontextprotocol/go-sdk v1.8.1-0.20260922085944-8075fb3cf313 // indirect
+	github.com/modelcontextprotocol/go-sdk v1.8.1-0.20261016161459-3e9d812b1814 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/nexus-rpc/nexus-proto-annotations v0.1.0 // indirect
 	github.com/nexus-rpc/sdk-go v0.7.0 // indirect

@@ -195,11 +195,7 @@ func TestGeneratedServerRawRejectsCallWithoutSession(t *testing.T) {
 	wire := decodeRawJSONRPCResponse(t, responseBody)
 	require.NotNil(t, wire.Error, "response body: %s; result: %#v", responseBody, wire.Result)
 	assert.Contains(t, wire.Error.Message, "invalid during session initialization")
-	if wire.Error.Code == 0 {
-		t.Log("MCP Go SDK v1.8.0 emits an untyped pre-initialization error before server middleware runs")
-		return
-	}
-	assert.Equal(t, int64(-32602), wire.Error.Code)
+	assert.Equal(t, int64(-32600), wire.Error.Code, "requests before initialization must report Invalid Request")
 }
 
 func TestGeneratedServerRawRejectsDuplicateInitialize(t *testing.T) {

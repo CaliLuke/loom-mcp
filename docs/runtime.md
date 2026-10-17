@@ -5399,8 +5399,9 @@ re-entered and code before the runtime helper must be retry-safe.
 original client token. Both fail closed with an unavailable error outside a
 generated SDK request context. Sampling and roots are deprecated in MCP
 `2026-07-28` and are not exposed as Loom runtime client features. Multi-step
-elicitation requires a `2026-07-28` client and uses one round trip per
-`mcp.Elicit` call. Its `requestState` is AES-GCM protected, bound to the
+elicitation uses one round trip per `mcp.Elicit` call. The SDK's compatibility
+middleware also supports sequential elicitation for legacy `2025-11-25`
+clients. Its `requestState` is AES-GCM protected, bound to the
 original logical request, and portable across SDK server replicas that share a
 stable 32-byte `SDKServerOptions.RequestStateKey`. The protected responses
 remain client assertions, not an authorization or server-state channel. See
@@ -5419,6 +5420,7 @@ caller, err := mcp.NewStdioCaller(ctx, mcp.StdioOptions{
     Args:    []string{"-y", "@modelcontextprotocol/server-filesystem"},
     Env:     []string{"HOME=" + os.Getenv("HOME")},
     InitTimeout: 5 * time.Second,
+    MaxLineLength: 8 * 1024 * 1024,
 })
 if err != nil {
     log.Fatal(err)
@@ -5426,12 +5428,40 @@ if err != nil {
 defer caller.Close()
 ```
 
+`MaxLineLength` bounds each incoming JSON-RPC frame in bytes. Zero keeps the
+SDK's 16 MiB default; a negative value disables the cap. Oversized responses
+fail the call and close the transport. Choose a larger limit for servers that
+return large documents or images.
+
 ### HTTPCaller
 
 MCP HTTP/SSE callers and Ollama preserve a custom `http.DefaultTransport` when
 constructing their default clients. Phase timeout tuning applies only when the
 default is a standard `*http.Transport`; a custom transport owns its timeouts.
 Explicitly supplied HTTP clients are used unchanged.
+
+`HTTPOptions.ElicitationHandler` and `StdioOptions.ElicitationHandler` let an
+application handle requests for user input without constructing an SDK session
+itself. HTTP and SSE share `HTTPOptions`. A nil handler leaves elicitation
+unsupported. The SDK advertises the capability when a handler is supplied and
+handles successive input-required rounds, including legacy server callbacks.
+The handler must collect the user's response and return an SDK `ElicitResult`
+with `accept`, `decline`, or `cancel`; it must not silently approve requests.
+
+```go
+caller, err := mcp.NewHTTPCaller(ctx, mcp.HTTPOptions{
+    Endpoint: "https://mcp-server.example.com/mcp",
+    ElicitationHandler: func(ctx context.Context, req *sdkmcp.ElicitRequest) (*sdkmcp.ElicitResult, error) {
+        return ui.RequestInput(ctx, req.Params)
+    },
+})
+```
+
+Here `sdkmcp` imports `github.com/modelcontextprotocol/go-sdk/mcp`, and
+`ui.RequestInput` is application-owned UI code. Honor the request context and
+support decline and cancel. Stateless HTTP callers remain usable after a
+request-level HTTP failure; a failed call is returned to the application and is
+not automatically retried by the Loom caller.
 
 Connects to an MCP server that exposes the streamable HTTP transport:
 

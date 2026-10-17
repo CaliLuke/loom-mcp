@@ -257,52 +257,68 @@ func TestGeneratedSDKServerRejectsFutureInputResponseOverStreamableHTTP(t *testi
 	require.ErrorContains(t, err, "does not match pending request count")
 }
 
-func TestGeneratedSDKServerLegacyClientCompletesSingleStepElicitation(t *testing.T) {
-	generatedServer, sdkHTTPServer := newGeneratedSDKServer(t)
-	defer sdkHTTPServer.Close()
-
-	client := sdkmcp.NewClient(&sdkmcp.Implementation{
-		Name:    "fixture-legacy-elicitation-client",
-		Version: "1.0.0",
-	}, &sdkmcp.ClientOptions{
-		ElicitationHandler: func(context.Context, *sdkmcp.ElicitRequest) (*sdkmcp.ElicitResult, error) {
-			return &sdkmcp.ElicitResult{
-				Action:  "accept",
-				Content: map[string]any{"summary": "Legacy single-step response."},
-			}, nil
+func TestGeneratedSDKServerLegacyClientCompletesElicitation(t *testing.T) {
+	tests := []struct {
+		name        string
+		text        string
+		wantSummary string
+	}{
+		{
+			name:        "single step",
+			text:        "needs-elicitation",
+			wantSummary: "Protocol migration complete",
 		},
-	})
-	client.AddSendingMiddleware(func(next sdkmcp.MethodHandler) sdkmcp.MethodHandler {
-		return func(ctx context.Context, method string, req sdkmcp.Request) (sdkmcp.Result, error) {
-			if method == "server/discover" {
-				return nil, &sdkjsonrpc.Error{
-					Code:    sdkjsonrpc.CodeMethodNotFound,
-					Message: "legacy client does not support server/discover",
+		{
+			name:        "multiple steps",
+			text:        "needs-multi-elicitation",
+			wantSummary: "Protocol migration complete for SDK maintainers.",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			generatedServer, sdkHTTPServer := newGeneratedSDKServer(t)
+			defer sdkHTTPServer.Close()
+
+			client := sdkmcp.NewClient(&sdkmcp.Implementation{
+				Name:    "fixture-legacy-elicitation-client",
+				Version: "1.0.0",
+			}, &sdkmcp.ClientOptions{
+				ElicitationHandler: multiStepElicitationHandler(t),
+				MultiRoundTrip:     &sdkmcp.MultiRoundTripOptions{Disabled: true},
+			})
+			client.AddSendingMiddleware(func(next sdkmcp.MethodHandler) sdkmcp.MethodHandler {
+				return func(ctx context.Context, method string, req sdkmcp.Request) (sdkmcp.Result, error) {
+					if method == "server/discover" {
+						return nil, &sdkjsonrpc.Error{
+							Code:    sdkjsonrpc.CodeMethodNotFound,
+							Message: "legacy client does not support server/discover",
+						}
+					}
+					return next(ctx, method, req)
 				}
-			}
-			return next(ctx, method, req)
-		}
-	})
+			})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	clientTransport, serverTransport := sdkmcp.NewInMemoryTransports()
-	serverSession, err := generatedServer.Server.Connect(ctx, serverTransport, nil)
-	require.NoError(t, err)
-	defer func() { require.NoError(t, serverSession.Close()) }()
-	session, err := client.Connect(ctx, clientTransport, nil)
-	require.NoError(t, err)
-	defer func() { require.NoError(t, session.Close()) }()
-	require.Equal(t, "2025-11-25", session.InitializeResult().ProtocolVersion)
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			clientTransport, serverTransport := sdkmcp.NewInMemoryTransports()
+			serverSession, err := generatedServer.Server.Connect(ctx, serverTransport, nil)
+			require.NoError(t, err)
+			defer func() { require.NoError(t, serverSession.Close()) }()
+			session, err := client.Connect(ctx, clientTransport, nil)
+			require.NoError(t, err)
+			defer func() { require.NoError(t, session.Close()) }()
+			require.Equal(t, "2025-11-25", session.InitializeResult().ProtocolVersion)
 
-	result, err := session.CallTool(ctx, &sdkmcp.CallToolParams{
-		Name: "summarize_text",
-		Arguments: map[string]any{
-			"text": "needs-elicitation",
-		},
-	})
-	require.NoError(t, err)
-	assert.Equal(t, map[string]any{"summary": "Legacy single-step response."}, result.StructuredContent)
+			result, err := session.CallTool(ctx, &sdkmcp.CallToolParams{
+				Name: "summarize_text",
+				Arguments: map[string]any{
+					"text": test.text,
+				},
+			})
+			require.NoError(t, err)
+			assert.Equal(t, map[string]any{"summary": test.wantSummary}, result.StructuredContent)
+		})
+	}
 }
 
 func connectInMemoryElicitationClient(

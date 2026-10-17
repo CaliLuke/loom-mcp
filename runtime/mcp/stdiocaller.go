@@ -19,6 +19,12 @@ type StdioOptions struct {
 	ClientName    string
 	ClientVersion string
 	InitTimeout   time.Duration
+	// MaxLineLength limits inbound JSON-RPC frames in bytes. Zero uses the SDK
+	// default (16 MiB); a negative value disables the limit.
+	MaxLineLength int
+	// ElicitationHandler handles server requests for user input. Nil leaves
+	// elicitation unsupported. The handler owns user interaction and consent.
+	ElicitationHandler func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error)
 }
 
 // NewStdioCaller launches the target command using CommandTransport,
@@ -32,7 +38,7 @@ func NewStdioCaller(ctx context.Context, opts StdioOptions) (*SessionCaller, err
 	client := mcp.NewClient(&mcp.Implementation{
 		Name:    mcpClientName(opts.ClientName),
 		Version: mcpClientVersion(opts.ClientVersion),
-	}, nil)
+	}, &mcp.ClientOptions{ElicitationHandler: opts.ElicitationHandler})
 
 	return connectSession(ctx, opts.InitTimeout, func(sessionCtx context.Context) (*mcp.ClientSession, error) {
 		// #nosec G204 -- stdio callers are explicitly configured to launch the target MCP server command.
@@ -45,7 +51,8 @@ func NewStdioCaller(ctx context.Context, opts StdioOptions) (*SessionCaller, err
 		}
 
 		transport := &mcp.CommandTransport{
-			Command: cmd,
+			Command:       cmd,
+			MaxLineLength: opts.MaxLineLength,
 		}
 
 		session, err := client.Connect(sessionCtx, transport, nil)

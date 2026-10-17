@@ -485,10 +485,10 @@ but those responses remain client assertions and must never be used as
 authorization evidence or server-owned state.
 
 Each `mcpruntime.Elicit` call yields one input request, so N sequential
-elicitations require N protocol round trips. Multi-step elicitation requires an
-MCP `2026-07-28` client: the official SDK's legacy compatibility middleware
-re-enters a handler only once, so older clients support a single elicitation
-step only. Under the official Go SDK, `2026-07-28` streamable HTTP runs
+elicitations require N protocol round trips. The pinned SDK's legacy
+compatibility middleware also supports sequential elicitation for
+`2025-11-25` clients by re-entering the handler until it completes.
+Under the official Go SDK, `2026-07-28` streamable HTTP runs
 stateless: each retry is a separate POST and does not carry
 `Mcp-Session-Id`. Stateful streamable HTTP negotiates the legacy protocol
 instead.
