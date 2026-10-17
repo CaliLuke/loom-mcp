@@ -16,7 +16,7 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/leanovate/gopter v0.2.11
-	github.com/modelcontextprotocol/go-sdk v1.8.1-0.20260922085944-8075fb3cf313
+	github.com/modelcontextprotocol/go-sdk v1.8.1-0.20261016161459-3e9d812b1814
 	github.com/nexus-rpc/sdk-go v0.7.0
 	github.com/openai/openai-go/v3 v3.74.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3

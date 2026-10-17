@@ -654,9 +654,10 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   `SDKServerOptions.RequestStateKey` shared by endpoint replicas. Treat the
   protected responses as client assertions and never as authorization evidence
   or server-owned state.
-  Each `runtime/mcp.Elicit` call requires one round trip; multi-step flows
-  require a `2026-07-28` client because the official legacy middleware re-enters
-  only once. Official `2026-07-28` streamable HTTP is stateless and sessionless;
+  Each `runtime/mcp.Elicit` call requires one round trip. The pinned SDK's
+  legacy middleware also supports sequential elicitation for `2025-11-25`
+  clients by re-entering until completion. Official `2026-07-28` streamable HTTP
+  is stateless and sessionless;
   each retry is a separate POST. Reject wrong input-response types, invalid
   elicitation actions, responses outside the exact pending input-request set,
   changed elicitation contracts on re-entry, and bounded-state violations.
@@ -667,6 +668,13 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   Loom runtime client-feature adapters. Keep official-SDK conversion and
   request-state handling in `runtime/mcp/sdkclient`, not duplicated in generated
   files.
+- Runtime HTTP/SSE and stdio callers expose optional `ElicitationHandler`
+  callbacks in `HTTPOptions` and `StdioOptions`. Nil leaves elicitation
+  unsupported; application callbacks own user interaction and consent. The SDK
+  owns capability advertisement and sequential retries. `StdioOptions.MaxLineLength`
+  forwards the SDK's inbound frame limit: zero uses 16 MiB, negative disables
+  the cap. A framing failure closes the transport. Stateless HTTP request
+  failures do not poison later calls, and Loom does not retry failed calls.
 - Generated SDK servers and adapters provide typed service descriptors and
   closures to `runtime/mcp/sdkbridge`. The bridge owns common registration,
   tool interceptor composition, prompt and resource dispatch, resource policy,

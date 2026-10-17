@@ -40,7 +40,7 @@ the same endpoint must share that key. There is no v1 compatibility shim.
 This repo currently targets:
 
 - `github.com/CaliLuke/loom v1.10.0-alpha.10`
-- `github.com/modelcontextprotocol/go-sdk v1.8.1-0.20260922085944-8075fb3cf313`
+- `github.com/modelcontextprotocol/go-sdk v1.8.1-0.20261016161459-3e9d812b1814`
 - Go `1.27.2` or later
 
 The dependency baseline uses current stable releases, including MongoDB `9.0.2`,
@@ -50,7 +50,7 @@ version verification and the explicit unreleased pins.
 
 The workspace-level `go.work` file centralizes local multi-module overrides for dependencies that must stay in sync across the root module and integration fixtures.
 Use `make update-mcp-go-sdk MCP_GO_SDK_VERSION=vX.Y.Z` when bumping the MCP Go SDK.
-The current pseudo-version pins upstream commit `8075fb3cf313` while the merged
+The current pseudo-version pins upstream commit `3e9d812b1814` while the merged
 request-summary API awaits a tagged SDK release.
 
 The standard CLI for generation is:

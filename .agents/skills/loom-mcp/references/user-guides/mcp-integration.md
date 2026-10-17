@@ -49,6 +49,17 @@ Validation failures return `invalid_params` with a recovery example.
 For an external MCP server, use the `runtime/mcp` caller for its transport.
 All runtime callers use the official MCP Go SDK.
 
+Set `HTTPOptions.ElicitationHandler` (streamable HTTP and SSE) or
+`StdioOptions.ElicitationHandler` to connect server input requests to the
+application's user interaction. The handler uses the official SDK's
+`ElicitRequest` and `ElicitResult`; nil leaves elicitation unsupported. The SDK
+handles sequential rounds, including legacy elicitation callbacks. Keep user
+consent, decline/cancel handling, and context cancellation in the application.
+
+`StdioOptions.MaxLineLength` controls inbound JSON-RPC frame size: zero selects
+the SDK's 16 MiB default, positive values set a byte limit, and negative values
+disable the cap. An oversized response fails the call and closes the transport.
+
 For an MCP adapter in the same Go process, use the generated local-provider
 registration. This path does not open a network connection or create MCP
 session state.

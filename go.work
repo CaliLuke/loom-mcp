@@ -7,4 +7,4 @@ use (
 	./integration_tests/fixtures/longrun
 )
 
-replace github.com/modelcontextprotocol/go-sdk => github.com/modelcontextprotocol/go-sdk v1.8.1-0.20260922085944-8075fb3cf313
+replace github.com/modelcontextprotocol/go-sdk => github.com/modelcontextprotocol/go-sdk v1.8.1-0.20261016161459-3e9d812b1814

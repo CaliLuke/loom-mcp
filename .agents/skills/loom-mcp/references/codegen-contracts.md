@@ -187,8 +187,9 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   `RequestStateKey` into the adapter. Endpoint replicas must share that key.
   Protected responses remain client assertions and must not drive
   authorization.
-  One runtime elicitation call produces one input request, and multi-step flows
-  require a `2026-07-28` client. Official modern streamable HTTP is stateless
+  One runtime elicitation call produces one input request. The pinned SDK's
+  compatibility middleware also supports sequential elicitation for legacy
+  `2025-11-25` clients. Official modern streamable HTTP is stateless
   and sessionless, with one POST per retry. Preserve input-required errors
   through adapter safe-error mapping, and reject wrong response types, invalid
   actions, response IDs outside the pending round, changed input contracts on

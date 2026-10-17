@@ -33,9 +33,14 @@ renderer metadata representation.
 Explicit exceptions:
 
 - Loom uses the published alpha.10 release for this upgrade.
-- The MCP Go SDK remains at `v1.8.1-0.20260922085944-8075fb3cf313`.
-  Its merged request-summary fix is newer than stable v1.8.0 and is required by
-  the SDK bridge. Keep the root, fixtures, quickstart and workspace override aligned.
+- The MCP Go SDK pins `v1.8.1-0.20261016161459-3e9d812b1814`, verified on
+  2026-10-17 against upstream commit `3e9d812b1814`. Stable v1.8.0 still predates
+  the request-summary API required by the SDK bridge. This pin includes the
+  subsequent upstream fixes. Keep the root, fixtures, quickstart and workspace
+  override aligned with `make update-mcp-go-sdk`.
+  The runtime callers expose elicitation callbacks and stdio frame limits;
+  generated servers support sequential elicitation with legacy clients. Requests
+  before initialization now report JSON-RPC Invalid Request (`-32600`).
 - Loom requires `github.com/CaliLuke/go-sse` at immutable commit `b29b33ae1a1e`.
   Preserve the version selected by the published Loom module.
 - Some indirect modules, including Google's generated API definitions and
