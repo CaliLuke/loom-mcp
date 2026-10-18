@@ -115,3 +115,17 @@ Within each section, place main logic first and helpers last.
 - For any new MCP protocol feature or spec catch-up work, use `.agents/skills/new-mcp-feature-development/SKILL.md` as the default workflow. MCP feature work must start with a real client-vs-framework validation test and proceed red-green until fully green.
 - Use `.agents/skills/loom-mcp-release/SKILL.md` when cutting, tagging, pushing, or verifying a `loom-mcp` release from finished code.
 - Use `.agents/skills/mcp-tool-design/SKILL.md` when shaping MCP-facing tool contracts.
+
+<!-- graphicle:start (added by graphicle setup; graphicle disconnect removes it) -->
+## Graphicle
+
+This repository is indexed by Graphicle: a code graph and memory of its code, documents, reviewed decisions and past agent sessions, with citations. Use its MCP tools (the `graphicle` server) before searching files by hand:
+
+- `recall_project` with the question, for how something works, where it is defined, what calls what, or why it was built this way. Answer from the excerpts it returns and cite their sources.
+- `query_graph` with the question to walk the code graph around it; `get_node`, `get_neighbors` and `shortest_path` for one symbol, its callers and callees, and how two symbols connect.
+- `read_project_source` to read a cited source past its excerpt, and `repository_files` to list paths.
+- `session_timeline` for what earlier agent sessions in this repository did.
+- `propose_memory`, when the server offers it, to keep a decision or procedure, quoting its sources word for word; a person reviews it before it is used.
+
+Without the tools, run `graphicle context "<question>"` in a terminal.
+<!-- graphicle:end -->

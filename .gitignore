@@ -8,3 +8,9 @@ quickstart/orchestrator
 /gen/
 integration_tests/.tmp/
 .DS_Store
+
+# Machine-local agent integrations and scratch artifacts
+/.claude/settings.local.json
+/.mcp.json
+/.vscode/mcp.json
+/.tmp/
