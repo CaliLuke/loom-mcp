@@ -317,6 +317,45 @@ For live variants, declare `agenttest.LiveModel("model-id")` and set
 A disabled live variant produces a stored stopped experiment and an opt-in hint.
 The examples use no confirmation flows.
 
+## Frozen candidate content
+
+`eval/candidate` stores the content that an application can later bind to an attempt.
+The package accepts byte submissions. It does not read a source directory or install runtime behavior.
+Existing eval factories, stores and quality requirements retain their behavior.
+
+A host declares a `candidate.Surface` and an authorized baseline with `candidate.Open`.
+Each slot declares accepted media types, positive byte/count limits, permitted operations and a versioned host binding.
+`Store.Discover` returns this declaration, the baseline digest and its component dependency edges.
+An absent slot is unsupported. Slot names describe application capabilities, without a fixed component taxonomy.
+
+The content workflow uses these public methods:
+
+1. Call `Create(ctx)` to start from the registered baseline, or `Fork(ctx, digest)` to start from a stored frozen candidate.
+2. Call `Edit(ctx, id, revision, edits)` with an explicit batch of `Put` and `Delete` operations.
+3. Call `Validate(ctx, id, revision)` to apply core and host validators.
+4. Call `Freeze(ctx, id, revision)` to retain immutable content.
+5. Call `Load(ctx, digest)` to reopen that content after a process restart.
+
+Each edit uses the expected revision. A stale edit returns `ErrRevision` without a mutation.
+A batch can add a skill and its helper together. Missing dependencies reject the complete batch.
+Deleting a referenced helper also fails. Core uses explicit dependency names and never infers references from prose.
+Host validators receive owned copies and validate semantic dependencies, activation and renderer syntax.
+Ordinary template braces remain valid unless the host renderer rejects them.
+
+A frozen candidate binds the surface, baseline, sorted component hashes, dependency edges and host binding versions through SHA-256.
+`Frozen.Manifest`, `Components` and `Read` return owned values. `Closure` returns sorted transitive dependencies for an explicit selection.
+Frozen drafts reject edits with `ErrFrozen`. Further changes require a new draft.
+Component names must be normalized relative paths. Store files must be regular files, without symlinks.
+
+The host owns one `Store` writer per directory. Its methods serialize concurrent goroutines.
+Cross-process writer coordination and directory authorization remain host responsibilities.
+A reopen requires the same surface and baseline, plus explicit registration of host validators.
+A changed validator or installer contract requires a new host binding version.
+The store retains bytes independently of later source-directory changes and rejects corrupt or missing stored snapshots.
+
+The [candidate tests](../eval/candidate/store_test.go) provide executable examples of atomic edits, freeze, fork and durable reopen.
+See [Candidate surfaces](runtime.md#candidate-surfaces) for activation modes and host capability boundaries.
+
 ## Limits
 
 - Inline and agent-as-tool tools cannot be stubbed. Test child agents through

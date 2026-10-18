@@ -785,6 +785,18 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   run and direct callers to capture that agent. Partial eval results retain unique
   check and score names even when Assert fails.
 
+## Candidate Content
+
+- Use `eval/candidate` for declared edit surfaces and immutable byte candidates.
+  Keep it a leaf package. Runtime installation belongs to the execution host.
+- Declare activation, supported operations, finite limits and binding versions.
+  Absent slots are unsupported. Host validators own activation and semantic rules.
+- Start drafts from the authorized baseline or a stored frozen candidate.
+  Apply atomic edits with expected revisions. Freeze before use by execution code.
+- Preserve owned bytes and canonical manifest identities across persistence.
+  Use one host-owned Store writer per directory. See
+  `references/runtime-contracts.md` and `docs/agent_testing.md` for the contract.
+
 ## Eval Scenarios
 
 - Use top-level `eval` for immutable Go/JSONL datasets, scenario validation and

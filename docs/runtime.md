@@ -1967,6 +1967,50 @@ failures leave Run's error nil. Invalid config returns no report.
 on errors. Reports retain all exports in memory. The experiment store persists those
 exports. CLI output and judging belong to later layers.
 
+### Candidate surfaces
+
+`eval/candidate` is an optional content package. It has no runtime execution dependency.
+`Open(ctx, directory, surface, baseline, validators...)` registers an authorized byte baseline in a durable, surface-scoped store.
+`Discover` returns owned surface metadata and baseline component identities, including their explicit dependencies.
+
+A `Surface` declares its identity, version, total byte limit and named `Slot` values.
+Each slot declares accepted media types, positive component limits, permitted `Put`/`Delete` operations and a binding ID/version.
+Capabilities describe host boundaries. They do not grant permissions or enable tools.
+Only slots that the host declares support edits.
+
+| Activation | Intended host behavior | Example content |
+| --- | --- | --- |
+| `AlwaysOn` (`always_on`) | Include content in standing context | System instructions, guardrails, a fixed memory snapshot, tool guidance |
+| `OnDemand` (`on_demand`) | Discover content and load or execute it through an approved binding | Skills and deterministic helper source |
+| `ChildContext` (`child_context`) | Apply content to an approved child context | Child instructions |
+| `Inline` (`inline`) | Install approved behavior within the execution loop | Interceptor source |
+
+These values describe activation. The candidate package does not install or execute the content.
+The host supplies semantic and activation validators. A helper binding must consume the submitted bytes before execution.
+An observer callback does not establish an inline interceptor binding.
+Unsupported helper, interceptor or child bindings remain absent from the surface.
+Guardrail edits change instructions within fixed host permissions.
+
+`Create` copies the advertised baseline. `Fork` copies a frozen candidate in the same scope.
+`Edit` applies one validated batch at an expected revision. It rejects unknown slots, unsupported operations, invalid media and exceeded limits.
+It also rejects duplicate component names, non-normalized paths, path collisions and missing explicit dependencies.
+Validation failure leaves the previous revision intact.
+`Validate` and `Freeze` apply the same core and host validators. Validators receive owned snapshots and must not reenter the store.
+
+`Freeze` hashes canonical version-1 JSON metadata with SHA-256.
+The manifest binds the surface digest, baseline digest, sorted component hashes and dependencies, and sorted host binding identities.
+The baseline seed has no parent baseline digest. Every draft-derived frozen candidate records the advertised baseline digest.
+Identity text must contain valid UTF-8. Component payloads can contain arbitrary bytes within the declared media and size limits.
+Labels and mutable filesystem references cannot replace component bytes.
+
+Frozen content is immutable. Accessors return owned copies, and `Load` validates stored bytes against their manifest digest.
+Input consists of bytes only. The store rejects symlinks and non-regular persisted files.
+The host owns authorization and one writer per directory. Store methods serialize goroutines, without cross-process writer coordination.
+A reopen requires the same registered surface and baseline. Host validators must be registered again.
+Existing eval configuration, experiment formats, runtime registration and workflow protocols retain their behavior.
+
+See [Frozen candidate content](agent_testing.md#frozen-candidate-content) for the edit workflow and executable examples.
+
 ### Eval experiment store
 
 `eval.Open(dir)` creates a local store. `eval.DefaultStoreDir(start)` finds

@@ -297,6 +297,32 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   ErrLiveModelDisabled, invalid values error, and neither makes a model call.
   Live:false leaves scripted/undeclared clients available without an env check.
 
+## Candidate Content
+
+- `eval/candidate` is a leaf package with no runtime execution dependency.
+  `Open` registers a versioned surface and an authorized byte baseline.
+  `Discover` returns slots, activation, permissions, media/size/count limits,
+  capability boundaries, binding versions and baseline dependency edges.
+- Activation is `AlwaysOn`, `OnDemand`, `ChildContext` or `Inline`.
+  These values describe host behavior. The package does not install components.
+  Unsupported categories remain absent. Host permissions remain fixed.
+- `Create` starts from the baseline. `Fork` starts from a stored frozen candidate.
+  `Edit` accepts an atomic put/delete batch at an expected revision.
+  Unknown slots, stale revisions, invalid paths/media/limits and missing explicit
+  dependencies fail without a mutation. Core does not infer prose references.
+- `Validate` and `Freeze` apply core and host validators to owned snapshots.
+  Host validators own semantic dependencies, activation and renderer syntax.
+  Template braces have no global prohibition. Validators must not reenter Store.
+- `Frozen` retains bytes and canonical version-1 SHA-256 manifest identity.
+  Identity binds the complete surface, advertised baseline, sorted component
+  digests/dependency edges and binding versions. Identity text requires valid UTF-8.
+  Payloads remain arbitrary bytes. All accessors return owned copies.
+- Inputs are bytes only. Store files reject symlinks and non-regular entries.
+  Reopen requires the same surface/baseline and explicit host validator registration.
+  Changed validators or installer contracts require a new binding version.
+  The host owns one writer per directory and cross-process writer coordination.
+  Store methods serialize concurrent goroutines. Existing eval behavior is unchanged.
+
 ## Eval Experiment Store
 
 - eval.Open creates a store with its own .gitignore. DefaultStoreDir finds
