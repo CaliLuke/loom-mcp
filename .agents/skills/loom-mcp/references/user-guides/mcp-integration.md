@@ -49,6 +49,17 @@ Validation failures return `invalid_params` with a recovery example.
 For an external MCP server, use the `runtime/mcp` caller for its transport.
 All runtime callers use the official MCP Go SDK.
 
+HTTP and SSE requests identify the library as `loom-mcp/<module version>`;
+local or unavailable build metadata uses `loom-mcp/dev`. Set
+`HTTPOptions.UserAgent` to override HTTP identity. Empty selects the default;
+invalid header-value bytes fail before I/O. MCP `ClientName` and `ClientVersion`
+remain the application's protocol identity. A supplied client keeps its
+transport, timeout, cookie jar and redirect policy; the caller clones the client
+value and request headers. Existing User-Agent headers, including explicit
+empty suppression, are preserved. A host transport can override or suppress the
+header and owns its connections. See `docs/runtime.md` for version selection
+and lifecycle details.
+
 Set `HTTPOptions.ElicitationHandler` (streamable HTTP and SSE) or
 `StdioOptions.ElicitationHandler` to connect server input requests to the
 application's user interaction. The handler uses the official SDK's

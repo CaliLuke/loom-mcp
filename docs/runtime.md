@@ -5690,7 +5690,9 @@ return large documents or images.
 MCP HTTP/SSE callers and Ollama preserve a custom `http.DefaultTransport` when
 constructing their default clients. Phase timeout tuning applies only when the
 default is a standard `*http.Transport`; a custom transport owns its timeouts.
-Explicitly supplied HTTP clients are used unchanged.
+MCP callers clone the supplied `http.Client` value and preserve its timeout,
+cookie jar, redirect policy and underlying transport. Requests and headers are
+cloned before adding HTTP identity; the host client and transport are not mutated.
 
 `HTTPOptions.ElicitationHandler` and `StdioOptions.ElicitationHandler` let an
 application handle requests for user input without constructing an SDK session
@@ -5727,6 +5729,26 @@ if err != nil {
 }
 defer caller.Close()
 ```
+
+#### HTTP user agent
+
+Streamable HTTP and SSE send `User-Agent: loom-mcp/<version>` on initialization
+and later requests. The version comes from the `github.com/CaliLuke/loom-mcp/v2`
+module's Go build metadata. Local replacements, development builds and missing
+metadata use `loom-mcp/dev`; application versions, VCS data and local paths are
+not included. A versioned module replacement uses its replacement version.
+
+Set `HTTPOptions.UserAgent` to a nonempty value to choose a different HTTP
+identity. Empty selects the library default. Invalid HTTP header-value bytes
+cause the constructor to fail before network I/O. This option is independent of
+`ClientName` and `ClientVersion`, which still identify the application in MCP.
+
+An existing request User-Agent is preserved, including an explicitly empty
+header. A custom transport on `HTTPOptions.Client` has final authority to
+replace the header or suppress it with `req.Header.Set("User-Agent", "")`.
+Timeouts, redirects, authentication and transport behavior remain host-owned.
+The wrapper forwards `CloseIdleConnections` when supported, but closing an MCP
+session does not close the host client's idle connections.
 
 ### SSECaller
 

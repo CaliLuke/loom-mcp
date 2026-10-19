@@ -675,6 +675,14 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   Loom runtime client-feature adapters. Keep official-SDK conversion and
   request-state handling in `runtime/mcp/sdkclient`, not duplicated in generated
   files.
+- Runtime HTTP/SSE callers send `loom-mcp/<library module version>` as their
+  HTTP User-Agent; local/unavailable build versions use `loom-mcp/dev`.
+  `HTTPOptions.UserAgent` overrides this identity independently from MCP
+  `ClientName`/`ClientVersion`; invalid header values fail before I/O. Preserve
+  existing headers and explicit empty suppression. Host transports retain final
+  override authority. Clone the client value and request headers, preserve host
+  timeout/jar/redirect/transport policy, and forward `CloseIdleConnections`
+  without automatically closing host-owned connections. Do not add retries.
 - Runtime HTTP/SSE and stdio callers expose optional `ElicitationHandler`
   callbacks in `HTTPOptions` and `StdioOptions`. Nil leaves elicitation
   unsupported; application callbacks own user interaction and consent. The SDK
