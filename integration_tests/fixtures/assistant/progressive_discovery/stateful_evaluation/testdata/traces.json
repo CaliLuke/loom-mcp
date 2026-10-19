@@ -1,0 +1,324 @@
+{
+  "version": 1,
+  "traces": [
+    {
+      "id": "exact-repeat",
+      "steps": [
+        {
+          "op": "discover",
+          "query": "summarize_text"
+        },
+        {
+          "op": "call",
+          "name": "summarize_text",
+          "args": {
+            "text": "Alpha beta"
+          }
+        },
+        {
+          "op": "call",
+          "name": "summarize_text",
+          "args": {
+            "text": "Alpha beta"
+          }
+        },
+        {
+          "op": "call",
+          "name": "summarize_text",
+          "args": {
+            "text": "Alpha beta"
+          }
+        },
+        {
+          "op": "call",
+          "name": "summarize_text",
+          "args": {
+            "text": "Alpha beta"
+          }
+        },
+        {
+          "op": "call",
+          "name": "summarize_text",
+          "args": {
+            "text": "Alpha beta"
+          }
+        }
+      ]
+    },
+    {
+      "id": "semantic",
+      "steps": [
+        {
+          "op": "discover",
+          "query": "tone emotion polarity"
+        },
+        {
+          "op": "selected_call",
+          "name": "analyze_sentiment",
+          "args": {
+            "text": "A useful result"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ambiguous",
+      "steps": [
+        {
+          "op": "discover",
+          "query": "lookup"
+        },
+        {
+          "op": "route_call",
+          "routes": [
+            "search",
+            "search_records",
+            "projected_lookup_tool"
+          ],
+          "args": {
+            "query": "loom"
+          }
+        }
+      ]
+    },
+    {
+      "id": "rediscovery",
+      "steps": [
+        {
+          "op": "discover",
+          "query": "summarize_text"
+        },
+        {
+          "op": "discover",
+          "query": "summarize_text"
+        },
+        {
+          "op": "call",
+          "name": "summarize_text",
+          "args": {
+            "text": "Alpha beta"
+          }
+        }
+      ]
+    },
+    {
+      "id": "hidden",
+      "steps": [
+        {
+          "op": "call",
+          "name": "summarize_text",
+          "args": {
+            "text": "Alpha beta"
+          }
+        }
+      ]
+    },
+    {
+      "id": "denied",
+      "steps": [
+        {
+          "op": "deny",
+          "value": true
+        },
+        {
+          "op": "discover",
+          "query": "summarize_text"
+        },
+        {
+          "op": "call",
+          "name": "summarize_text",
+          "args": {
+            "text": "Alpha beta"
+          }
+        }
+      ]
+    },
+    {
+      "id": "revocation",
+      "steps": [
+        {
+          "op": "discover",
+          "query": "summarize_text"
+        },
+        {
+          "op": "deny",
+          "value": true
+        },
+        {
+          "op": "call",
+          "name": "summarize_text",
+          "args": {
+            "text": "Alpha beta"
+          }
+        }
+      ]
+    },
+    {
+      "id": "stale-generation",
+      "steps": [
+        {
+          "op": "inject_stale"
+        },
+        {
+          "op": "generation",
+          "value": "catalog-v2"
+        },
+        {
+          "op": "call",
+          "name": "summarize_text",
+          "args": {
+            "text": "Alpha beta"
+          }
+        },
+        {
+          "op": "discover",
+          "query": "summarize_text"
+        },
+        {
+          "op": "call",
+          "name": "summarize_text",
+          "args": {}
+        },
+        {
+          "op": "call",
+          "name": "summarize_text",
+          "args": {
+            "text": "Alpha beta"
+          }
+        }
+      ]
+    },
+    {
+      "id": "isolation",
+      "steps": [
+        {
+          "op": "discover",
+          "query": "summarize_text"
+        },
+        {
+          "op": "call",
+          "name": "summarize_text",
+          "args": {
+            "text": "Alpha beta"
+          },
+          "agent": "a",
+          "session": "two"
+        },
+        {
+          "op": "call",
+          "name": "summarize_text",
+          "args": {
+            "text": "Alpha beta"
+          },
+          "agent": "b",
+          "session": "one"
+        },
+        {
+          "op": "call",
+          "name": "summarize_text",
+          "args": {
+            "text": "Alpha beta"
+          }
+        }
+      ]
+    },
+    {
+      "id": "count-bound",
+      "steps": [
+        {
+          "op": "discover",
+          "query": "summarize_text"
+        },
+        {
+          "op": "discover",
+          "query": "analyze_sentiment"
+        },
+        {
+          "op": "discover",
+          "query": "extract_keywords"
+        },
+        {
+          "op": "discover",
+          "query": "search_records"
+        },
+        {
+          "op": "discover",
+          "query": "projected_lookup_tool"
+        },
+        {
+          "op": "discover",
+          "query": "projected_bounded_lookup_tool"
+        },
+        {
+          "op": "discover",
+          "query": "summarize_text"
+        }
+      ]
+    },
+    {
+      "id": "byte-bound",
+      "steps": [
+        {
+          "op": "discover",
+          "query": "analyze_sentiment"
+        },
+        {
+          "op": "discover",
+          "query": "dispatch_action"
+        },
+        {
+          "op": "discover",
+          "query": "dispatch_command"
+        },
+        {
+          "op": "discover",
+          "query": "execute_code"
+        },
+        {
+          "op": "discover",
+          "query": "extract_keywords"
+        },
+        {
+          "op": "discover",
+          "query": "generate_dpi_spec"
+        },
+        {
+          "op": "discover",
+          "query": "multi_content"
+        },
+        {
+          "op": "discover",
+          "query": "process_batch"
+        },
+        {
+          "op": "discover",
+          "query": "projected_bounded_lookup_tool"
+        },
+        {
+          "op": "discover",
+          "query": "projected_lookup_tool"
+        },
+        {
+          "op": "discover",
+          "query": "projected_status_tool"
+        },
+        {
+          "op": "discover",
+          "query": "report_progress"
+        },
+        {
+          "op": "discover",
+          "query": "search"
+        },
+        {
+          "op": "discover",
+          "query": "search_records"
+        },
+        {
+          "op": "discover",
+          "query": "summarize_text"
+        }
+      ]
+    }
+  ]
+}
