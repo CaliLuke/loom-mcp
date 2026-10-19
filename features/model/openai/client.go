@@ -179,6 +179,9 @@ func (c *Client) resolveModelID(req *model.Request) string {
 }
 
 func encodeInput(messages []*model.Message, codec *openAIToolCodec) (responses.ResponseInputParam, error) {
+	if err := validateDocumentInputs(messages); err != nil {
+		return nil, err
+	}
 	items := make(responses.ResponseInputParam, 0, len(messages))
 	for _, msg := range messages {
 		if msg == nil {
@@ -237,6 +240,9 @@ func (b *messageContentBuilder) add(role model.ConversationRole, part model.Part
 			return err
 		}
 		b.content = append(b.content, image)
+	case model.DocumentPart:
+		b.flushText()
+		b.content = append(b.content, encodeDocumentContent(p))
 	case model.ToolUsePart, model.ToolResultPart:
 		// Encoded separately as response items, not message content.
 		return nil
@@ -338,7 +344,7 @@ func encodeMessageParts(msg *model.Message, codec *openAIToolCodec) ([]responses
 				return nil, err
 			}
 			items = append(items, responses.ResponseInputItemUnionParam{OfFunctionCallOutput: output})
-		case model.TextPart, model.CitationsPart, model.ImagePart:
+		case model.TextPart, model.CitationsPart, model.ImagePart, model.DocumentPart:
 			continue
 		case model.CacheCheckpointPart, model.ThinkingPart:
 			// Cache checkpoints are ignored because this adapter has no prompt

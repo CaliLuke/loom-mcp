@@ -4699,6 +4699,45 @@ If `model.Request.Thinking.Enable` is true, the OpenAI adapter requests an
 automatic reasoning summary. It returns each summary as a typed
 `model.ThinkingPart`.
 
+OpenAI Responses accepts inline PDF documents in user messages:
+
+```go
+message := &model.Message{
+    Role: model.ConversationRoleUser,
+    Parts: []model.Part{
+        model.TextPart{Text: "Summarize this document."},
+        model.DocumentPart{
+            Name:   "report.pdf",
+            Format: model.DocumentFormatPDF,
+            Bytes:  pdfBytes,
+        },
+    },
+}
+```
+
+The adapter sends each document as an `input_file` with a PDF base64 data URI.
+It preserves `Name` exactly as `filename`, including spaces and Unicode; it does
+not append an extension. Names must be nonempty valid UTF-8. The only accepted
+format is the case-sensitive `pdf`, with nonempty `Bytes`. `Text`, `Chunks`,
+`URI`, and `Context` must be empty, and `Cite` must be false. Other document
+forms and non-user placements fail before a provider call. The adapter does not
+parse PDF contents or fetch, upload, or store files.
+
+Choose a Responses model that supports PDF/vision input. OpenAI documents a
+per-file limit below 50 MB and a combined file limit of 50 MB. The adapter uses
+conservative decimal limits: each document must contain fewer than 50,000,000
+raw bytes, and all documents together must contain at most 50,000,000 bytes.
+The validated model client's existing 16 MiB budget for owned request data is
+stricter and includes document bytes, names, and other request fields. Base64
+encoding does not increase that canonical budget. See the official
+[OpenAI file-input guide](https://developers.openai.com/api/docs/guides/file-inputs).
+
+Request capture preserves the original PDF bytes and name. Context estimates
+count the name as text and use `ceil(bytes/2)` for PDF bytes; this is a framework
+heuristic, not exact provider token usage. Top-level PDF support does not add
+`ToolResultPartsInfo`: OpenAI tool-result attachments and multimodal recall
+expansion remain unsupported.
+
 Create a Codex subscription client when a desktop or local application supplies
 ChatGPT credentials. The credential source runs once for each logical request.
 It can refresh an expired token. Loom does not find or store credentials.

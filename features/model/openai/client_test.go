@@ -258,7 +258,7 @@ func TestClientCompleteRejectsUnsupportedDocumentPart(t *testing.T) {
 			},
 		}},
 	})
-	require.ErrorContains(t, err, "openai responses: unsupported message part model.DocumentPart")
+	require.ErrorContains(t, err, "openai responses: unsupported document format")
 	require.Empty(t, mock.captured.Model)
 }
 

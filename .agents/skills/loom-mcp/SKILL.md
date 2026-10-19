@@ -450,6 +450,13 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - Provider adapters implement raw `model.Provider`, not consumer-facing
   `model.Client`. Construct clients with `model.NewClient`; never pass a raw
   provider to a planner or runtime.
+- OpenAI Responses accepts only user-message `DocumentPart` with case-sensitive
+  `pdf` format and nonempty Bytes, without Text, Chunks, URI, Context, or Cite.
+  It preserves the nonempty UTF-8 Name as filename without normalization.
+  Each PDF must be below 50,000,000 raw bytes; combined PDFs may total at most
+  50,000,000 bytes. The validated client's existing 16 MiB request budget stays
+  stricter. Context estimates retain name text and ceil(bytes/2), not base64
+  wire size. This does not enable `ToolResultPartsInfo` or multimodal recall.
 - Drain `model.ValidatedStreamer` to the literal `io.EOF`, then call
   `Finalize(nil)`. Pass terminal receive or processing errors to `Finalize`.
   `Close` is cleanup-only. Do not expose finalized tool calls or completions

@@ -830,6 +830,16 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - OpenAI Responses projects tool and structured-output schemas into the
   provider strict-schema subset, rejects structured output combined with
   tools, and round-trips canonical tool names through its request-local codec.
+  User-message documents accept only case-sensitive `pdf` with nonempty Bytes;
+  Text, Chunks, URI, Context, and Cite are unsupported before provider I/O.
+  Nonempty UTF-8 names are preserved as filename without extension changes or
+  other normalization. Responses receives `input_file` with a PDF base64 data URI.
+  Each document is below 50,000,000 raw bytes; the request's documents total at
+  most 50,000,000 bytes. The existing validated 16 MiB owned-request budget
+  remains stricter. Capture keeps canonical bytes; context estimates count
+  name text and ceil(bytes/2), not the wire envelope. Callers select a PDF/vision
+  model. This support does not advertise `ToolResultPartsInfo`, enable nested
+  attachments, or enable multimodal recall expansion.
 - Canonical tool IDs may exceed provider name limits. Provider codecs must use
   deterministic byte-bounded names with a stable hash suffix, retain the
   request-scoped reverse mapping, and fail fast on collisions.

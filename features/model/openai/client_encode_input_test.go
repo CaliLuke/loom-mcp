@@ -82,7 +82,7 @@ func TestEncodeInput_PartSkipContract(t *testing.T) {
 					},
 				},
 			},
-			wantErr: "openai responses: unsupported message part model.DocumentPart",
+			wantErr: "openai responses: unsupported document format",
 		},
 	}
 	for _, tt := range tests {
