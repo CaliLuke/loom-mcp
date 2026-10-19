@@ -2094,7 +2094,11 @@ Retained deliverables and canonical capture survive environment removal.
 ### Eval experiment store
 
 `eval.Open(dir)` creates a local store. `eval.DefaultStoreDir(start)` finds
-`.loom-evals` beside the nearest ancestor `go.mod`. Each experiment has a UUIDv7
+`.loom-evals` beside the nearest ancestor `go.mod`. `store.Dir()` returns the
+absolute directory resolved by `Open`; it does not resolve symbolic links.
+Extension and control binders can derive adjacent host-owned state from this
+directory without parsing CLI flags or choosing a second store root.
+Each experiment has a UUIDv7
 directory, an `experiment.json` summary, and one append-only `attempts.jsonl` file.
 Legacy factories use schema version 1. Prepared evaluations and probes use version 2. The JSONL file starts with a format, version,
 and experiment ID header.

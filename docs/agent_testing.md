@@ -837,6 +837,11 @@ They cannot be supplied or widened through tool arguments.
 
 For a CLI, register the leaf `eval/controlcli` adapter through `evalcli.Config.Extensions`.
 Its binder receives the selected `*eval.Store` and must wire execution and evidence to that store.
+Use `store.Dir()` to derive adjacent host-owned candidate, inspection or admission
+directories, for example `store.Dir() + "-candidates"`. It returns the absolute
+directory resolved when the store opened, including the default, `Config.StoreDir`
+or a common `--out` before or after the command. Reopen the same selected store to
+derive the same adjacent locations; no additional root option or argv parsing is needed.
 The syntax is `experiment <operation> --request '<JSON object>'`.
 For example, a text edit uses:
 

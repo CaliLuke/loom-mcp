@@ -92,6 +92,12 @@ func DefaultStoreDir(start string) (string, error) {
 	}
 }
 
+// Dir returns the absolute directory selected when Open created the store.
+// Host binders can use it to locate adjacent state without selecting another root.
+func (s *Store) Dir() string {
+	return s.dir
+}
+
 // Begin stages both headers privately, then atomically publishes the experiment directory.
 func (s *Store) Begin(ctx context.Context, cfg Config, meta ExperimentMeta) (*Writer, error) {
 	keys, err := Plan(cfg)

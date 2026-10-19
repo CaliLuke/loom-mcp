@@ -1047,6 +1047,7 @@ Use direct UTF-8 `content` OR canonical `content_base64` for put, expected revis
 Bind `EvidenceProvider` per authorized durable job to a fresh finite `inspect.View` with fixed role/policy.
 Do not expose JobRecord/Submission, raw error causes, selector lineage or caller-selected scope/roots/credentials/live permission.
 `eval/controlcli` remains a leaf adapter over existing `evalcli.Extension`; its binder must honor the selected store.
+Use `store.Dir()` for the selected absolute eval directory and derive adjacent host-owned state from it; keep paths out of model requests.
 Cancellation intent is not stoppedness. Terminal job states are immutable; lost execution ownership becomes interrupted.
 See `references/{agent-testing,runtime-contracts}.md` and the control/recovery/agent-feature tests for contracts and executable wiring.
 

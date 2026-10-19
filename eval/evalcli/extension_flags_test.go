@@ -55,6 +55,7 @@ func TestExtensionOutPlacementAndArgumentOwnership(t *testing.T) {
 			var got []string
 			cfg := evalcli.Config{StoreDir: fallback, Extensions: []evalcli.Extension{{Name: "publish", Run: func(_ context.Context, request evalcli.ExtensionRequest) error {
 				got = request.Args
+				assert.Equal(t, selected, request.Store.Dir())
 				return nil
 			}}}}
 			code, _, diagnostic := invoke(t.Context(), cfg, tt.args(selected)...)

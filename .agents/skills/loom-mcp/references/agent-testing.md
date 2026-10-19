@@ -214,6 +214,9 @@ Missing/corrupt captures return explicit errors; do not infer a quality verdict.
 - --out and --json apply to run/show/compare/list/check. Selectors accept repeated
   flags and comma lists. Flags work on either side of positional arguments.
   Store precedence is --out, Config.StoreDir, then DefaultStoreDir(Config.Dir).
+- Extension and control binders use `store.Dir()` to obtain the absolute directory
+  resolved at Open and derive adjacent host-owned state. Reopen the selected store
+  to recover the same locations; no second root setting or argv parsing is needed.
 - --rerun-failed inherits parent repeats unless --repeat overrides them. It
   rejects selector flags and uses the store's variant/item cross-product.
   --merge-parent overlays a candidate rerun on its recorded parent for comparison.
