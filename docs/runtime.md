@@ -6949,3 +6949,64 @@ One host owns workspace writes. A separate process can reopen the stores for rea
 Cross-process concurrent writers are outside this contract.
 
 See [Inspect retained experiment evidence](agent_testing.md#inspect-retained-experiment-evidence) for host code and the executable restart fixture.
+
+### Optional experiment control
+
+`eval/control.Service` binds candidate editing, host trial execution and authorized inspection to one scope.
+Its `Config` supplies the candidate/eval stores, immutable `TaskBinding` values,
+explicit operation grants, verified authorization, positive read/page caps and optional host capabilities.
+Missing operations remain unavailable. Native tools require explicit registration through `NewToolsetRegistration`.
+The leaf `eval/controlcli` adapter uses existing `evalcli.Extension` dispatch and selected-store handling.
+Neither root eval nor evalcli depends on the optional adapter.
+
+Draft creation names an authorized baseline or frozen source.
+Metadata reads return revisions and component identities; content reads are bounded exact byte slices.
+Edits require an expected revision. Put accepts exactly one UTF-8 `content` or canonical `content_base64` field.
+Empty content remains distinguishable from an omitted field.
+Delete rejects content and other put-only fields.
+All edits use the candidate store's existing validators and immutable freeze contract.
+A rejected edit changes neither content nor revision.
+Frozen candidates are required for submission.
+
+`Submission` is a host-only normalized value containing scope, request key,
+frozen candidate, task snapshot, execution kind, evaluation plan and host binding identity.
+The host executor atomically persists this identity and its job before acceptance acknowledgement.
+Identical scoped retries return the same job; changed input conflicts.
+The service resolves task/configuration facts before acceptance and checks host execution permission.
+Requests cannot set live permission, credentials, roots, policies, models or host callbacks.
+Probes remain explicit operational executions with unassessed quality.
+Evaluation plans retain normal assertion/judge rules.
+The host runs existing `BeginProbe`/`Probe`/`Finish` or detached `Plan`/`Begin`/`Run`/`Finish` lifecycle APIs.
+It does not wrap prepared persistence with `Writer.OnAttempt`.
+
+The executor owns dispatch, cancellation, stoppedness and restart recovery.
+States are `queued`, `running`, `cancel_requested`, `succeeded`, `failed`, `canceled` and `interrupted`.
+Queued cancellation can commit `canceled` without preparation.
+Running cancellation remains `cancel_requested` until stopped execution and finalization are established.
+A recorded execution/infrastructure error yields `failed`; unknown effects or lost ownership yield `interrupted`.
+If success committed first, later cancellation cannot change it.
+If cancellation committed first, a later success result cannot commit success.
+Every terminal state is immutable. An interrupted job is never silently replayed.
+The framework adds no scheduler, retry loop or proposal/selection policy.
+
+`JobRecord` and `Submission` retain private host associations.
+Public `Job` returns only an opaque ID, state, evidence availability and approved safe failure text.
+Selector services cannot configure authoring/submission operations or receive candidate/task/source identity from status.
+Every request rechecks authorization; opaque handle knowledge grants no access.
+Host errors, including typed `control.Error` values, are projected through approved static templates and safe field classes.
+Raw host messages, causes and repair strings cannot pass through to model or CLI output.
+
+A host `EvidenceProvider` resolves each authorized durable job to its exact committed `ManifestRef`.
+It returns a fresh finite `inspect.View` with the constructor-bound role and versioned policy.
+No global allow-all scope or mutable reader grant is needed when submissions create new experiments.
+A job without a committed evidence association reports `evidence_not_ready`.
+A locator from a different job or view remains unauthorized.
+Restart reconstructs authority from persistent job associations and host policy.
+Failed/interrupted jobs may expose explicitly incomplete or provisional evidence.
+The host retains candidate, eval and inspect roots for the locator lifetime.
+
+Comparison accepts exact job associations and projects existing eval statistics only.
+It rejects broader experiment matrices instead of silently including unrelated attempts.
+If either side is a probe, quality is `not_comparable` and quality count fields are absent.
+Protected check diagnostics, judge references, tool arguments and candidate lineage are not comparison fields.
+See [Control candidates through native tools](agent_testing.md#control-candidates-through-native-tools) for wiring and proof commands.

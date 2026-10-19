@@ -1038,3 +1038,14 @@ Canonical projections deny private/configuration/reasoning leaves before host ca
 Retain candidate/eval/inspect roots for locator lifetime. Reopen uses persisted approved bytes without callbacks.
 Use `references/{agent-testing,runtime-contracts}.md` for publication, role, cap, missing/provisional and restart contracts.
 The external `eval/component_inspect_test.go` proves physical unopened sources, exact outputs/renderings, linked diffs and process restart.
+
+### Optional experiment control
+
+Use `eval/control` for explicitly granted Go/native candidate editing, durable host submissions and scoped evidence reads.
+Keep `Executor` host-owned; acceptance persists request/job identity before acknowledgement and never replays uncertain effects.
+Use direct UTF-8 `content` OR canonical `content_base64` for put, expected revisions for edits and frozen digests for submissions.
+Bind `EvidenceProvider` per authorized durable job to a fresh finite `inspect.View` with fixed role/policy.
+Do not expose JobRecord/Submission, raw error causes, selector lineage or caller-selected scope/roots/credentials/live permission.
+`eval/controlcli` remains a leaf adapter over existing `evalcli.Extension`; its binder must honor the selected store.
+Cancellation intent is not stoppedness. Terminal job states are immutable; lost execution ownership becomes interrupted.
+See `references/{agent-testing,runtime-contracts}.md` and the control/recovery/agent-feature tests for contracts and executable wiring.

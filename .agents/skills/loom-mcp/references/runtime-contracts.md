@@ -1803,3 +1803,32 @@ ContextModel; disabled/default registration uses ContextDefault.
 - Enforce positive publication/read/list caps. Distinguish available empty, missing, withheld, provisional and response truncation.
 - Use output descriptor provisional status for evaluations and probes. Do not infer it from generic cleanup errors.
 - Keep canonical raw exports unchanged. Process restart supports reads. Concurrent writes from separate processes are outside this contract.
+
+## Optional experiment control
+
+`eval/control` owns shared validation, scoped authorization, public DTOs and native tool registration.
+`eval/controlcli` imports control/evalcli; evalcli never imports either optional package.
+Host-only Config/Submission/JobRecord values are not native schemas or public response DTOs.
+Operations are explicit maximum grants, narrowed by per-request verified authorization.
+Task/model/live permission, store roots, credentials, evidence role/policy and host bindings stay outside request payloads.
+
+Draft edits use one expected revision and either direct UTF-8 text or canonical base64 bytes.
+Both forms route the same candidate byte/slot validation; rejected edits preserve revision/content.
+Only frozen candidates can submit, under a scoped idempotency request key.
+The host Executor persists request identity plus job before acknowledgement and rejects different inputs under that key.
+It owns dispatch/recovery rather than adding a framework workflow engine.
+Host execution uses existing prepared root eval and explicit writer Finish; prepared OnAttempt remains an observer.
+
+Running cancellation stays cancel_requested until execution stops and finalizes.
+Queued cancellation avoids preparation. Terminal states never change.
+Cancellation-first prevents success; success-first remains success.
+Infrastructure failure is failed, unknown effects/lost execution ownership is interrupted; uncertain effects never automatically replay.
+Public Job exposes only opaque ID/state/evidence availability and approved static failures.
+Reproject even typed host Error text; never serialize arbitrary Message/Recovery/private causes into tool or CLI output.
+Candidate validation exposes safe actionable field/classes where available.
+
+EvidenceProvider resolves a persisted authorized job to its committed exact manifest and returns a new finite role-bound inspect View.
+No caller role/scope or mutable allow-all grant exists. A publication without the job association grants no access.
+Read/List recheck authority and locator membership; selector metadata stays opaque and excludes internal/source/candidate identities.
+Comparison delegates existing eval statistics for exact single-attempt associations and rejects broader matrices.
+Probe comparison never creates quality counts or a quality winner.

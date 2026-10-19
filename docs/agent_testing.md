@@ -774,3 +774,88 @@ The fixture compiles two submitted helpers and retains distinct outputs.
 It publishes a physical source absent from every solver request, linked diffs, a decision note and an evaluator reference.
 A new reader process reopens all three stores after environment removal.
 It checks exact bytes, renderer identity, role restrictions and stable pagination without model or compiler calls.
+
+## Control candidates through native tools
+
+`eval/control` exposes the candidate, trial and evidence operations through one Go service.
+Register its native tools explicitly before sealing the controller runtime:
+
+Import `github.com/CaliLuke/loom-mcp/v2/eval/control` and `github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime`.
+
+<!-- snippet: control-register-tools -->
+```go
+func RegisterExperimentTools(rt *runtime.Runtime, cfg control.Config) error {
+	service, err := control.New(cfg)
+	if err != nil {
+		return err
+	}
+	registration, err := control.NewToolsetRegistration(control.ToolsetConfig{
+		Name: "experiment", Service: service,
+	})
+	if err != nil {
+		return err
+	}
+	return rt.RegisterToolset(registration)
+}
+```
+
+The host supplies one candidate store, one experiment store, fixed task bindings,
+a verified scope, an authorization callback and explicit operation grants.
+Set `Limits: control.DefaultLimits()` or provide positive read/page caps.
+The host also supplies the `Executor` and `EvidenceProvider` for enabled trial/evidence operations.
+No tools are installed by default. The service does not start a worker or an improvement loop.
+
+A controller uses the advertised baseline to create its own draft.
+It reads component bytes, edits with `expected_revision`, validates, freezes and submits the frozen digest.
+Use `content` to author Go or Markdown directly. Use `content_base64` for binary bytes.
+A put requires exactly one field, including an explicit empty string when empty content is intended.
+Both forms submit the same exact candidate bytes and use the same slot limits.
+A rejected edit preserves the revision. Fix its indicated field and retry that revision.
+A stale revision requires `get_candidate` before retrying.
+
+`submit_trial` defaults to an operational probe.
+An evaluation requires an advertised evaluation plan and retains its quality requirements.
+Retry an uncertain submission with the same `request_key` and identical inputs.
+The host must persist request/job identity before acknowledging acceptance.
+A different input under that key is a conflict, including after restart.
+A new key represents a new intentional trial.
+
+Poll `get_job`; use `cancel_job` to request cancellation.
+`cancel_requested` records intent and does not prove execution stopped.
+Only the host can commit a terminal status after execution and finalization.
+An uncertain lost execution becomes `interrupted`; it is not automatically replayed.
+Already committed terminal states remain unchanged.
+`compare_trials` returns existing execution statistics; probes have `not_comparable` quality and no quality counts.
+
+Evidence requests take a job ID and bounded pagination or locator fields.
+The host provider resolves the authorized durable job to its committed manifest,
+then constructs a fresh exact `inspect.View` with a fixed role and policy name.
+The service never grows an existing view's scope to include future jobs.
+Publication alone does not grant job access; the durable job association must be committed.
+Task creation, credentials, live execution permission, filesystem roots and evidence roles are host configuration.
+They cannot be supplied or widened through tool arguments.
+
+For a CLI, register the leaf `eval/controlcli` adapter through `evalcli.Config.Extensions`.
+Its binder receives the selected `*eval.Store` and must wire execution and evidence to that store.
+The syntax is `experiment <operation> --request '<JSON object>'`.
+For example, a text edit uses:
+
+```text
+experiment edit_candidate --request '{"draft_id":"<draft>","expected_revision":1,"operation":"put","name":"helper.go","slot":"helpers","media_type":"text/x-go","content":"package main\nfunc main() {}\n"}'
+```
+
+Core `--out` and `--` handling stays with `evalcli`; the native tools have no store-path argument.
+The Go, native and CLI surfaces share request validation and static safe error codes with repair guidance.
+Raw compiler, filesystem and executor diagnostic strings stay out of public errors.
+Approved retained diagnostics can be published as evidence under host policy.
+
+The generated agent-feature fixture exercises the controller journey through native tools.
+The disk-backed executor under `eval/control/testfixture` proves crash recovery and cancellation arbitration.
+It is an explicit test host, not a production scheduler.
+Run the focused checks with:
+
+```sh
+go test ./eval/control/... ./eval/controlcli/... ./eval/evalcli/...
+make verify-agent-feature-fixture
+go test -race -shuffle=on -count=20 -timeout=15m ./eval/control -run '^(TestControlRecovery|TestControlCancellation)'
+```

@@ -12,6 +12,8 @@ This plan sequences the contracts in [the design](agent_experiment_support_desig
 
 - 2026-10-18 — Milestone 3 implemented in an isolated worktree while Milestone 2 qualification continues. Combined eval/inspect/trajectory checks, inspect race tests, the real helper/restart fixture, static analysis and targeted lint passed. Full gates and independent review remain before integration and commit.
 
+- 2026-10-18 — Milestone 4 implemented in isolation: shared Go/native/CLI control, durable host-executor recovery and a tool-only journey that compiles submitted source and cancels a real probe. Targeted tests, recovery race repetitions and lint passed. Full milestone gates and independent review remain before integration and commit. Milestone 3 full lint/test passed; its documentation gate repair is under review while integration reruns. Milestone 2 longrun qualification remains active.
+
 ## Scope and current inventory
 
 Required: editable surface discovery; immutable candidates; one prepared configuration/input/environment binding; operational probes; retained sources/outputs and bounded evidence; optional agent control; explicit component reuse. Application-owned: proposal/composition/selection/reflection policy, real environment provisioning, domain checks and production adoption. Unified process accounting and pricing are deferred.
@@ -107,10 +109,10 @@ Acceptance Criteria
 
 Checklist
 
-- [ ] Read `.agents/skills/mcp-tool-design/SKILL.md` before freezing public tool schemas; specify canonical service input/output/error schemas and host executor ownership from the design.
-- [ ] Add proposed `eval/control/{service,submission,toolset}_test.go` and `eval/controlcli/extension_test.go`, with type shells first; implement the service/native registration and proposed `eval/controlcli/extension.go` through the existing `eval/evalcli/extensions.go` API. Keep imports controlcli → control/evalcli, never evalcli → controlcli/control.
-- [ ] Add proposed `eval/control/testfixture/durable_executor.go` plus external-package `eval/control/recovery_test.go` (`package control_test`) using a temporary on-disk request/job store and child-process crash injection before/after acceptance and completion persistence. Cover cancellation/terminal races and lost ownership without adding a framework scheduler. Name these cases `TestControlRecovery`/`TestControlCancellation`.
-- [ ] Exercise native tool registration through proposed `integration_tests/fixtures/agent_features/experiment_control_test.go`. V1 proves native tools and Go/CLI equivalence; a generated MCP projection is application follow-up, so this milestone does not add a speculative MCP service or alter wire handling.
+- [x] Read `.agents/skills/mcp-tool-design/SKILL.md` before freezing public tool schemas; specify canonical service input/output/error schemas and host executor ownership from the design.
+- [x] Add proposed `eval/control/{service,submission,toolset}_test.go` and `eval/controlcli/extension_test.go`, with type shells first; implement the service/native registration and proposed `eval/controlcli/extension.go` through the existing `eval/evalcli/extensions.go` API. Keep imports controlcli → control/evalcli, never evalcli → controlcli/control.
+- [x] Add proposed `eval/control/testfixture/durable_executor.go` plus external-package `eval/control/recovery_test.go` (`package control_test`) using a temporary on-disk request/job store and child-process crash injection before/after acceptance and completion persistence. Cover cancellation/terminal races and lost ownership without adding a framework scheduler. Name these cases `TestControlRecovery`/`TestControlCancellation`.
+- [x] Exercise native tool registration through proposed `integration_tests/fixtures/agent_features/experiment_control_test.go`. V1 proves native tools and Go/CLI equivalence; a generated MCP projection is application follow-up, so this milestone does not add a speculative MCP service or alter wire handling.
 - [ ] Run `go test ./eval/control/... ./eval/controlcli/... ./eval/evalcli/...` and `make verify-agent-feature-fixture`; run `go test -race -shuffle=on -count=20 -timeout=15m ./eval/control -run '^(TestControlRecovery|TestControlCancellation)'`. Update `docs/agent_testing.md`, `docs/runtime.md` and repo skills; identify any confirmed external publishing source before a future release.
 - [ ] Freeze the diff; run `make lint`, `make test`, `make ci-integration` and `make test-stress`; obtain independent review before the ticket's atomic commit.
 

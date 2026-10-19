@@ -373,3 +373,25 @@ Bind views with host-fixed scope, role and policy name.
 Test copied-locator denial across roles and scopes.
 Treat nil artifact redaction as identity for permitted bytes. Never describe it as sanitization.
 See `docs/agent_testing.md` for the host publication example and content-policy limits.
+
+## Experiment control fixtures
+
+Use `eval/control.New` with explicit operations, verified scope, scoped stores, task bindings and positive limits.
+Register native tools before runtime sealing with `control.NewToolsetRegistration`; nothing is installed by default.
+Test controller-created drafts, rejected-edit repair at the same revision, text/base64 byte equivalence, freeze and submit.
+A scripted controller must consume actual service/tool results and retained helper output; no fixture-side candidate prepopulation.
+Use existing root eval prepared lifecycles from host execution, followed by `Writer.Finish` and authorized inspection publication.
+
+The disk-backed host fixture owns request-key acceptance, claims, cancellation and terminal persistence.
+Use child-process checkpoints and channels for crash/race proof, not timing sleeps.
+Same scoped key/input must recover one job; unknown effects become interrupted without replay.
+Cancellation-first cannot commit success, and success-first remains success.
+A request cancellation alone does not prove execution stopped.
+
+Test a new job after service construction: publish evidence, commit its durable manifest association, then read through a newly bound exact View.
+Reject copied cross-job locators and revoked authority after restart.
+Check selector status and evidence JSON for identity/lineage exclusions.
+Typed executor errors are not automatically safe; public templates must exclude raw callback/compiler/OS diagnostics.
+The CLI binder must honor `ExtensionRequest.Store`; use the existing extension API and JSON-object request syntax.
+Run `go test ./eval/control/... ./eval/controlcli/... ./eval/evalcli/...`, `make verify-agent-feature-fixture`,
+and the targeted `TestControlRecovery|TestControlCancellation` race/shuffle/repetition command from `docs/agent_testing.md`.
