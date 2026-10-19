@@ -17,13 +17,13 @@ func resultSchema(op Operation) schema {
 	case FreezeOperation:
 		return object(schema{jsonCandidate: hexadecimal(64), "manifest": manifestSchema()}, jsonCandidate, "manifest")
 	case SubmitOperation, StatusOperation, CancelOperation:
-		return object(schema{"id": nonempty(), "state": enumeration("queued", "running", "cancel_requested", "succeeded", "failed", "canceled", "interrupted"), "evidence_available": schema{jsonType: jsonBoolean}, "failure": errorSchema()}, "id", "state", "evidence_available")
+		return object(schema{"id": nonempty(), jsonState: enumeration("queued", "running", "cancel_requested", "succeeded", "failed", "canceled", "interrupted"), "evidence_available": schema{jsonType: jsonBoolean}, "failure": errorSchema()}, "id", jsonState, "evidence_available")
 	case ListEvidenceOperation:
 		return object(schema{"entries": array(entrySchema()), jsonTotal: integer(0), jsonNextOffset: integer(0), jsonTruncated: schema{jsonType: jsonBoolean}}, "entries", jsonTotal, jsonTruncated)
 	case ReadEvidenceOperation:
 		return object(schema{"entry": entrySchema(), "data": text(), jsonOffset: integer(0), jsonTotal: integer(0), jsonNextOffset: integer(0), jsonTruncated: schema{jsonType: jsonBoolean}}, "entry", jsonOffset, jsonTruncated)
 	case CompareOperation:
-		return object(schema{"status": enumeration("comparable", "not_comparable"), jsonBaseline: comparisonSideSchema(), jsonCandidate: comparisonSideSchema(), "warning_codes": array(text())}, "status", jsonBaseline, jsonCandidate)
+		return comparisonResultSchema()
 	default:
 		return object(schema{})
 	}
@@ -48,7 +48,7 @@ func errorSchema() schema {
 func entrySchema() schema {
 	key := object(schema{"scenario": text(), "item": text(), "variant": text(), "repeat": integer(1)}, "scenario", "item", "variant", "repeat")
 	provenance := object(schema{"experiment_id": text(), "attempt": key, "run_id": text(), "step": integer(0), "call_seq": integer(0), "call_attempt": integer(0), "candidate_digest": text(), jsonBaselineDigest: text(), "note": text()})
-	return object(schema{jsonLocator: hexadecimal(64), jsonKind: enumeration("task_source", "baseline_component", "candidate_component", "component_diff", "run_view", "call_view", "deliverable", "decision_note", "evaluator_reference", "rendered"), "label": text(), jsonMediaType: text(), "state": enumeration("available", "missing", "withheld", "provisional"), "size": integer(0), jsonDigest: hexadecimal(64), "source_digest": hexadecimal(64), "renderer_version": text(), "source_locator": hexadecimal(64), "links": array(text()), "provenance": provenance, "incomplete": schema{jsonType: jsonBoolean}, "code": text()}, jsonLocator, jsonKind, "label", "state")
+	return object(schema{jsonLocator: hexadecimal(64), jsonKind: enumeration("task_source", "baseline_component", "candidate_component", "component_diff", "run_view", "call_view", "deliverable", "decision_note", "evaluator_reference", "rendered"), "label": text(), jsonMediaType: text(), jsonState: enumeration("available", "missing", "withheld", "provisional"), "size": integer(0), jsonDigest: hexadecimal(64), "source_digest": hexadecimal(64), "renderer_version": text(), "source_locator": hexadecimal(64), "links": array(text()), "provenance": provenance, "incomplete": schema{jsonType: jsonBoolean}, "code": text()}, jsonLocator, jsonKind, "label", jsonState)
 }
 func comparisonSideSchema() schema {
 	quality := object(schema{"passed": integer(0), "failed": integer(0), "errored": integer(0), "pending": integer(0), "not_run": integer(0)}, "passed", "failed", "errored", "pending", "not_run")

@@ -1842,6 +1842,16 @@ EvidenceProvider resolves a persisted authorized job to its committed exact mani
 No caller role/scope or mutable allow-all grant exists. A publication without the job association grants no access.
 Read/List recheck authority and locator membership; selector metadata stays opaque and excludes internal/source/candidate identities.
 Comparison delegates existing eval statistics for exact single-attempt associations and rejects broader matrices.
+The scalar pair remains supported; exclusive baseline_job_ids/candidate_job_ids lists select 1..MaxPageEntries jobs per side.
+Groups require authorized terminal committed trials, unique job IDs and original experiment/attempt associations.
+Missing or incomplete group evidence is evidence_not_ready; corrupt evidence remains operation_failed.
+One candidate/kind per side; scenario/item cases pin task ID/snapshot, evaluation plan and installation bindings.
+Different cases may bind different tasks/plans. Candidate model configuration differences remain supported.
+eval.CompareTrials pools original attempts (including independent Repeat=1 submissions) without synthetic experiment IDs or rewritten lineage.
+Unequal repeats all count; unmatched whole cases are reported but excluded from totals; no intersection is not_comparable.
+Safe groups/unmatched members expose only opaque job ID/state and existing statistics, never protected case identity or annotations.
+Pending judgments and committed interrupted attempts remain visible; mixed probe/evaluation sides are rejected.
+Existing warnings inspect original headers; no_agent_change requires every matched original pair to agree.
 Probe comparison never creates quality counts or a quality winner.
 
 ## Explicit reuse and child installation

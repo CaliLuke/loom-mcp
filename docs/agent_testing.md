@@ -827,6 +827,44 @@ An uncertain lost execution becomes `interrupted`; it is not automatically repla
 Already committed terminal states remain unchanged.
 `compare_trials` returns existing execution statistics; probes have `not_comparable` quality and no quality counts.
 
+For repeated trials, pass `baseline_job_ids` and `candidate_job_ids` instead of
+the existing `baseline_job_id` and `candidate_job_id` pair. For example:
+
+```json
+{"baseline_job_ids":["base-case-a-1","base-case-a-2","base-case-b-1","base-case-b-2"],"candidate_job_ids":["new-case-a-1","new-case-a-2","new-case-b-1","new-case-b-2"]}
+```
+
+Each list contains 1 through `Limits.MaxPageEntries` jobs (100 by default).
+The two request forms cannot be mixed. Repeated job IDs and aliases of the same
+stored experiment/attempt are rejected, including across sides. Every job must
+be authorized, terminal and associated with a committed complete single-attempt
+experiment. Missing or unfinished evidence returns `evidence_not_ready`.
+
+Each side selects one candidate and one execution kind with compatible
+installation bindings. Cases match by recorded scenario/item identity. All
+occurrences of a case must share its task ID, task snapshot, host/component
+bindings and, for evaluations, evaluation plan. Different cases can have
+different task snapshots and plans. Candidate model settings can differ between
+sides. A conflicting case binding is rejected rather than merged.
+
+All selected repeats of a shared case are pooled using existing eval statistics.
+Independent submissions may all have `Repeat: 1`; their original experiment and
+attempt identities remain unchanged. Unequal repeat counts use all selected
+observations, without pairing repeats or inventing missing observations.
+`groups` reports safe member job IDs/states and per-case statistics.
+`only_baseline` and `only_candidate` report jobs whose cases have no counterpart;
+these jobs are excluded from the top-level totals. No shared cases yields
+`not_comparable` and zero totals.
+
+Pending judgments stay pending. Interrupted, failed and canceled terminal jobs
+remain visible when their committed attempt is available. A side cannot mix
+probes and evaluations; comparing a probe side with either kind omits quality
+counts on both sides. Warnings retain existing eval qualifications, with
+`no_agent_change` only when every matched source comparison agrees.
+The response omits protected case identifiers, configuration, annotations and
+lineage; original lineage stays in the store and existing job evidence controls.
+Comparison never executes a trial, calls a judge, selects a winner or promotes a candidate.
+
 Evidence requests take a job ID and bounded pagination or locator fields.
 The host provider resolves the authorized durable job to its committed manifest,
 then constructs a fresh exact `inspect.View` with a fixed role and policy name.

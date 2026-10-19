@@ -396,6 +396,11 @@ Reject copied cross-job locators and revoked authority after restart.
 Check selector status and evidence JSON for identity/lineage exclusions.
 Typed executor errors are not automatically safe; public templates must exclude raw callback/compiler/OS diagnostics.
 The CLI binder must honor `ExtensionRequest.Store`; use the existing extension API and JSON-object request syntax.
+Repeated-trial comparison tests must persist independent single-attempt experiments,
+including duplicate local Repeat=1 values, then compare through Go/native/CLI.
+Verify pooled counts, case intersections, unequal repeats, original stored lineage,
+pending/interrupted/probe semantics, fixed per-case task/plan bindings and finite selection caps.
+Keep private case/configuration/judgment canaries out of grouped response JSON.
 Run `go test ./eval/control/... ./eval/controlcli/... ./eval/evalcli/...`, `make verify-agent-feature-fixture`,
 and the targeted `TestControlRecovery|TestControlCancellation` race/shuffle/repetition command from `docs/agent_testing.md`.
 

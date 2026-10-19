@@ -7029,7 +7029,29 @@ The host retains candidate, eval and inspect roots for the locator lifetime.
 
 Comparison accepts exact job associations and projects existing eval statistics only.
 It rejects broader experiment matrices instead of silently including unrelated attempts.
+The existing scalar job pair remains supported. Exclusive `baseline_job_ids` and
+`candidate_job_ids` lists add grouped comparison, bounded to `Limits.MaxPageEntries`
+per side (default 100). Each side selects one candidate and execution kind.
+Repeated job IDs or original experiment/attempt aliases are rejected.
+Every selected job must be authorized and terminal, with committed complete
+single-attempt evidence; group requests report missing/unfinished evidence as
+`evidence_not_ready`.
+
+`eval.CompareTrials` is the underlying read-only adapter for original experiment
+selections. It pools repeats by scenario/item and reuses existing statistics;
+it creates no synthetic experiment identity and does not rewrite attempt keys.
+The control service checks compatible task ID/snapshot, evaluation plan and
+installation bindings for each case. Different cases may have different bindings
+to task snapshots/plans, and candidates may use different model configurations.
+Unequal repeat counts use all selected observations. Cases present on one side
+only are reported but excluded from aggregate totals; an empty intersection is
+`not_comparable`. The group result contains opaque job IDs/states and statistics,
+without exposing protected case or experiment identities. Pending verdicts and
+committed interrupted attempts remain visible. Existing warning qualifications
+are retained; `no_agent_change` requires agreement for every matched source pair.
 If either side is a probe, quality is `not_comparable` and quality count fields are absent.
+Grouped sides cannot mix probes with evaluations. Neither request form starts
+execution, judging or candidate selection.
 Protected check diagnostics, judge references, tool arguments and candidate lineage are not comparison fields.
 See [Control candidates through native tools](agent_testing.md#control-candidates-through-native-tools) for wiring and proof commands.
 

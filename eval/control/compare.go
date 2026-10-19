@@ -2,6 +2,8 @@ package control
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 
 	"github.com/CaliLuke/loom-mcp/v2/eval"
 )
@@ -10,6 +12,9 @@ import (
 func (s *Service) Compare(ctx context.Context, q CompareRequest) (Comparison, error) {
 	if err := s.authorizeRequest(ctx, CompareOperation, q); err != nil {
 		return Comparison{}, err
+	}
+	if q.BaselineJobIDs != nil {
+		return s.compareGroups(ctx, q)
 	}
 	base, err := s.comparisonSide(ctx, q.BaselineJobID)
 	if err != nil {
@@ -43,23 +48,36 @@ func comparisonStats(s eval.GroupStats, quality bool) ComparisonSide {
 }
 
 func (s *Service) comparisonSide(ctx context.Context, id string) (eval.Side, error) {
+	trial, err := s.comparisonTrial(ctx, id, false)
+	return trial.side, err
+}
+
+// comparisonTrial retains exact authorization and association checks; group mode
+// distinguishes uncommitted evidence while preserving legacy scalar error codes.
+func (s *Service) comparisonTrial(ctx context.Context, id string, grouped bool) (comparisonTrial, error) {
 	r, err := s.job(ctx, id)
 	if err != nil {
-		return eval.Side{}, err
+		return comparisonTrial{}, err
 	}
 	if !terminal(r.State) || r.ExperimentID == "" {
-		return eval.Side{}, NewError(EvidenceNotReady, "", "", "")
+		return comparisonTrial{}, NewError(EvidenceNotReady, "", "", "")
 	}
 	e, err := s.cfg.Experiments.Load(r.ExperimentID)
 	if err != nil {
-		return eval.Side{}, publicError(err, OperationFailed, "")
+		if grouped && errors.Is(err, fs.ErrNotExist) {
+			return comparisonTrial{}, NewError(EvidenceNotReady, "", "", "")
+		}
+		return comparisonTrial{}, publicError(err, OperationFailed, "")
+	}
+	if grouped && !e.Complete() {
+		return comparisonTrial{}, NewError(EvidenceNotReady, "", "", "")
 	}
 	if !e.Complete() || e.Header.ID != r.ExperimentID || len(e.Attempts) != 1 || e.Attempts[0].AttemptKey != r.Attempt || len(e.Header.Variants) != 1 || len(e.Header.Scenarios) != 1 || e.Header.Planned != 1 {
-		return eval.Side{}, NewError(Unsupported, "", "", "")
+		return comparisonTrial{}, NewError(Unsupported, "", "", "")
 	}
 	a := e.Attempts[0]
 	if a.Prepared == nil || a.Prepared.CandidateDigest != r.Submission.Candidate || a.Prepared.TaskSnapshot != r.Submission.TaskSnapshot || a.ExecutionKind != r.Submission.Kind {
-		return eval.Side{}, NewError(Unsupported, "", "", "")
+		return comparisonTrial{}, NewError(Unsupported, "", "", "")
 	}
-	return eval.Side{Experiment: e, Variant: r.Attempt.Variant}, nil
+	return comparisonTrial{record: r, side: eval.Side{Experiment: e, Variant: r.Attempt.Variant}}, nil
 }

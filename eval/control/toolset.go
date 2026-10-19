@@ -218,7 +218,7 @@ func description(op Operation) string {
 	case ReadEvidenceOperation:
 		return "Read bounded evidence bytes through a job-local locator; data is base64 and missing/withheld/provisional are explicit."
 	case CompareOperation:
-		return "Compare exact authorized trial statistics; probes have no comparable quality verdict."
+		return "Compare exact authorized terminal trials: use baseline_job_id/candidate_job_id or bounded baseline_job_ids/candidate_job_ids lists. Groups pool repeats over shared cases; unmatched cases are excluded from totals. Probes have no comparable quality verdict."
 	default:
 		return "Unsupported control operation."
 	}

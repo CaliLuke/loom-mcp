@@ -19,7 +19,8 @@ type Service struct {
 // Operation identifies an explicitly enabled control capability.
 type Operation string
 
-// Limits sets positive ceilings for bounded model-facing reads and pages.
+// Limits sets positive ceilings for model-facing reads, pages and comparison groups.
+// MaxPageEntries also bounds the selected jobs on each side of a comparison.
 type Limits struct {
 	MaxReadBytes   int
 	MaxPageEntries int

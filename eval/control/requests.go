@@ -130,10 +130,13 @@ type EvidenceReadRequest struct {
 	MaxBytes int    `json:"max_bytes,omitempty"`
 }
 
-// CompareRequest selects two authorized exact trial associations.
+// CompareRequest selects either two exact trials or two nonempty trial groups.
+// Group lists are exclusive with the scalar pair and bounded by MaxPageEntries.
 type CompareRequest struct {
-	BaselineJobID  string `json:"baseline_job_id"`
-	CandidateJobID string `json:"candidate_job_id"`
+	BaselineJobID   string   `json:"baseline_job_id,omitempty"`
+	CandidateJobID  string   `json:"candidate_job_id,omitempty"`
+	BaselineJobIDs  []string `json:"baseline_job_ids,omitzero"`
+	CandidateJobIDs []string `json:"candidate_job_ids,omitzero"`
 }
 
 // ComparisonSide projects existing aggregate execution and optional quality statistics.
@@ -156,10 +159,27 @@ type QualityCounts struct {
 
 // Comparison compares existing statistics without inferring probe quality or a winner.
 type Comparison struct {
-	Status       string         `json:"status"` // comparable or not_comparable for QUALITY
-	Baseline     ComparisonSide `json:"baseline"`
-	Candidate    ComparisonSide `json:"candidate"`
-	WarningCodes []string       `json:"warning_codes,omitempty"`
+	Status        string            `json:"status"` // comparable or not_comparable for QUALITY
+	Baseline      ComparisonSide    `json:"baseline"`
+	Candidate     ComparisonSide    `json:"candidate"`
+	WarningCodes  []string          `json:"warning_codes,omitempty"`
+	Groups        []ComparisonGroup `json:"groups,omitempty"`
+	OnlyBaseline  []ComparisonJob   `json:"only_baseline,omitempty"`
+	OnlyCandidate []ComparisonJob   `json:"only_candidate,omitempty"`
+}
+
+// ComparisonJob preserves an authorized opaque member and its terminal state.
+type ComparisonJob struct {
+	JobID string   `json:"job_id"`
+	State JobState `json:"state"`
+}
+
+// ComparisonGroup projects one shared case without exposing protected case lineage.
+type ComparisonGroup struct {
+	BaselineJobs  []ComparisonJob `json:"baseline_jobs"`
+	CandidateJobs []ComparisonJob `json:"candidate_jobs"`
+	Baseline      ComparisonSide  `json:"baseline"`
+	Candidate     ComparisonSide  `json:"candidate"`
 }
 
 const (

@@ -6,6 +6,8 @@ import "strconv"
 type schema map[string]any
 
 const (
+	jsonAnyOf      = "anyOf"
+	jsonState      = "state"
 	jsonTruncated  = "truncated"
 	jsonTotal      = "total"
 	jsonNextOffset = "next_offset"
@@ -55,7 +57,7 @@ func requestSchema(op Operation) schema {
 		return o
 	case ReadOperation:
 		o := object(schema{jsonDraftId: hexadecimal(32), jsonExpectedRevision: integer(1), jsonCandidate: hexadecimal(64), "component": nonempty(), jsonOffset: integer(0), jsonMaxBytes: integer(0)}, "component")
-		o["oneOf"] = []schema{{jsonRequired: []string{jsonDraftId, jsonExpectedRevision}, jsonNot: schema{jsonRequired: []string{jsonCandidate}}}, {jsonRequired: []string{jsonCandidate}, jsonNot: schema{"anyOf": []schema{{jsonRequired: []string{jsonDraftId}}, {jsonRequired: []string{jsonExpectedRevision}}}}}}
+		o["oneOf"] = []schema{{jsonRequired: []string{jsonDraftId, jsonExpectedRevision}, jsonNot: schema{jsonRequired: []string{jsonCandidate}}}, {jsonRequired: []string{jsonCandidate}, jsonNot: schema{jsonAnyOf: []schema{{jsonRequired: []string{jsonDraftId}}, {jsonRequired: []string{jsonExpectedRevision}}}}}}
 		return o
 	case PreviewCopyOperation, CopyOperation:
 		return copyRequestSchema(op)
@@ -76,7 +78,7 @@ func requestSchema(op Operation) schema {
 	case ReadEvidenceOperation:
 		return object(schema{jsonJobId: nonempty(), jsonLocator: hexadecimal(64), jsonOffset: integer(0), jsonMaxBytes: integer(0)}, jsonJobId, jsonLocator)
 	case CompareOperation:
-		return object(schema{"baseline_job_id": nonempty(), "candidate_job_id": nonempty()}, "baseline_job_id", "candidate_job_id")
+		return comparisonRequestSchema()
 	default:
 		return object(schema{})
 	}
@@ -88,7 +90,7 @@ func editSchema() schema {
 	o := object(schema{jsonDraftId: hexadecimal(32), jsonExpectedRevision: integer(1), jsonOperation: enumeration("put", "delete"), jsonName: nonempty(), jsonSlot: nonempty(), jsonMediaType: nonempty(), jsonContent: text(), jsonContentBase64: text(), jsonDependencies: deps}, jsonDraftId, jsonExpectedRevision, jsonOperation, jsonName)
 	o["oneOf"] = []schema{
 		{jsonProperties: schema{jsonOperation: schema{jsonConst: "put"}}, jsonRequired: []string{jsonSlot, jsonMediaType}, "oneOf": exclusive([]string{jsonContent}, []string{jsonContentBase64})},
-		{jsonProperties: schema{jsonOperation: schema{jsonConst: "delete"}}, jsonNot: schema{"anyOf": []schema{{jsonRequired: []string{jsonSlot}}, {jsonRequired: []string{jsonMediaType}}, {jsonRequired: []string{jsonContent}}, {jsonRequired: []string{jsonContentBase64}}, {jsonRequired: []string{jsonDependencies}}}}},
+		{jsonProperties: schema{jsonOperation: schema{jsonConst: "delete"}}, jsonNot: schema{jsonAnyOf: []schema{{jsonRequired: []string{jsonSlot}}, {jsonRequired: []string{jsonMediaType}}, {jsonRequired: []string{jsonContent}}, {jsonRequired: []string{jsonContentBase64}}, {jsonRequired: []string{jsonDependencies}}}}},
 	}
 	return o
 }
@@ -128,6 +130,11 @@ func exclusive(a, b []string) []schema {
 // nativeRequestSchema advertises the same finite byte boundary as candidate edits.
 func (s *Service) nativeRequestSchema(op Operation) schema {
 	out := requestSchema(op)
+	if op == CompareOperation {
+		props := out[jsonProperties].(schema)
+		props[jsonBaselineJobIDs].(schema)["maxItems"] = s.cfg.Limits.MaxPageEntries
+		props[jsonCandidateJobIDs].(schema)["maxItems"] = s.cfg.Limits.MaxPageEntries
+	}
 	if op == PreviewCopyOperation || op == CopyOperation {
 		props := out[jsonProperties].(schema)
 		props[jsonComponents].(schema)["maxItems"] = s.cfg.Limits.MaxPageEntries

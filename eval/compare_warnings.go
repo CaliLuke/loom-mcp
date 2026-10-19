@@ -2,6 +2,8 @@ package eval
 
 import "fmt"
 
+const warningNoAgentChange = "no_agent_change"
+
 func comparisonWarnings(base, cand Side, candidateAttempts []*StoredAttempt, parent *Experiment) ([]Warning, error) {
 	bh, ch := base.Experiment.Header, cand.Experiment.Header
 	var warnings []Warning
@@ -11,7 +13,7 @@ func comparisonWarnings(base, cand Side, candidateAttempts []*StoredAttempt, par
 		return nil, err
 	}
 	if same {
-		warnings = append(warnings, Warning{Code: "no_agent_change", Message: "recorded agent fingerprints, models and policy are identical"})
+		warnings = append(warnings, Warning{Code: warningNoAgentChange, Message: "recorded agent fingerprints, models and policy are identical"})
 	}
 	if judgeChanged(bh.Judge, ch.Judge) {
 		warnings = append(warnings, Warning{Code: "judge_changed", Message: "judge model or prompt changed"})
