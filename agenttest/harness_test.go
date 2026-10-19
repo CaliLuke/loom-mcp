@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/CaliLuke/loom-mcp/v2/agenttest"
@@ -119,16 +120,18 @@ func TestHarnessCleanupRecordingTB(t *testing.T) {
 }
 
 func TestHarnessTimeout(t *testing.T) {
-	h, err := agenttest.NewHarness(t.Context(), registerHarnessAgent("root", harnessPlanner{block: true}), agenttest.WithRunTimeout(20*time.Millisecond),
-		agenttest.WithRuntimeOptions(runtime.WithInterceptors(runtime.RuntimeInterceptorFuncs{BeforeEventFunc: func(context.Context, *runtime.BeforeEventInput) (*runtime.BeforeEventDecision, error) {
-			return nil, nil
-		}})))
-	require.NoError(t, err)
-	result, err := h.Run(t.Context(), "root", nil)
-	assert.Nil(t, result)
-	require.ErrorIs(t, err, context.DeadlineExceeded)
-	require.ErrorContains(t, err, "BeforeEvent")
-	require.NoError(t, h.Close())
+	synctest.Test(t, func(t *testing.T) {
+		h, err := agenttest.NewHarness(t.Context(), registerHarnessAgent("root", harnessPlanner{block: true}), agenttest.WithRunTimeout(20*time.Millisecond),
+			agenttest.WithRuntimeOptions(runtime.WithInterceptors(runtime.RuntimeInterceptorFuncs{BeforeEventFunc: func(context.Context, *runtime.BeforeEventInput) (*runtime.BeforeEventDecision, error) {
+				return nil, nil
+			}})))
+		require.NoError(t, err)
+		result, err := h.Run(t.Context(), "root", nil)
+		assert.Nil(t, result)
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+		require.ErrorContains(t, err, "BeforeEvent")
+		require.NoError(t, h.Close())
+	})
 }
 
 func TestHarnessConcurrentRuns(t *testing.T) {
