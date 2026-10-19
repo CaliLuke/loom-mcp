@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "warmups": 20,
+  "samples": 100,
+  "python": "3.13.9",
+  "schemarouter_commit": "f7a332220eb16d2264d85f2a87c56dc0c5c020f8",
+  "server_name": "assistant-mcp",
+  "baseline": "generated-local-registration-defaults",
+  "competitor": "SchemaRouter-defaults-tool_from_mcp",
+  "include_schemas": true,
+  "metadata_check": {"query": "lookup", "category": "records", "max_results": 5, "include_schemas": true}
+}

@@ -1,0 +1,21 @@
+{
+  "benchmark_test.go": "00357e790c5ae6c1e15063cb946165f405f09e335389110f1ce1d4bf89684e04",
+  "config.json": "576fed93377230f98af2e6e66891b79b515f0cbc1c628be7e59ec889d7c54364",
+  "fixture/design/design.go": "e56d2a17b579e54bfc7456c43990df5992a96e065b7484a4095cb00ce7185f58",
+  "fixture/gen/mcp_assistant/adapter_server.go": "6628c3d5b5e4e03e2c7524804caa7ef048c081ecdbdaeb07d16dbcd32326dad0",
+  "fixture/gen/mcp_assistant/local_provider.go": "9d0c911979fbc3fae8f22c76d552ee721540a6ec68de5e094c5766e1ddd84265",
+  "fixture/gen/mcp_assistant/sdk_server.go": "4fe924f02e12fbe3527777faa0a7db41cf21c2c71ceb3fed63ae12d3901afb92",
+  "fixture/go.mod": "26675349f260fbd3f1fd236d4259fffc5c1cd823cc62e31f9000609cf3c91a93",
+  "fixture/go.sum": "4aaa04224a37c951ee06acdb82aab22bcb74d8e3b7e3cacb3ef41cbe04881e5f",
+  "fixture_test.go": "546afd7d79b5ca895b14b11ed99fb1f782de8e0705bca31d1ffb5bd145e30f5f",
+  "helpers_test.go": "a40b4ac96c62420df2d3933b648998318435cbd7e98effccf237c97edd22ee62",
+  "reproduce.sh": "33cc5bd3c224d98288e8597ae8d91effb5e54da9dcc3a5ee7f2cc5d2f671a5b0",
+  "requirements.in": "e716cc24d135ceb046eb6c63b95d5595a2b2439add1300ea2dd5a7e44f0f2810",
+  "requirements.lock": "96f3d94b871985c7ad4fbd6b43d4ed2e5e66c27cefe4e5b0d105b617e114fff2",
+  "run_schemarouter.py": "d7504d19a9ccf8fcc05b01b4ff94adde77492d6052b74609937496cb0fe3cc3b",
+  "scoring.py": "d5757f6f102b9cd5206205be0b19974e55ba05551070e0284e2836c539f0e17e",
+  "scoring_test.py": "2aa33e3bf038ec599ab10f472783af68c54d3338afbf2a434e591737ae651eed",
+  "summarize.py": "ac4e732669b3446c508cf8b14b17b5b52ff0e24306b1191711864d550e4fd65d",
+  "testdata/cases.json": "a248254ef490c931f2284648a1c97f5a796b6b368f752c1081247ccbd020a62b",
+  "testdata/catalog.json": "5533903d33ecbb42f6523b353ba9bfb8c60c0a705ee499c9b28223736a66a94b"
+}

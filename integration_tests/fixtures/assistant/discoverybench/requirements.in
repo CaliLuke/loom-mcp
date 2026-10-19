@@ -1,0 +1,2 @@
+# Stock MCP import + deterministic retrieval; never installed into repository dependencies.
+schemarouter @ git+https://github.com/JDeun/SchemaRouter.git@f7a332220eb16d2264d85f2a87c56dc0c5c020f8

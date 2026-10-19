@@ -1,0 +1,166 @@
+5875a032be9c77660ee29c0d41ff9fd5ff2ae5f1
+MM .agents/skills/loom-mcp/SKILL.md
+MM .agents/skills/loom-mcp/references/runtime-contracts.md
+ M .agents/skills/loom-mcp/references/user-guides/mcp-integration.md
+ M codegen/agent/data.go
+ M codegen/agent/data_runtime.go
+ M codegen/agent/registry_render.go
+ M codegen/agent/templates/agents_quickstart.go.tpl
+ M codegen/agent/tests/golden_run_policy_test.go
+ M codegen/agent/tests/testdata/golden/quickstart/minimal.header.md.golden
+ M codegen/agent/tests/testscenarios/run_policy.go
+ M docs/dsl.md
+MM docs/runtime.md
+ M dsl/dsl_test.go
+ M dsl/policy.go
+ M expr/agent/policy.go
+ M expr/agent/policy_test.go
+ M features/model/gemini/client.go
+M  features/model/openai/client.go
+M  features/model/openai/client_encode_input_test.go
+M  features/model/openai/client_test.go
+A  features/model/openai/document_contract_test.go
+A  features/model/openai/document_input.go
+A  features/model/openai/document_input_test.go
+A  features/model/openai/document_rejection_test.go
+ M integration_tests/fixtures/agent_features/AGENTS_QUICKSTART.md
+ M integration_tests/fixtures/agent_features/design/design.go
+ M integration_tests/fixtures/agent_features/gen/features/agents/specialist/registry.go
+ M integration_tests/fixtures/agent_features/gen/loom.json
+ M integration_tests/fixtures/agent_features/selvedge_observation_test.go
+ M integration_tests/fixtures/agent_features/selvedge_recording_test.go
+ M integration_tests/fixtures/agent_features/selvedge_replay_test.go
+ M integration_tests/fixtures/agent_features/temporal_acceptance_test.go
+ M integration_tests/fixtures/agent_features/workflow_budget_replay_test.go
+ M integration_tests/fixtures/agent_features/workflow_child_replay_test.go
+ M integration_tests/fixtures/agent_features/workflow_continuation_replay_test.go
+ M integration_tests/fixtures/agent_features/workflow_default_replay_test.go
+ M integration_tests/fixtures/agent_features/workflow_multimodal_replay_test.go
+ M integration_tests/fixtures/agent_features/workflow_pause_replay_test.go
+ M integration_tests/fixtures/agent_features/workflow_replay_test.go
+ M integration_tests/fixtures/agent_features/workflow_summary_replay_test.go
+ M integration_tests/fixtures/assistant/AGENTS_QUICKSTART.md
+ M integration_tests/fixtures/longrun/AGENTS_QUICKSTART.md
+ M integration_tests/fixtures/longrun/gen/loom.json
+ M quickstart/AGENTS_QUICKSTART.md
+ M quickstart/gen/loom.json
+ M runtime/agent/api/content.go
+ M runtime/agent/api/summarize.go
+ M runtime/agent/api/types.go
+ M runtime/agent/api/workflow_protocol.go
+ M runtime/agent/engine/temporal/data_converter.go
+ M runtime/agent/hooks/context_events.go
+ M runtime/agent/hooks/record_events.go
+ M runtime/agent/model/clone.go
+ M runtime/agent/model/model.go
+ M runtime/agent/model/output_validation.go
+ M runtime/agent/model/request_contract.go
+ M runtime/agent/runrecord/read.go
+ M runtime/agent/runrecord/record.go
+ M runtime/agent/runtime/agent_context.go
+ M runtime/agent/runtime/call_recording.go
+ M runtime/agent/runtime/finalization_record_test.go
+ M runtime/agent/runtime/model_call_info.go
+ M runtime/agent/runtime/planner_activities.go
+ M runtime/agent/runtime/publish_hook_activity_context_test.go
+ M runtime/agent/runtime/record_content.go
+ M runtime/agent/runtime/record_content_test.go
+ M runtime/agent/runtime/recovery_turns_test.go
+ M runtime/agent/runtime/run_options.go
+ M runtime/agent/runtime/runtime.go
+ M runtime/agent/runtime/runtime_catalog.go
+ M runtime/agent/runtime/runtime_models.go
+ M runtime/agent/runtime/runtime_registration.go
+ M runtime/agent/runtime/runtime_runs.go
+ M runtime/agent/runtime/summarize_activity.go
+ M runtime/agent/runtime/summary_fold.go
+ M runtime/agent/runtime/workflow.go
+ M runtime/agent/runtime/workflow_compaction.go
+ M runtime/agent/runtime/workflow_index.go
+ M runtime/agent/runtime/workflow_plan_activity.go
+ M runtime/agent/runtime/workflow_summary.go
+ M runtime/agent/runtime/workflow_terminal_policy_test.go
+ M runtime/agent/runtime/workflow_turn.go
+ M runtime/mcp/httpcaller.go
+?? docs/wips/compaction_tail_retention_audit.md
+?? docs/wips/gemini_hosted_code_evaluation.md
+?? docs/wips/mcp_credential_refresh_evaluation.md
+?? docs/wips/model_call_admission_budget.md
+?? features/model/gemini/continuation_contract_test.go
+?? features/model/gemini/continuation_generation.go
+?? features/model/gemini/continuation_http_test.go
+?? features/model/gemini/continuation_terminal_test.go
+?? features/model/gemini/continuation_usage.go
+?? features/model/gemini/continuation_usage_test.go
+?? features/model/gemini/hosted_code_evaluation_test.go
+?? features/model/gemini/hosted_code_proposal_test.go
+?? features/model/gemini/testdata/hosted_code/
+?? features/mongo/clientinfra/model_call_budget_integration_test.go
+?? integration_tests/fixtures/agent_features/model_call_budget_test.go
+?? integration_tests/fixtures/agent_features/testdata/selvedge/workflow_protocol_v20.json
+?? integration_tests/fixtures/agent_features/testdata/selvedge/workflow_protocol_v20_budget.json
+?? integration_tests/fixtures/agent_features/testdata/selvedge/workflow_protocol_v20_child.json
+?? integration_tests/fixtures/agent_features/testdata/selvedge/workflow_protocol_v20_child_run.json
+?? integration_tests/fixtures/agent_features/testdata/selvedge/workflow_protocol_v20_confirmed_pause.json
+?? integration_tests/fixtures/agent_features/testdata/selvedge/workflow_protocol_v20_continued.json
+?? integration_tests/fixtures/agent_features/testdata/selvedge/workflow_protocol_v20_default.json
+?? integration_tests/fixtures/agent_features/testdata/selvedge/workflow_protocol_v20_model_call_budget.json
+?? integration_tests/fixtures/agent_features/testdata/selvedge/workflow_protocol_v20_multimodal.json
+?? integration_tests/fixtures/agent_features/testdata/selvedge/workflow_protocol_v20_nontext_resident.json
+?? integration_tests/fixtures/agent_features/testdata/selvedge/workflow_protocol_v20_summary.json
+?? integration_tests/fixtures/agent_features/testdata/workflow_protocol_v20.json
+?? integration_tests/fixtures/agent_features/testdata/workflow_protocol_v20_budget.json
+?? integration_tests/fixtures/agent_features/testdata/workflow_protocol_v20_child.json
+?? integration_tests/fixtures/agent_features/testdata/workflow_protocol_v20_child_run.json
+?? integration_tests/fixtures/agent_features/testdata/workflow_protocol_v20_confirmed_pause.json
+?? integration_tests/fixtures/agent_features/testdata/workflow_protocol_v20_continued.json
+?? integration_tests/fixtures/agent_features/testdata/workflow_protocol_v20_default.json
+?? integration_tests/fixtures/agent_features/testdata/workflow_protocol_v20_model_call_budget.json
+?? integration_tests/fixtures/agent_features/testdata/workflow_protocol_v20_multimodal.json
+?? integration_tests/fixtures/agent_features/testdata/workflow_protocol_v20_nontext_resident.json
+?? integration_tests/fixtures/agent_features/testdata/workflow_protocol_v20_summary.json
+?? integration_tests/fixtures/agent_features/workflow_model_call_replay_test.go
+?? integration_tests/fixtures/assistant/discoverybench/
+?? integration_tests/fixtures/assistant/progressive_discovery/stateful_evaluation/
+?? runtime/agent/engine/temporal/model_call_converter_test.go
+?? runtime/agent/model/request_input_usage.go
+?? runtime/agent/model/request_input_usage_test.go
+?? runtime/agent/policy/model_calls.go
+?? runtime/agent/runrecord/model_calls.go
+?? runtime/agent/runtime/call_recording_continuation_test.go
+?? runtime/agent/runtime/model_call_budget.go
+?? runtime/agent/runtime/model_call_budget_test.go
+?? runtime/agent/runtime/model_call_evidence_test.go
+?? runtime/agent/runtime/model_call_failures_test.go
+?? runtime/agent/runtime/model_call_policy.go
+?? runtime/agent/runtime/model_call_policy_test.go
+?? runtime/agent/runtime/runtime_models_continuation_test.go
+?? runtime/agent/runtime/summary_rolling_test.go
+?? runtime/mcp/credential_refresh_evaluation_test.go
+?? runtime/mcp/credential_refresh_sdk_evaluation_test.go
+?? runtime/mcp/http_user_agent.go
+?? runtime/mcp/http_user_agent_integration_test.go
+?? runtime/mcp/http_user_agent_test.go
+?? runtime/mcp/http_user_agent_version_test.go
+go version go1.27.2 darwin/arm64
+Darwin INC-62P4PJC-luca 27.0.0 Darwin Kernel Version 27.0.0: Tue Aug 11 21:02:59 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T8142 arm64
+uv 0.13.1 (Homebrew 2026-10-14 aarch64-apple-darwin)
+Python 3.13.9
+annotated-types==0.8.0
+anyio==4.15.1
+attrs==26.1.0
+certifi==2026.10.18
+h11==0.16.0
+httpcore==1.0.9
+httpx==0.28.1
+idna==3.20
+jsonschema==4.26.0
+jsonschema-specifications==2025.9.1
+pydantic==2.14.1
+pydantic-core==2.50.1
+pyyaml==6.0.3
+referencing==0.37.0
+rpds-py==2026.9.1
+schemarouter @ git+https://github.com/JDeun/SchemaRouter.git@f7a332220eb16d2264d85f2a87c56dc0c5c020f8
+typing-extensions==4.16.0
+typing-inspection==0.4.4

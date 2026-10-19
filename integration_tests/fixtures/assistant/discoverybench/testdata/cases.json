@@ -1,0 +1,245 @@
+{
+  "cases": [
+    {
+      "id": "exact-summary",
+      "query": "summarize_text",
+      "routes": [
+        {
+          "input_fields": [
+            "/properties/text"
+          ],
+          "output_fields": [
+            "/properties/summary"
+          ],
+          "tool": "summarize_text"
+        }
+      ],
+      "unsupported_output_fields": []
+    },
+    {
+      "id": "sentiment-synonym",
+      "query": "tone emotion polarity",
+      "routes": [
+        {
+          "input_fields": [
+            "/properties/text"
+          ],
+          "output_fields": [
+            "/properties/sentiment"
+          ],
+          "tool": "analyze_sentiment"
+        }
+      ],
+      "unsupported_output_fields": []
+    },
+    {
+      "id": "keyword-synonym",
+      "query": "extract terms phrases entities",
+      "routes": [
+        {
+          "input_fields": [
+            "/properties/text"
+          ],
+          "output_fields": [
+            "/properties/keywords/items"
+          ],
+          "tool": "extract_keywords"
+        }
+      ],
+      "unsupported_output_fields": []
+    },
+    {
+      "id": "document-lookup",
+      "query": "document lookup",
+      "routes": [
+        {
+          "input_fields": [
+            "/properties/query",
+            "/properties/limit"
+          ],
+          "output_fields": [
+            "/properties/results/items"
+          ],
+          "tool": "search"
+        }
+      ],
+      "unsupported_output_fields": []
+    },
+    {
+      "id": "records-lookup",
+      "query": "records lookup",
+      "routes": [
+        {
+          "input_fields": [
+            "/properties/query",
+            "/properties/limit"
+          ],
+          "output_fields": [
+            "/properties/results/items"
+          ],
+          "tool": "search_records"
+        }
+      ],
+      "unsupported_output_fields": []
+    },
+    {
+      "id": "projected",
+      "query": "runtime tool data",
+      "routes": [
+        {
+          "input_fields": [
+            "/properties/query"
+          ],
+          "output_fields": [
+            "/properties/answer",
+            "/properties/source"
+          ],
+          "tool": "projected_lookup_tool"
+        }
+      ],
+      "unsupported_output_fields": []
+    },
+    {
+      "id": "field-bounded",
+      "query": "bounded lookup next_cursor returned truncated",
+      "routes": [
+        {
+          "input_fields": [
+            "/properties/query",
+            "/properties/cursor"
+          ],
+          "output_fields": [
+            "/properties/hits/items",
+            "/properties/next_cursor",
+            "/properties/returned",
+            "/properties/truncated"
+          ],
+          "tool": "projected_bounded_lookup_tool"
+        }
+      ],
+      "unsupported_output_fields": []
+    },
+    {
+      "id": "field-design",
+      "query": "screen platform viewport sections primary_cta",
+      "routes": [
+        {
+          "input_fields": [
+            "/properties/screen_title",
+            "/properties/platform",
+            "/properties/density",
+            "/properties/primary_cta",
+            "/properties/sections/items"
+          ],
+          "output_fields": [
+            "/properties/screen_title",
+            "/properties/platform",
+            "/properties/density",
+            "/properties/viewport/properties/width",
+            "/properties/viewport/properties/height",
+            "/properties/sections/items/properties/name",
+            "/properties/sections/items/properties/component",
+            "/properties/primary_cta/properties/label",
+            "/properties/primary_cta/properties/style"
+          ],
+          "tool": "generate_dpi_spec"
+        }
+      ],
+      "unsupported_output_fields": []
+    },
+    {
+      "id": "ambiguous-lookup",
+      "query": "lookup",
+      "routes": [
+        {
+          "input_fields": [
+            "/properties/query",
+            "/properties/limit"
+          ],
+          "output_fields": [
+            "/properties/results/items"
+          ],
+          "tool": "search"
+        },
+        {
+          "input_fields": [
+            "/properties/query",
+            "/properties/limit"
+          ],
+          "output_fields": [
+            "/properties/results/items"
+          ],
+          "tool": "search_records"
+        },
+        {
+          "input_fields": [
+            "/properties/query"
+          ],
+          "output_fields": [
+            "/properties/answer",
+            "/properties/source"
+          ],
+          "tool": "projected_lookup_tool"
+        }
+      ],
+      "unsupported_output_fields": []
+    },
+    {
+      "id": "ambiguous-search",
+      "query": "search query limit",
+      "routes": [
+        {
+          "input_fields": [
+            "/properties/query",
+            "/properties/limit"
+          ],
+          "output_fields": [
+            "/properties/results/items"
+          ],
+          "tool": "search"
+        },
+        {
+          "input_fields": [
+            "/properties/query",
+            "/properties/limit"
+          ],
+          "output_fields": [
+            "/properties/results/items"
+          ],
+          "tool": "search_records"
+        }
+      ],
+      "unsupported_output_fields": []
+    },
+    {
+      "id": "unsupported",
+      "query": "send invoice payment to bank account",
+      "routes": [],
+      "unsupported_output_fields": []
+    },
+    {
+      "id": "unsupported-field",
+      "query": "summarize text and return exchange_rate",
+      "routes": [
+        {
+          "input_fields": [
+            "/properties/text"
+          ],
+          "output_fields": [
+            "/properties/summary"
+          ],
+          "tool": "summarize_text"
+        }
+      ],
+      "unsupported_output_fields": [
+        "/properties/exchange_rate"
+      ]
+    }
+  ],
+  "k_values": [
+    1,
+    3,
+    5
+  ],
+  "version": 1
+}
