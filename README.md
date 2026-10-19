@@ -43,7 +43,7 @@ This repo currently targets:
 - `github.com/modelcontextprotocol/go-sdk v1.8.1-0.20261016161459-3e9d812b1814`
 - Go `1.27.2` or later
 
-The dependency baseline uses current stable releases, including MongoDB `9.0.2`,
+The dependency baseline uses current stable releases, including MongoDB `9.0.4`,
 Redis `8.10.2`, the MongoDB Go driver `v2.9.2`, Redis Go client `v9.23.0`,
 and OpenAI Go SDK `v3.74.0`. See [dependency policy](docs/dependencies.md) for
 version verification and the explicit unreleased pins.

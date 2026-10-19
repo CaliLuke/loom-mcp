@@ -11,7 +11,7 @@ Verified on 2026-10-08:
 | --- | --- |
 | Go | 1.27.2 |
 | Loom | v1.10.0-alpha.10 (verified 2026-10-14) |
-| MongoDB server / Go driver | 9.0.2 / v2.9.2 |
+| MongoDB server / Go driver | 9.0.4 / v2.9.2 |
 | Redis server / Go client | 8.10.2 / CaliLuke/go-redis v9.23.1-0.20261014134601-1073297e76ea (client verified 2026-10-14) |
 | OpenAI Go SDK | v3.74.0 |
 | Anthropic Go SDK | v1.79.1 |
@@ -48,9 +48,13 @@ Explicit exceptions:
   recorded in the module files; a pseudo-version alone does not identify an
   obsolete dependency.
 
-Container tests use `mongo:9.0.2` and `redis:8.10.2-alpine`, rather than old
+Container tests use `mongo:9.0.4` and `redis:8.10.2-alpine`, rather than old
 major-only image tags. The MongoDB tests still require a replica set for
 transactional behavior.
+
+MongoDB server 9.0.4 was re-verified on 2026-10-19. It includes the upstream
+[Ubuntu kernel compatibility fix](https://jira.mongodb.org/browse/SERVER-131779)
+for the startup refusal observed with 9.0.2 on the hosted Docker runner.
 
 Staticcheck v0.8.1 is built with the stable `golang.org/x/tools v0.51.0` importer
 for Go 1.27.2 export-data support. `make tools` verifies both versions. Its check
