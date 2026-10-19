@@ -737,6 +737,11 @@ func translateResponse(modelID string, modelClass model.ModelClass, resp *genai.
 	if resp == nil {
 		return &model.Response{}, nil
 	}
+	for _, candidate := range resp.Candidates {
+		if candidate != nil && candidate.FinishReason == genai.FinishReasonContinuation {
+			return nil, continuationError(translateUsage(modelID, modelClass, resp.UsageMetadata))
+		}
+	}
 	messages := make([]model.Message, 0, len(resp.Candidates))
 	toolCalls := make([]model.ToolCall, 0)
 	stopReason, outputLimitedReason := geminiFinishReasons(resp.Candidates)

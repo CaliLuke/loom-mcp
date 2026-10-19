@@ -821,6 +821,12 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - Gemini and Vertex support exact `model.TokenCounter` but their `Stream`
   method returns `model.ErrStreamingUnsupported`; streaming is an explicit
   provider capability despite being part of the shared client interface.
+  Any `CONTINUATION` candidate rejects the whole response before content/tool
+  translation with `OutputValidationError` (`response_shape`) wrapping
+  `gemini.ErrContinuationUnsupported`. There is no automatic continuation.
+  Valid single-call usage survives for failed-call recording; malformed usage
+  is omitted. Evidence records response presence without retaining partial output.
+  `MAX_TOKENS` remains output-limited, not context overflow.
 - OpenAI Responses projects tool and structured-output schemas into the
   provider strict-schema subset, rejects structured output combined with
   tools, and round-trips canonical tool names through its request-local codec.
@@ -976,6 +982,11 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   are design/runtime-owned and must not be controlled by tool payloads. Tool
   results use model-facing hits and must not expose raw scope, source
   references, or metadata from stored entries.
+  The in-memory service tokenizes Unicode letters, numbers and combining marks
+  for case-insensitive substring matching without canonical normalization.
+  Discard mark-only terms, including isolated emoji variation selectors.
+  Empty/whitespace queries browse; nonempty queries with no terms return no hits.
+  Scope/label filters and score, newest-timestamp, ID ordering precede the limit.
 - Planner-input memory preload is opt-in through generated
   `RunPolicy.PreloadMemory`. It fills `planner.PlanInput.PreloadedMemory` and
   `planner.PlanResumeInput.PreloadedMemory` with bounded snippets without

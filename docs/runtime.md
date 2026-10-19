@@ -4392,6 +4392,15 @@ derives a non-global namespace from the agent ID and reads reserved run labels
 `memory.namespace` and `memory.user_id`; production runtimes should provide
 `runtime.WithMemoryScopeResolver(...)` for account/project/user routing.
 
+The in-memory `memory.Service` matches case-insensitive substrings using query
+terms composed of Unicode letters, numbers and combining marks. Punctuation
+separates terms; each term must contain a letter or number, so isolated marks
+and emoji variation selectors are discarded. Empty or whitespace-only queries browse the filtered scope;
+nonempty queries with no searchable terms return no hits. Matching does not
+normalize canonically equivalent Unicode sequences. Results retain scope and
+label filtering, then sort by matched-term fraction, newest timestamp and ID
+before applying the limit.
+
 Use `FromMemory(MemoryLongTerm(), ...)` to expose `search_memory`. The
 model-facing payload accepts `query`, optional `labels`, and optional `limit`;
 visibility and scope are owned by the design/runtime configuration, not by model
@@ -4818,6 +4827,15 @@ client, err := rt.NewVertexGeminiModelClient(ctx, runtime.VertexConfig{
     ThinkingBudget: 8192,
 })
 ```
+
+Gemini and Vertex reject a response containing a `CONTINUATION` candidate with
+`model.OutputValidationError` (`response_shape`), wrapping
+`gemini.ErrContinuationUnsupported`. Automatic continuation is not supported by
+the adapter. No partial answer or tool calls are returned. Valid usage from the
+single provider call remains available through the rejection's `Usage()` and is
+recorded as a failed call; its input count still describes that one request.
+Malformed usage is omitted. `MAX_TOKENS` remains an output-limit rejection and
+does not become a context-overflow error.
 
 ### Structured Output
 
