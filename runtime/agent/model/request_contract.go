@@ -179,20 +179,11 @@ func (c *RequestContract) captureStructuredOutput(req *Request) error {
 // ValidateResponse validates a complete provider response against the captured
 // request contract and returns a detached response on success.
 func (c *RequestContract) ValidateResponse(resp *Response) (*Response, error) {
-	evidence := ResponseEvidence{Present: resp != nil}
-	if resp == nil {
-		return nil, newOutputValidationError(OutputValidationResponseShape, errors.New("provider returned a nil response"), evidence, nil)
-	}
-	owned, err := cloneModelResponse(resp)
+	owned, err := cloneResponseForValidation(resp)
 	if err != nil {
-		kind := OutputValidationResponseShape
-		var boundsErr *modelBoundsError
-		if errors.As(err, &boundsErr) {
-			kind = OutputValidationOutputBounds
-		}
-		return nil, newOutputValidationError(kind, err, evidence, &resp.Usage)
+		return nil, err
 	}
-	evidence = responseEvidence(owned)
+	evidence := responseEvidence(owned)
 	if err := validateTokenUsage(owned.Usage); err != nil {
 		return nil, newOutputValidationError(OutputValidationUsage, err, evidence, &owned.Usage)
 	}
@@ -988,18 +979,43 @@ func compileModelSchema(schema any, label string) (*jsonschema.Schema, error) {
 	return compiled, nil
 }
 
+// cloneResponseForValidation retains bounded usage evidence when ownership or
+// original-request accounting rejects a provider response.
+func cloneResponseForValidation(resp *Response) (*Response, error) {
+	evidence := ResponseEvidence{Present: resp != nil}
+	if resp == nil {
+		return nil, newOutputValidationError(OutputValidationResponseShape, errors.New("provider returned a nil response"), evidence, nil)
+	}
+	evidence.RequestInputUsage = retainedRequestInputUsage(resp.RequestInputUsage, &resp.Usage)
+	if err := validateRequestInputUsage(resp.RequestInputUsage, &resp.Usage); err != nil {
+		return nil, newOutputValidationError(OutputValidationUsage, err, evidence, &resp.Usage)
+	}
+	owned, err := cloneModelResponse(resp)
+	if err != nil {
+		kind := OutputValidationResponseShape
+		var boundsErr *modelBoundsError
+		if errors.As(err, &boundsErr) {
+			kind = OutputValidationOutputBounds
+		}
+		return nil, newOutputValidationError(kind, err, evidence, &resp.Usage)
+	}
+	return owned, nil
+}
+
 func responseEvidence(resp *Response) ResponseEvidence {
 	if resp == nil {
 		return ResponseEvidence{}
 	}
+	input := retainedRequestInputUsage(resp.RequestInputUsage, &resp.Usage)
 	raw, err := deterministicModelJSON(resp)
 	if err != nil || len(raw) > maxModelOutputBytes {
-		return ResponseEvidence{Present: true, ByteCount: len(raw)}
+		return ResponseEvidence{Present: true, ByteCount: len(raw), RequestInputUsage: input}
 	}
 	return ResponseEvidence{
-		Present:     true,
-		ByteCount:   len(raw),
-		Fingerprint: sha256.Sum256(raw),
+		Present:           true,
+		ByteCount:         len(raw),
+		Fingerprint:       sha256.Sum256(raw),
+		RequestInputUsage: input,
 	}
 }
 

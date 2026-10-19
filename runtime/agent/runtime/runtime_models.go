@@ -74,29 +74,35 @@ type OllamaConfig struct {
 
 // GeminiConfig configures the Gemini API-backed model client created by the runtime.
 type GeminiConfig struct {
-	APIKey         string
-	DefaultModel   string
-	HighModel      string
-	SmallModel     string
-	MaxTokens      int
-	ThinkingBudget int
-	Temperature    float32
+	// MaxGenerationRequests caps generation requests including the initial request.
+	// Zero disables continuation; SDK transport retries remain separate.
+	MaxGenerationRequests int
+	APIKey                string
+	DefaultModel          string
+	HighModel             string
+	SmallModel            string
+	MaxTokens             int
+	ThinkingBudget        int
+	Temperature           float32
 }
 
 // VertexConfig configures the Vertex AI Gemini model client created by the runtime.
 type VertexConfig struct {
-	ProjectID      string
-	Location       string
-	APIKey         string
-	Credentials    *auth.Credentials
-	HTTPClient     *http.Client
-	HTTPOptions    genai.HTTPOptions
-	DefaultModel   string
-	HighModel      string
-	SmallModel     string
-	MaxTokens      int
-	ThinkingBudget int
-	Temperature    float32
+	// MaxGenerationRequests caps generation requests including the initial request.
+	// Zero disables continuation; SDK transport retries remain separate.
+	MaxGenerationRequests int
+	ProjectID             string
+	Location              string
+	APIKey                string
+	Credentials           *auth.Credentials
+	HTTPClient            *http.Client
+	HTTPOptions           genai.HTTPOptions
+	DefaultModel          string
+	HighModel             string
+	SmallModel            string
+	MaxTokens             int
+	ThinkingBudget        int
+	Temperature           float32
 }
 
 // RegisterModel registers a ModelClient by identifier for planner lookup.
@@ -289,13 +295,14 @@ func (r *Runtime) NewGeminiModelClient(ctx context.Context, cfg GeminiConfig) (m
 		return nil, fmt.Errorf("gemini client init: %w", err)
 	}
 	provider, err := gemini.New(gemini.Options{
-		Client:         client.Models,
-		DefaultModel:   cfg.DefaultModel,
-		HighModel:      cfg.HighModel,
-		SmallModel:     cfg.SmallModel,
-		MaxTokens:      cfg.MaxTokens,
-		ThinkingBudget: cfg.ThinkingBudget,
-		Temperature:    cfg.Temperature,
+		Client:                client.Models,
+		DefaultModel:          cfg.DefaultModel,
+		HighModel:             cfg.HighModel,
+		SmallModel:            cfg.SmallModel,
+		MaxTokens:             cfg.MaxTokens,
+		ThinkingBudget:        cfg.ThinkingBudget,
+		MaxGenerationRequests: cfg.MaxGenerationRequests,
+		Temperature:           cfg.Temperature,
 	})
 	if err != nil {
 		return nil, err
@@ -321,18 +328,19 @@ func (r *Runtime) NewVertexGeminiModelClient(ctx context.Context, cfg VertexConf
 		return nil, errors.New("vertex: default model is required")
 	}
 	provider, err := gemini.NewFromVertex(ctx, gemini.VertexOptions{
-		ProjectID:      projectID,
-		Location:       location,
-		APIKey:         apiKey,
-		Credentials:    cfg.Credentials,
-		HTTPClient:     cfg.HTTPClient,
-		HTTPOptions:    cfg.HTTPOptions,
-		DefaultModel:   cfg.DefaultModel,
-		HighModel:      cfg.HighModel,
-		SmallModel:     cfg.SmallModel,
-		MaxTokens:      cfg.MaxTokens,
-		ThinkingBudget: cfg.ThinkingBudget,
-		Temperature:    cfg.Temperature,
+		ProjectID:             projectID,
+		Location:              location,
+		APIKey:                apiKey,
+		Credentials:           cfg.Credentials,
+		HTTPClient:            cfg.HTTPClient,
+		HTTPOptions:           cfg.HTTPOptions,
+		DefaultModel:          cfg.DefaultModel,
+		HighModel:             cfg.HighModel,
+		SmallModel:            cfg.SmallModel,
+		MaxTokens:             cfg.MaxTokens,
+		ThinkingBudget:        cfg.ThinkingBudget,
+		MaxGenerationRequests: cfg.MaxGenerationRequests,
+		Temperature:           cfg.Temperature,
 	})
 	if err != nil {
 		return nil, err

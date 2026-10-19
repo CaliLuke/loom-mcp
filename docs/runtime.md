@@ -4917,14 +4917,31 @@ client, err := rt.NewVertexGeminiModelClient(ctx, runtime.VertexConfig{
 })
 ```
 
-Gemini and Vertex reject a response containing a `CONTINUATION` candidate with
-`model.OutputValidationError` (`response_shape`), wrapping
-`gemini.ErrContinuationUnsupported`. Automatic continuation is not supported by
-the adapter. No partial answer or tool calls are returned. Valid usage from the
-single provider call remains available through the rejection's `Usage()` and is
-recorded as a failed call; its input count still describes that one request.
-Malformed usage is omitted. `MAX_TOKENS` remains an output-limit rejection and
-does not become a context-overflow error.
+Gemini and Vertex reject `CONTINUATION` by default with
+`model.OutputValidationError` wrapping `gemini.ErrContinuationUnsupported`.
+Set `MaxGenerationRequests` on `runtime.GeminiConfig`, `runtime.VertexConfig`,
+`gemini.Options`, or `gemini.VertexOptions` to opt into bounded unary continuation.
+The positive value counts generation requests including the initial request;
+`1` permits no follow-up, `0` disables continuation, and negative values fail
+construction. SDK transport retries remain separate from this limit.
+
+A continued call reuses the original request and output cap, changing only the
+opaque continuation token. It requires one candidate with stable lineage,
+valid usage on every hop, fresh nonempty tokens, and final `STOP`. Repeated tokens,
+missing evidence, cancellation, exhausted requests, and canonical output bounds
+stop the call. No partial answer or tool calls escape. `MAX_TOKENS` never resumes;
+it remains an output-limit rejection. Streaming remains unsupported.
+
+One continued generation consumes one logical model-call reservation and produces
+one canonical call record. `TokenUsage` sums billable counts from successful hops,
+including tool-use prompt tokens. Optional `RequestInputUsage` on the response or
+rejection evidence retains the first validated provider `PromptTokenCount`, which
+includes cached prompt tokens but excludes tool-use prompt tokens. Recording uses
+that initial count for request facts; aggregate billing never becomes the original
+request size. Later failures retain valid prior usage and initial facts, with
+redacted public errors and the original provider/cancellation classification.
+See Google's [manual continuation guide](https://ai.google.dev/gemini-api/docs/generate-content/long-decode)
+and [usage field reference](https://ai.google.dev/api/generate-content#UsageMetadata).
 
 ### Structured Output
 
@@ -5159,7 +5176,11 @@ it decode as zero.
 
 Every terminal call has facts: unary success/failure, stream setup failure,
 `Finalize`, `Close`, and `stream_abandoned`. Only started records have no facts.
-`InputTokens` sums input, cache reads and cache writes; missing usage gives zero.
+`InputTokens` normally sums input, cache reads and cache writes; missing usage gives
+zero. When a response or output-rejection evidence carries present
+`RequestInputUsage`, its initial-request count overrides this sum. A present zero
+means unmeasured/zero and never falls back to aggregate continuation billing.
+Completion usage and all usage totals remain additive billable counts.
 Streaming facts use the usage chunks observed by the recorder, including those
 received before closing or abandoning a stream. Outcomes are `ok`, `overflow`
 for provider `context_overflow`, and `error` for other failures.

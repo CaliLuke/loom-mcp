@@ -23,6 +23,8 @@ import (
 
 type (
 	// ModelsClient captures the subset of the Gen AI SDK used by the adapter.
+	// GenerateContent must return one provider hop per invocation; the adapter
+	// owns continuation and relies on that boundary to enforce its request cap.
 	ModelsClient interface {
 		GenerateContent(ctx context.Context, model string, contents []*genai.Content, config *genai.GenerateContentConfig) (*genai.GenerateContentResponse, error)
 	}
@@ -39,6 +41,11 @@ type (
 	Options struct {
 		// Client is the underlying Gen AI models client.
 		Client ModelsClient
+
+		// MaxGenerationRequests opts into continuation and caps GenerateContent
+		// invocations including the initial request. Zero keeps continuation
+		// unsupported. Transport retries remain owned by the supplied SDK client.
+		MaxGenerationRequests int
 
 		// DefaultModel is the model identifier used when Request.Model is empty.
 		DefaultModel string
@@ -86,6 +93,10 @@ type (
 		// HTTPOptions optionally overrides Gen AI SDK HTTP behavior.
 		HTTPOptions genai.HTTPOptions
 
+		// MaxGenerationRequests caps generation requests including the initial
+		// request. Zero preserves unsupported-continuation rejection.
+		MaxGenerationRequests int
+
 		// DefaultModel is the model identifier used when Request.Model is empty.
 		DefaultModel string
 
@@ -112,14 +123,15 @@ type (
 
 	// Client implements model.Provider using Gemini GenerateContent calls.
 	Client struct {
-		limitsCache    contextlimits.Cache
-		models         ModelsClient
-		defaultModel   string
-		highModel      string
-		smallModel     string
-		maxTokens      int
-		temperature    float32
-		thinkingBudget int
+		limitsCache           contextlimits.Cache
+		models                ModelsClient
+		defaultModel          string
+		highModel             string
+		smallModel            string
+		maxTokens             int
+		temperature           float32
+		thinkingBudget        int
+		maxGenerationRequests int
 	}
 
 	toolResultRef struct {
@@ -138,14 +150,18 @@ func New(opts Options) (*Client, error) {
 	if opts.DefaultModel == "" {
 		return nil, errors.New("default model identifier is required")
 	}
+	if opts.MaxGenerationRequests < 0 {
+		return nil, errors.New("gemini: maximum generation requests must not be negative")
+	}
 	return &Client{
-		models:         opts.Client,
-		defaultModel:   opts.DefaultModel,
-		highModel:      opts.HighModel,
-		smallModel:     opts.SmallModel,
-		maxTokens:      opts.MaxTokens,
-		temperature:    opts.Temperature,
-		thinkingBudget: opts.ThinkingBudget,
+		models:                opts.Client,
+		defaultModel:          opts.DefaultModel,
+		highModel:             opts.HighModel,
+		smallModel:            opts.SmallModel,
+		maxTokens:             opts.MaxTokens,
+		temperature:           opts.Temperature,
+		thinkingBudget:        opts.ThinkingBudget,
+		maxGenerationRequests: opts.MaxGenerationRequests,
 	}, nil
 }
 
@@ -167,6 +183,9 @@ func NewFromAPIKey(apiKey, defaultModel string) (*Client, error) {
 // NewFromVertex constructs a Gemini client using the official Gen AI SDK's
 // Vertex AI backend.
 func NewFromVertex(ctx context.Context, opts VertexOptions) (*Client, error) {
+	if opts.MaxGenerationRequests < 0 {
+		return nil, errors.New("gemini: maximum generation requests must not be negative")
+	}
 	if opts.APIKey == "" && opts.ProjectID == "" {
 		return nil, errors.New("vertex: project id is required")
 	}
@@ -189,13 +208,14 @@ func NewFromVertex(ctx context.Context, opts VertexOptions) (*Client, error) {
 		return nil, fmt.Errorf("vertex gemini client init: %w", err)
 	}
 	return New(Options{
-		Client:         client.Models,
-		DefaultModel:   opts.DefaultModel,
-		HighModel:      opts.HighModel,
-		SmallModel:     opts.SmallModel,
-		MaxTokens:      opts.MaxTokens,
-		Temperature:    opts.Temperature,
-		ThinkingBudget: opts.ThinkingBudget,
+		Client:                client.Models,
+		DefaultModel:          opts.DefaultModel,
+		HighModel:             opts.HighModel,
+		SmallModel:            opts.SmallModel,
+		MaxTokens:             opts.MaxTokens,
+		Temperature:           opts.Temperature,
+		ThinkingBudget:        opts.ThinkingBudget,
+		MaxGenerationRequests: opts.MaxGenerationRequests,
 	})
 }
 
@@ -205,17 +225,7 @@ func (c *Client) Complete(ctx context.Context, req *model.Request) (*model.Respo
 	if err != nil {
 		return nil, err
 	}
-	resp, err := c.models.GenerateContent(ctx, modelID, contents, config)
-	if err != nil {
-		if overflow := geminiContextOverflow(err); overflow != nil {
-			return nil, overflow
-		}
-		if isRateLimited(err) {
-			return nil, fmt.Errorf("%w: %w", model.ErrRateLimited, err)
-		}
-		return nil, fmt.Errorf("gemini generate_content: %w", err)
-	}
-	return translateResponse(modelID, req.ModelClass, resp)
+	return c.completeGeneration(ctx, modelID, req.ModelClass, contents, config)
 }
 
 // CountTokens implements model.TokenCounter using Gemini's native counter.
@@ -799,6 +809,11 @@ func geminiFinishReasons(candidates []*genai.Candidate) (string, string) {
 }
 
 func translateCandidate(candidate *genai.Candidate) (model.Message, []model.ToolCall, error) {
+	return translateCandidateParts(candidate, false)
+}
+
+// translateCandidateParts optionally retains signature-only thinking during continuation.
+func translateCandidateParts(candidate *genai.Candidate, preserveEmptyThoughts bool) (model.Message, []model.ToolCall, error) {
 	msg := model.Message{Role: model.ConversationRoleAssistant}
 	toolCalls := make([]model.ToolCall, 0)
 
@@ -810,7 +825,7 @@ func translateCandidate(candidate *genai.Candidate) (model.Message, []model.Tool
 			continue
 		}
 		switch {
-		case part.Text != "":
+		case part.Text != "" || (preserveEmptyThoughts && part.Thought):
 			if part.Thought {
 				msg.Parts = append(msg.Parts, model.ThinkingPart{
 					Text:      part.Text,

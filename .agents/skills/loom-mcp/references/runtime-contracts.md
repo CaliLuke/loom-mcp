@@ -844,12 +844,23 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - Gemini and Vertex support exact `model.TokenCounter` but their `Stream`
   method returns `model.ErrStreamingUnsupported`; streaming is an explicit
   provider capability despite being part of the shared client interface.
-  Any `CONTINUATION` candidate rejects the whole response before content/tool
-  translation with `OutputValidationError` (`response_shape`) wrapping
-  `gemini.ErrContinuationUnsupported`. There is no automatic continuation.
-  Valid single-call usage survives for failed-call recording; malformed usage
-  is omitted. Evidence records response presence without retaining partial output.
-  `MAX_TOKENS` remains output-limited, not context overflow.
+  By default `CONTINUATION` rejects with `OutputValidationError` wrapping
+  `gemini.ErrContinuationUnsupported`. Positive `MaxGenerationRequests` opts into
+  a bounded unary chain, counting the initial GenerateContent invocation but not
+  SDK transport retries. Zero disables continuation; negatives fail construction.
+  Reuse original contents/config/output cap, changing only continuationToken.
+  Require a single candidate with stable index, fresh nonempty tokens and valid
+  usage per hop; only STOP finishes. Canonical output bounds and cancellation are
+  checked before more I/O. MAX_TOKENS never resumes. Partial output is private.
+  Aggregate valid hop usage with checked arithmetic; missing/malformed later usage
+  or transport failure retains earlier billing through OutputValidationError.
+  Preserve cancellation/provider classifications while public errors stay redacted.
+  Per-response/evidence RequestInputUsage stores first validated PromptTokenCount
+  (cache included; tool-use prompts excluded), never an additive usage total.
+  Its presence overrides recorded RequestFacts.InputTokens, including present zero.
+  Continuation uses one logical reservation and one canonical record. Snapshots
+  and export preserve initial facts separately from aggregate Completion.Usage.
+
 - OpenAI Responses projects tool and structured-output schemas into the
   provider strict-schema subset, rejects structured output combined with
   tools, and round-trips canonical tool names through its request-local codec.

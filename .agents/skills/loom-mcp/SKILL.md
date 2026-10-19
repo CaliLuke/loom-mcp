@@ -496,6 +496,12 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - Gemini and Vertex implement exact `model.TokenCounter` but do not implement
   streaming; `Stream` returns `model.ErrStreamingUnsupported`. Treat streaming
   as a provider capability, not a universal consequence of `model.Client`.
+  Unary continuation is opt-in through `MaxGenerationRequests` (initial request
+  included; zero rejects continuation; SDK retries are separate). Require one
+  candidate, fresh tokens, valid hop usage, bounded output, and terminal STOP.
+  Never resume MAX_TOKENS or expose partial output. Aggregate billing stays in
+  TokenUsage; RequestInputUsage keeps first PromptTokenCount including cache but
+  excluding tool-use prompts for canonical request facts and failed-call evidence.
 - Provider-safe tool names must be deterministic, byte-bounded, collision
   checked, and reversible through the request-scoped canonical mapping. Do not
   truncate long canonical IDs without a stable hash suffix.

@@ -93,6 +93,18 @@ func (r *CallRecording) Overflow() *contextmeasure.ContextOverflow {
 	return &copy
 }
 
+// recordedRequestInputUsage reads per-invocation facts without changing billed usage.
+func recordedRequestInputUsage(response *model.Response, primary error) model.RequestInputUsage {
+	if response != nil {
+		return response.RequestInputUsage
+	}
+	var rejection *model.OutputValidationError
+	if errors.As(primary, &rejection) {
+		return rejection.Evidence().RequestInputUsage
+	}
+	return model.RequestInputUsage{}
+}
+
 func (r *CallRecording) configureOverflow(input *PlanActivityInput) {
 	if input.Overflow != nil {
 		r.overflowStep = *input.Overflow
@@ -280,6 +292,9 @@ func (c *recordedCall) complete(ctx context.Context, response *model.Response, u
 		}
 	}()
 	facts := c.facts.WithResult(usage, primary)
+	if input := recordedRequestInputUsage(response, primary); input.Present {
+		facts.InputTokens = input.InputTokens
+	}
 	source := ""
 	switch {
 	case kind == "context_budget":

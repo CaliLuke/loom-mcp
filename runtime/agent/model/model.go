@@ -524,6 +524,10 @@ type (
 		// Usage reports token consumption for the request.
 		Usage TokenUsage
 
+		// RequestInputUsage measures only the original request when the provider
+		// bills several internal continuation requests as one logical completion.
+		RequestInputUsage RequestInputUsage `json:"request_input_usage,omitzero"`
+
 		// StopReason records why generation stopped (provider-specific).
 		StopReason string
 

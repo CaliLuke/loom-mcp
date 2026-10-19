@@ -51,6 +51,8 @@ type ResponseEvidence struct {
 	Present     bool
 	ByteCount   int
 	Fingerprint [sha256.Size]byte
+	// RequestInputUsage retains original-request measurement, never billed totals.
+	RequestInputUsage RequestInputUsage `json:"request_input_usage,omitzero"`
 }
 
 // OutputValidationError reports that provider output failed the immutable
@@ -127,6 +129,9 @@ func RestoreOutputValidationError(kind OutputValidationKind, cause error, eviden
 		copy := *usage
 		usage = &copy
 	}
+	if err := validateRequestInputUsage(evidence.RequestInputUsage, usage); err != nil {
+		return nil, fmt.Errorf("model: output validation request input usage: %w", err)
+	}
 	return &OutputValidationError{kind: kind, cause: cause, evidence: evidence, usage: usage}, nil
 }
 
@@ -139,6 +144,7 @@ func newOutputValidationError(kind OutputValidationKind, cause error, evidence R
 		copy := *usage
 		copiedUsage = &copy
 	}
+	evidence.RequestInputUsage = retainedRequestInputUsage(evidence.RequestInputUsage, copiedUsage)
 	return &OutputValidationError{
 		kind:     kind,
 		cause:    cause,

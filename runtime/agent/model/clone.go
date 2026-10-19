@@ -171,6 +171,9 @@ func cloneModelResponse(response *Response) (*Response, error) {
 	if response == nil {
 		return nil, nil
 	}
+	if err := validateRequestInputUsage(response.RequestInputUsage, &response.Usage); err != nil {
+		return nil, err
+	}
 	budget := &cloneBudget{active: make(map[cloneContainer]struct{})}
 	owned := *response
 	if err := budget.addBytes(len(response.StopReason) + len(response.Usage.Model) + len(response.Usage.ModelClass)); err != nil {
