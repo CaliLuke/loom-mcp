@@ -1,0 +1,38 @@
+{
+  "candidates": [
+    {
+      "index": 0,
+      "content": {
+        "role": "model",
+        "parts": [
+          {
+            "text": "attempt"
+          },
+          {
+            "executableCode": {
+              "code": "raise ValueError(\"failed\")\n",
+              "language": "PYTHON",
+              "id": "exec-1"
+            }
+          },
+          {
+            "codeExecutionResult": {
+              "output": "ValueError: failed\n",
+              "outcome": "OUTCOME_FAILED",
+              "id": "exec-1"
+            }
+          },
+          {
+            "text": "execution failed"
+          }
+        ]
+      },
+      "finishReason": "STOP"
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 10,
+    "candidatesTokenCount": 3,
+    "totalTokenCount": 13
+  }
+}

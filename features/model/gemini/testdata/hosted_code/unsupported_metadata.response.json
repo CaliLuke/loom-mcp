@@ -1,0 +1,30 @@
+{
+  "candidates": [
+    {
+      "index": 0,
+      "content": {
+        "role": "model",
+        "parts": [
+          {
+            "text": "before"
+          },
+          {
+            "executableCode": {
+              "id": "exec-private",
+              "language": "PYTHON",
+              "code": "print(2)\n"
+            },
+            "thought": true,
+            "thoughtSignature": "cHJpdmF0ZQ=="
+          }
+        ]
+      },
+      "finishReason": "STOP"
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 10,
+    "candidatesTokenCount": 3,
+    "totalTokenCount": 13
+  }
+}

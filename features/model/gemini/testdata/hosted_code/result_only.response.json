@@ -1,0 +1,25 @@
+{
+  "candidates": [
+    {
+      "index": 0,
+      "content": {
+        "role": "model",
+        "parts": [
+          {
+            "codeExecutionResult": {
+              "output": "2\n",
+              "outcome": "OUTCOME_OK",
+              "id": "exec-1"
+            }
+          }
+        ]
+      },
+      "finishReason": "STOP"
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 10,
+    "candidatesTokenCount": 3,
+    "totalTokenCount": 13
+  }
+}

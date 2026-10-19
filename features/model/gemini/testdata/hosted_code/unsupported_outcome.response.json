@@ -1,0 +1,28 @@
+{
+  "candidates": [
+    {
+      "index": 0,
+      "content": {
+        "role": "model",
+        "parts": [
+          {
+            "text": "before"
+          },
+          {
+            "codeExecutionResult": {
+              "output": "unknown",
+              "outcome": "FUTURE_OUTCOME",
+              "id": "exec-1"
+            }
+          }
+        ]
+      },
+      "finishReason": "STOP"
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 10,
+    "candidatesTokenCount": 3,
+    "totalTokenCount": 13
+  }
+}

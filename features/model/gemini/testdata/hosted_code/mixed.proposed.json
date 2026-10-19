@@ -1,0 +1,22 @@
+[
+  {
+    "Kind": "text",
+    "Text": "before"
+  },
+  {
+    "Kind": "executable_code",
+    "ID": "exec-1",
+    "Language": "PYTHON",
+    "Code": "print(1 + 1)\n"
+  },
+  {
+    "Kind": "code_execution_result",
+    "ID": "exec-1",
+    "Outcome": "OUTCOME_OK",
+    "Output": "2\n"
+  },
+  {
+    "Kind": "text",
+    "Text": "after"
+  }
+]

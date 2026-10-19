@@ -1,0 +1,22 @@
+[
+  {
+    "Kind": "text",
+    "Text": "attempt"
+  },
+  {
+    "Kind": "executable_code",
+    "ID": "exec-1",
+    "Language": "PYTHON",
+    "Code": "raise ValueError(\"failed\")\n"
+  },
+  {
+    "Kind": "code_execution_result",
+    "ID": "exec-1",
+    "Outcome": "OUTCOME_FAILED",
+    "Output": "ValueError: failed\n"
+  },
+  {
+    "Kind": "text",
+    "Text": "execution failed"
+  }
+]
