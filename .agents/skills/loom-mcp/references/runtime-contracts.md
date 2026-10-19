@@ -1786,3 +1786,20 @@ ContextModel; disabled/default registration uses ContextDefault.
 - Failed/canceled probes remain operational errors and never enter quality denominators. Strict checks reject even unfinished probes with `quality_not_assessed`.
 - Prepared evaluations/probes use schema version 2 with matching header/attempt kinds; legacy version 1 omits all additions.
 - Probe comparisons suppress quality deltas and use `not_comparable`; any probe parent overlay fails. Rerun returns `ErrProbeRerunUnsupported`.
+
+## Retained experiment inspection
+
+- `eval/inspect` depends on eval/candidate/runrecord. Root eval and candidate remain independent of inspect.
+- Host-only `Publication` binds exact origin, candidate/baseline, expected outputs, byte attachments, renderings and versioned role policies.
+- `View` binds finite immutable manifest references and one fixed role/policy name. Request DTOs cannot expand authority.
+- Check view membership before body access. Locators are opaque identities. Foreign role/scope reads return `ErrNotFound`.
+- Editor sees authorized components/diffs/runs/outputs/notes. Selector sees approved task sources/outputs without lineage, internal names or provenance.
+- Evaluator references require explicit evaluator audiences. Incompatible audience grants fail publication. Protected-reference existence stays hidden elsewhere.
+- Canonical projections always deny server-only/raw evidence, reasoning, metadata, event payloads, diagnostics, system/developer content and raw attachments.
+- Nil `RunContent` omits canonical leaves. Nil `ArtifactContent` applies no redaction to structurally permitted bytes.
+- Persist approved bytes once. Reopen never invokes policy callbacks. Changed policy behavior needs a new name/publication.
+- Keep exact source digests and renderer versions. The host owns renderer correctness and raw/rendered redaction consistency.
+- Original components/outputs stay with their candidate/eval owners. Retain all three store roots for locator lifetime.
+- Enforce positive publication/read/list caps. Distinguish available empty, missing, withheld, provisional and response truncation.
+- Use output descriptor provisional status for evaluations and probes. Do not infer it from generic cleanup errors.
+- Keep canonical raw exports unchanged. Process restart supports reads. Concurrent writes from separate processes are outside this contract.

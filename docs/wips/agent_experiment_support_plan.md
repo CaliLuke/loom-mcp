@@ -10,6 +10,8 @@ This plan sequences the contracts in [the design](agent_experiment_support_desig
 - 2026-10-18 — User authorized implementation of this plan using Sol agents. Work started on `luca/agent-experiment-support`; milestone contracts, failing tests, mandatory gates and independent review precede each atomic commit. Pushes, releases, live experiments and production consumer changes remain outside scope.
 - 2026-10-18 — Milestone 1 committed as `1a3a751f`. Independent review found directory anchoring and frozen-draft integrity defects; both received failing regression tests and fixes, then a clean re-review. `make lint`, `make test`, `make ci-integration` and the commit hook passed. Milestone 2 is in progress with separate Sol authors for lifecycle, persistence/projections and the executable-source fixture.
 
+- 2026-10-18 — Milestone 3 implemented in an isolated worktree while Milestone 2 qualification continues. Combined eval/inspect/trajectory checks, inspect race tests, the real helper/restart fixture, static analysis and targeted lint passed. Full gates and independent review remain before integration and commit.
+
 ## Scope and current inventory
 
 Required: editable surface discovery; immutable candidates; one prepared configuration/input/environment binding; operational probes; retained sources/outputs and bounded evidence; optional agent control; explicit component reuse. Application-owned: proposal/composition/selection/reflection policy, real environment provisioning, domain checks and production adoption. Unified process accounting and pricing are deferred.
@@ -85,11 +87,11 @@ Acceptance Criteria
 
 Checklist
 
-- [ ] Inventory `eval/{store_evidence,show_json,store_message}.go`, `trajectory/{trajectory,document,render}.go`, `runtime/agent/artifact/artifact.go` and `runtime/agent/runtime/artifact_toolset.go`; do not widen the current-run artifact tools globally.
-- [ ] Add proposed `eval/inspect/{views,read,artifacts}_test.go`, then implement the corresponding bounded manifest/read/projection contracts using canonical captures plus retained host attachments and candidate store content.
-- [ ] Extend `eval/component_probe_test.go` to retain an unopened source, candidate diffs and an application decision note; verify byte identity and access rules after teardown and reopening stores in a new process.
-- [ ] Include raw server-only data, hidden judge references and instruction-bearing task/tool content in projection tests. Assert structural authorization and exact inclusion/exclusion, not heuristic string filtering.
-- [ ] Run `go test ./eval/inspect/... ./eval/... ./trajectory/...`; document locator lifetime, read limits, incomplete evidence and host redaction ownership.
+- [x] Inventory `eval/{store_evidence,show_json,store_message}.go`, `trajectory/{trajectory,document,render}.go`, `runtime/agent/artifact/artifact.go` and `runtime/agent/runtime/artifact_toolset.go`; do not widen the current-run artifact tools globally.
+- [x] Add proposed `eval/inspect/{views,read,artifacts}_test.go`, then implement the corresponding bounded manifest/read/projection contracts using canonical captures plus retained host attachments and candidate store content.
+- [x] Extend `eval/component_probe_test.go` to retain an unopened source, candidate diffs and an application decision note; verify byte identity and access rules after teardown and reopening stores in a new process.
+- [x] Include raw server-only data, hidden judge references and instruction-bearing task/tool content in projection tests. Assert structural authorization and exact inclusion/exclusion, not heuristic string filtering.
+- [x] Run `go test ./eval/inspect/... ./eval/... ./trajectory/...`; document locator lifetime, read limits, incomplete evidence and host redaction ownership.
 - [ ] Freeze the diff; run `make lint`, `make test`, `make ci-integration`; obtain independent review before the ticket's atomic commit.
 
 ### Milestone 4: A complete agent tool journey with durable host execution

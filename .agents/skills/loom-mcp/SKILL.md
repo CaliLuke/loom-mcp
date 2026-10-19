@@ -1028,3 +1028,13 @@ No production qualifications or live-provider gates are introduced here.
 - Codex terminal responses must retain completed provider message boundaries. Never replay individual streaming text deltas as separate assistant messages.
 
 - Codex defaults to client compatibility revision `0.162.1` (live-validated with `gpt-6-luna`). Treat a catalog model rejection as potentially revision-dependent; use the supported `ClientVersion` option only with verified compatibility.
+
+### Retained experiment inspection
+
+Use `eval/inspect` for immutable bounded views of explicitly published experiment evidence.
+The host fixes origin, candidate/baseline identity, attachments, expected outputs, scope and versioned role policies.
+Keep solver/selector metadata free of internal names, lineage, provenance and run/call identities.
+Canonical projections deny private/configuration/reasoning leaves before host callbacks. Nil artifact redaction makes no sanitization claim.
+Retain candidate/eval/inspect roots for locator lifetime. Reopen uses persisted approved bytes without callbacks.
+Use `references/{agent-testing,runtime-contracts}.md` for publication, role, cap, missing/provisional and restart contracts.
+The external `eval/component_inspect_test.go` proves physical unopened sources, exact outputs/renderings, linked diffs and process restart.

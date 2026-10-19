@@ -672,3 +672,105 @@ See [Prepared attempts and operational probes](runtime.md#prepared-attempts-and-
 Run `go test ./eval -run TestComponentProbe` for the submitted-source fixture.
 This fixture freezes new Go source, compiles and executes it through a tool, and retains evidence after resource release.
 The framework supplies no general shell, sandbox or optimization policy.
+
+## Inspect retained experiment evidence
+
+`eval/inspect` publishes immutable views of retained experiment evidence.
+The host submits task sources, notes and evaluator references as explicit bytes.
+A source remains inspectable even when the solver never opens it.
+The host also supplies each attempt's expected deliverables before it releases the environment.
+The eval store retains present outputs. Declarations identify missing outputs.
+
+The host chooses the role, policy name and exact manifest scope.
+List and read requests contain no role or scope override.
+An editor can inspect components, linked diffs, approved runs, outputs and authorized notes.
+A selector receives approved task sources and outputs, with opaque labels.
+Only an evaluator can receive an explicit evaluator reference.
+A locator from an editor view grants no access in a selector view.
+
+After `Writer.Finish`, use this host function to publish an editor view.
+Its inputs come from the admitted attempt and the host's retained snapshots.
+The function applies no artifact redaction.
+Its nil `RunContent` callback omits canonical content leaves.
+
+Import `context`, `github.com/CaliLuke/loom-mcp/v2/eval`, `github.com/CaliLuke/loom-mcp/v2/eval/candidate` and `github.com/CaliLuke/loom-mcp/v2/eval/inspect`.
+
+<!-- snippet: inspect-publish-editor -->
+```go
+func PublishEditorView(
+	ctx context.Context,
+	dir string,
+	experiments *eval.Store,
+	candidates *candidate.Store,
+	origin inspect.Origin,
+	candidateDigest string,
+	declarations []eval.Deliverable,
+	source []byte,
+) (*inspect.View, error) {
+	workspace, err := inspect.Open(dir, experiments, candidates, inspect.DefaultLimits())
+	if err != nil {
+		return nil, err
+	}
+	ref, err := workspace.Publish(ctx, inspect.Publication{
+		Origin:               origin,
+		CandidateDigest:      candidateDigest,
+		ExpectedDeliverables: declarations,
+		Attachments: []inspect.Attachment{{
+			Name: "task-source.txt", Kind: inspect.TaskSource,
+			MediaType: "text/plain", Data: source,
+			Audiences: []inspect.Role{inspect.Editor},
+		}},
+		Policies: []inspect.Policy{{Role: inspect.Editor, Name: "application.editor.v1"}},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return workspace.View(
+		inspect.Scope{Manifests: []inspect.ManifestRef{ref}},
+		inspect.ViewPolicy{Role: inspect.Editor, Name: "application.editor.v1"},
+	)
+}
+```
+
+`View.List(ctx, inspect.ListQuery{})` returns the first page.
+`View.Read` accepts an entry's opaque locator, byte offset and requested byte limit.
+Both operations enforce the host's positive caps.
+A zero request limit uses the configured cap. A larger limit clamps to that cap.
+Follow `NextOffset` until it is nil to reconstruct the complete body or entry list.
+Offsets count bytes, including multibyte text and binary data.
+`Truncated` describes the response boundary. It does not change the artifact's state.
+
+Artifact states distinguish available, missing, withheld and provisional evidence.
+An available empty file has size zero and the digest of empty bytes.
+A missing file has no fabricated digest or body.
+Failed quiescence preserves provisional output marks from the eval store.
+A generic release error alone does not mark retained bytes provisional.
+
+The host computes optional `Rendering.Data` before publication.
+Each rendering names the original source, its exact digest and a renderer version.
+Inspect checks the declared source identity. The host owns the renderer's semantic correctness.
+Raw bytes and rendered bytes remain separate artifacts.
+The host also owns redaction consistency between those artifacts.
+
+Policies approve or transform bytes once, during publication.
+Nil `ArtifactContent` approves structurally permitted original bytes. It provides no automatic secret or PII removal.
+The canonical deny rules still exclude reasoning, server-only content, metadata, diagnostics, raw attachments and system/developer instructions.
+A permissive `RunContent` callback cannot restore those leaves.
+Reopened views use persisted approved bytes and the original policy name.
+A changed policy requires a new name and publication.
+
+The host must retain the candidate, eval and inspect store roots for the locator's lifetime.
+Inspect reuses original component and output owners rather than copying those bodies.
+Owner data loss becomes an explicit missing or integrity state.
+Publication does not grant access by itself. The host must bind each reader to an authorized finite scope.
+
+Run the complete source, output and restart proof with:
+
+```sh
+go test ./eval -run '^TestComponentInspectRetainsEvidenceAcrossRestart$' -count=1
+```
+
+The fixture compiles two submitted helpers and retains distinct outputs.
+It publishes a physical source absent from every solver request, linked diffs, a decision note and an evaluator reference.
+A new reader process reopens all three stores after environment removal.
+It checks exact bytes, renderer identity, role restrictions and stable pagination without model or compiler calls.

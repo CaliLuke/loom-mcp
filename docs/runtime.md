@@ -6868,3 +6868,84 @@ reasoning indexes and encrypted bytes, tools, and usage retain their stream cont
 The Codex adapter defaults to compatibility revision `0.162.1`, validated with
 `gpt-6-luna`. Older revision headers can reject newer catalog models. An explicit
 `ClientVersion` still overrides the default. Model availability remains account-specific.
+
+### Authorized experiment inspection
+
+`eval/inspect` adds offline, bounded evidence views over existing candidate and eval stores.
+It does not change runtime execution, canonical capture or raw export formats.
+The host publishes one exact `Origin` with candidate identity and optional baseline identity.
+`Publication.ExpectedDeliverables` supplies names that the finalized attempt does not persist.
+Absent declarations never imply a guessed missing filename.
+
+Publication accepts explicit task-source bytes, opaque decision notes and evaluator-reference bytes.
+It also accepts renderer output with a matching source digest and renderer version.
+A rendering preserves its own returned-byte digest and a link to its authorized original.
+The host owns rendering correctness and redaction across raw and rendered bodies.
+Inspect checks source identity without executing renderer callbacks.
+
+Publication materializes immutable role-specific bytes under versioned policy names.
+A manifest reference binds the origin, source identities, policy names, provider descriptors and approved content.
+Identical semantic publication returns the same immutable reference.
+A changed publication creates a different reference. It does not replace old bytes or locators.
+
+The host constructs `View` with an exact finite manifest scope and a fixed role/policy pair.
+A view cannot create a policy absent from its manifests.
+List/read requests cannot choose a role, policy, manifest or raw-export mode.
+Locators contain opaque hashes. They are not authorization tokens.
+Each read checks membership in the bound view before it accesses the body.
+A copied locator from a different role or scope returns `ErrNotFound`.
+
+| Evidence | Solver | Editor | Selector | Evaluator |
+| --- | --- | --- | --- | --- |
+| Task source | Explicit audience | Explicit audience | Explicit audience | Explicit audience |
+| Components and diffs | Absent | Available | Absent | Absent |
+| Approved runs and calls | Absent | Available | Absent | Available |
+| Outputs | Absent | Available | Available | Available |
+| Decision notes | Absent | Explicit audience | Absent | Absent |
+| Evaluator references | Absent | Absent | Absent | Explicit audience |
+| Renderings | Source permission and explicit audience | Source permission and explicit audience | Source permission and explicit audience | Source permission and explicit audience |
+
+These are hard inclusion rules. Artifact callbacks can only narrow them.
+Solver and selector metadata omit source lineage, internal names, provenance and run/call identities.
+Their labels are generated for the view.
+Structural exclusions also hide protected-reference existence and counts.
+An explicit artifact omission can produce a generic withheld row without original metadata.
+
+Run/call bodies use `RunRecord.Project` with mandatory deny rules before the host's content callback.
+Those rules exclude server-only content, raw evidence, reasoning, metadata, event payloads and diagnostics.
+They also exclude system/developer content and raw attachments.
+Separate authorized task attachments provide source bytes when required.
+Unknown content classes remain excluded.
+Only editor/evaluator views expose structural run/call navigation and projection omissions.
+
+Nil `ArtifactContent` provides no redaction beyond structural inclusion.
+Nil `RunContent` excludes canonical content leaves.
+The framework supplies no automatic secret detection or sanitized-output guarantee.
+Callbacks run only during publication. Later reads use persisted approved bytes.
+The host must version a changed policy and authorize its new manifest separately.
+
+`Limits` requires positive artifact, entry, page and read caps.
+Defaults are 16 MiB per artifact, 4096 entries, 100 entries per page and 64 KiB per read.
+Request limit zero uses the cap. Larger positive requests clamp to it.
+Negative limits or offsets are invalid.
+An offset at the end returns a complete empty response. An offset past the end is invalid.
+List ordering and byte offsets remain stable after restart.
+
+Available empty artifacts retain size zero and the empty-byte digest.
+Missing and withheld artifacts expose no body, size or digest.
+Readable provisional artifacts still support normal pagination.
+Retained output descriptors supply provisional status for prepared evaluations and probes.
+A generic cleanup error does not imply provisional output.
+Missing canonical evidence has an explicit unavailable run row.
+Sharing exclusions appear as projection omissions rather than fabricated content.
+`Truncated` reports remaining response bytes or rows independently of these states.
+
+Original component/output bodies remain in their candidate/eval stores.
+Inspect stores explicit attachments, approved projections, transformed bytes, diffs and rendering bodies.
+Reads check recorded size and digest against the exact owner.
+Missing or corrupt owner data produces a safe missing/integrity result without filesystem or callback diagnostics.
+The host must retain all three store roots for the locator's lifetime.
+One host owns workspace writes. A separate process can reopen the stores for reads.
+Cross-process concurrent writers are outside this contract.
+
+See [Inspect retained experiment evidence](agent_testing.md#inspect-retained-experiment-evidence) for host code and the executable restart fixture.

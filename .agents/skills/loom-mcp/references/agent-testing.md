@@ -354,3 +354,22 @@ The runner owns durable receipts, canonical capture and retained output publicat
 Probes report unassessed quality; completion never implies a quality pass.
 See `docs/runtime.md` for the exact schema and lifecycle contract.
 `eval/component_probe_test.go` proves newly submitted Go source changes a tool result and retained deliverable.
+
+## Retained inspection fixtures
+
+Use `eval/inspect` for immutable role-scoped evidence, with explicit host publication after `Writer.Finish`.
+Keep candidate/eval/inspect roots persistent across the reader's lifetime.
+Submit unopened sources and opaque notes as bytes before the environment disappears.
+Copy expected deliverable declarations from the lease. Never infer missing names from errors.
+
+`eval/component_inspect_test.go` runs two real helper candidates from one persistent candidate store.
+Its physical unopened source never enters a solver request.
+The fixture checks raw output, renderer identity, linked diffs, missing output and note/reference role boundaries.
+A separate test process reopens all stores and checks identical pages and byte chunks.
+Run `go test ./eval -run '^TestComponentInspectRetainsEvidenceAcrossRestart$' -count=1`.
+
+Keep raw replay exports unchanged when constructing sharing views.
+Bind views with host-fixed scope, role and policy name.
+Test copied-locator denial across roles and scopes.
+Treat nil artifact redaction as identity for permitted bytes. Never describe it as sanitization.
+See `docs/agent_testing.md` for the host publication example and content-policy limits.
