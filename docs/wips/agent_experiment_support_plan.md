@@ -1,18 +1,16 @@
 # Agent experiment support plan
 
-This plan sequences the contracts in [the design](agent_experiment_support_design.md). It supplies framework support for an application-defined improvement process. It does not implement Harness² or modify Luke/AutoK. New API and package names below are proposed additions until their milestones are implemented.
+This plan implements the contracts in [the design](agent_experiment_support_design.md). It supplies generic framework tooling for an application-defined improvement process. Proposal, composition, selection, reflection and adoption policy remain application-owned. It does not implement Harness² or change Luke/AutoK production code. All five milestones below are implemented.
 
 ## Status
 
-- 2026-10-18 — Initial source-backed draft reviewed by a fresh agent that independently reread Google Harness², its paper, Loom-MCP and consumer code. Five contract gaps identified.
-- 2026-10-18 — Revised around a root prepared-attempt seam, explicit unassessed probes, executed helper source, complete evidence workspace and tool-only create/copy operations. Focused independent re-check found no remaining blockers. Technically ready for implementation; current task remains documentation-only. See the [review record](agent_experiment_support_review.md).
-- 2026-10-18 — A second fresh reviewer found two remaining integration blockers: writer binding and probe persistence/quality projections. Both were corrected; its focused re-check found no remaining blockers and judged the updated plan ready to execute. This confirms documentation readiness only; implementation remains outside the current task.
-- 2026-10-18 — User authorized implementation of this plan using Sol agents. Work started on `luca/agent-experiment-support`; milestone contracts, failing tests, mandatory gates and independent review precede each atomic commit. Pushes, releases, live experiments and production consumer changes remain outside scope.
-- 2026-10-18 — Milestone 1 committed as `1a3a751f`. Independent review found directory anchoring and frozen-draft integrity defects; both received failing regression tests and fixes, then a clean re-review. `make lint`, `make test`, `make ci-integration` and the commit hook passed. Milestone 2 is in progress with separate Sol authors for lifecycle, persistence/projections and the executable-source fixture.
-
-- 2026-10-18 — Milestone 3 implemented in an isolated worktree while Milestone 2 qualification continues. Combined eval/inspect/trajectory checks, inspect race tests, the real helper/restart fixture, static analysis and targeted lint passed. Full gates and independent review remain before integration and commit.
-
-- 2026-10-18 — Milestone 4 implemented in isolation: shared Go/native/CLI control, durable host-executor recovery and a tool-only journey that compiles submitted source and cancels a real probe. Targeted tests, recovery race repetitions and lint passed. Full milestone gates and independent review remain before integration and commit. Milestone 3 full lint/test passed; its documentation gate repair is under review while integration reruns. Milestone 2 longrun qualification remains active.
+- 2026-10-18 — Completed the user-authorized implementation using Sol authors and independent Sol reviewers on `luca/agent-experiment-support`. The source-backed planning reviews are retained in the [review record](agent_experiment_support_review.md). Each milestone received failing executable scenarios, a frozen contract, required gates and clean independent review after corrections.
+- Milestone 1: `1a3a751f` — discoverable edit surfaces and immutable candidates. `make lint`, `make test`, `make ci-integration` and the mandatory commit hook passed.
+- Milestone 2: `28eb7639` — prepared attempts and operational probes with a compiled-source execution proof. Lint, full tests, integration, stress and repeated lifecycle race checks passed. Qualification's payload-growth and 1,000-step recall checks passed. The first longrun run exposed a version-1 record with omitted configuration; the decoder correction received regression tests and a clean independent review, then the entire affected `make test-longrun` rerun passed. All qualification components and the mandatory commit hook passed.
+- Milestone 3: `7140cdb5` — retained, role-scoped evidence with bounded reads and process-restart proof. Lint, full tests, integration, focused race checks, independent review and the mandatory commit hook passed.
+- Milestone 4: `6c2f9956` — shared Go/native/CLI control and durable host-executor recovery. Lint, full tests, integration, stress, repeated recovery/cancellation race checks, independent review and the mandatory commit hook passed. The integration gate runs the same complete agent-feature fixture command as `make verify-agent-feature-fixture`.
+- Milestone 5 is delivered by this completion commit: explicit preview/confirmed component copy, immediate provenance and document/graph revision/composition proofs. The complete implementation received clean independent review. Focused normal/race checks and final pinned-dependency `make ci` passed, including generation, build, lint, unit, integration, Docker and existing live-smoke checks. Combined coverage met the required 90.1% threshold. The post-CI source matched the reviewed frozen diff; only this administrative completion record changed afterward and received focused review before commit.
+- The consumer fixtures execute authored helpers and child instructions, consume actual child reads/results, explicitly reuse components on task B with fresh facts, and reopen retained evidence after release. They introduce no framework-owned improvement policy. Production adapters, domain evaluation and adoption remain application work. No push, release, live improvement experiment or production consumer change is part of these local commits.
 
 ## Scope and current inventory
 
@@ -20,9 +18,9 @@ Required: editable surface discovery; immutable candidates; one prepared configu
 
 Reuse `eval/{attempt_builder,attempt_factory,runner,execute,scenario,selection,record,verdict,report_groups,show,show_json,quality_check}.go`, `eval/store*.go`, `eval/compare*.go`, `agenttest/harness.go`, `agenttest/evidence.go`, `trajectory/{build,document,render}.go`, `runtime/agent/prompt`, `runtime/mcp/skills`, and `runtime/agent/runtime/{skill_toolset,interceptors}.go`. Preserve immutable registration, canonical call records, default eval quality requirements and runtime-owned authorization. Do not modify generated files manually.
 
-The critical current split is concrete: `AttemptHarnessFunc` returns only a harness and receives item data before defaults; `Scenario.BuildInputs` receives a separately resolved item; `runAttempt` owns execution/close. A wrapper cannot supply the proposed shared preparation and finalization. The integration belongs in root `eval`, with content/inspection/control as optional supporting packages. No separate trial runner or workflow engine is planned.
+The implementation preserves the legacy split between `AttemptHarnessFunc`, scenario-owned inputs/drivers and runner-owned execution/close. Opt-in `PrepareAttempt` binds registration, resolved inputs and environment to one receipt and lifecycle in root `eval`. Content, inspection and control remain optional supporting packages. No separate trial runner or new workflow engine was introduced.
 
-The design fixes persistence ownership: detached `Plan`/`Store.Begin` first, then attach `Config.PreparedWriter`, then `Run`, then caller-owned `Writer.Finish`. `Store.BeginProbe` admits one operational attempt through the same storage, with `ProbeConfig.PreparedWriter` required before execution. Root eval publishes prepared attempts; `OnAttempt` is an observer in this mode. Existing `Writer.CaptureHarness` and built-in CLI run remain legacy paths. The new CLI adapter uses the existing extension facility from a leaf `eval/controlcli` package. Fixture helpers importing root eval/control require external test packages.
+Persistence ownership is explicit: detached `Plan`/`Store.Begin` first, then attach `Config.PreparedWriter`, then `Run`, then caller-owned `Writer.Finish`. `Store.BeginProbe` admits one operational attempt through the same storage, with `ProbeConfig.PreparedWriter` required before execution. Root eval publishes prepared attempts; `OnAttempt` is an observer in this mode. Existing `Writer.CaptureHarness` and built-in CLI run remain legacy paths. The new CLI adapter uses the existing extension facility from a leaf `eval/controlcli` package. Fixture helpers importing root eval/control require external test packages.
 
 Consumer proof shapes come from inspected sources: Luke `/Users/luca/code/luke/backend-go/internal/localapi/chatv2/{agent_runtime,agent_planner,service}.go` and `chatv2_wire.go`; AutoK `/Users/luca/code/autok-deploy/autok-app/autok-server/internal/chat/{eval_suite,eval_model,prompts}.go` and `internal/service/prompts`. Proofs live in Loom-MCP fixtures. Production adapters require separate scoped tickets.
 
@@ -74,7 +72,7 @@ Checklist
 - [x] Use scripted model turns to discover/load the skill, invoke its helper and consume the actual result. Assert invocation and resulting deliverable, not receipt metadata or callback counts. Retain canonical capture outside the released environment; reopen it after close for verification.
 - [x] Run `go test ./eval/... ./agenttest/...`; update `docs/agent_testing.md` and repo-local contract references with preparation/finalization ordering and probe semantics.
 - [x] Run `go test -race -shuffle=on -count=20 -timeout=15m ./eval -run '^(TestPrepared|TestProbeLifecycle)'` for the new lifecycle contract. The inherited `make test-stress` does not include eval, so this targeted repetition is additional proof.
-- [ ] Freeze the diff; run `make lint`, `make test`, `make ci-integration`, `make test-stress` and `make qualification` (this ticket changes quality comparison/denominator semantics); obtain independent review before the ticket's atomic commit.
+- [x] Freeze the diff; run `make lint`, `make test`, `make ci-integration`, `make test-stress` and `make qualification` (this ticket changes quality comparison/denominator semantics); obtain independent review before the ticket's atomic commit.
 
 ### Milestone 3: A navigable evidence workspace
 
@@ -94,7 +92,7 @@ Checklist
 - [x] Extend `eval/component_probe_test.go` to retain an unopened source, candidate diffs and an application decision note; verify byte identity and access rules after teardown and reopening stores in a new process.
 - [x] Include raw server-only data, hidden judge references and instruction-bearing task/tool content in projection tests. Assert structural authorization and exact inclusion/exclusion, not heuristic string filtering.
 - [x] Run `go test ./eval/inspect/... ./eval/... ./trajectory/...`; document locator lifetime, read limits, incomplete evidence and host redaction ownership.
-- [ ] Freeze the diff; run `make lint`, `make test`, `make ci-integration`; obtain independent review before the ticket's atomic commit.
+- [x] Freeze the diff; run `make lint`, `make test`, `make ci-integration`; obtain independent review before the ticket's atomic commit.
 
 ### Milestone 4: A complete agent tool journey with durable host execution
 
@@ -113,8 +111,8 @@ Checklist
 - [x] Add proposed `eval/control/{service,submission,toolset}_test.go` and `eval/controlcli/extension_test.go`, with type shells first; implement the service/native registration and proposed `eval/controlcli/extension.go` through the existing `eval/evalcli/extensions.go` API. Keep imports controlcli → control/evalcli, never evalcli → controlcli/control.
 - [x] Add proposed `eval/control/testfixture/durable_executor.go` plus external-package `eval/control/recovery_test.go` (`package control_test`) using a temporary on-disk request/job store and child-process crash injection before/after acceptance and completion persistence. Cover cancellation/terminal races and lost ownership without adding a framework scheduler. Name these cases `TestControlRecovery`/`TestControlCancellation`.
 - [x] Exercise native tool registration through proposed `integration_tests/fixtures/agent_features/experiment_control_test.go`. V1 proves native tools and Go/CLI equivalence; a generated MCP projection is application follow-up, so this milestone does not add a speculative MCP service or alter wire handling.
-- [ ] Run `go test ./eval/control/... ./eval/controlcli/... ./eval/evalcli/...` and `make verify-agent-feature-fixture`; run `go test -race -shuffle=on -count=20 -timeout=15m ./eval/control -run '^(TestControlRecovery|TestControlCancellation)'`. Update `docs/agent_testing.md`, `docs/runtime.md` and repo skills; identify any confirmed external publishing source before a future release.
-- [ ] Freeze the diff; run `make lint`, `make test`, `make ci-integration` and `make test-stress`; obtain independent review before the ticket's atomic commit.
+- [x] Run `go test ./eval/control/... ./eval/controlcli/... ./eval/evalcli/...` and `make verify-agent-feature-fixture`; run `go test -race -shuffle=on -count=20 -timeout=15m ./eval/control -run '^(TestControlRecovery|TestControlCancellation)'`. Update `docs/agent_testing.md`, `docs/runtime.md` and repo skills; identify any confirmed external publishing source before a future release.
+- [x] Freeze the diff; run `make lint`, `make test`, `make ci-integration` and `make test-stress`; obtain independent review before the ticket's atomic commit.
 
 ### Milestone 5: Explicit reuse and two consumer-shaped proofs
 
@@ -130,13 +128,13 @@ Acceptance Criteria
 
 Checklist
 
-- [ ] Add proposed `eval/candidate/reuse_test.go` and `eval/control/copy_test.go`, then implement dependency-aware import/copy with source provenance in the candidate store and shared service/tool contract. Preserve existing `Parent` semantics.
-- [ ] Add proposed `integration_tests/fixtures/agent_features/experiment_support_test.go` and fixture-local resources. Reuse the public helper binding and add approved child registration with candidate-bound instructions. Add design declarations only where required and regenerate with `make regen-agent-feature-fixture`; never edit `gen/` manually.
-- [ ] Write two scripted controller scenarios: one revision; independent proposals followed by explicit composition. Both execute through public tools, inspect retained outputs and perform task-B reuse.
-- [ ] Reconcile fixture bindings with the exact Luke and AutoK source paths in the inventory. Record application-owned prompt/schema binding, environment reset and adoption work in the handoff; do not modify either consumer repository.
-- [ ] Run `go test ./eval/candidate/... ./eval/control/...` and `make verify-agent-feature-fixture`; update `docs/agent_testing.md` with runnable wiring and mark controller scripts as examples, not framework policy.
-- [ ] Freeze the diff; select pinned dependencies with `make loom-remote` and `make selvedge-remote`, verify status, and run `make ci` once for final generation/build/lint/unit/integration/Docker proof. No qualification behavior changes are in scope, so `make qualification` is not required.
-- [ ] Obtain independent review against the frozen contract, make the ticket's atomic commit with mandatory hooks, and hand off proof artifacts and application follow-ups. No push/release/live experiment is implied.
+- [x] Add proposed `eval/candidate/reuse_test.go` and `eval/control/copy_test.go`, then implement dependency-aware import/copy with source provenance in the candidate store and shared service/tool contract. Preserve existing `Parent` semantics.
+- [x] Add proposed `integration_tests/fixtures/agent_features/experiment_support_test.go` and fixture-local resources. Reuse the public helper binding and add approved child registration with candidate-bound instructions. Add design declarations only where required and regenerate with `make regen-agent-feature-fixture`; never edit `gen/` manually.
+- [x] Write two scripted controller scenarios: one revision; independent proposals followed by explicit composition. Both execute through public tools, inspect retained outputs and perform task-B reuse.
+- [x] Reconcile fixture bindings with the exact Luke and AutoK source paths in the inventory. Record application-owned prompt/schema binding, environment reset and adoption work in the handoff; do not modify either consumer repository.
+- [x] Run `go test ./eval/candidate/... ./eval/control/...` and `make verify-agent-feature-fixture`; update `docs/agent_testing.md` with runnable wiring and mark controller scripts as examples, not framework policy.
+- [x] Freeze the diff; select pinned dependencies with `make loom-remote` and `make selvedge-remote`, verify status, and run `make ci` once for final generation/build/lint/unit/integration/Docker proof. No qualification behavior changes are in scope, so `make qualification` is not required.
+- [x] Obtain independent review against the frozen contract, make the ticket's atomic commit with mandatory hooks, and hand off proof artifacts and application follow-ups. No push/release/live experiment is implied.
 
 ## Deferred work
 

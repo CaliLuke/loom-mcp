@@ -859,3 +859,89 @@ go test ./eval/control/... ./eval/controlcli/... ./eval/evalcli/...
 make verify-agent-feature-fixture
 go test -race -shuffle=on -count=20 -timeout=15m ./eval/control -run '^(TestControlRecovery|TestControlCancellation)'
 ```
+
+## Reuse procedures across consumer tasks
+
+A candidate is a complete content snapshot. Reuse is an explicit selection of component bytes and dependencies.
+Copy imports selected component bytes and content metadata. Components can contain facts.
+Applications must keep current task facts in separately bound inputs and sources.
+Copy transfers no execution state, credentials or tool authority.
+`eval/candidate.Store.PreviewCopy` returns the complete transitive closure and every destination collision without changing the draft.
+The controller must inspect that plan before calling `Copy` with its `Digest` and exact `Replace` names.
+A changed destination revision or selection requires a new preview.
+The native operations are `experiment.preview_copy` and `experiment.copy_candidate`.
+The CLI uses the same operation names after `experiment`, with a JSON `--request` object.
+Both operations require current read, edit and operation-specific grants.
+
+The copy transaction writes bytes and immediate-source origins together, then increments the destination revision once.
+A copied component records its source candidate, component name and source byte digest.
+It owns its copied bytes; it is not a live reference.
+A later explicit edit clears that component's origin, including an identical-byte put.
+Origin-bearing candidates use manifest version 2. Candidates with no origins retain their existing version 1 identity.
+Keep immediate source snapshots available while inspecting provenance.
+Copy provenance is independent of eval experiment `Parent` and rerun behavior.
+
+The agent-feature fixture's `TestExperimentSupportConsumers` covers document and graph tasks under revision and composition.
+The controller creates every draft through native tools; fixture setup contains only a baseline and a fixed task registry.
+Revision authors a new Go procedure, skill and child instruction.
+Composition executes two independent proposals, then executes a third candidate containing selected components from both.
+The host compiles the exact submitted Go bytes and invokes the resulting executable through `components.run_helper`.
+The next model request consumes its actual stdout. It sends that analysis to the generated delegated specialist.
+The host registers the generated specialist through public runtime registration with exactly one current-source read grant.
+It uses generated agent/workflow/activity identities, delegated routing and typed result codecs.
+The child performs that read and checks its actual facts against the helper analysis.
+The child receives the exact authored instruction in its canonical system message.
+Its actual response enters a subsequent parent request and the retained consumer output.
+The finite fixture child grammar is `section=<label>` followed by a newline; arbitrary child programs are unsupported.
+
+Every task B starts from baseline defaults, without A-authored helper or skill bytes.
+The controller reads those defaults, previews the selected A skill's full closure, and confirms both baseline replacements.
+The copy imports only that skill and its helper. It preserves B's baseline child configuration.
+The procedure reads fresh B facts at execution; it contains no A document, node, edge or beneficiary identifiers.
+Receipts bind B's source and input snapshots. Component origins identify the selected immediate A or composition candidate.
+This separates reusable procedure evidence from claims that a prior answer is valid for a new task.
+
+The document host reads a current document, proposes an edit, then accepts the exact proposed bytes.
+Its retained receipt checks the current document identity, a new version and preserved protected text.
+The graph host discovers and calls a permitted read tool against current release, capability and beneficiary nodes.
+It retains a draft-aware release description and the exact node and edge identities without editing the graph.
+Both hosts retain sources, diffs and outputs through M3 publication after prepared writer finalization.
+Reopened stores return the same authorized pages and exact artifact bytes after the temporary host directory is released.
+An unopened physical source remains outside canonical solver requests.
+Private canonical evidence proves child system bytes; public run projections continue to hide system and developer messages.
+
+The fixture advertises only these installation contracts:
+
+| Component class | Fixture installation and authority |
+| --- | --- |
+| System instructions | Exact per-attempt standing messages; no tool grants |
+| Guardrails | Standing instruction content; host validation and tool authority remain fixed |
+| Tool guidance | Descriptions on the host's existing permitted domain tools |
+| Child instructions | Exact generated specialist system message with bounded declared grammar |
+| Skills | Discoverable `SKILL.md`, activated through real skill list/load tools |
+| Scripts and helpers | Exact stdlib Go source compiled into an isolated host executable |
+| Memory | Unadvertised; edits are rejected before execution |
+| Plugins and hooks | Unadvertised; edits are rejected before execution |
+
+A security permission is host configuration, not an editable component class.
+Unknown binding versions and unsupported activation modes fail before installation or model dispatch.
+`eval/testfixture.InstallComponentBindings` is a bounded fixture seam for existing fresh host directories.
+It returns real skill/helper registrations and executable identity, without sealing a runtime or registering a solver.
+The caller validates its complete surface first and owns quiescence, collection and cleanup.
+Existing `ComponentHost` still accepts only its original two bindings.
+This compiler host is not an untrusted-code sandbox or a production plugin loader.
+
+Production consumer adoption remains application work.
+For a document assistant, snapshot prompts, tool guidance and document state once before registering and preparing a run.
+Bind document reads and propose/accept tools to that snapshot and preserve protected document content.
+For a graph assistant, pass an explicit prompt catalog directory and keep capability, beneficiary, draft and node/edge evidence current.
+Do not mutate process-global prompt roots between attempts.
+Retain the application's shared review/evaluation authority, including its existing Opik review workflow.
+These fixtures do not change either consumer's production source or replace its authorization and review policy.
+
+Run the focused consumer proof from the generated agent-feature fixture module:
+
+```sh
+go test . -run '^TestExperimentSupport' -count=1 -timeout=180s
+go test -race . -run '^TestExperimentSupport' -count=1 -timeout=180s
+```

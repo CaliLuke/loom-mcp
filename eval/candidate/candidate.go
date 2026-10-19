@@ -34,13 +34,14 @@ type ComponentRef struct {
 
 // Manifest is the canonical versioned identity of a complete content snapshot.
 type Manifest struct {
-	Version        int            `json:"version"`
-	SurfaceID      string         `json:"surface_id"`
-	SurfaceVersion string         `json:"surface_version"`
-	SurfaceDigest  string         `json:"surface_digest"`
-	BaselineDigest string         `json:"baseline_digest,omitempty"`
-	Bindings       []Binding      `json:"bindings"`
-	Components     []ComponentRef `json:"components"`
+	Version        int               `json:"version"`
+	SurfaceID      string            `json:"surface_id"`
+	SurfaceVersion string            `json:"surface_version"`
+	SurfaceDigest  string            `json:"surface_digest"`
+	BaselineDigest string            `json:"baseline_digest,omitempty"`
+	Bindings       []Binding         `json:"bindings"`
+	Components     []ComponentRef    `json:"components"`
+	Origins        []ComponentOrigin `json:"origins,omitempty"`
 }
 
 // Frozen retains immutable content; all accessors return owned values.
@@ -52,10 +53,11 @@ type Frozen struct {
 
 // Draft is a complete editable snapshot and optimistic revision.
 type Draft struct {
-	ID           string      `json:"id"`
-	Revision     uint64      `json:"revision"`
-	FrozenDigest string      `json:"frozen_digest,omitempty"`
-	Components   []Component `json:"components"`
+	ID           string            `json:"id"`
+	Revision     uint64            `json:"revision"`
+	FrozenDigest string            `json:"frozen_digest,omitempty"`
+	Components   []Component       `json:"components"`
+	Origins      []ComponentOrigin `json:"origins,omitempty"`
 }
 
 // Edit declares exactly one named put or delete operation.
@@ -82,6 +84,7 @@ func (f *Frozen) Digest() string {
 // Manifest returns an owned manifest.
 func (f *Frozen) Manifest() Manifest {
 	manifest := f.manifest
+	manifest.Origins = slices.Clone(manifest.Origins)
 	manifest.Bindings = slices.Clone(manifest.Bindings)
 	manifest.Components = slices.Clone(manifest.Components)
 	for i := range manifest.Components {
@@ -136,6 +139,11 @@ func (f *Frozen) Closure(names []string) ([]string, error) {
 
 // makeFrozen binds canonical content and the entire surface to immutable identity.
 func makeFrozen(surface Surface, baseline string, components []Component) (*Frozen, error) {
+	return makeFrozenWithOrigins(surface, baseline, components, nil)
+}
+
+// makeFrozenWithOrigins preserves v1 identity unless the snapshot has copy origins.
+func makeFrozenWithOrigins(surface Surface, baseline string, components []Component, origins []ComponentOrigin) (*Frozen, error) {
 	surfaceBytes, err := json.Marshal(surface)
 	if err != nil {
 		return nil, err
@@ -162,6 +170,13 @@ func makeFrozen(surface Surface, baseline string, components []Component) (*Froz
 		}
 		slices.Sort(c.Dependencies)
 		manifest.Components = append(manifest.Components, ComponentRef{Name: c.Name, Slot: c.Slot, MediaType: c.MediaType, Digest: hashBytes(c.Data), Size: int64(len(c.Data)), Dependencies: slices.Clone(c.Dependencies)})
+	}
+	if len(origins) > 0 {
+		manifest.Version = 2
+		manifest.Origins = slices.Clone(origins)
+		slices.SortFunc(manifest.Origins, func(a, b ComponentOrigin) int {
+			return strings.Compare(a.Name, b.Name)
+		})
 	}
 	encoded, err := json.Marshal(manifest)
 	if err != nil {

@@ -57,6 +57,8 @@ func requestSchema(op Operation) schema {
 		o := object(schema{jsonDraftId: hexadecimal(32), jsonExpectedRevision: integer(1), jsonCandidate: hexadecimal(64), "component": nonempty(), jsonOffset: integer(0), jsonMaxBytes: integer(0)}, "component")
 		o["oneOf"] = []schema{{jsonRequired: []string{jsonDraftId, jsonExpectedRevision}, jsonNot: schema{jsonRequired: []string{jsonCandidate}}}, {jsonRequired: []string{jsonCandidate}, jsonNot: schema{"anyOf": []schema{{jsonRequired: []string{jsonDraftId}}, {jsonRequired: []string{jsonExpectedRevision}}}}}}
 		return o
+	case PreviewCopyOperation, CopyOperation:
+		return copyRequestSchema(op)
 	case EditOperation:
 		return editSchema()
 	case ValidateOperation, FreezeOperation:
@@ -126,6 +128,13 @@ func exclusive(a, b []string) []schema {
 // nativeRequestSchema advertises the same finite byte boundary as candidate edits.
 func (s *Service) nativeRequestSchema(op Operation) schema {
 	out := requestSchema(op)
+	if op == PreviewCopyOperation || op == CopyOperation {
+		props := out[jsonProperties].(schema)
+		props[jsonComponents].(schema)["maxItems"] = s.cfg.Limits.MaxPageEntries
+		if op == CopyOperation {
+			props[jsonReplace].(schema)["maxItems"] = s.cfg.Limits.MaxPageEntries
+		}
+	}
 	if op == EditOperation {
 		props := out[jsonProperties].(schema)
 		maxBytes := s.cfg.Candidates.Discover().Surface.MaxTotalBytes

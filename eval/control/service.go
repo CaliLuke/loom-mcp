@@ -64,7 +64,7 @@ func (s *Service) Discover(ctx context.Context) (Discovery, error) {
 
 func knownOperation(op Operation) bool {
 	switch op {
-	case DiscoverOperation, CreateOperation, GetOperation, ReadOperation, EditOperation, ValidateOperation, FreezeOperation, SubmitOperation, StatusOperation, CancelOperation, ListEvidenceOperation, ReadEvidenceOperation, CompareOperation:
+	case PreviewCopyOperation, CopyOperation, DiscoverOperation, CreateOperation, GetOperation, ReadOperation, EditOperation, ValidateOperation, FreezeOperation, SubmitOperation, StatusOperation, CancelOperation, ListEvidenceOperation, ReadEvidenceOperation, CompareOperation:
 		return true
 	default:
 		return false

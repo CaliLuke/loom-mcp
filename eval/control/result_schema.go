@@ -3,9 +3,13 @@ package control
 func resultSchema(op Operation) schema {
 	switch op {
 	case DiscoverOperation:
-		return object(schema{"surface": discoverySchema(), "tasks": array(object(schema{"id": nonempty(), "modes": array(enumeration("probe", "evaluation")), "evaluation_plans": array(nonempty())}, "id", "modes")), "operations": array(enumeration("discover", "create_candidate", "get_candidate", "read_candidate", "edit_candidate", "validate_candidate", "freeze_candidate", "submit_trial", "get_job", "cancel_job", "list_evidence", "read_evidence", "compare_trials"))}, "operations")
+		return object(schema{"surface": discoverySchema(), "tasks": array(object(schema{"id": nonempty(), "modes": array(enumeration("probe", "evaluation")), "evaluation_plans": array(nonempty())}, "id", "modes")), "operations": array(enumeration("discover", "create_candidate", "get_candidate", "read_candidate", "edit_candidate", "preview_copy", "copy_candidate", "validate_candidate", "freeze_candidate", "submit_trial", "get_job", "cancel_job", "list_evidence", "read_evidence", "compare_trials"))}, "operations")
 	case CreateOperation, GetOperation, EditOperation:
 		return object(schema{jsonDraftId: hexadecimal(32), "revision": integer(1), jsonCandidate: hexadecimal(64), "components": array(componentRefSchema())}, "components")
+	case PreviewCopyOperation:
+		return copyPlanSchema()
+	case CopyOperation:
+		return copyResultSchema()
 	case ReadOperation:
 		return object(schema{"data": text(), jsonMediaType: text(), jsonDigest: hexadecimal(64), jsonOffset: integer(0), jsonTotal: integer(0), jsonNextOffset: integer(0), jsonTruncated: schema{jsonType: jsonBoolean}}, jsonMediaType, jsonDigest, jsonOffset, jsonTotal, jsonTruncated)
 	case ValidateOperation:
@@ -31,7 +35,7 @@ func bindingSchema() schema {
 	return object(schema{"id": text(), jsonVersion: text()}, "id", jsonVersion)
 }
 func manifestSchema() schema {
-	return object(schema{jsonVersion: integer(1), "surface_id": text(), "surface_version": text(), "surface_digest": hexadecimal(64), jsonBaselineDigest: hexadecimal(64), "bindings": array(bindingSchema()), "components": array(componentRefSchema())}, jsonVersion, "surface_id", "surface_version", "surface_digest", "bindings", "components")
+	return candidateManifestSchema()
 }
 func discoverySchema() schema {
 	slot := object(schema{jsonName: text(), "activation": enumeration("always_on", "on_demand", "child_context", "inline"), "operations": array(enumeration("put", "delete")), "media_types": array(text()), jsonMaxBytes: integer(1), "max_components": integer(1), "binding": bindingSchema(), "capabilities": array(text())}, jsonName, "activation", "operations", "media_types", jsonMaxBytes, "max_components", "binding")

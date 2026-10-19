@@ -395,3 +395,22 @@ Typed executor errors are not automatically safe; public templates must exclude 
 The CLI binder must honor `ExtensionRequest.Store`; use the existing extension API and JSON-object request syntax.
 Run `go test ./eval/control/... ./eval/controlcli/... ./eval/evalcli/...`, `make verify-agent-feature-fixture`,
 and the targeted `TestControlRecovery|TestControlCancellation` race/shuffle/repetition command from `docs/agent_testing.md`.
+
+## Consumer procedure reuse
+
+Use `TestExperimentSupportConsumers` in the agent-feature fixture for document/graph × revision/composition proof.
+Every controller draft starts from the advertised baseline through native tools.
+Execute independent proposals and their composition; do not preload candidate drafts or completed answers.
+For task B, read baseline defaults, preview the selected skill closure and explicitly confirm its full replacement list and plan digest.
+Copy skill/helper procedure bytes only; bind B receipts to fresh B source/input snapshots and assert no A facts survive.
+Origins identify the immediate selected source candidate. They are not eval Parent or rerun metadata.
+
+The bounded `eval/testfixture.InstallComponentBindings` seam reuses exact-source compilation, real helper execution and skill registration.
+Validate the complete host surface before calling it. Keep existing ComponentHost's exact two-binding contract.
+Real helper stdout must enter subsequent model requests and retained consumer output.
+Register the generated specialist, inject exact authored child system bytes and consume its actual output in a later parent request.
+Use private canonical Store.ReadEvidence for the system-byte proof; do not widen M3 public projections.
+Reopen persistent eval/inspect roots and compare outputs and pages after teardown.
+Reject unadvertised memory/plugins/permissions and unsupported binding versions or activation before dispatch.
+Keep production prompt catalogs, document protections, graph identities and shared review authority application-owned.
+See `docs/agent_testing.md` for the eight-class map and consumer adoption boundaries.

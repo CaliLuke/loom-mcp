@@ -7010,3 +7010,33 @@ It rejects broader experiment matrices instead of silently including unrelated a
 If either side is a probe, quality is `not_comparable` and quality count fields are absent.
 Protected check diagnostics, judge references, tool arguments and candidate lineage are not comparison fields.
 See [Control candidates through native tools](agent_testing.md#control-candidates-through-native-tools) for wiring and proof commands.
+
+### Confirmed component reuse
+
+Candidate copy is a synchronous store transaction, not a job or optimizer.
+`PreviewCopy` validates the proposed complete snapshot and returns a finite dependency closure, collision list and plan digest.
+It changes neither destination bytes nor revision.
+`Copy` recomputes that plan under the same store lock and requires its digest plus explicit acknowledgement of every replacement.
+A stale plan requires another preview. Source content comes from an immutable candidate in the same registered store and surface.
+There is no implicit dependency substitution, renaming or cross-surface adaptation.
+The service/native/CLI adapters recheck read, edit and operation grants independently on each request.
+A plan digest binds confirmation integrity; it grants no authority.
+Oversized plans fail instead of returning executable-looking partial plans.
+
+Copy commits owned bytes and immediate component origins in one replacement.
+Origins bind the source candidate, same component name and exact source component digest.
+Manifest version 2 includes nonempty origins in candidate identity; zero-origin snapshots preserve version 1 bytes and identity.
+Loading verifies immediate source identity without recursively replaying an ancestry graph.
+Explicit edits clear origins only for edited names; failed mutations clear nothing.
+Keep source store roots available for provenance inspection.
+This mechanism does not add eval Parent, retries, scheduling or selection policy.
+
+Activation remains an installation contract implemented by the host.
+Standing instructions, fixed tool descriptions, generated-child system messages, on-demand skill files and compiled helpers require explicit bindings.
+Instruction content cannot widen host permissions.
+The consumer fixture rejects unknown bindings/activations before installation and dispatch; memory and plugins are unadvertised.
+Its real generated child request retains exact authored system bytes in private canonical evidence.
+Public inspection projections continue to exclude system/developer content.
+Task B receipts identify current B source/input snapshots while component origins identify selected reusable procedure bytes.
+Sources, outputs and diffs must be published before cleanup; authorized store readers can retain them after release.
+Production prompt catalogs and document/graph adapters remain application-owned configuration.

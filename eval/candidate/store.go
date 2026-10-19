@@ -82,7 +82,7 @@ func (s *Store) Discover() Discovery {
 func (s *Store) Create(ctx context.Context) (Draft, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.create(ctx, s.baseline.Components())
+	return s.create(ctx, s.baseline.Components(), nil)
 }
 
 // Fork starts a new draft from a frozen snapshot in this scope.
@@ -96,7 +96,7 @@ func (s *Store) Fork(ctx context.Context, digest string) (Draft, error) {
 	if err != nil {
 		return Draft{}, err
 	}
-	return s.create(ctx, f.Components())
+	return s.create(ctx, f.Components(), f.Manifest().Origins)
 }
 
 // Draft returns an owned editable snapshot.
@@ -136,6 +136,7 @@ func (s *Store) Edit(ctx context.Context, id string, expected uint64, edits []Ed
 	}
 	d.Revision++
 	d.Components = components
+	d.Origins = editedOrigins(d.Origins, edits)
 	if err := s.write("draft-"+id+".json", d); err != nil {
 		return Draft{}, err
 	}
@@ -168,7 +169,7 @@ func (s *Store) Freeze(ctx context.Context, id string, expected uint64) (*Frozen
 	if err := s.validate(ctx, d.Components); err != nil {
 		return nil, err
 	}
-	f, err := makeFrozen(s.surface, s.baseline.Digest(), d.Components)
+	f, err := makeFrozenWithOrigins(s.surface, s.baseline.Digest(), d.Components, d.Origins)
 	if err != nil {
 		return nil, err
 	}
@@ -317,12 +318,12 @@ func (s *Store) validate(ctx context.Context, components []Component) error {
 	return ctx.Err()
 }
 
-func (s *Store) create(ctx context.Context, components []Component) (Draft, error) {
+func (s *Store) create(ctx context.Context, components []Component, origins []ComponentOrigin) (Draft, error) {
 	if err := s.validate(ctx, components); err != nil {
 		return Draft{}, err
 	}
 	id := randomID()
-	d := Draft{ID: id, Revision: 1, Components: components}
+	d := Draft{ID: id, Revision: 1, Components: components, Origins: slices.Clone(origins)}
 	if err := s.write("draft-"+id+".json", d); err != nil {
 		return Draft{}, err
 	}
@@ -357,8 +358,11 @@ func (s *Store) draft(id string) (Draft, error) {
 	if err := validateComponents(s.surface, d.Components); err != nil {
 		return Draft{}, err
 	}
+	if err := s.validateOrigins(d.Components, d.Origins, d.FrozenDigest); err != nil {
+		return Draft{}, err
+	}
 	if d.FrozenDigest != "" {
-		f, err := makeFrozen(s.surface, s.baseline.Digest(), d.Components)
+		f, err := makeFrozenWithOrigins(s.surface, s.baseline.Digest(), d.Components, d.Origins)
 		if err != nil {
 			return Draft{}, err
 		}
@@ -373,6 +377,18 @@ func (s *Store) draft(id string) (Draft, error) {
 }
 
 func (s *Store) load(digest string) (*Frozen, error) {
+	f, err := s.loadContent(digest)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.validateOrigins(f.components, f.manifest.Origins, digest); err != nil {
+		return nil, err
+	}
+	return f, nil
+}
+
+// loadContent verifies a snapshot itself without recursively walking its origins.
+func (s *Store) loadContent(digest string) (*Frozen, error) {
 	if !validHex(digest, 64) {
 		return nil, fmt.Errorf("%w: snapshot %q", ErrNotFound, digest)
 	}
@@ -387,7 +403,13 @@ func (s *Store) load(digest string) (*Frozen, error) {
 	if err := validateComponents(s.surface, stored.Components); err != nil {
 		return nil, err
 	}
-	f, err := makeFrozen(s.surface, baseline, stored.Components)
+	if (stored.Manifest.Version != 1 && stored.Manifest.Version != 2) || (stored.Manifest.Version == 1 && len(stored.Manifest.Origins) != 0) || (stored.Manifest.Version == 2 && len(stored.Manifest.Origins) == 0) {
+		return nil, errors.New("candidate: invalid manifest version or origins")
+	}
+	if err := validateOriginStructure(stored.Components, stored.Manifest.Origins, digest); err != nil {
+		return nil, err
+	}
+	f, err := makeFrozenWithOrigins(s.surface, baseline, stored.Components, stored.Manifest.Origins)
 	if err != nil {
 		return nil, err
 	}

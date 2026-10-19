@@ -1049,3 +1049,13 @@ Do not expose JobRecord/Submission, raw error causes, selector lineage or caller
 `eval/controlcli` remains a leaf adapter over existing `evalcli.Extension`; its binder must honor the selected store.
 Cancellation intent is not stoppedness. Terminal job states are immutable; lost execution ownership becomes interrupted.
 See `references/{agent-testing,runtime-contracts}.md` and the control/recovery/agent-feature tests for contracts and executable wiring.
+
+## Consumer experiment reuse
+
+Use explicit candidate `PreviewCopy` then confirmed `Copy` for reusable component closures; never infer reuse from eval Parent.
+Keep v1 identity unchanged without origins and use v2 only for immediate-source provenance.
+Validate host binding/activation support before installing frozen bytes.
+Require real helper stdout and generated-child output to affect retained consumer deliverables.
+Task B must begin from baseline, import only a previewed selected procedure closure and read fresh B facts.
+Keep memory/plugins unadvertised unless a host implements them; instructions never grant security authority.
+See `references/agent-testing.md` and `references/runtime-contracts.md` for proofs and production consumer boundaries.

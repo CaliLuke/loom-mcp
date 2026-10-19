@@ -54,6 +54,10 @@ func NewError(code Code, _, _, field string) *Error {
 	case RevisionConflict:
 		e.Message = "Draft revision changed."
 		e.Recovery = "Get the current draft revision and retry the edit."
+		if e.Field == jsonPlanDigest {
+			e.Message = "Copy confirmation does not match the current preview."
+			e.Recovery = "Preview the current destination and confirm the complete returned plan before copying."
+		}
 	case FrozenConflict:
 		e.Message = "Candidate is frozen."
 		e.Recovery = "Create a new draft from the frozen candidate."
@@ -100,7 +104,7 @@ func (e *Error) Unwrap() error {
 
 func safeField(field string) string {
 	switch field {
-	case jsonBaseline, jsonSourceCandidate, jsonDraftId, jsonCandidate, jsonExpectedRevision, "component", jsonContent, jsonContentBase64, jsonDependencies, jsonSlot, jsonMediaType, jsonOperation, jsonOffset, "limit", jsonMaxBytes, "request_key", "task_id", jsonKind, jsonEvaluationPlan, jsonJobId, jsonLocator:
+	case jsonComponents, jsonReplace, jsonPlanDigest, jsonBaseline, jsonSourceCandidate, jsonDraftId, jsonCandidate, jsonExpectedRevision, "component", jsonContent, jsonContentBase64, jsonDependencies, jsonSlot, jsonMediaType, jsonOperation, jsonOffset, "limit", jsonMaxBytes, "request_key", "task_id", jsonKind, jsonEvaluationPlan, jsonJobId, jsonLocator:
 		return field
 	default:
 		return ""
@@ -127,6 +131,9 @@ func publicError(err error, fallback Code, field string) error {
 	case errors.As(err, &ce):
 		code = ce.Code
 		field = ce.Field
+	case errors.Is(err, candidate.ErrCopyPlan):
+		code = RevisionConflict
+		field = jsonPlanDigest
 	case errors.Is(err, candidate.ErrRevision):
 		code = RevisionConflict
 		field = jsonExpectedRevision

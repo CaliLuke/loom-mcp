@@ -75,7 +75,7 @@ func parseRequest(args []string) (control.Operation, rawjson.Message, error) {
 
 func knownOperation(operation control.Operation) bool {
 	switch operation {
-	case control.DiscoverOperation, control.CreateOperation, control.GetOperation, control.ReadOperation, control.EditOperation, control.ValidateOperation, control.FreezeOperation, control.SubmitOperation, control.StatusOperation, control.CancelOperation, control.ListEvidenceOperation, control.ReadEvidenceOperation, control.CompareOperation:
+	case control.PreviewCopyOperation, control.CopyOperation, control.DiscoverOperation, control.CreateOperation, control.GetOperation, control.ReadOperation, control.EditOperation, control.ValidateOperation, control.FreezeOperation, control.SubmitOperation, control.StatusOperation, control.CancelOperation, control.ListEvidenceOperation, control.ReadEvidenceOperation, control.CompareOperation:
 		return true
 	default:
 		return false

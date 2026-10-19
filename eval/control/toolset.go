@@ -67,44 +67,53 @@ func NewToolsetRegistration(cfg ToolsetConfig) (agentsruntime.ToolsetRegistratio
 func nativeTools(name string, s *Service) ([]nativeTool, error) {
 	var out []nativeTool
 	for _, op := range s.cfg.Operations {
-		var tool nativeTool
-		var err error
-		switch op {
-		case DiscoverOperation:
-			tool, err = makeTool(name, op, s, func(ctx context.Context, _ struct{}) (Discovery, error) {
-				return s.Discover(ctx)
-			})
-		case CreateOperation:
-			tool, err = makeTool(name, op, s, s.Create)
-		case GetOperation:
-			tool, err = makeTool(name, op, s, s.GetCandidate)
-		case ReadOperation:
-			tool, err = makeTool(name, op, s, s.ReadCandidate)
-		case EditOperation:
-			tool, err = makeTool(name, op, s, s.Edit)
-		case ValidateOperation:
-			tool, err = makeTool(name, op, s, s.Validate)
-		case FreezeOperation:
-			tool, err = makeTool(name, op, s, s.Freeze)
-		case SubmitOperation:
-			tool, err = makeTool(name, op, s, s.Submit)
-		case StatusOperation:
-			tool, err = makeTool(name, op, s, s.Status)
-		case CancelOperation:
-			tool, err = makeTool(name, op, s, s.Cancel)
-		case ListEvidenceOperation:
-			tool, err = makeTool(name, op, s, s.ListEvidence)
-		case ReadEvidenceOperation:
-			tool, err = makeTool(name, op, s, s.ReadEvidence)
-		case CompareOperation:
-			tool, err = makeTool(name, op, s, s.Compare)
-		}
+		tool, err := nativeToolFor(name, op, s)
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, tool)
 	}
 	return out, nil
+}
+
+// nativeToolFor binds one closed typed operation without changing service policy.
+func nativeToolFor(name string, op Operation, s *Service) (nativeTool, error) {
+	switch op {
+	case DiscoverOperation:
+		return makeTool(name, op, s, func(ctx context.Context, _ struct{}) (Discovery, error) {
+			return s.Discover(ctx)
+		})
+	case CreateOperation:
+		return makeTool(name, op, s, s.Create)
+	case GetOperation:
+		return makeTool(name, op, s, s.GetCandidate)
+	case ReadOperation:
+		return makeTool(name, op, s, s.ReadCandidate)
+	case EditOperation:
+		return makeTool(name, op, s, s.Edit)
+	case PreviewCopyOperation:
+		return makeTool(name, op, s, s.PreviewCopy)
+	case CopyOperation:
+		return makeTool(name, op, s, s.Copy)
+	case ValidateOperation:
+		return makeTool(name, op, s, s.Validate)
+	case FreezeOperation:
+		return makeTool(name, op, s, s.Freeze)
+	case SubmitOperation:
+		return makeTool(name, op, s, s.Submit)
+	case StatusOperation:
+		return makeTool(name, op, s, s.Status)
+	case CancelOperation:
+		return makeTool(name, op, s, s.Cancel)
+	case ListEvidenceOperation:
+		return makeTool(name, op, s, s.ListEvidence)
+	case ReadEvidenceOperation:
+		return makeTool(name, op, s, s.ReadEvidence)
+	case CompareOperation:
+		return makeTool(name, op, s, s.Compare)
+	default:
+		return nativeTool{}, invalid(jsonOperation)
+	}
 }
 
 func makeTool[P, R any](name string, op Operation, s *Service, run func(context.Context, P) (R, error)) (nativeTool, error) {
@@ -182,6 +191,10 @@ func description(op Operation) string {
 	switch op {
 	case DiscoverOperation:
 		return "Discover authorized baseline, editable slots, limits, tasks and available operations."
+	case PreviewCopyOperation:
+		return "Preview the complete selected source dependency closure and every destination collision without mutation. Inspect the entire plan before copy_candidate; oversized plans fail without truncation."
+	case CopyOperation:
+		return "Copy exactly a previously previewed closure using its plan_digest and explicit replace list. A changed source, destination revision or confirmation requires a fresh preview. This operation rechecks current read and edit grants."
 	case CreateOperation:
 		return "Create an editable candidate from the discovered baseline or an authorized frozen candidate."
 	case GetOperation:

@@ -1832,3 +1832,18 @@ No caller role/scope or mutable allow-all grant exists. A publication without th
 Read/List recheck authority and locator membership; selector metadata stays opaque and excludes internal/source/candidate identities.
 Comparison delegates existing eval statistics for exact single-attempt associations and rejects broader matrices.
 Probe comparison never creates quality counts or a quality winner.
+
+## Explicit reuse and child installation
+
+PreviewCopy is read-only and returns a complete validated dependency closure, collisions and confirmation digest.
+Copy recomputes it under the store lock and atomically commits bytes plus immediate-source origins only with exact confirmation.
+Native/CLI copy operations require read/edit and their own current operation grants; digest knowledge is never permission.
+Origin-bearing identity is v2; zero-origin v1 identity stays unchanged. Explicit puts/deletes clear origins only for touched names.
+Source snapshots must remain available to verify immediate provenance; no recursive history engine or optimizer is added.
+
+A component binding and activation name do not install behavior by themselves.
+Hosts must validate the full declared surface, install exact frozen bytes before sealing, and own lifecycle cleanup.
+The fixture supports standing instructions/guardrails, tool descriptions, generated child instructions, on-demand skills and stdlib helpers.
+Unadvertised memory and plugin components fail; security permissions remain host authority.
+Child instructions must reach actual child model requests and affect consumed output, not a parent-only trace label.
+Private canonical capture retains that proof. Public role projections still omit system/developer instructions.
