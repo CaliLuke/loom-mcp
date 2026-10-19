@@ -5,6 +5,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"net"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -34,6 +35,12 @@ type registryTransportCase struct {
 	bind    func(*genregistry.Endpoints, loom.Endpoint)
 	client  func(*grpcclient.Client) loom.Endpoint
 	errors  []string
+}
+
+type registryReadyListener struct {
+	net.Listener
+	ready chan struct{}
+	once  sync.Once
 }
 
 func TestRegistryTransportRoundTrip(t *testing.T) {
@@ -149,10 +156,7 @@ func registryTransportConnection(t *testing.T, tc registryTransportCase, endpoin
 		endpoints.ReportToolCallOverload, endpoints.ClaimToolCall)
 	endpoints = genregistry.NewEndpoints(service)
 	registrypb.RegisterRegistryServer(server, grpcserver.New(endpoints, nil))
-	done := make(chan error, 1)
-	go func() {
-		done <- server.Serve(listener)
-	}()
+	done := startRegistryTransportServer(t, server, listener)
 	conn, err := grpc.NewClient("passthrough:///registry-test",
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
@@ -167,8 +171,35 @@ func registryTransportConnection(t *testing.T, tc registryTransportCase, endpoin
 	return conn
 }
 
+// startRegistryTransportServer starts serving before tests can request shutdown.
+func startRegistryTransportServer(t *testing.T, server *grpc.Server, listener net.Listener) <-chan error {
+	t.Helper()
+	readyListener := &registryReadyListener{Listener: listener, ready: make(chan struct{})}
+	done := make(chan error, 1)
+	go func() {
+		done <- server.Serve(readyListener)
+	}()
+	// NewClient is lazy: even tests making no RPC must wait until Serve has
+	// registered its listener before cleanup can call Stop.
+	select {
+	case <-readyListener.ready:
+	case err := <-done:
+		server.Stop()
+		t.Fatalf("gRPC Serve ended before accepting connections: %v", err)
+	}
+	return done
+}
+
 func registryPayloadBuilder[T any](build func(string) (*T, error)) func(string) (any, error) {
 	return func(raw string) (any, error) {
 		return build(raw)
 	}
+}
+
+// Accept signals that Serve has registered this listener before waiting for clients.
+func (listener *registryReadyListener) Accept() (net.Conn, error) {
+	listener.once.Do(func() {
+		close(listener.ready)
+	})
+	return listener.Listener.Accept()
 }
