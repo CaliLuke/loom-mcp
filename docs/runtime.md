@@ -4819,6 +4819,15 @@ client, err := rt.NewVertexGeminiModelClient(ctx, runtime.VertexConfig{
 })
 ```
 
+Gemini and Vertex reject a response containing a `CONTINUATION` candidate with
+`model.OutputValidationError` (`response_shape`), wrapping
+`gemini.ErrContinuationUnsupported`. Automatic continuation is not supported by
+the adapter. No partial answer or tool calls are returned. Valid usage from the
+single provider call remains available through the rejection's `Usage()` and is
+recorded as a failed call; its input count still describes that one request.
+Malformed usage is omitted. `MAX_TOKENS` remains an output-limit rejection and
+does not become a context-overflow error.
+
 ### Structured Output
 
 `model.Request.StructuredOutput` asks the provider to enforce a JSON Schema for

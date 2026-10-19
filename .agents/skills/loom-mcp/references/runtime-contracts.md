@@ -821,6 +821,12 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 - Gemini and Vertex support exact `model.TokenCounter` but their `Stream`
   method returns `model.ErrStreamingUnsupported`; streaming is an explicit
   provider capability despite being part of the shared client interface.
+  Any `CONTINUATION` candidate rejects the whole response before content/tool
+  translation with `OutputValidationError` (`response_shape`) wrapping
+  `gemini.ErrContinuationUnsupported`. There is no automatic continuation.
+  Valid single-call usage survives for failed-call recording; malformed usage
+  is omitted. Evidence records response presence without retaining partial output.
+  `MAX_TOKENS` remains output-limited, not context overflow.
 - OpenAI Responses projects tool and structured-output schemas into the
   provider strict-schema subset, rejects structured output combined with
   tools, and round-trips canonical tool names through its request-local codec.
