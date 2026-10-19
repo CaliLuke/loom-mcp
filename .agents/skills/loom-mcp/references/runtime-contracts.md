@@ -982,6 +982,11 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   are design/runtime-owned and must not be controlled by tool payloads. Tool
   results use model-facing hits and must not expose raw scope, source
   references, or metadata from stored entries.
+  The in-memory service tokenizes Unicode letters, numbers and combining marks
+  for case-insensitive substring matching without canonical normalization.
+  Discard mark-only terms, including isolated emoji variation selectors.
+  Empty/whitespace queries browse; nonempty queries with no terms return no hits.
+  Scope/label filters and score, newest-timestamp, ID ordering precede the limit.
 - Planner-input memory preload is opt-in through generated
   `RunPolicy.PreloadMemory`. It fills `planner.PlanInput.PreloadedMemory` and
   `planner.PlanResumeInput.PreloadedMemory` with bounded snippets without

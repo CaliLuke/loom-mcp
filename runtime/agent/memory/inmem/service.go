@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/CaliLuke/loom-mcp/v2/internal/structured"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/memory"
@@ -87,11 +88,14 @@ func (s *Service) Search(_ context.Context, query memory.SearchQuery) (memory.Se
 	if err := validateScope(query.Scope); err != nil {
 		return memory.SearchResult{}, err
 	}
+	tokens := tokenize(query.Query)
+	if len(tokens) == 0 && strings.TrimSpace(query.Query) != "" {
+		return memory.SearchResult{Hits: []memory.SearchHit{}}, nil
+	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	tokens := tokenize(query.Query)
 	hits := make([]memory.SearchHit, 0, len(s.entries))
 	for _, entry := range s.entries {
 		if !scopeMatches(entry.Scope, query.Scope) || !labelsMatch(entry.Labels, query.Labels) {
@@ -108,15 +112,7 @@ func (s *Service) Search(_ context.Context, query memory.SearchQuery) (memory.Se
 			MatchedRefs: cloneSources(entry.Sources),
 		})
 	}
-	sort.SliceStable(hits, func(i, j int) bool {
-		if hits[i].Score != hits[j].Score {
-			return hits[i].Score > hits[j].Score
-		}
-		if !hits[i].Entry.Timestamp.Equal(hits[j].Entry.Timestamp) {
-			return hits[i].Entry.Timestamp.After(hits[j].Entry.Timestamp)
-		}
-		return hits[i].Entry.ID < hits[j].Entry.ID
-	})
+	sortSearchHits(hits)
 	truncated := false
 	if query.Limit > 0 && len(hits) > query.Limit {
 		truncated = true
@@ -266,6 +262,19 @@ func labelsMatch(labels, query map[string]string) bool {
 	return true
 }
 
+// sortSearchHits orders matches by relevance, recency, then stable entry ID.
+func sortSearchHits(hits []memory.SearchHit) {
+	sort.SliceStable(hits, func(i, j int) bool {
+		if hits[i].Score != hits[j].Score {
+			return hits[i].Score > hits[j].Score
+		}
+		if !hits[i].Entry.Timestamp.Equal(hits[j].Entry.Timestamp) {
+			return hits[i].Entry.Timestamp.After(hits[j].Entry.Timestamp)
+		}
+		return hits[i].Entry.ID < hits[j].Entry.ID
+	})
+}
+
 func entryScore(entry memory.Entry, tokens []string) float64 {
 	if len(tokens) == 0 {
 		return 1
@@ -280,13 +289,14 @@ func entryScore(entry memory.Entry, tokens []string) float64 {
 	return float64(score) / float64(len(tokens))
 }
 
+// tokenize retains lowercased word substrings; marks alone are not search terms.
 func tokenize(text string) []string {
 	fields := strings.FieldsFunc(strings.ToLower(text), func(r rune) bool {
-		return (r < 'a' || r > 'z') && (r < '0' || r > '9')
+		return !unicode.IsLetter(r) && !unicode.IsNumber(r) && !unicode.IsMark(r)
 	})
 	out := fields[:0]
 	for _, field := range fields {
-		if field != "" {
+		if strings.TrimFunc(field, unicode.IsMark) != "" {
 			out = append(out, field)
 		}
 	}
