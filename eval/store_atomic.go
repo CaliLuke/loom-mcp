@@ -68,7 +68,7 @@ func (s *Store) stageExperiment(h ExperimentHeader) (string, error) {
 	if err := s.writeHeader(staging, h); err != nil {
 		return "", err
 	}
-	data, err := encodeStore(attemptsHeader{Format: attemptsFormat, Version: 1, Experiment: h.ID})
+	data, err := encodeStore(attemptsHeader{Format: attemptsFormat, Version: h.Version, Experiment: h.ID})
 	if err != nil {
 		return "", err
 	}

@@ -17,9 +17,16 @@ import (
 // OnAttempt runs serially once per record; callbacks must not mutate configuration.
 // A callback panic stops new attempts and disables subsequent callbacks.
 type Config struct {
-	Harness HarnessFunc
+	// PrepareAttempt is exclusive with both legacy harness factories.
+	PrepareAttempt PrepareAttemptFunc
+	// PreparedWriter binds prepared attempts to an explicitly begun experiment.
+	PreparedWriter *Writer
+	// PrepareTimeout and CleanupTimeout must be positive for prepared attempts.
+	PrepareTimeout time.Duration
+	CleanupTimeout time.Duration
+	Harness        HarnessFunc
 	// AttemptHarness receives owned attempt metadata before harness construction.
-	// Exactly one of Harness and AttemptHarness must be set.
+	// Exactly one of Harness, AttemptHarness and PrepareAttempt must be set.
 	AttemptHarness                  AttemptHarnessFunc
 	Scenarios                       []Scenario
 	Variants                        []Variant
@@ -43,7 +50,8 @@ type harnessOwners struct {
 
 // Run executes a validated matrix with isolated harnesses and bounded concurrency.
 // A stopped experiment retains one record per planned key. Only invalid config,
-// caller cancellation, disabled live models and callback panics return errors;
+// caller cancellation, disabled live models, prepared persistence errors and
+// callback panics return errors;
 // quality and harness failures remain in records. The first stop reason wins.
 // Already running attempts finish after a token stop or callback panic.
 func Run(ctx context.Context, cfg Config) (*Report, error) {
@@ -51,7 +59,15 @@ func Run(ctx context.Context, cfg Config) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
-	report := newReport(cfg, plan)
+	return runPlan(ctx, cfg, plan, preparedPlanForConfig(cfg, plan))
+}
+
+// runPlan shares bounded dispatch between evaluations and explicit probes.
+func runPlan(ctx context.Context, cfg Config, plan []plannedAttempt, binding preparedPlan) (*Report, error) {
+	report, err := preparedRunReport(cfg, plan, binding)
+	if err != nil {
+		return nil, err
+	}
 	var prepareErr error
 	if cfg.Judge != nil {
 		prepareErr = cfg.Judge.Prepare(ctx)
@@ -59,18 +75,7 @@ func Run(ctx context.Context, cfg Config) (*Report, error) {
 	concurrency := min(report.Concurrency, len(plan))
 	jobs := make(chan runnerJob)
 	completed := make(chan *AttemptRecord, concurrency)
-	owners := &harnessOwners{seen: make(map[*agenttest.Harness]bool)}
-	factory := harnessFactory(cfg)
-	var workers sync.WaitGroup
-	for range concurrency {
-		workers.Go(func() {
-			for job := range jobs {
-				record := runAttempt(ctx, factory, owners, job)
-				judgeAttempt(ctx, cfg.Judge, cfg.JudgeTimeout, record)
-				completed <- record
-			}
-		})
-	}
+	workers := startRunnerWorkers(ctx, cfg, concurrency, jobs, completed, binding.Kind)
 	order := schedule(plan)
 	runErr := collect(ctx, &cfg, report, plan, order, jobs, completed)
 	close(jobs)
@@ -92,6 +97,51 @@ func Run(ctx context.Context, cfg Config) (*Report, error) {
 	return report, runErr
 }
 
+// preparedRunReport checks admission before any host callback or resource acquisition.
+func preparedRunReport(cfg Config, plan []plannedAttempt, binding preparedPlan) (*Report, error) {
+	if cfg.PrepareAttempt != nil {
+		if cfg.PreparedWriter == nil {
+			return nil, errors.New("eval: prepared writer is required")
+		}
+		if err := cfg.PreparedWriter.validatePreparedPlan(binding); err != nil {
+			return nil, err
+		}
+	}
+	report := newReport(cfg, plan)
+	if cfg.PrepareAttempt != nil {
+		report.ExecutionKind = binding.Kind
+		for _, a := range report.Attempts {
+			a.ExecutionKind = binding.Kind
+			if binding.Kind == ExecutionProbe {
+				a.Probe = initialProbeStatus()
+			}
+		}
+	}
+	return report, nil
+}
+
+// startRunnerWorkers copies configuration before the collector can disable observers.
+func startRunnerWorkers(ctx context.Context, cfg Config, concurrency int, jobs <-chan runnerJob, completed chan<- *AttemptRecord, kind ExecutionKind) *sync.WaitGroup {
+	owners := &harnessOwners{seen: make(map[*agenttest.Harness]bool)}
+	factory := harnessFactory(cfg)
+	workers := &sync.WaitGroup{}
+	for range concurrency {
+		workers.Go(func() {
+			for job := range jobs {
+				var record *AttemptRecord
+				if cfg.PrepareAttempt != nil {
+					record = runPreparedAttempt(ctx, cfg, job, kind)
+				} else {
+					record = runAttempt(ctx, factory, owners, job)
+				}
+				judgeAttempt(ctx, cfg.Judge, cfg.JudgeTimeout, record)
+				completed <- record
+			}
+		})
+	}
+	return workers
+}
+
 // collect owns dispatch, stop decisions, accounting and all callbacks.
 func collect(ctx context.Context, cfg *Config, report *Report, plan []plannedAttempt, order []int, jobs chan<- runnerJob, completed <-chan *AttemptRecord) error {
 	next, inFlight := 0, 0
@@ -103,6 +153,7 @@ func collect(ctx context.Context, cfg *Config, report *Report, plan []plannedAtt
 			runErr = errors.Join(runErr, context.Cause(ctx))
 			canceled = nil
 		}
+		runErr = checkPreparedPersistence(cfg, report, runErr)
 		if report.Stop != "" && inFlight == 0 {
 			break
 		}
@@ -134,6 +185,14 @@ func collect(ctx context.Context, cfg *Config, report *Report, plan []plannedAtt
 	return runErr
 }
 
+func checkPreparedPersistence(cfg *Config, report *Report, runErr error) error {
+	if cfg.PreparedWriter != nil && cfg.PreparedWriter.Err() != nil {
+		report.stop(StopStoreError)
+		return errors.Join(runErr, cfg.PreparedWriter.Err())
+	}
+	return runErr
+}
+
 // acceptRecord accounts completed work before deciding whether more work may start.
 func acceptRecord(cfg *Config, report *Report, a *AttemptRecord, runErr error) error {
 	report.Attempts[a.Index] = a
@@ -154,6 +213,12 @@ func acceptRecord(cfg *Config, report *Report, a *AttemptRecord, runErr error) e
 
 // notifyAttempt disables a panicking observer so collection can drain the workers.
 func notifyAttempt(cfg *Config, report *Report, a *AttemptRecord, runErr error) (err error) {
+	if cfg.PreparedWriter != nil {
+		if err := cfg.PreparedWriter.Append(a); err != nil {
+			report.stop(StopStoreError)
+			runErr = errors.Join(runErr, err)
+		}
+	}
 	if cfg.OnAttempt == nil {
 		return runErr
 	}

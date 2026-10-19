@@ -98,6 +98,10 @@ func (s *Store) Begin(ctx context.Context, cfg Config, meta ExperimentMeta) (*Wr
 	if err != nil {
 		return nil, err
 	}
+	return s.begin(ctx, newExperimentHeader(cfg, keys, "", meta, Identity{}, time.Time{}), keys, meta)
+}
+
+func (s *Store) begin(ctx context.Context, h ExperimentHeader, keys []AttemptKey, meta ExperimentMeta) (*Writer, error) {
 	if !utf8.ValidString(meta.Label) || len(meta.Label) > 256 {
 		return nil, fmt.Errorf("eval: label must be valid UTF-8 and at most 256 bytes")
 	}
@@ -115,7 +119,7 @@ func (s *Store) Begin(ctx context.Context, cfg Config, meta ExperimentMeta) (*Wr
 		detected := DetectIdentity(ctx, ".")
 		identity = &detected
 	}
-	h := newExperimentHeader(cfg, keys, id.String(), meta, *identity, s.now())
+	h.ID, h.Started, h.Source, h.Versions = id.String(), s.now(), identity.Source, identity.Versions
 	staging, err := s.stageExperiment(h)
 	if err != nil {
 		return nil, err
@@ -139,7 +143,12 @@ func newExperimentHeader(cfg Config, keys []AttemptKey, id string, meta Experime
 	for i, v := range report.Variants {
 		variants[i] = StoredVariant{ID: v.ID, Labels: v.Labels, Policy: v.Policy}
 	}
-	return ExperimentHeader{Format: experimentFormat, Version: 1, ID: id, Label: meta.Label, Parent: meta.Parent, Status: statusRunning, Started: now, Source: identity.Source, Versions: identity.Versions, Config: StoredConfig{Repeats: report.Repeats, Concurrency: report.Concurrency, MaxTokens: report.MaxTokens, Selection: report.Selection}, Scenarios: report.Scenarios, Variants: variants, Planned: len(keys)}
+	h := ExperimentHeader{Format: experimentFormat, Version: 1, ID: id, Label: meta.Label, Parent: meta.Parent, Status: statusRunning, Started: now, Source: identity.Source, Versions: identity.Versions, Config: StoredConfig{Repeats: report.Repeats, Concurrency: report.Concurrency, MaxTokens: report.MaxTokens, Selection: report.Selection}, Scenarios: report.Scenarios, Variants: variants, Planned: len(keys)}
+	if cfg.PrepareAttempt != nil {
+		h.Version, h.ExecutionKind = 2, ExecutionEvaluation
+		h.Config.PrepareTimeout, h.Config.CleanupTimeout = cfg.PrepareTimeout, cfg.CleanupTimeout
+	}
+	return h
 }
 
 func (s *Store) readHeader(id string) (*ExperimentHeader, error) {

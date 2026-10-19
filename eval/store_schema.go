@@ -5,6 +5,7 @@ import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/CaliLuke/loom-mcp/v2/expect"
@@ -17,33 +18,36 @@ import (
 
 // ExperimentHeader is the versioned summary stored in experiment.json.
 type ExperimentHeader struct {
-	Format       string                 `json:"format"`
-	Version      int                    `json:"version"`
-	ID           string                 `json:"id"`
-	Label        string                 `json:"label"`
-	Parent       string                 `json:"parent"`
-	Status       string                 `json:"status"`
-	Started      time.Time              `json:"started"`
-	Finished     time.Time              `json:"finished"`
-	Stop         StopReason             `json:"stop"`
-	RunError     string                 `json:"run_error"`
-	Source       VCS                    `json:"source"`
-	Versions     Versions               `json:"versions"`
-	Config       StoredConfig           `json:"config"`
-	Scenarios    []ScenarioInfo         `json:"scenarios"`
-	Variants     []StoredVariant        `json:"variants"`
-	Planned      int                    `json:"planned"`
-	Tokens       int                    `json:"tokens"`
-	Fingerprints map[string]Fingerprint `json:"fingerprints"`
-	Judge        *JudgeInfo             `json:"judge,omitempty"`
+	ExecutionKind ExecutionKind          `json:"execution_kind,omitempty"`
+	Format        string                 `json:"format"`
+	Version       int                    `json:"version"`
+	ID            string                 `json:"id"`
+	Label         string                 `json:"label"`
+	Parent        string                 `json:"parent"`
+	Status        string                 `json:"status"`
+	Started       time.Time              `json:"started"`
+	Finished      time.Time              `json:"finished"`
+	Stop          StopReason             `json:"stop"`
+	RunError      string                 `json:"run_error"`
+	Source        VCS                    `json:"source"`
+	Versions      Versions               `json:"versions"`
+	Config        StoredConfig           `json:"config"`
+	Scenarios     []ScenarioInfo         `json:"scenarios"`
+	Variants      []StoredVariant        `json:"variants"`
+	Planned       int                    `json:"planned"`
+	Tokens        int                    `json:"tokens"`
+	Fingerprints  map[string]Fingerprint `json:"fingerprints"`
+	Judge         *JudgeInfo             `json:"judge,omitempty"`
 }
 
 // StoredConfig contains the reproducible runner settings.
 type StoredConfig struct {
-	Repeats     int       `json:"repeats"`
-	Concurrency int       `json:"concurrency"`
-	MaxTokens   int       `json:"max_tokens"`
-	Selection   Selection `json:"selection"`
+	PrepareTimeout time.Duration `json:"prepare_timeout,omitempty,omitzero"`
+	CleanupTimeout time.Duration `json:"cleanup_timeout,omitempty,omitzero"`
+	Repeats        int           `json:"repeats"`
+	Concurrency    int           `json:"concurrency"`
+	MaxTokens      int           `json:"max_tokens"`
+	Selection      Selection     `json:"selection"`
 }
 
 // StoredVariant excludes opaque harness options; policy retains its Go field names.
@@ -107,6 +111,10 @@ type StoredJudgment struct {
 
 // StoredAttempt owns one attempt's durable quality results and run evidence.
 type StoredAttempt struct {
+	ExecutionKind ExecutionKind    `json:"execution_kind,omitempty"`
+	Prepared      *PreparedReceipt `json:"prepared,omitempty"`
+	Probe         *ProbeStatus     `json:"probe,omitempty"`
+	Artifacts     []StoredArtifact `json:"artifacts,omitempty"`
 	AttemptKey
 	Index        int              `json:"index"`
 	Key          string           `json:"key"`
@@ -182,9 +190,12 @@ func decodeAttemptLine(data []byte) (*StoredAttempt, error) {
 		return nil, fmt.Errorf("invalid attempt index or key")
 	}
 	switch a.Verdict {
-	case VerdictPassed, VerdictFailed, VerdictError, VerdictPending, VerdictNotRun:
+	case VerdictPassed, VerdictFailed, VerdictError, VerdictPending, VerdictNotRun, VerdictUnassessed:
 	default:
 		return nil, fmt.Errorf("invalid verdict %q", a.Verdict)
+	}
+	if err := validateStoredPrepared(&a); err != nil {
+		return nil, err
 	}
 	for i, r := range a.Runs {
 		if len(r.Export) == 0 || string(r.Export) == "null" {
@@ -208,7 +219,7 @@ func storedAttempt(r *AttemptRecord) (*StoredAttempt, error) {
 	if r == nil {
 		return nil, fmt.Errorf("eval: nil attempt")
 	}
-	a := &StoredAttempt{AttemptKey: r.AttemptKey, Key: r.AttemptKey.String(), Index: r.Index, Verdict: r.Verdict(), NotRun: r.NotRun, HarnessError: errorText(r.HarnessErr), Started: r.Started, Duration: r.Duration, Usage: r.Usage, Tokens: r.Tokens, JudgeUsage: r.JudgeUsage, JudgeTokens: r.JudgeTokens}
+	a := &StoredAttempt{ExecutionKind: r.ExecutionKind, Prepared: clonePreparedReceipt(r.Prepared), Probe: cloneProbeStatus(r.Probe), Artifacts: slices.Clone(r.Artifacts), AttemptKey: r.AttemptKey, Key: r.AttemptKey.String(), Index: r.Index, Verdict: r.Verdict(), NotRun: r.NotRun, HarnessError: errorText(r.HarnessErr), Started: r.Started, Duration: r.Duration, Usage: r.Usage, Tokens: r.Tokens, JudgeUsage: r.JudgeUsage, JudgeTokens: r.JudgeTokens}
 	if o := r.Outcome; o != nil {
 		a.Task, a.Reference, a.Checks, a.Scores, a.Error = o.Task, o.Reference, o.Checks, o.Scores, errorText(o.Err)
 		for _, claim := range o.Claims {

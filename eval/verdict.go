@@ -4,6 +4,8 @@ package eval
 type Verdict string
 
 const (
+	// VerdictUnassessed means a successful probe has no quality assessment.
+	VerdictUnassessed Verdict = "unassessed"
 	// VerdictPassed means every quality gate passed and no gating claim is pending.
 	VerdictPassed Verdict = "passed"
 	// VerdictFailed means a check or score threshold failed.
@@ -45,6 +47,12 @@ func (r *AttemptRecord) Verdict() Verdict {
 	}
 	if r.HarnessErr != nil {
 		return VerdictError
+	}
+	if r.ExecutionKind == ExecutionProbe {
+		if r.Outcome == nil || r.Outcome.Err != nil || r.Probe == nil || r.Probe.Execution != probeExecutionSucceeded {
+			return VerdictError
+		}
+		return VerdictUnassessed
 	}
 	return r.Outcome.Verdict()
 }

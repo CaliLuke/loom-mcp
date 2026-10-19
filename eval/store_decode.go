@@ -2,6 +2,8 @@ package eval
 
 import (
 	"bufio"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -13,8 +15,30 @@ func decodeExperiment(data []byte, id string) (*ExperimentHeader, error) {
 	if err := decodeStore(data, &h); err != nil {
 		return nil, err
 	}
-	if h.Format != experimentFormat || h.Version != 1 {
+	if h.Format != experimentFormat || validateExecutionKind(h.Version, h.ExecutionKind) != nil {
 		return nil, fmt.Errorf("unsupported experiment format %q or version %d", h.Format, h.Version)
+	}
+	if h.Version == 1 {
+		if err := rejectLegacyMembers(data, "execution_kind"); err != nil {
+			return nil, err
+		}
+		var wire struct {
+			Config jsontext.Value `json:"config"`
+		}
+		if err := json.Unmarshal(data, &wire); err != nil {
+			return nil, err
+		}
+		if len(wire.Config) != 0 {
+			if err := rejectLegacyMembers(wire.Config, "prepare_timeout", "cleanup_timeout"); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if h.Version == 2 && (h.Config.PrepareTimeout <= 0 || h.Config.CleanupTimeout <= 0) {
+		return nil, errors.New("eval: prepared header requires positive callback timeouts")
+	}
+	if h.ExecutionKind == ExecutionProbe && (h.Parent != "" || h.Judge != nil || h.Planned != 1) {
+		return nil, errors.New("eval: probe header contains evaluation lineage or judge, or invalid plan")
 	}
 	if h.ID != id {
 		return nil, fmt.Errorf("experiment ID mismatch: %q", h.ID)
@@ -28,7 +52,7 @@ func decodeExperiment(data []byte, id string) (*ExperimentHeader, error) {
 }
 
 // readAttempts tolerates only an incomplete final JSON value, never a corrupt complete line.
-func readAttempts(r io.Reader, source, id string) ([]*StoredAttempt, bool, error) {
+func readAttempts(r io.Reader, source string, header *ExperimentHeader) ([]*StoredAttempt, bool, error) {
 	reader := bufio.NewReader(r)
 	var attempts []*StoredAttempt
 	seen := make(map[int]bool)
@@ -43,10 +67,16 @@ func readAttempts(r io.Reader, source, id string) ([]*StoredAttempt, bool, error
 		}
 		var err error
 		if line == 1 {
-			err = decodeAttemptsHeader(data, id)
+			err = decodeAttemptsHeader(data, header)
 		} else {
 			var a *StoredAttempt
 			a, err = decodeUniqueAttempt(data, seen, keys)
+			if err == nil && a.ExecutionKind != header.ExecutionKind {
+				err = errors.New("eval: attempt execution kind differs from header")
+			}
+			if err == nil && header.Version == 1 {
+				err = rejectLegacyMembers(data, "execution_kind", "prepared", "probe", "artifacts")
+			}
 			if err == nil {
 				attempts = append(attempts, a)
 			}
@@ -71,12 +101,12 @@ func sortedAttempts(attempts []*StoredAttempt) []*StoredAttempt {
 	return attempts
 }
 
-func decodeAttemptsHeader(data []byte, id string) error {
+func decodeAttemptsHeader(data []byte, header *ExperimentHeader) error {
 	var h attemptsHeader
 	if err := decodeStore(data, &h); err != nil {
 		return err
 	}
-	if h.Format != attemptsFormat || h.Version != 1 || h.Experiment != id {
+	if h.Format != attemptsFormat || h.Version != header.Version || h.Experiment != header.ID {
 		return fmt.Errorf("missing or mismatched attempts header")
 	}
 	return nil

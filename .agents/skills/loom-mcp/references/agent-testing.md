@@ -343,3 +343,14 @@ full-bootstrap check cells and tests progress equivalence. No new full grid or
 qualification is claimed. Keep production source matching strict: changed code
 refuses historical calibration/freeze/pilot/look inputs before opening stores.
 Future qualification requires fresh source-bound validation and calibration.
+
+## Prepared attempt hosts
+
+Use `eval.Config.PrepareAttempt` for frozen registration/input bindings and host resource leases.
+Call `Store.Begin`, assign `PreparedWriter`, call `Run`, then call `Writer.Finish`.
+For a task without assertions, use explicit `ProbeConfig` with `BeginProbe` and `Probe`.
+Keep positive preparation/cleanup timeouts and cooperative quiesce/collect/release callbacks.
+The runner owns durable receipts, canonical capture and retained output publication before observers and release.
+Probes report unassessed quality; completion never implies a quality pass.
+See `docs/runtime.md` for the exact schema and lifecycle contract.
+`eval/component_probe_test.go` proves newly submitted Go source changes a tool result and retained deliverable.

@@ -25,9 +25,13 @@ func check(cfg Config, f flags, ref string) error {
 		if result.Passed {
 			decision = "passed"
 		}
-		_, err = fmt.Fprintf(cfg.Stdout, "strict check %s: %d/%d passed (planned %d; %d failed, %d error, %d pending, %d not run)\n",
-			decision, result.Counts.Passed, result.Attempts, result.Planned,
-			result.Counts.Failed, result.Counts.Error, result.Counts.Pending, result.Counts.NotRun)
+		if result.ExecutionKind == eval.ExecutionProbe {
+			_, err = fmt.Fprintf(cfg.Stdout, "strict check rejected: quality not_assessed (%d probes; planned %d)\n", result.Counts.Probes, result.Planned)
+		} else {
+			_, err = fmt.Fprintf(cfg.Stdout, "strict check %s: %d/%d passed (planned %d; %d failed, %d error, %d pending, %d not run)\n",
+				decision, result.Counts.Passed, result.Attempts, result.Planned,
+				result.Counts.Failed, result.Counts.Error, result.Counts.Pending, result.Counts.NotRun)
+		}
 		if err == nil && len(result.Reasons) > 0 {
 			_, err = fmt.Fprintf(cfg.Stdout, "Reasons: %s\n", strings.Join(result.Reasons, ", "))
 		}

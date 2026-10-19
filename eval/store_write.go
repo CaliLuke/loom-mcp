@@ -9,15 +9,18 @@ import (
 // Writer streams one experiment, retaining the first persistence failure.
 // Methods are concurrency-safe; callbacks run after releasing the writer lock.
 type Writer struct {
-	mu       sync.Mutex
-	store    *Store
-	dir      string
-	header   ExperimentHeader
-	keys     []AttemptKey
-	written  map[int]Fingerprint
-	order    []int
-	err      error
-	finished bool
+	reserved  map[int]bool
+	receipts  map[int]PreparedReceipt
+	artifacts map[int][]StoredArtifact
+	mu        sync.Mutex
+	store     *Store
+	dir       string
+	header    ExperimentHeader
+	keys      []AttemptKey
+	written   map[int]Fingerprint
+	order     []int
+	err       error
+	finished  bool
 }
 
 // ID returns the experiment's canonical UUIDv7.
@@ -106,6 +109,9 @@ func (w *Writer) encodeAttempt(r *AttemptRecord) ([]byte, Fingerprint, error) {
 	if err != nil {
 		return nil, Fingerprint{}, err
 	}
+	if err := validateStoredPrepared(a); err != nil {
+		return nil, Fingerprint{}, err
+	}
 	data, err := encodeStore(a)
 	if err != nil {
 		return nil, Fingerprint{}, err
@@ -169,7 +175,7 @@ func (w *Writer) validateAppend(r *AttemptRecord) error {
 		return fmt.Errorf("eval: duplicate attempt index %d", r.Index)
 	}
 
-	return nil
+	return w.validatePreparedRecord(r)
 }
 
 func (w *Writer) validateReport(report *Report) error {
@@ -179,13 +185,16 @@ func (w *Writer) validateReport(report *Report) error {
 	if w.finished {
 		return fmt.Errorf("eval: writer is finished")
 	}
-	if report == nil || len(report.Attempts) != len(w.keys) {
+	if report == nil || report.ExecutionKind != w.header.ExecutionKind || len(report.Attempts) != len(w.keys) {
 		return fmt.Errorf("eval: report keys do not match plan")
 	}
 	seen := make(map[int]bool, len(w.keys))
 	for _, a := range report.Attempts {
 		if a == nil || a.Index < 0 || a.Index >= len(w.keys) || seen[a.Index] || w.keys[a.Index] != a.AttemptKey {
 			return fmt.Errorf("eval: report keys do not match plan")
+		}
+		if err := w.validatePreparedRecord(a); err != nil {
+			return err
 		}
 		seen[a.Index] = true
 	}

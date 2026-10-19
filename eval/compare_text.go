@@ -41,11 +41,17 @@ func WriteComparisonsJSON(w io.Writer, cs []*Comparison) error {
 			return fmt.Errorf("eval: nil comparison")
 		}
 	}
+	version := 1
+	for _, c := range cs {
+		if c.Baseline.Version == 2 || c.Candidate.Version == 2 {
+			version = 2
+		}
+	}
 	return writeReportJSON(w, struct {
 		Format      string        `json:"format"`
 		Version     int           `json:"version"`
 		Comparisons []*Comparison `json:"comparisons"`
-	}{Format: "loom-mcp.eval.compare", Version: 1, Comparisons: cs})
+	}{Format: "loom-mcp.eval.compare", Version: version, Comparisons: cs})
 }
 
 func writeComparisonContext(out *strings.Builder, c *Comparison) {
@@ -67,6 +73,11 @@ func writeGroupSections(out *strings.Builder, c *Comparison) {
 		fmt.Fprintf(out, "%s:\n", section.title)
 		for _, g := range c.Groups {
 			if g.Status != section.status {
+				continue
+			}
+			if g.Baseline.Probes+g.Candidate.Probes > 0 {
+				fmt.Fprintf(out, "  %s/%s quality not_assessed\n", g.Scenario, g.Item)
+				writeGroupDetails(out, g)
 				continue
 			}
 			fmt.Fprintf(out, "  %s/%s %d/%d -> %d/%d passed%s\n", g.Scenario, g.Item, g.Baseline.Passed, g.Baseline.Ran, g.Candidate.Passed, g.Candidate.Ran, judgmentFlags(g.Uncalibrated, g.TruncatedJudgments, g.Judgments))
@@ -113,6 +124,10 @@ func writeGroupDetails(out *strings.Builder, g GroupDelta) {
 }
 
 func writeSideTotals(out *strings.Builder, name string, s GroupStats) {
+	if s.Probes > 0 || s.Quality == probeQualityNotAssessed {
+		fmt.Fprintf(out, "  %s quality not_assessed; %d probes; median tokens %d; duration %s; tools_unavailable %d\n", name, s.Probes, s.MedianTokens, s.MedianDuration, s.ToolsUnavailable)
+		return
+	}
 	fmt.Fprintf(out, "  %s %d/%d passed; median tokens %d; duration %s; tools_unavailable %d\n", name, s.Passed, s.Ran, s.MedianTokens, s.MedianDuration, s.ToolsUnavailable)
 }
 
@@ -203,11 +218,19 @@ func writeVariantRow(out *strings.Builder, cs []*Comparison, pair Pair) {
 			break
 		}
 	}
-	fmt.Fprintf(out, " | %d/%d passed", baseline.Baseline.Passed, baseline.Baseline.Ran)
+	if baseline.Baseline.Probes > 0 {
+		out.WriteString(" | quality not_assessed")
+	} else {
+		fmt.Fprintf(out, " | %d/%d passed", baseline.Baseline.Passed, baseline.Baseline.Ran)
+	}
 	for _, c := range cs {
 		g := findDelta(c, pair)
 		if g == nil {
 			out.WriteString(" | absent")
+			continue
+		}
+		if g.Candidate.Probes > 0 {
+			fmt.Fprintf(out, " | quality not_assessed %s", g.Status)
 			continue
 		}
 		fmt.Fprintf(out, " | %d/%d %s%s", g.Candidate.Passed, g.Candidate.Ran, g.Status, judgmentFlags(g.Uncalibrated, g.TruncatedJudgments, g.Judgments))

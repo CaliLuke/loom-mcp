@@ -82,8 +82,14 @@ func buildPlan(cfg Config) ([]plannedAttempt, error) {
 
 func validateConfig(cfg Config, variants []Variant) []error {
 	var problems []error
-	if (cfg.Harness == nil) == (cfg.AttemptHarness == nil) {
-		problems = append(problems, errors.New("eval: exactly one of Harness and AttemptHarness is required"))
+	factories := 0
+	for _, set := range []bool{cfg.Harness != nil, cfg.AttemptHarness != nil, cfg.PrepareAttempt != nil} {
+		if set {
+			factories++
+		}
+	}
+	if factories != 1 {
+		problems = append(problems, errors.New("eval: exactly one of Harness, AttemptHarness and PrepareAttempt is required"))
 	}
 	if len(cfg.Scenarios) == 0 {
 		problems = append(problems, errors.New("eval: no scenarios"))
@@ -91,7 +97,8 @@ func validateConfig(cfg Config, variants []Variant) []error {
 	if cfg.JudgeTimeout < 0 {
 		problems = append(problems, errors.New("eval: JudgeTimeout must be non-negative"))
 	}
-	problems = append(problems, Validate(cfg.Scenarios...))
+	problems = append(problems, validatePreparedConfig(cfg)...)
+	problems = append(problems, validateScenarios(cfg.Scenarios, cfg.PrepareAttempt != nil))
 	problems = append(problems, validateVariants(variants)...)
 	for _, field := range []struct {
 		name  string

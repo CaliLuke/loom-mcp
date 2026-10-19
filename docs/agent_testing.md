@@ -648,3 +648,27 @@ For example, `LONGRUN_BEDROCK_ANTHROPIC_PLANNER_SMALL` names the small Bedrock m
 Provider API keys use the normal `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, and `GEMINI_API_KEY` variables.
 Bedrock uses `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and optional `AWS_SESSION_TOKEN`.
 The CLI never enables live models automatically.
+
+## Prepared attempts and probes
+
+Use `eval.Config.PrepareAttempt` when registration, inputs and outputs depend on one frozen candidate.
+The host returns a lease with isolated resources, a receipt and explicit quiescence, collection and release callbacks.
+Use `Store.Begin` → `Run` → `Writer.Finish` for evaluations.
+Use `Store.BeginProbe` → `Probe` → `Writer.Finish` for operational tasks without a quality rubric.
+Assign the admitted writer to `PreparedWriter` before execution.
+Both paths require positive preparation and cleanup timeouts.
+
+Probes always report `quality: not_assessed`.
+A successful probe is `unassessed`; execution and infrastructure failures remain errors.
+All probes stay outside quality denominators.
+Strict checks reject probes, and evaluation rerun overlays do not apply to them.
+
+The host collects declared output bytes before release.
+Missing output differs from an explicitly retained empty file.
+`Store.ReadArtifact` verifies retained size and SHA-256 before returning owned bytes.
+Failed quiescence preserves a provisional mark on retained artifacts.
+
+See [Prepared attempts and operational probes](runtime.md#prepared-attempts-and-operational-probes) for admission and lifecycle contracts.
+Run `go test ./eval -run TestComponentProbe` for the submitted-source fixture.
+This fixture freezes new Go source, compiles and executes it through a tool, and retains evidence after resource release.
+The framework supplies no general shell, sandbox or optimization policy.

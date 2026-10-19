@@ -2,23 +2,26 @@ package eval
 
 // QualityCounts tallies stored attempt verdicts for a quality check.
 type QualityCounts struct {
-	Passed  int `json:"passed"`
-	Failed  int `json:"failed"`
-	Error   int `json:"error"`
-	Pending int `json:"pending"`
-	NotRun  int `json:"not_run"`
+	Probes     int `json:"probes,omitempty,omitzero"`
+	Unassessed int `json:"unassessed,omitempty,omitzero"`
+	Passed     int `json:"passed"`
+	Failed     int `json:"failed"`
+	Error      int `json:"error"`
+	Pending    int `json:"pending"`
+	NotRun     int `json:"not_run"`
 }
 
 // QualityCheck is an offline decision over one stored experiment. Reasons are
 // stable codes so callers can inspect a rejection without parsing prose.
 type QualityCheck struct {
-	Policy   string        `json:"policy"`
-	Passed   bool          `json:"passed"`
-	Status   string        `json:"status"`
-	Planned  int           `json:"planned"`
-	Attempts int           `json:"attempts"`
-	Counts   QualityCounts `json:"counts"`
-	Reasons  []string      `json:"reasons"`
+	ExecutionKind ExecutionKind `json:"execution_kind,omitempty"`
+	Policy        string        `json:"policy"`
+	Passed        bool          `json:"passed"`
+	Status        string        `json:"status"`
+	Planned       int           `json:"planned"`
+	Attempts      int           `json:"attempts"`
+	Counts        QualityCounts `json:"counts"`
+	Reasons       []string      `json:"reasons"`
 }
 
 // CheckQualityStrict decides whether stored results meet the strict policy.
@@ -30,6 +33,10 @@ func CheckQualityStrict(e *Experiment) QualityCheck {
 	if e == nil {
 		result.Reasons = []string{"no_experiment"}
 		return result
+	}
+	result.ExecutionKind = e.Header.ExecutionKind
+	if e.Header.ExecutionKind == ExecutionProbe {
+		result.Reasons = append(result.Reasons, "quality_not_assessed")
 	}
 	result.Status = e.Header.Status
 	result.Planned = e.Header.Planned
@@ -47,6 +54,9 @@ func CheckQualityStrict(e *Experiment) QualityCheck {
 	result.Counts, coverage = countQuality(e.Attempts, e.Header.Planned)
 	if !coverage {
 		result.Reasons = append(result.Reasons, "incomplete_plan")
+	}
+	if result.Counts.Probes > 0 && e.Header.ExecutionKind != ExecutionProbe {
+		result.Reasons = append(result.Reasons, "quality_not_assessed")
 	}
 	result.Reasons = append(result.Reasons, verdictReasons(result.Counts)...)
 	result.Passed = len(result.Reasons) == 0
@@ -69,6 +79,13 @@ func countQuality(attempts []*StoredAttempt, planned int) (QualityCounts, bool) 
 		} else {
 			seen[attempt.Index] = true
 		}
+		if attempt.ExecutionKind == ExecutionProbe {
+			counts.Probes++
+			if attempt.Verdict == VerdictUnassessed {
+				counts.Unassessed++
+			}
+			continue
+		}
 		switch attempt.Verdict {
 		case VerdictPassed:
 			counts.Passed++
@@ -80,6 +97,8 @@ func countQuality(attempts []*StoredAttempt, planned int) (QualityCounts, bool) 
 			counts.Pending++
 		case VerdictNotRun:
 			counts.NotRun++
+		case VerdictUnassessed:
+			coverage = false
 		default:
 			coverage = false
 		}

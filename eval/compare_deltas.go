@@ -10,26 +10,30 @@ type scoreSamples struct {
 
 func compareGroup(base, cand reportGroup) GroupDelta {
 	g := GroupDelta{Scenario: cand.Scenario, Item: cand.Item, Baseline: base.GroupStats, Candidate: cand.GroupStats}
-	g.Status = regression(g.Baseline.Passed, g.Baseline.Ran, g.Candidate.Passed, g.Candidate.Ran)
-	sample := failingSample(cand.attempts)
-	if g.Status == statusImproved {
-		sample = failingSample(base.attempts)
-	}
-	g.Checks = compareChecks(base.attempts, cand.attempts, sample)
-	g.Claims = compareClaims(base.attempts, cand.attempts, sample)
-	g.Scores = compareScores(base.attempts, cand.attempts)
-	for _, attempts := range [][]*StoredAttempt{base.attempts, cand.attempts} {
-		for _, a := range attempts {
-			for _, j := range a.Judgments {
-				g.Judgments++
-				if j.Truncated {
-					g.TruncatedJudgments++
+	if base.Probes > 0 || cand.Probes > 0 {
+		g.Status = statusNotComparable
+	} else {
+		g.Status = regression(g.Baseline.Passed, g.Baseline.Ran, g.Candidate.Passed, g.Candidate.Ran)
+		sample := failingSample(cand.attempts)
+		if g.Status == statusImproved {
+			sample = failingSample(base.attempts)
+		}
+		g.Checks = compareChecks(base.attempts, cand.attempts, sample)
+		g.Claims = compareClaims(base.attempts, cand.attempts, sample)
+		g.Scores = compareScores(base.attempts, cand.attempts)
+		for _, attempts := range [][]*StoredAttempt{base.attempts, cand.attempts} {
+			for _, a := range attempts {
+				for _, j := range a.Judgments {
+					g.Judgments++
+					if j.Truncated {
+						g.TruncatedJudgments++
+					}
+					g.Uncalibrated = g.Uncalibrated || j.Uncalibrated
 				}
-				g.Uncalibrated = g.Uncalibrated || j.Uncalibrated
 			}
 		}
+		g.Truncated = g.TruncatedJudgments > 0
 	}
-	g.Truncated = g.TruncatedJudgments > 0
 	bseq, bu := attemptSequences(base.attempts)
 	cseq, cu := attemptSequences(cand.attempts)
 	g.Baseline.ToolsUnavailable, g.Candidate.ToolsUnavailable = bu, cu

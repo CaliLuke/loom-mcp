@@ -78,14 +78,14 @@ func TestStoreStrictDocuments(t *testing.T) {
 		{"bad export", header + strings.Replace(string(attempt), `"runs":[]`, `"runs":[{"run_id":"r","export":{"version":2}}]`, 1), 2},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, _, err := readAttempts(strings.NewReader(tc.body), "attempts.jsonl", "fixed")
+			_, _, err := readAttempts(strings.NewReader(tc.body), "attempts.jsonl", &ExperimentHeader{ID: "fixed", Version: 1})
 			var located *DecodeError
 			require.ErrorAs(t, err, &located)
 			assert.Equal(t, tc.line, located.Line)
 			assert.Equal(t, "attempts.jsonl", located.Source)
 		})
 	}
-	records, truncated, err := readAttempts(strings.NewReader(header+string(attempt)+`{"index":`), "attempts.jsonl", "fixed")
+	records, truncated, err := readAttempts(strings.NewReader(header+string(attempt)+`{"index":`), "attempts.jsonl", &ExperimentHeader{ID: "fixed", Version: 1})
 	require.NoError(t, err)
 	assert.True(t, truncated)
 	assert.Len(t, records, 1)

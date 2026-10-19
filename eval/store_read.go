@@ -122,7 +122,7 @@ func (s *Store) Load(id string) (*Experiment, error) {
 	if err != nil {
 		return nil, err
 	}
-	attempts, truncated, readErr := readAttempts(f, path, id)
+	attempts, truncated, readErr := readAttempts(f, path, h)
 	if err := errors.Join(readErr, f.Close()); err != nil {
 		return nil, err
 	}
@@ -157,13 +157,16 @@ func (e *Experiment) Find(ref string) (*StoredAttempt, error) {
 // RerunSelection selects failed, error and not-run groups, including all repeats.
 // Selection combines variants and qualified items as a cross-product superset.
 func (e *Experiment) RerunSelection() (Selection, error) {
+	if e.Header.ExecutionKind == ExecutionProbe {
+		return Selection{}, ErrProbeRerunUnsupported
+	}
 	var selection Selection
 	for _, a := range e.Attempts {
 		switch a.Verdict {
 		case VerdictFailed, VerdictError, VerdictNotRun:
 			selection.Variants = append(selection.Variants, a.Variant)
 			selection.Items = append(selection.Items, a.Scenario+"/"+a.Item)
-		case VerdictPassed, VerdictPending:
+		case VerdictPassed, VerdictPending, VerdictUnassessed:
 		}
 	}
 	if len(selection.Items) == 0 {

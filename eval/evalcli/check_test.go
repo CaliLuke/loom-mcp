@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/CaliLuke/loom-mcp/v2/eval"
 	"github.com/CaliLuke/loom-mcp/v2/eval/evalcli"
@@ -132,4 +133,29 @@ type errWriter struct{}
 
 func (errWriter) Write([]byte) (int, error) {
 	return 0, errors.New("output failed")
+}
+
+func TestCheckProbeQualityIsUnassessed(t *testing.T) {
+	cfg := config(t)
+	store, err := eval.Open(cfg.StoreDir)
+	require.NoError(t, err)
+	probe := eval.ProbeConfig{Key: eval.AttemptKey{Variant: "base", Scenario: "probe", Item: "one", Repeat: 1}, Item: eval.Item{ID: "one", Input: "task"}, Variant: eval.Variant{ID: "base"}, PrepareTimeout: time.Second, CleanupTimeout: time.Second, PrepareAttempt: func(context.Context, eval.PreparedAttemptInfo) (*eval.PreparedAttempt, error) {
+		t.Fatal("read command invoked preparation")
+		return nil, nil
+	}}
+	writer, err := store.BeginProbe(t.Context(), probe, eval.ExperimentMeta{Identity: &eval.Identity{}})
+	require.NoError(t, err)
+	cfg.Harness, cfg.Scenarios = nil, nil
+	code, out, diagnostic := invoke(t.Context(), cfg, "check", writer.ID(), "--policy", "strict")
+	assert.Equal(t, 3, code, diagnostic)
+	assert.Contains(t, out, "quality not_assessed")
+	assert.Contains(t, out, "quality_not_assessed")
+	assert.NotContains(t, out, "0/0 passed")
+	code, out, diagnostic = invoke(t.Context(), cfg, "check", writer.ID(), "--policy", "strict", "--json")
+	assert.Equal(t, 3, code, diagnostic)
+	var result eval.QualityCheck
+	require.NoError(t, json.Unmarshal([]byte(out), &result))
+	assert.False(t, result.Passed)
+	assert.Equal(t, eval.ExecutionProbe, result.ExecutionKind)
+	assert.Contains(t, result.Reasons, "quality_not_assessed")
 }

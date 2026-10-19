@@ -77,6 +77,9 @@ func CompareVariants(e *Experiment, variants []string) ([]*Comparison, error) {
 }
 
 func compareSides(base, cand Side, opts CompareOptions, allowSame bool) (*Comparison, error) {
+	if opts.Parent != nil && ((base.Experiment != nil && base.Experiment.Header.ExecutionKind == ExecutionProbe) || (cand.Experiment != nil && cand.Experiment.Header.ExecutionKind == ExecutionProbe) || opts.Parent.Header.ExecutionKind == ExecutionProbe) {
+		return nil, ErrProbeRerunUnsupported
+	}
 	var err error
 	if base, err = resolveSide(base); err != nil {
 		return nil, err
@@ -126,6 +129,12 @@ func alignComparison(c *Comparison, bg, cg []reportGroup) *Comparison {
 		}
 	}
 	c.Totals = Totals{Baseline: groupStats(baseAttempts), Candidate: groupStats(candAttempts)}
+	if c.Baseline.ExecutionKind == ExecutionProbe {
+		c.Totals.Baseline.Quality = probeQualityNotAssessed
+	}
+	if c.Candidate.ExecutionKind == ExecutionProbe {
+		c.Totals.Candidate.Quality = probeQualityNotAssessed
+	}
 	for _, g := range c.Groups {
 		c.Totals.Baseline.ToolsUnavailable += g.Baseline.ToolsUnavailable
 		c.Totals.Candidate.ToolsUnavailable += g.Candidate.ToolsUnavailable
@@ -161,7 +170,11 @@ func hasVariant(e *Experiment, variant string) bool {
 
 func sideInfo(side Side) SideInfo {
 	e := side.Experiment
-	return SideInfo{ID: e.Header.ID, Label: e.Header.Label, Variant: side.Variant, Status: e.Header.Status, Complete: e.Complete()}
+	version := 0
+	if e.Header.Version == 2 {
+		version = 2
+	}
+	return SideInfo{ExecutionKind: e.Header.ExecutionKind, Version: version, ID: e.Header.ID, Label: e.Header.Label, Variant: side.Variant, Status: e.Header.Status, Complete: e.Complete()}
 }
 
 // sideGroups uses header declaration order; parent-only groups follow candidate groups.
@@ -197,6 +210,9 @@ func sideGroups(side Side, attempts []*StoredAttempt) []reportGroup {
 func mergedAttempts(cand, parent *Experiment) ([]*StoredAttempt, error) {
 	if parent == nil {
 		return cand.Attempts, nil
+	}
+	if cand.Header.ExecutionKind == ExecutionProbe || parent.Header.ExecutionKind == ExecutionProbe {
+		return nil, ErrProbeRerunUnsupported
 	}
 	if parent.Header.ID == "" || cand.Header.Parent != parent.Header.ID {
 		return nil, fmt.Errorf("eval: merge parent does not match candidate parent %q", cand.Header.Parent)

@@ -39,7 +39,7 @@ func (w *Writer) replaceAttempts(report *Report) (err error) {
 
 // writeAttempts streams the final log without retaining its encoded records in memory.
 func (w *Writer) writeAttempts(file *os.File, report *Report) (map[int]Fingerprint, error) {
-	header, err := encodeStore(attemptsHeader{Format: attemptsFormat, Version: 1, Experiment: w.ID()})
+	header, err := encodeStore(attemptsHeader{Format: attemptsFormat, Version: w.header.Version, Experiment: w.ID()})
 	if err != nil {
 		return nil, err
 	}

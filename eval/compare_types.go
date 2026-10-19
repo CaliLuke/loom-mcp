@@ -11,11 +11,13 @@ type CompareOptions struct{ Parent *Experiment }
 
 // SideInfo identifies an experiment side without retaining its stored exports.
 type SideInfo struct {
-	ID       string `json:"id"`
-	Label    string `json:"label"`
-	Variant  string `json:"variant"`
-	Status   string `json:"status"`
-	Complete bool   `json:"complete"`
+	ExecutionKind ExecutionKind `json:"execution_kind,omitempty"`
+	Version       int           `json:"version,omitempty,omitzero"`
+	ID            string        `json:"id"`
+	Label         string        `json:"label"`
+	Variant       string        `json:"variant"`
+	Status        string        `json:"status"`
+	Complete      bool          `json:"complete"`
 }
 
 // Warning qualifies a comparison using a stable machine-readable code.

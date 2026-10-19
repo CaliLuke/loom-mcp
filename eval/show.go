@@ -30,6 +30,7 @@ func Show(w io.Writer, e *Experiment, a *StoredAttempt, opts ShowOptions) error 
 		fmt.Fprintf(&out, " judge tokens %d", a.JudgeTokens)
 	}
 	fmt.Fprintf(&out, "\nTask: %s\nReference: %s\n", a.Task, a.Reference)
+	showPrepared(&out, a)
 	showErrors(&out, a)
 	out.WriteString("Checks:\n")
 	for _, check := range a.Checks {
@@ -65,12 +66,16 @@ func Summary(w io.Writer, e *Experiment) error {
 	reportHeader(&out, e.Header)
 	groups := summaryGroups(e)
 	for _, g := range groups {
+		if g.Probes > 0 {
+			fmt.Fprintf(&out, "%s/%s [%s] quality not_assessed (%d probes, %d unassessed, %d error, %d not run)\n", g.Scenario, g.Item, g.Variant, g.Probes, g.Unassessed, g.Errored, g.NotRun)
+			continue
+		}
 		fmt.Fprintf(&out, "%s/%s [%s] %d/%d passed (%d failed, %d error, %d pending, %d not run)\n", g.Scenario, g.Item, g.Variant, g.Passed, g.Ran, g.Failed, g.Errored, g.Pending, g.NotRun)
 	}
 	out.WriteString("Failing attempts:\n")
 	for _, g := range groups {
 		for _, a := range g.attempts {
-			if a.Verdict != VerdictPassed {
+			if reportFailure(a) {
 				fmt.Fprintf(&out, "  %s/#%d %s %s: %s\n", e.Header.ID, a.Index, a.AttemptKey, a.Verdict, attemptReason(a))
 			}
 		}
@@ -89,6 +94,9 @@ func reportHeader(out *strings.Builder, h ExperimentHeader) {
 		out.WriteString(" (modified)")
 	}
 	out.WriteByte('\n')
+	if h.ExecutionKind == ExecutionProbe {
+		out.WriteString("Quality: not_assessed\n")
+	}
 	if h.Judge != nil {
 		calibrated := "yes"
 		if !h.Judge.Calibrated {
@@ -214,7 +222,7 @@ func summaryGroups(e *Experiment) []reportGroup {
 	result := make([]reportGroup, 0, len(groups))
 	for _, failing := range []bool{true, false} {
 		for _, g := range groups {
-			if (g.Passed != g.Attempts) == failing {
+			if (g.Passed+g.Unassessed != g.Attempts) == failing {
 				result = append(result, g)
 			}
 		}
@@ -268,4 +276,31 @@ func claimSubject(subject string) string {
 		return "answer"
 	}
 	return subject
+}
+
+func reportVersion(h ExperimentHeader) int {
+	if h.Version == 2 {
+		return 2
+	}
+	return 1
+}
+
+func reportFailure(a *StoredAttempt) bool {
+	return a.Verdict != VerdictPassed && a.Verdict != VerdictUnassessed
+}
+
+func showPrepared(out *strings.Builder, a *StoredAttempt) {
+	if a.Probe != nil {
+		fmt.Fprintf(out, "Probe execution %s; delivery %s; evidence %s; quality %s\n", a.Probe.Execution, a.Probe.Delivery, a.Probe.Evidence, a.Probe.Quality)
+	}
+	if a.Prepared != nil {
+		fmt.Fprintf(out, "Prepared candidate %s surface %s/%s environment %s/%s\n", a.Prepared.CandidateDigest, a.Prepared.SurfaceID, a.Prepared.SurfaceVersion, a.Prepared.Environment.Mode, a.Prepared.Environment.SnapshotID)
+	}
+	for _, artifact := range a.Artifacts {
+		fmt.Fprintf(out, "Artifact %s %s %d bytes sha256:%s", artifact.Name, artifact.MediaType, artifact.Size, artifact.Digest)
+		if artifact.Provisional {
+			out.WriteString(" provisional")
+		}
+		out.WriteByte('\n')
+	}
 }

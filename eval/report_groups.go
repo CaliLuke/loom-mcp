@@ -8,6 +8,9 @@ import (
 
 // GroupStats counts stored verdicts; medians include only attempts that ran.
 type GroupStats struct {
+	Quality          string        `json:"quality,omitempty"`
+	Probes           int           `json:"probes,omitempty,omitzero"`
+	Unassessed       int           `json:"unassessed,omitempty,omitzero"`
 	Attempts         int           `json:"attempts"`
 	Ran              int           `json:"ran"`
 	Passed           int           `json:"passed"`
@@ -57,7 +60,13 @@ func groupStats(attempts []*StoredAttempt) GroupStats {
 	var tokens []int
 	var durations []time.Duration
 	for _, a := range attempts {
+		if a.ExecutionKind == ExecutionProbe {
+			stats.Probes++
+			stats.Quality = probeQualityNotAssessed
+		}
 		switch a.Verdict {
+		case VerdictUnassessed:
+			stats.Unassessed++
 		case VerdictPassed:
 			stats.Passed++
 		case VerdictFailed:

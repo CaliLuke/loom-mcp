@@ -857,6 +857,14 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   skips the factory. ErrLiveModelDisabled prints a notice and runs without a
   judge, leaving gating claims pending; other factory errors fail before Begin.
 
+- Prepared attempts use exclusive `Config.PrepareAttempt` with a matching `PreparedWriter`.
+  Persist receipt/capture before registration; close, quiesce, collect and retain before release.
+  Require positive cooperative callback timeouts. Never wrap their observer with `Writer.OnAttempt`.
+- Explicit `Probe`/`BeginProbe` run one prepared attempt without quality assertions.
+  Quality remains `not_assessed`; all probes stay outside quality denominators.
+  Prepared/probe stores use schema 2; legacy schema 1 output remains unchanged.
+  Keep provisional artifact marks after failed quiescence. See runtime-contracts.md.
+
 ## Eval Judge
 
 - `eval/judging` implements eval.OutcomeJudge and renders answer, last-run

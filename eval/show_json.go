@@ -7,14 +7,15 @@ import (
 )
 
 type showExperiment struct {
-	ID       string     `json:"id"`
-	Label    string     `json:"label"`
-	Parent   string     `json:"parent"`
-	Status   string     `json:"status"`
-	Stop     StopReason `json:"stop"`
-	Source   VCS        `json:"source"`
-	Versions Versions   `json:"versions"`
-	Judge    *JudgeInfo `json:"judge,omitempty"`
+	ExecutionKind ExecutionKind `json:"execution_kind,omitempty"`
+	ID            string        `json:"id"`
+	Label         string        `json:"label"`
+	Parent        string        `json:"parent"`
+	Status        string        `json:"status"`
+	Stop          StopReason    `json:"stop"`
+	Source        VCS           `json:"source"`
+	Versions      Versions      `json:"versions"`
+	Judge         *JudgeInfo    `json:"judge,omitempty"`
 }
 
 type showRun struct {
@@ -66,7 +67,7 @@ func ShowJSON(w io.Writer, e *Experiment, a *StoredAttempt, opts ShowOptions) er
 		Version    int            `json:"version"`
 		Experiment showExperiment `json:"experiment"`
 		Attempt    showAttempt    `json:"attempt"`
-	}{Format: "loom-mcp.eval.show", Version: 1, Experiment: showExperiment{ID: h.ID, Label: h.Label, Parent: h.Parent, Status: h.Status, Stop: h.Stop, Source: h.Source, Versions: h.Versions, Judge: h.Judge}, Attempt: attempt})
+	}{Format: "loom-mcp.eval.show", Version: reportVersion(h), Experiment: showExperiment{ExecutionKind: h.ExecutionKind, ID: h.ID, Label: h.Label, Parent: h.Parent, Status: h.Status, Stop: h.Stop, Source: h.Source, Versions: h.Versions, Judge: h.Judge}, Attempt: attempt})
 }
 
 // SummaryJSON writes the header, failing-first groups and full failing references.
@@ -74,23 +75,28 @@ func SummaryJSON(w io.Writer, e *Experiment) error {
 	if e == nil {
 		return fmt.Errorf("eval: summary requires an experiment")
 	}
+	quality := ""
+	if e.Header.ExecutionKind == ExecutionProbe {
+		quality = probeQualityNotAssessed
+	}
 	groups := summaryGroups(e)
 	var failures []summaryFailure
 	for _, g := range groups {
 		for _, a := range g.attempts {
-			if a.Verdict != VerdictPassed {
+			if reportFailure(a) {
 				failures = append(failures, summaryFailure{Ref: fmt.Sprintf("%s/#%d", e.Header.ID, a.Index), Key: a.AttemptKey.String(), Verdict: a.Verdict, Reason: attemptReason(a)})
 			}
 		}
 	}
 	return writeReportJSON(w, struct {
+		Quality         string           `json:"quality,omitempty"`
 		Format          string           `json:"format"`
 		Version         int              `json:"version"`
 		Experiment      ExperimentHeader `json:"experiment"`
 		Complete        bool             `json:"complete"`
 		Groups          []reportGroup    `json:"groups"`
 		FailingAttempts []summaryFailure `json:"failing_attempts"`
-	}{Format: "loom-mcp.eval.summary", Version: 1, Experiment: e.Header, Complete: e.Complete(), Groups: groups, FailingAttempts: failures})
+	}{Quality: quality, Format: "loom-mcp.eval.summary", Version: reportVersion(e.Header), Experiment: e.Header, Complete: e.Complete(), Groups: groups, FailingAttempts: failures})
 }
 
 func writeReportJSON(w io.Writer, value any) error {

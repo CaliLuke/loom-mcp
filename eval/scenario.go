@@ -65,6 +65,11 @@ var claimIDPattern = regexp.MustCompile(`^[a-z0-9_]{1,64}$`)
 
 // Validate joins all scenario and item problems with their declaration locations.
 func Validate(scenarios ...Scenario) error {
+	return validateScenarios(scenarios, false)
+}
+
+// validateScenarios preserves public validation while prepared leases own driving.
+func validateScenarios(scenarios []Scenario, prepared bool) error {
 	var problems []error
 	seen := make(map[string]bool, len(scenarios))
 	for _, s := range scenarios {
@@ -78,7 +83,7 @@ func Validate(scenarios ...Scenario) error {
 			add(errors.New("duplicate scenario ID"))
 		}
 		seen[s.ID] = true
-		add(validateDriver(s))
+		add(validateScenarioDriver(s, prepared))
 		if s.Timeout < 0 {
 			add(errors.New("Timeout must be non-negative"))
 		}
@@ -103,6 +108,17 @@ func Validate(scenarios ...Scenario) error {
 		}
 	}
 	return errors.Join(problems...)
+}
+
+// validateScenarioDriver leaves public driver validation unchanged for legacy calls.
+func validateScenarioDriver(s Scenario, prepared bool) error {
+	if !prepared {
+		return validateDriver(s)
+	}
+	if s.BuildInputs != nil || s.Drive != nil {
+		return errors.New("prepared scenarios cannot declare BuildInputs or Drive")
+	}
+	return nil
 }
 
 // validateDriver keeps standard input building distinct from custom execution.

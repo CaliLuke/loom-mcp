@@ -55,13 +55,11 @@ func Execute(ctx context.Context, h *agenttest.Harness, s Scenario, item Item) (
 	if err := validateItem(item); err != nil {
 		return nil, fmt.Errorf("scenario %q item %q: %w", s.ID, item.ID, err)
 	}
-	item = cloneItem(item)
-	if item.Task == "" {
-		item.Task = s.Task
-	}
-	if item.Reference == "" {
-		item.Reference = s.Reference
-	}
+	return executeResolved(ctx, h, s, resolvedItem(s, item), false)
+}
+
+// executeResolved shares driving and capture while keeping probe quality absent.
+func executeResolved(ctx context.Context, h *agenttest.Harness, s Scenario, item Item, probe bool) (*Outcome, error) {
 	out := &Outcome{Scenario: s.ID, Item: item.ID, Task: item.Task, Reference: item.Reference, Claims: slices.Clone(s.Claims)}
 	if err := resolveClaims(out.Claims, item); err != nil {
 		out.Err = err
@@ -83,7 +81,13 @@ func Execute(ctx context.Context, h *agenttest.Harness, s Scenario, item Item) (
 		return out, nil
 	}
 	attempt := &Attempt{Scenario: s.ID, Item: item, Harness: h, Session: session}
-	out.Err = evaluate(ctx, s, attempt, out)
+	if probe {
+		if check := runsSucceeded(session); !check.Passed {
+			out.Err = errors.New(check.Diagnostic)
+		}
+	} else {
+		out.Err = evaluate(ctx, s, attempt, out)
+	}
 	return out, nil
 }
 
@@ -233,4 +237,16 @@ func uniqueName(base string, seen map[string]bool) string {
 	}
 	seen[name] = true
 	return name
+}
+
+// resolvedItem owns item values before applying scenario defaults.
+func resolvedItem(s Scenario, item Item) Item {
+	item = cloneItem(item)
+	if item.Task == "" {
+		item.Task = s.Task
+	}
+	if item.Reference == "" {
+		item.Reference = s.Reference
+	}
+	return item
 }

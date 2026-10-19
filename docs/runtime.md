@@ -2011,12 +2011,92 @@ Existing eval configuration, experiment formats, runtime registration and workfl
 
 See [Frozen candidate content](agent_testing.md#frozen-candidate-content) for the edit workflow and executable examples.
 
+### Prepared attempts and operational probes
+
+`Config.PrepareAttempt` binds frozen resources, inputs and an isolated environment to each attempt.
+It is mutually exclusive with `Harness` and `AttemptHarness`.
+Prepared scenarios cannot also declare `BuildInputs` or `Drive`.
+Evaluation scenarios still require assertions or claims.
+
+Preparation receives an owned `PreparedAttemptInfo` with resolved task and reference defaults.
+The returned `PreparedAttempt` supplies `AttemptHarnessConfig`, base options, a receipt and host callbacks.
+It supplies exactly one nonempty `Inputs` list or a versioned `Drive` callback.
+The host binds registration and inputs to the same immutable resources.
+References remain evaluator data unless the host explicitly exposes them.
+
+The caller owns experiment admission and final publication:
+
+1. Set positive `PrepareTimeout` and `CleanupTimeout` values.
+2. Call `Store.Begin` with the detached prepared configuration.
+3. Assign the returned writer to `Config.PreparedWriter`.
+4. Call `Run`.
+5. Call `Writer.Finish` with the report and run error.
+
+`Plan` accepts a detached prepared configuration.
+`Run` requires a matching, open writer without a sticky error.
+The writer checks ordered keys, dataset and variant provenance, and recorded runner settings before resource acquisition.
+It reserves durable capture before preparation and persists the receipt before registration.
+Base options precede configured options, then variant and runner options.
+An application evidence-directory option conflicts with runner capture and fails before registration.
+
+The receipt records candidate SHA-256, surface and binding versions, task/source/input snapshots, model configuration and environment identity.
+Environment modes are `fixture`, `snapshot` and `external_read_only`.
+A custom driver also declares `DriverVersion`.
+An optional build receipt records the compiler, dependency identity and executable SHA-256.
+These values describe host provenance; the framework does not infer installation behavior from them.
+
+The runner closes the harness, quiesces host writers, reopens canonical capture, collects declared outputs, then releases the lease.
+Every acquired lease must provide `Release`, including partial leases returned with preparation errors.
+Valid leases also provide `Quiesce` and `Collect`; hosts without these operations supply explicit no-op callbacks.
+Each cleanup callback receives a fresh bounded context that survives task cancellation.
+Callbacks must cooperate with cancellation. `Harness.Close` retains its existing context-free contract.
+The host owns process isolation and resource recovery after process death.
+
+`Collect` receives owned receipt and capture snapshots.
+It returns named `CollectedArtifact` bytes that match declared deliverables and media types.
+An explicit empty byte slice retains an empty output. A missing declared output is a collection error.
+The store retains verified blobs before lease release.
+Failed quiescence marks every retained artifact `provisional`, including artifacts from prepared evaluations.
+`Store.ReadArtifact(ctx, experimentID, attemptKey, name)` returns owned bytes after SHA-256 and size verification.
+
+Prepared execution persists each finalized attempt before the optional `OnAttempt` observer.
+Do not wrap this observer with `Writer.OnAttempt`.
+Sticky store failures stop further dispatch and return an error without requiring `WithOnError`.
+`Writer.Finish` still publishes final records, including judgment and observer-panic errors.
+The built-in `evalcli run` command retains its existing factory configuration.
+
+`Probe(ctx, ProbeConfig)` executes one explicit prepared attempt without assertions or judging.
+Its complete key must match the nonempty item and variant identities.
+The caller uses `Store.BeginProbe`, assigns `PreparedWriter`, then calls `Probe` and `Writer.Finish`.
+`BeginProbe` rejects `Parent`; a retry is a new probe submission.
+
+A probe reports independent execution, delivery and evidence statuses, with `quality: not_assessed`.
+Successful probes use `VerdictUnassessed`. Execution or finalization failures use `VerdictError`.
+Attempts that never start use `VerdictNotRun`; started cancellation reports `execution: canceled`.
+Missing capture or collection errors make evidence incomplete. Failed quiescence makes it provisional.
+All probes remain outside quality denominators, including failed and canceled probes.
+
+Prepared evaluations and probes use version 2 experiment and attempt formats.
+`execution_kind` is `evaluation` or `probe`; probe attempts require a `probe` status object.
+Legacy factories still write version 1 and omit all new fields.
+Readers reject unknown versions, mixed kinds, invalid status axes and probe quality assertions.
+Show, summary and comparison documents use version 2 when their experiments do.
+Successful probes do not appear as failing attempts.
+Comparisons involving probes report `not_comparable` for quality and retain operational evidence deltas.
+Strict quality checks reject probes with `quality_not_assessed`, including unfinished experiments; CLI check exits with code 3.
+`RerunSelection` returns `ErrProbeRerunUnsupported`, and comparisons reject parent overlays involving any probe.
+
+The public fixture in `eval/component_probe_test.go` edits and freezes submitted Go source through `eval/candidate`.
+Its host compiles those exact bytes and executes the helper through an actual tool call.
+The scripted solver discovers and loads its candidate skill before it uses the helper output.
+Retained deliverables and canonical capture survive environment removal.
+
 ### Eval experiment store
 
 `eval.Open(dir)` creates a local store. `eval.DefaultStoreDir(start)` finds
 `.loom-evals` beside the nearest ancestor `go.mod`. Each experiment has a UUIDv7
 directory, an `experiment.json` summary, and one append-only `attempts.jsonl` file.
-Both documents use schema version 1. The JSONL file starts with a format, version,
+Legacy factories use schema version 1. Prepared evaluations and probes use version 2. The JSONL file starts with a format, version,
 and experiment ID header.
 
 Version 1 reserves optional judging fields. `StoredClaim` retains `subject` and

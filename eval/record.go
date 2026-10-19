@@ -22,6 +22,10 @@ type StopReason string
 
 // AttemptRecord retains quality results and harness failures for one planned key.
 type AttemptRecord struct {
+	ExecutionKind ExecutionKind
+	Prepared      *PreparedReceipt
+	Probe         *ProbeStatus
+	Artifacts     []StoredArtifact
 	AttemptKey
 	Index       int
 	Outcome     *Outcome
@@ -53,6 +57,7 @@ type ScenarioInfo struct {
 
 // Report retains every planned attempt in declaration order.
 type Report struct {
+	ExecutionKind                           ExecutionKind
 	Variants                                []Variant
 	Scenarios                               []ScenarioInfo
 	Selection                               Selection
@@ -67,9 +72,13 @@ type Report struct {
 type Group struct {
 	Variant, Scenario, Item                            string
 	Attempts, Passed, Failed, Errored, Pending, NotRun int
+	Probes                                             int `json:"probes,omitempty,omitzero"`
+	Unassessed                                         int `json:"unassessed,omitempty,omitzero"`
 }
 
 const (
+	// StopStoreError means durable prepared publication failed.
+	StopStoreError StopReason = "store_error"
 	// StopCanceled means the caller context stopped new attempts.
 	StopCanceled StopReason = "canceled"
 	// StopTokenLimit means the token budget was reached.
@@ -116,7 +125,12 @@ func (r *Report) Groups() []Group {
 		}
 		g := &groups[pos]
 		g.Attempts++
+		if a.ExecutionKind == ExecutionProbe {
+			g.Probes++
+		}
 		switch a.Verdict() {
+		case VerdictUnassessed:
+			g.Unassessed++
 		case VerdictPassed:
 			g.Passed++
 		case VerdictFailed:

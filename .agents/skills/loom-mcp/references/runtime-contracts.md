@@ -1770,3 +1770,19 @@ No compatibility command is added to unqualified, waived or sticky-resident runs
 Overflow retries retain their recorded recovery path; the next normal threshold
 decision still requires evidence. Generated planner configs expose optional
 ContextModel; disabled/default registration uses ContextDefault.
+
+## Prepared attempts and probes
+
+- `Config.PrepareAttempt` exclusively owns resolved inputs and host resources; legacy factories retain their contract.
+- Detached `Plan`/`Begin` require no writer. Execution requires the exact open `PreparedWriter`, with ordered keys and recorded provenance/settings.
+- Reserve capture before acquisition. Persist an owned receipt before registration. Keep store capture outside the releasable environment.
+- Use positive `PrepareTimeout` and `CleanupTimeout`. Close, quiesce, reopen capture, collect and retain, then release exactly once.
+- Each cooperative host cleanup callback gets a fresh bounded context. A partial preparation error must return its acquired lease.
+- `Collect` receives owned receipt/capture snapshots. Missing deliverables are errors; explicit empty bytes represent retained empty files.
+- Persist artifact `Provisional` after failed quiescence for evaluations and probes. `ReadArtifact` verifies digest and size.
+- Prepared runners append before observers. Never wrap their observer with `Writer.OnAttempt`; sticky writer errors stop dispatch independently.
+- `Probe` returns one planned attempt with complete explicit identity. `BeginProbe` rejects `Parent`; probes never contain quality assertions or judge results.
+- Probe execution, delivery and evidence axes remain independent. Quality is always `not_assessed`; successful verdict is `unassessed`.
+- Failed/canceled probes remain operational errors and never enter quality denominators. Strict checks reject even unfinished probes with `quality_not_assessed`.
+- Prepared evaluations/probes use schema version 2 with matching header/attempt kinds; legacy version 1 omits all additions.
+- Probe comparisons suppress quality deltas and use `not_comparable`; any probe parent overlay fails. Rerun returns `ErrProbeRerunUnsupported`.
