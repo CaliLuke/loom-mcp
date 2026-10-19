@@ -31,6 +31,9 @@ const plannerThoughtCodeKey = "code"
 // agent context with memory access and delegates to the planner's PlanStart
 // implementation.
 func (r *Runtime) PlanStartActivity(ctx context.Context, input *PlanActivityInput) (out *PlanActivityOutput, activityErr error) {
+	if input.MaxModelCalls < 0 {
+		return nil, fmt.Errorf("%w: MaxModelCalls must not be negative", ErrInvalidConfig)
+	}
 	stopHeartbeat := startActivityHeartbeat(ctx)
 	defer stopHeartbeat()
 
@@ -46,11 +49,7 @@ func (r *Runtime) PlanStartActivity(ctx context.Context, input *PlanActivityInpu
 	events := newPlannerEvents(r, input.AgentID, input.RunID, input.RunContext.SessionID, input.RunContext.TurnID)
 	events.step = input.Step
 	recoveryRecorder := &modelRecoveryRecorder{}
-	recordedView := input.View
-	recordedView.IndexHead, recordedView.Pending = view.Head, nil
-	callRecording := NewCallRecording(r.RunStore, input.RunContext.RootRunID, recordedView, view.Messages, input.Step)
-	callRecording.qualifications = r.contextQualifications
-	callRecording.configureOverflow(input)
+	callRecording := r.newPlannerCallRecording(input, view)
 	defer callRecording.finishActivity(ctx, &out, &activityErr, events)
 	reg, agentCtx, err := r.plannerContext(ctx, input, events, recoveryRecorder, callRecording)
 	if err != nil {
@@ -61,6 +60,9 @@ func (r *Runtime) PlanStartActivity(ctx context.Context, input *PlanActivityInpu
 		return nil, err
 	}
 	result, err := r.planStart(ctx, reg, planInput)
+	if out, handled, limitErr := resolvePlanModelCallLimit(ctx, events, callRecording, recoveryRecorder, input, err); handled {
+		return out, limitErr
+	}
 	if out, handled, err := resolvePlanActivityOverflow(ctx, events, callRecording, recoveryRecorder, input); handled {
 		return out, err
 	}
@@ -82,6 +84,9 @@ func (r *Runtime) PlanStartActivity(ctx context.Context, input *PlanActivityInpu
 // execution to produce the next plan. The activity creates an agent context
 // with memory access and delegates to the planner's PlanResume implementation.
 func (r *Runtime) PlanResumeActivity(ctx context.Context, input *PlanActivityInput) (out *PlanActivityOutput, activityErr error) {
+	if input.MaxModelCalls < 0 {
+		return nil, fmt.Errorf("%w: MaxModelCalls must not be negative", ErrInvalidConfig)
+	}
 	stopHeartbeat := startActivityHeartbeat(ctx)
 	defer stopHeartbeat()
 
@@ -97,11 +102,7 @@ func (r *Runtime) PlanResumeActivity(ctx context.Context, input *PlanActivityInp
 	events := newPlannerEvents(r, input.AgentID, input.RunID, input.RunContext.SessionID, input.RunContext.TurnID)
 	events.step = input.Step
 	recoveryRecorder := &modelRecoveryRecorder{}
-	recordedView := input.View
-	recordedView.IndexHead, recordedView.Pending = view.Head, nil
-	callRecording := NewCallRecording(r.RunStore, input.RunContext.RootRunID, recordedView, view.Messages, input.Step)
-	callRecording.qualifications = r.contextQualifications
-	callRecording.configureOverflow(input)
+	callRecording := r.newPlannerCallRecording(input, view)
 	defer callRecording.finishActivity(ctx, &out, &activityErr, events)
 	reg, agentCtx, err := r.plannerContext(ctx, input, events, recoveryRecorder, callRecording)
 	if err != nil {
@@ -112,6 +113,9 @@ func (r *Runtime) PlanResumeActivity(ctx context.Context, input *PlanActivityInp
 		return nil, err
 	}
 	result, err := r.planResume(ctx, reg, planInput)
+	if out, handled, limitErr := resolvePlanModelCallLimit(ctx, events, callRecording, recoveryRecorder, input, err); handled {
+		return out, limitErr
+	}
 	if out, handled, err := resolvePlanActivityOverflow(ctx, events, callRecording, recoveryRecorder, input); handled {
 		return out, err
 	}
@@ -134,7 +138,7 @@ func loadedPlanActivityInput(input *PlanActivityInput, view *loadedView) *PlanAc
 
 // returnLoadedView excludes recoverable rejections from view adoption.
 func returnLoadedView(out **PlanActivityOutput, view *loadedView) {
-	if *out != nil && (*out).Recovery == nil {
+	if *out != nil && (*out).Recovery == nil && (*out).ModelCallLimit == nil {
 		(*out).View = view.View
 	}
 }
@@ -542,4 +546,15 @@ func (r *Runtime) restoreRecoveryCorrection(ctx context.Context, input *PlanActi
 		input.Recovery = &copy
 	}
 	return nil
+}
+
+// newPlannerCallRecording snapshots the loaded view and immutable activity policy.
+func (r *Runtime) newPlannerCallRecording(input *PlanActivityInput, view *loadedView) *CallRecording {
+	recordedView := input.View
+	recordedView.IndexHead, recordedView.Pending = view.Head, nil
+	callRecording := NewCallRecording(r.RunStore, input.RunContext.RootRunID, recordedView, view.Messages, input.Step)
+	callRecording.qualifications = r.contextQualifications
+	callRecording.maxModelCalls = input.MaxModelCalls
+	callRecording.configureOverflow(input)
+	return callRecording
 }

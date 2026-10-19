@@ -20,6 +20,7 @@ Here’s a map of what loom-mcp just built for you based on your `design/*.go` f
             * `orchestrator.helpers`
         * **Exports Toolsets:***none*
         * **Run Policy:**
+            * Max Model Calls (logical reservations, 0 = unlimited): `0`
             * Max Tool Calls: `2`
             * Max Recovery Turns: `1`
             * Time Budget: `15s`

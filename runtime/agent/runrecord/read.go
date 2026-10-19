@@ -255,6 +255,9 @@ func (r *runReader) readStep(event *runlog.Event) error {
 	if step.Step < 1 || step.IndexHead != step.ViewRef.IndexHead || len(step.ViewRef.Pending) != 0 {
 		return fmt.Errorf("runrecord: invalid committed planner view")
 	}
+	if err := r.recordModelCallLimit(step.ModelCallLimit); err != nil {
+		return err
+	}
 	if err := r.recordProtocolVersion(step.ProtocolVersion); err != nil {
 		return err
 	}
@@ -433,6 +436,9 @@ func (r *runReader) readCompactionRecord(event *runlog.Event) error {
 		if err := json.Unmarshal(event.Payload, &summary); err != nil {
 			return err
 		}
+		if err := r.recordModelCallLimit(summary.ModelCallLimit); err != nil {
+			return err
+		}
 		if err := r.recordContextFingerprint(summary.Fingerprint); err != nil {
 			return err
 		}
@@ -454,21 +460,27 @@ func (r *runReader) readCompactionRecord(event *runlog.Event) error {
 			}
 			r.run.Recall = r.run.Recall.Refilled(settings)
 		}
-		// The common envelope reads canonical compaction keys and retained K8
-		// exports. K12 produces an empty call_keys list.
-		var adoption struct {
-			CallKeys []runstore.CallKey `json:"call_keys,case:ignore"`
-			ViewRef  *index.ViewRef     `json:"view_ref,case:ignore"`
-		}
-		if err := json.Unmarshal(event.Payload, &adoption); err != nil {
-			return err
-		}
-		if err := r.adopt(adoption.CallKeys); err != nil {
-			return err
-		}
-		if adoption.ViewRef != nil {
-			return r.resolveView(*adoption.ViewRef)
-		}
+		return r.readCompactionAdoption(event)
+	}
+	return nil
+}
+
+// readCompactionAdoption resolves the common envelope after policy evidence.
+func (r *runReader) readCompactionAdoption(event *runlog.Event) error {
+	// The common envelope reads canonical compaction keys and retained K8
+	// exports. K12 produces an empty call_keys list.
+	var adoption struct {
+		CallKeys []runstore.CallKey `json:"call_keys,case:ignore"`
+		ViewRef  *index.ViewRef     `json:"view_ref,case:ignore"`
+	}
+	if err := json.Unmarshal(event.Payload, &adoption); err != nil {
+		return err
+	}
+	if err := r.adopt(adoption.CallKeys); err != nil {
+		return err
+	}
+	if adoption.ViewRef != nil {
+		return r.resolveView(*adoption.ViewRef)
 	}
 	return nil
 }

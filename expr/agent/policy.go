@@ -89,6 +89,8 @@ type (
 
 	// CapsExpr defines per-run limits on agent tool usage.
 	CapsExpr struct {
+		// MaxModelCalls caps logical model invocation reservations per run; zero is unset.
+		MaxModelCalls int
 		// Policy is the run policy expression this caps configuration
 		// belongs to.
 		Policy *RunPolicyExpr
@@ -159,6 +161,9 @@ func (r *RunPolicyExpr) validateTiming(verr *eval.ValidationErrors) {
 func (r *RunPolicyExpr) validateCaps(verr *eval.ValidationErrors) {
 	if r.DefaultCaps == nil {
 		return
+	}
+	if r.DefaultCaps.MaxModelCalls < 0 {
+		verr.Add(r.DefaultCaps, "MaxModelCalls must be non-negative")
 	}
 	if r.DefaultCaps.MaxToolCalls < 0 {
 		verr.Add(r.DefaultCaps, "MaxToolCalls must be non-negative")

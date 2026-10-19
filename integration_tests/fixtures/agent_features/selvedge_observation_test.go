@@ -163,6 +163,8 @@ type observingSelvedgeEngine struct {
 	observed *replayCommandObservations
 }
 type replayCommandObservations struct {
+	modelPolicies   []*api.ModelCallPolicyInput
+	modelCaps       []int
 	planners        []*api.PlanActivityInput
 	outputs         []*api.PlanActivityOutput
 	compatibilities []*contextcompat.Result
@@ -240,7 +242,7 @@ func assertSelvedgeContextStart(t *testing.T, filename string, history *sv.Recor
 	assert.Equal(t, fmt.Sprintf("sha256:%x", sha256.Sum256(compaction.Canonical(start.ContextSettings))), start.ContextFingerprint)
 	assert.NotEmpty(t, start.ContextSettings.Prompt.Template)
 	assert.NotEmpty(t, start.ContextSettings.Prompt.Ref.ID)
-	if filename == "workflow_protocol_v19.json" || filename == "workflow_protocol_v19_summary.json" {
+	if filename == "workflow_protocol_v20.json" || filename == "workflow_protocol_v20_summary.json" {
 		require.NotNil(t, start.Policy)
 		require.NotNil(t, start.Policy.Context)
 		require.NotNil(t, start.Policy.Context.ContextWindow)
@@ -264,10 +266,10 @@ func assertSelvedgeObservedHistory(t *testing.T, filename string, history *sv.Re
 			planners++
 			if observation.Name == "features.coordinator.resume" {
 				resumes++
-				if filename == "workflow_protocol_v19_summary.json" {
+				if filename == "workflow_protocol_v20_summary.json" {
 					assert.Equal(t, 1, adoptions)
 				}
-				if filename == "workflow_protocol_v19_budget.json" {
+				if filename == "workflow_protocol_v20_budget.json" {
 					assert.Nil(t, input.Finalize)
 					var output api.PlanActivityOutput
 					require.NoError(t, json.Unmarshal(observation.Output, &output))
@@ -300,7 +302,7 @@ func assertSelvedgeObservedHistory(t *testing.T, filename string, history *sv.Re
 						assert.Equal(t, 1, adopted.Chunks)
 					}
 				}
-				if filename == "workflow_protocol_v19_budget.json" && hook.Type == hooks.PlannerStep {
+				if filename == "workflow_protocol_v20_budget.json" && hook.Type == hooks.PlannerStep {
 					var step hooks.PlannerStepEvent
 					require.NoError(t, json.Unmarshal(hook.Payload, &step))
 					if step.Step == 2 {
@@ -312,22 +314,32 @@ func assertSelvedgeObservedHistory(t *testing.T, filename string, history *sv.Re
 			}
 		}
 	}
-	if filename != "workflow_protocol_v19_child_run.json" {
+	if filename != "workflow_protocol_v20_child_run.json" {
 		assert.Positive(t, planners)
 	}
-	if filename == "workflow_protocol_v19_summary.json" {
+	if filename == "workflow_protocol_v20_summary.json" {
 		assert.Equal(t, 1, summaries)
 		assert.Equal(t, 1, adoptions)
 		assert.Equal(t, 1, resumes)
 	}
-	if filename == "workflow_protocol_v19_budget.json" {
+	if filename == "workflow_protocol_v20_budget.json" {
 		assert.True(t, budgetAdoption, "terminal adoption must complete after crossing the active budget")
 		assert.Equal(t, 1, resumes)
 	}
 }
 
 func (w *observingSelvedgeContext) ExecuteRecordContentActivity(ctx context.Context, call engine.RecordContentActivityCall) (*api.RecordContentOutput, error) {
+	if call.Input.ModelCallPolicy != nil {
+		cloned, err := cloneSelvedgeInput(call.Input.ModelCallPolicy)
+		if err != nil {
+			return nil, err
+		}
+		w.observed.modelPolicies = append(w.observed.modelPolicies, cloned)
+	}
 	output, err := w.WorkflowContext.ExecuteRecordContentActivity(ctx, call)
+	if err == nil && output != nil && output.MaxModelCalls != nil {
+		w.observed.modelCaps = append(w.observed.modelCaps, *output.MaxModelCalls)
+	}
 	if err == nil && output != nil && output.Compatibility != nil {
 		cloned, cloneErr := cloneSelvedgeInput(output.Compatibility)
 		if cloneErr != nil {

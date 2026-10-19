@@ -11,6 +11,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/callrecord"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/summarize"
 )
@@ -49,9 +50,19 @@ func (r *Runtime) SummarizeContextActivity(ctx context.Context, in *SummarizeCon
 	recording.qualifications = r.contextQualifications
 	recording.fingerprint = in.ContextFingerprint
 	recording.activity = callrecord.ActivitySummarize
+	recording.maxModelCalls = in.MaxModelCalls
 	defer recording.finishSummaryActivity(context.WithoutCancel(ctx), &out, &activityErr)
 	out = &SummarizeContextOutput{From: in.From, To: in.To, IndexHead: in.ViewRef.IndexHead}
 	if err := r.summarize(ctx, in, out, recording); err != nil {
+		if limit := recording.modelLimit(); limit != nil {
+			if primary := modelCallLimitPrimaryError(ctx, err); primary != nil {
+				return nil, primary
+			}
+			out.ModelCallLimit = limit
+			out.Usage = recording.modelCallUsage()
+			out.Kind = policy.ModelCallLimitReason
+			return out, nil
+		}
 		var rejection *summarize.Rejection
 		if errors.As(err, &rejection) {
 			out.Kind = rejection.Kind
@@ -63,7 +74,7 @@ func (r *Runtime) SummarizeContextActivity(ctx context.Context, in *SummarizeCon
 }
 
 func validateSummaryInput(ctx context.Context, in *SummarizeContextInput) error {
-	if in == nil || in.RunID == "" || in.Scope == "" || in.AgentID == "" || in.ContextModel.ID == "" || in.From == 0 || in.From != max(index.MessageID(1), in.ViewRef.TailFrom) || in.To <= in.From || engine.ActivityAttemptFromContext(ctx) < 1 {
+	if in == nil || in.MaxModelCalls < 0 || in.RunID == "" || in.Scope == "" || in.AgentID == "" || in.ContextModel.ID == "" || in.From == 0 || in.From != max(index.MessageID(1), in.ViewRef.TailFrom) || in.To <= in.From || engine.ActivityAttemptFromContext(ctx) < 1 {
 		return fmt.Errorf("summarize activity: invalid identity, attempt or cut")
 	}
 	return nil

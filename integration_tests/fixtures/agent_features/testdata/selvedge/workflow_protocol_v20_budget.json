@@ -1,0 +1,853 @@
+{
+  "format": "selvedge.history/v1",
+  "instance": {
+    "instance_id": "run-external-await",
+    "workflow_name": "features.coordinator.workflow",
+    "status": "completed",
+    "input": {
+      "context_settings": {
+        "default": true,
+        "nontext_resident": true,
+        "max_tier": "summary",
+        "guard_margin": {
+          "Tokens": 1,
+          "Bytes": 10
+        },
+        "prompt": {
+          "Ref": {
+            "ID": "features.coordinator.context.summary",
+            "Version": "sha256:c213a63837087dad5fb990d74a4fea84f0072c70f4455cce27e9a646268aef95"
+          },
+          "Template": "sha256:c213a63837087dad5fb990d74a4fea84f0072c70f4455cce27e9a646268aef95"
+        },
+        "framing_tokens": 200,
+        "max_pins": 32,
+        "max_pinned_parts": 2,
+        "max_summary_chunks": 8,
+        "recall_scan_bytes": 8000000,
+        "TriggerAt": {
+          "Tokens": 17,
+          "Bytes": 20
+        },
+        "RecallDiscoveryCalls": 20,
+        "RecallReadCalls": 20
+      },
+      "context_fingerprint": "sha256:dad60a2a0bce0d2545da071d43b4d0461c4b4106b6ff076af09be49d0849af76",
+      "context_default_agents": {
+        "features.coordinator": {
+          "Disabled": false,
+          "ContextModel": null
+        }
+      },
+      "context_recovery": {
+        "guard_margin": {
+          "Tokens": 1,
+          "Bytes": 10
+        },
+        "disable_recall": false
+      },
+      "WorkflowProtocolVersion": 20,
+      "AgentID": "features.coordinator",
+      "RunID": "run-external-await",
+      "RootRunID": "run-external-await",
+      "SessionID": "sess-external-await",
+      "TurnID": "",
+      "ParentToolCallID": "",
+      "ParentRunID": "",
+      "ParentAgentID": "",
+      "Tool": "",
+      "ToolArgs": null,
+      "Messages": [
+        {
+          "Role": "user",
+          "Parts": [
+            {
+              "Kind": "text",
+              "Text": "await"
+            }
+          ],
+          "Meta": null
+        }
+      ],
+      "Labels": null,
+      "Metadata": null,
+      "WorkflowOptions": null,
+      "Policy": {
+        "PerTurnMaxToolCalls": 0,
+        "RestrictToTool": "",
+        "CompletionTool": "",
+        "AllowedTags": null,
+        "DeniedTags": null,
+        "MaxToolCalls": 0,
+        "MaxRecoveryTurns": 0,
+        "MaxConsecutiveFailedToolCalls": 0,
+        "TimeBudget": 10000000000,
+        "PlanTimeout": 0,
+        "ToolTimeout": 0,
+        "PerToolTimeout": {},
+        "FinalizerGrace": 0,
+        "LimitTerminalPlans": null,
+        "InterruptsAllowed": false
+      }
+    },
+    "output": {
+      "AgentID": "features.coordinator",
+      "RunID": "run-external-await",
+      "Final": {
+        "Role": "assistant",
+        "Parts": [
+          {
+            "Kind": "text",
+            "Text": "external inputs complete"
+          }
+        ],
+        "Meta": null
+      },
+      "FinalRef": "sha256:c20cb6e0289a769cb3a92dd3a10e1f99a60eb5d1eec13dabc1315eace5341977",
+      "FinalToolResult": null,
+      "ToolEventsRef": "sha256:f8a42e152df5018a4cdfd4cf212db1e5cdc76805f61b844b22c25f73e7ec41ee",
+      "ToolEventCount": 1,
+      "ToolSummary": {
+        "FailedCount": 0,
+        "LastError": null,
+        "Telemetry": null
+      },
+      "Notes": [],
+      "Usage": {
+        "Model": "",
+        "ModelClass": "",
+        "InputTokens": 0,
+        "OutputTokens": 0,
+        "TotalTokens": 0,
+        "CacheReadTokens": 0,
+        "CacheWriteTokens": 0
+      }
+    },
+    "cancel_requested": false,
+    "cancel_reason": "",
+    "parent_instance_id": "",
+    "parent_key": ""
+  },
+  "events": [
+    {
+      "seq": 1,
+      "key": "#1",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 20
+    },
+    {
+      "seq": 2,
+      "key": "#2",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 20
+    },
+    {
+      "seq": 3,
+      "key": "#3",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-19T19:22:26.680762Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 3
+    },
+    {
+      "seq": 4,
+      "key": "#4",
+      "command": "activity:features.coordinator.record_content",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "max_model_calls": 0,
+        "continuation": {
+          "Prev": null,
+          "Pos": 1,
+          "ContinuedFrom": null,
+          "Outcome": "fresh",
+          "Reason": "no_head",
+          "View": {
+            "chain_pos": 1,
+            "context_fingerprint": "sha256:dad60a2a0bce0d2545da071d43b4d0461c4b4106b6ff076af09be49d0849af76"
+          },
+          "Limits": {
+            "ContextWindow": 0,
+            "MaxOutputTokens": 0,
+            "DefaultMaxTokens": 0,
+            "ImageTokens": 0
+          },
+          "Visible": [
+            "sha256:3630085189428fa2187b692d7aa01e32a69b782a5ded4327a0a6a35c09cf8fb9"
+          ]
+        },
+        "Refs": [
+          "sha256:8242b45f11ceab4a6b2d052aae5848252d2c91f2d24fca6c4ceec57438fd8bc8"
+        ],
+        "IndexHead": "sha256:30bb847df3c1b061a4c5f417888e72834c0a438e56cde55356ffe10e7d0efaeb",
+        "Entries": [
+          {
+            "id": 1,
+            "kind": "message",
+            "hash": "sha256:8242b45f11ceab4a6b2d052aae5848252d2c91f2d24fca6c4ceec57438fd8bc8",
+            "role": "user",
+            "bytes": 5,
+            "chain": "sha256:ebf28140cc4a1646ca32b59a9168bbacdd71b85261686a670e1b20afbfd9026d"
+          }
+        ],
+        "ToolResults": null,
+        "Calls": null,
+        "CallRefs": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 20
+    },
+    {
+      "seq": 5,
+      "key": "#5",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-19T19:22:26.681811Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 5
+    },
+    {
+      "seq": 6,
+      "key": "#6",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-19T19:22:26.681969Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 6
+    },
+    {
+      "seq": 7,
+      "key": "#7",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 20
+    },
+    {
+      "seq": 8,
+      "key": "#8",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-19T19:22:26.682911Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 8
+    },
+    {
+      "seq": 9,
+      "key": "#9",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-19T19:22:26.68306Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 9
+    },
+    {
+      "seq": 10,
+      "key": "#10",
+      "command": "activity:features.coordinator.plan",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "facts": [],
+        "Result": {
+          "ToolCalls": null,
+          "FinalResponse": null,
+          "FinalToolResult": null,
+          "Streamed": false,
+          "Await": {
+            "Items": [
+              {
+                "Kind": "clarification",
+                "Clarification": {
+                  "ID": "clarify-topic",
+                  "Question": "Which topic?",
+                  "MissingFields": [
+                    "topic"
+                  ],
+                  "RestrictToTool": "",
+                  "ExampleInput": null,
+                  "ClarifyingPrompt": ""
+                },
+                "Questions": null,
+                "ExternalTools": null,
+                "TypedInput": null
+              },
+              {
+                "Kind": "external_tools",
+                "Clarification": null,
+                "Questions": null,
+                "ExternalTools": {
+                  "ID": "external-draft",
+                  "Items": [
+                    {
+                      "Name": "workflow.draft",
+                      "ToolCallID": "external-draft-1",
+                      "Payload": {
+                        "topic": "loom"
+                      }
+                    }
+                  ]
+                },
+                "TypedInput": null
+              }
+            ]
+          },
+          "RetryHint": null,
+          "ExpectedChildren": 0,
+          "Notes": null
+        },
+        "IndexHead": "sha256:30bb847df3c1b061a4c5f417888e72834c0a438e56cde55356ffe10e7d0efaeb",
+        "View": null,
+        "call_view": {
+          "chain_pos": 1,
+          "context_fingerprint": "sha256:dad60a2a0bce0d2545da071d43b4d0461c4b4106b6ff076af09be49d0849af76",
+          "index_head": "sha256:30bb847df3c1b061a4c5f417888e72834c0a438e56cde55356ffe10e7d0efaeb"
+        },
+        "TranscriptRef": "",
+        "TranscriptSize": {
+          "Bytes": 0,
+          "NonText": 0,
+          "Role": ""
+        },
+        "ToolCallRefs": null,
+        "AwaitCallRefs": {
+          "external-draft-1": "sha256:c541de0dbe35fa6f75854c9f92aaff6f2ab571cb162ab262ce72276a097eee1a"
+        },
+        "CallKeys": null,
+        "ProducingCall": null,
+        "RequestGrowth": null,
+        "Usage": {
+          "Model": "",
+          "ModelClass": "",
+          "InputTokens": 0,
+          "OutputTokens": 0,
+          "TotalTokens": 0,
+          "CacheReadTokens": 0,
+          "CacheWriteTokens": 0
+        },
+        "ToolPolicyActive": true,
+        "AllowedTools": [
+          "delegated.summarize",
+          "workflow.draft",
+          "workflow.finalize",
+          "workflow.method_echo",
+          "workflow.publish",
+          "workflow.retry",
+          "workflow.review",
+          "workflow.revise"
+        ],
+        "PolicyCaps": {
+          "MaxToolCalls": 12,
+          "RemainingToolCalls": 12,
+          "MaxRecoveryTurns": 2,
+          "RemainingRecoveryTurns": 2,
+          "ExpiresAt": "0001-01-01T00:00:00Z"
+        },
+        "Recovery": null,
+        "Attempt": 1
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 20
+    },
+    {
+      "seq": 11,
+      "key": "#11",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-19T19:22:26.684159Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 11
+    },
+    {
+      "seq": 12,
+      "key": "#12",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 20
+    },
+    {
+      "seq": 13,
+      "key": "#13",
+      "command": "receive_async:loom_mcp.runtime.pause",
+      "event_type": "SignalNone",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 14,
+      "key": "#14",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-19T19:22:26.685591Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 14
+    },
+    {
+      "seq": 15,
+      "key": "#15",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 20
+    },
+    {
+      "seq": 16,
+      "key": "#16",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 20
+    },
+    {
+      "seq": 17,
+      "key": "#17",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 20
+    },
+    {
+      "seq": 18,
+      "key": "#18",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 20
+    },
+    {
+      "seq": 19,
+      "key": "#19",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-19T19:22:26.691549Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 19
+    },
+    {
+      "seq": 20,
+      "key": "#20",
+      "command": "receive:loom_mcp.runtime.provide.clarification",
+      "event_type": "SignalReceived",
+      "data": {
+        "RunID": "run-external-await",
+        "ID": "clarify-topic",
+        "Answer": "",
+        "AnswerRef": "sha256:ab065aec59325acfa25bcf26d66373930bcc78d2a2c8476a39a59517dd6d86c9",
+        "AnswerBytes": 8,
+        "Labels": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 20
+    },
+    {
+      "seq": 21,
+      "key": "#21",
+      "command": "activity:features.coordinator.record_content",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "Refs": [
+          "sha256:3f764dc5222c1d0337d87d1fb14506cc26809780e7d1cbc6e5f295141c882de9"
+        ],
+        "IndexHead": "",
+        "Entries": null,
+        "ToolResults": null,
+        "Calls": null,
+        "CallRefs": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 24
+    },
+    {
+      "seq": 22,
+      "key": "#22",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-19T19:22:26.693005Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 22
+    },
+    {
+      "seq": 23,
+      "key": "#23",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-19T19:22:26.69316Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 23
+    },
+    {
+      "seq": 24,
+      "key": "#24",
+      "command": "receive:loom_mcp.runtime.provide.toolresults",
+      "event_type": "SignalReceived",
+      "data": {
+        "RunID": "run-external-await",
+        "ID": "external-draft",
+        "Results": [
+          {
+            "Refs": {
+              "Result": "sha256:ce2d59223e6653b8e03f54a8e761d2d046f4f2d01d14bf7e6b2c7c37522ddfa0",
+              "ServerData": "",
+              "Payload": ""
+            },
+            "Name": "workflow.draft",
+            "ToolCallID": "external-draft-1",
+            "Result": null,
+            "Bounds": null,
+            "Error": null,
+            "RetryHint": null
+          }
+        ]
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 24
+    },
+    {
+      "seq": 25,
+      "key": "#25",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-19T19:22:26.694861Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 25
+    },
+    {
+      "seq": 26,
+      "key": "#26",
+      "command": "activity:features.coordinator.record_content",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "Refs": null,
+        "IndexHead": "",
+        "Entries": [
+          {
+            "id": 0,
+            "kind": "tool_result",
+            "hash": "sha256:b198124cf1aa66e6c4b8c846a0f33e68418f17e7e675adb672964db4ae43ef5e",
+            "role": "user",
+            "tool_use_ids": [
+              "external-draft-1"
+            ],
+            "bytes": 27,
+            "batch": 5,
+            "result": {
+              "content_bytes": 27
+            },
+            "output": "sha256:6a0a9f6e8decd3d3565b76506b9230356d2de521b189d0531e1709967784ed60"
+          }
+        ],
+        "ToolResults": [
+          {
+            "Preview": "",
+            "Refs": {
+              "Result": "sha256:b198124cf1aa66e6c4b8c846a0f33e68418f17e7e675adb672964db4ae43ef5e",
+              "ServerData": "",
+              "Payload": ""
+            },
+            "Name": "workflow.draft",
+            "Result": null,
+            "ResultBytes": 27,
+            "ResultOmitted": false,
+            "ResultOmittedReason": "",
+            "ServerData": null,
+            "Bounds": null,
+            "Error": null,
+            "RetryHint": null,
+            "Telemetry": null,
+            "ToolCallID": "external-draft-1",
+            "ChildrenCount": 0,
+            "RunLink": null
+          }
+        ],
+        "Calls": null,
+        "CallRefs": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 27,
+      "key": "#27",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-19T19:22:26.696051Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 27
+    },
+    {
+      "seq": 28,
+      "key": "#28",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 29,
+      "key": "#29",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-19T19:22:26.69841Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 29
+    },
+    {
+      "seq": 30,
+      "key": "#30",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-19T19:22:26.698591Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 30
+    },
+    {
+      "seq": 31,
+      "key": "#31",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-19T19:22:26.698786Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 31
+    },
+    {
+      "seq": 32,
+      "key": "#32",
+      "command": "activity:features.coordinator.resume",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "facts": [],
+        "Result": {
+          "ToolCalls": null,
+          "FinalResponse": {
+            "Message": {
+              "Role": "assistant",
+              "Parts": [
+                {
+                  "Kind": "text",
+                  "Text": "external inputs complete"
+                }
+              ],
+              "Meta": null
+            }
+          },
+          "FinalToolResult": null,
+          "Streamed": false,
+          "Await": null,
+          "RetryHint": null,
+          "ExpectedChildren": 0,
+          "Notes": null
+        },
+        "IndexHead": "sha256:c80e4b7469297cee3746dddce3d70ce234d109904f56abf736452253dfbbd1a7",
+        "View": null,
+        "call_view": {
+          "chain_pos": 1,
+          "context_fingerprint": "sha256:dad60a2a0bce0d2545da071d43b4d0461c4b4106b6ff076af09be49d0849af76",
+          "index_head": "sha256:c80e4b7469297cee3746dddce3d70ce234d109904f56abf736452253dfbbd1a7"
+        },
+        "TranscriptRef": "sha256:de735a1a5dc6584a87275a18f9ada17c92bab3b8dbc9ab7f9f8f81e26ebc88cc",
+        "TranscriptSize": {
+          "Bytes": 24,
+          "NonText": 0,
+          "Role": "assistant"
+        },
+        "ToolCallRefs": null,
+        "AwaitCallRefs": null,
+        "CallKeys": null,
+        "ProducingCall": null,
+        "RequestGrowth": null,
+        "Usage": {
+          "Model": "",
+          "ModelClass": "",
+          "InputTokens": 0,
+          "OutputTokens": 0,
+          "TotalTokens": 0,
+          "CacheReadTokens": 0,
+          "CacheWriteTokens": 0
+        },
+        "ToolPolicyActive": true,
+        "AllowedTools": [
+          "delegated.summarize",
+          "workflow.draft",
+          "workflow.finalize",
+          "workflow.method_echo",
+          "workflow.publish",
+          "workflow.retry",
+          "workflow.review",
+          "workflow.revise"
+        ],
+        "PolicyCaps": {
+          "MaxToolCalls": 12,
+          "RemainingToolCalls": 12,
+          "MaxRecoveryTurns": 2,
+          "RemainingRecoveryTurns": 2,
+          "ExpiresAt": "0001-01-01T00:00:00Z"
+        },
+        "Recovery": null,
+        "Attempt": 2
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 33,
+      "key": "#33",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-19T19:22:26.700038Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 33
+    },
+    {
+      "seq": 34,
+      "key": "#34",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 35,
+      "key": "#35",
+      "command": "receive_async:loom_mcp.runtime.pause",
+      "event_type": "SignalNone",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 36,
+      "key": "#36",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 37,
+      "key": "#37",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 38,
+      "key": "#38",
+      "command": "activity:features.coordinator.finish",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "FinalRef": "sha256:c20cb6e0289a769cb3a92dd3a10e1f99a60eb5d1eec13dabc1315eace5341977",
+        "ToolEventsRef": "sha256:f8a42e152df5018a4cdfd4cf212db1e5cdc76805f61b844b22c25f73e7ec41ee",
+        "ToolEventCount": 1,
+        "ToolSummary": {
+          "FailedCount": 0,
+          "LastError": null,
+          "Telemetry": null
+        },
+        "FinalToolResult": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 39,
+      "key": "#39",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-19T19:22:37.736468Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 39
+    },
+    {
+      "seq": 40,
+      "key": "#40",
+      "command": "activity:features.coordinator.seal",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "IndexHead": "sha256:1a8d3b445f7026cae4a397d4b797ea34c6c76f580cc5ad51a2329d3d124d032b"
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 41,
+      "key": "#41",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    }
+  ],
+  "signals": [
+    {
+      "id": 1,
+      "channel": "loom_mcp.runtime.provide.clarification",
+      "delivered_seq": 20,
+      "consumed_seq": 20
+    },
+    {
+      "id": 2,
+      "channel": "loom_mcp.runtime.provide.toolresults",
+      "delivered_seq": 24,
+      "consumed_seq": 24
+    }
+  ]
+}

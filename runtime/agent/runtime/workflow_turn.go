@@ -342,6 +342,9 @@ func (r *Runtime) handleResumePlanError(
 	turnID string,
 	resumeErr error,
 ) (*RunOutput, error) {
+	if isModelCallLimitError(resumeErr) {
+		return nil, resumeErr
+	}
 	if deadlines.budgetExpired(wfCtx.Now()) {
 		return r.finalizeAfterResumePlanError(
 			wfCtx,

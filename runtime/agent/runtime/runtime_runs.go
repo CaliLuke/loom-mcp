@@ -142,6 +142,9 @@ func (r *Runtime) startRunOn(ctx context.Context, input *RunInput, workflowName,
 		}
 		input.RootRunID = input.RunID
 	}
+	if err := validateModelCallOverride(input.Policy); err != nil {
+		return nil, err
+	}
 	r.stampContextCompaction(input)
 	if err := r.prepareContextStart(ctx, input); err != nil {
 		return nil, err

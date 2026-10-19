@@ -26,7 +26,7 @@ type pauseHistoryPlanner struct{}
 
 type pauseHistoryExecutor struct{ recordingWorkflowExecutor }
 
-const workflowPauseHistoryFile = "testdata/workflow_protocol_v19_confirmed_pause.json"
+const workflowPauseHistoryFile = "testdata/workflow_protocol_v20_confirmed_pause.json"
 
 // recordPauseWorkflowHistory answers a pause returned only after tool approval.
 func recordPauseWorkflowHistory(t *testing.T, c client.Client) {

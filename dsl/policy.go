@@ -309,6 +309,18 @@ func ErrorIfRetryExceeded(enabled bool) RetryAndReflectOption {
 	}
 }
 
+// MaxModelCalls caps logical model invocation reservations in one run.
+// Use with DefaultCaps. The explicit value must be positive.
+func MaxModelCalls(n int) CapsOption {
+	return func(c *expragents.CapsExpr) {
+		if n <= 0 {
+			eval.ReportError("MaxModelCalls requires n > 0, got %d", n)
+			return
+		}
+		c.MaxModelCalls = n
+	}
+}
+
 // MaxToolCalls configures the maximum number of tool invocations allowed during
 // agent execution. Use this with DefaultCaps to limit total tool usage.
 //

@@ -20,7 +20,7 @@ import (
 
 type continuationHistoryPlanner struct{}
 
-const workflowContinuationHistoryFile = "testdata/workflow_protocol_v19_continued.json"
+const workflowContinuationHistoryFile = "testdata/workflow_protocol_v20_continued.json"
 
 func TestGeneratedContinuationWorkflowReplay(t *testing.T) {
 	data, err := os.ReadFile(workflowContinuationHistoryFile)

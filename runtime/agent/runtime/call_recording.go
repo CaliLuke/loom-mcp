@@ -14,6 +14,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextmeasure"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/overflow"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
 )
@@ -26,6 +27,9 @@ type (
 	// CallRecording owns call evidence for one activity attempt. Workflow state
 	// owns run-level adoption and growth event publication.
 	CallRecording struct {
+		maxModelCalls  int
+		modelCallLimit *policy.ModelCallLimit
+		usage          model.TokenUsage
 		qualifications []Qualification
 		store          runstore.Store
 		scope          string
@@ -306,7 +310,7 @@ func (c *recordedCall) complete(ctx context.Context, response *model.Response, u
 		return fmt.Errorf("write model call completion: %w", err)
 	}
 	c.recording.adoptCompletion(record.Key, facts, source, primary, state == runstore.CallCompleted, completion.Response)
-	return nil
+	return c.recording.recordModelCallUsage(usage)
 }
 
 // measureRequest snapshots facts before sending, with limits from the registered
@@ -361,7 +365,9 @@ func (r *CallRecording) finishActivity(ctx context.Context, out **PlanActivityOu
 		(*out).CallKeys = r.Keys()
 		(*out).Facts = r.Facts()
 		(*out).RequestGrowth = r.RequestGrowth()
-		(*out).ProducingCall = r.ProducingCall(events.eventCallKeys())
+		if (*out).ModelCallLimit == nil {
+			(*out).ProducingCall = r.ProducingCall(events.eventCallKeys())
+		}
 	}
 }
 

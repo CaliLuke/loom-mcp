@@ -17,6 +17,10 @@ func TestRunPolicyExprValidateCapsAndTiming(t *testing.T) {
 		require.NoError(t, policy.Validate())
 	})
 
+	t.Run("negative max model calls", func(t *testing.T) {
+		p := &RunPolicyExpr{Agent: &AgentExpr{Name: "planner"}, DefaultCaps: &CapsExpr{MaxModelCalls: -1}}
+		require.ErrorContains(t, p.Validate(), "MaxModelCalls must be non-negative")
+	})
 	t.Run("negative max tool calls", func(t *testing.T) {
 		policy := &RunPolicyExpr{
 			Agent: &AgentExpr{Name: "planner"},

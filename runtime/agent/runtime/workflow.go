@@ -119,6 +119,9 @@ func validateWorkflowInput(input *RunInput) error {
 	if input.RootRunID == "" {
 		return errors.New("root run id is required")
 	}
+	if err := validateModelCallOverride(input.Policy); err != nil {
+		return err
+	}
 	if input.Policy != nil && input.Policy.MaxRecoveryTurns < 0 {
 		return fmt.Errorf("%w: MaxRecoveryTurns must not be negative", ErrInvalidConfig)
 	}
@@ -219,6 +222,11 @@ func seedWorkflowPlan(wfCtx engine.WorkflowContext, input *RunInput, planInput *
 	if err != nil {
 		return err
 	}
+	if seed.MaxModelCalls == nil || *seed.MaxModelCalls < 0 {
+		return fmt.Errorf("recorded model call policy is missing or invalid")
+	}
+	planInput.maxModelCalls = *seed.MaxModelCalls
+	startReq.MaxModelCalls = *seed.MaxModelCalls
 	planInput.Entries, planInput.IndexHead = seed.Entries, seed.IndexHead
 	planInput.Committed = len(seed.Entries)
 	if seed.Continuation != nil {
@@ -234,6 +242,9 @@ func seedWorkflowPlan(wfCtx engine.WorkflowContext, input *RunInput, planInput *
 func (r *Runtime) prepareEffectiveRunInput(ctx context.Context, reg AgentRegistration, input *RunInput, runCtx run.Context) (*RunInput, error) {
 	effective, err := runBeforeRunInterceptors(ctx, r.interceptorsForAgent(input.AgentID), *input, runCtx)
 	if err != nil {
+		return nil, err
+	}
+	if err := validateModelCallOverride(effective.Policy); err != nil {
 		return nil, err
 	}
 	if err := r.validateTerminalPolicies(reg, &effective); err != nil {
@@ -359,6 +370,9 @@ func (r *Runtime) handleWorkflowStartError(
 	turnID string,
 	startErr error,
 ) (*RunOutput, string, error) {
+	if isModelCallLimitError(startErr) {
+		return nil, workflowStatusForError(startErr), startErr
+	}
 	if state.planInput == nil {
 		return nil, workflowStatusForError(startErr), startErr
 	}

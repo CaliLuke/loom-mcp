@@ -316,7 +316,7 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 - Workflow graph node IDs cannot contain `#`, which separates generated loop
   iteration IDs. Loop failures permit retries through `MaxIterations`. If every
   iteration fails, return the last iteration's `ToolError`.
-- `policy.CapsState` owns counter budgets only. Its deprecated `ExpiresAt` field
+- `policy.CapsState` owns tool and recovery counters. Its deprecated `ExpiresAt` field
   is ignored; active-time enforcement belongs to deterministic runtime deadlines
   configured through `TimeBudget`, with external waits pausing that budget.
 - An expired active-time budget permits only the time-budget finalizer, once,
@@ -327,6 +327,18 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   the separate hard deadline that includes its grace period. A finalizer that
   would start at or after that deadline (Budget + FinalizerGrace) is not scheduled;
   the run fails with context deadline exceeded.
+- `MaxModelCalls` caps logical model invocation reservations per run. Unset is
+  unlimited; explicit DSL/per-run values must be positive. Per-run nil inherits
+  the worker default. Initial content recording snapshots the worker-owned cap
+  once for all entry paths; replay never rereads it. Existing `RunStore.NextSeq`
+  is the admission authority, including concurrent calls and fresh invocations
+  on activity retry. Never add an activity-local or completed-call counter.
+- Model reservations include preflight/provider failures, summaries, retries and
+  finalizers. Adapter-internal HTTP hops share one outer invocation. Children
+  have independent RunID caps. Never refund uncertain reservations. Refusal is
+  sticky, records `model_call_cap` without a fabricated Started call, and fails
+  with `loom_mcp.model_call_cap` after canonical adoption; no recovery or extra
+  finalizer follows it. Direct `Runtime.ModelClient` remains outside this policy.
 - Retry-and-reflect failure tracking is process-local and limited to 4096
   run/tool keys. Each failure refreshes its key. When full, the interceptor
   discards the least-recently-failed keys, which restart at attempt one.

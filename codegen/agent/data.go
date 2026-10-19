@@ -329,6 +329,8 @@ type (
 	// activity after rejected model or tool output, terminating the agent run
 	// with an error if either cap is exceeded.
 	CapsData struct {
+		// MaxModelCalls caps logical invocation reservations per run; zero is unlimited.
+		MaxModelCalls int
 		// MaxToolCalls caps the number of tool invocations per run (0 = unlimited).
 		MaxToolCalls int
 		// MaxRecoveryTurns caps replacement planner activities after rejected output.

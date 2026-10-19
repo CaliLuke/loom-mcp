@@ -150,6 +150,17 @@ func WithPerTurnMaxToolCalls(n int) RunOption {
 	}
 }
 
+// WithRunMaxModelCalls caps logical model invocation reservations for this run.
+// The value must be positive; nil policy overrides inherit the worker default.
+func WithRunMaxModelCalls(n int) RunOption {
+	return func(in *RunInput) {
+		if in.Policy == nil {
+			in.Policy = &PolicyOverrides{}
+		}
+		in.Policy.MaxModelCalls = new(n)
+	}
+}
+
 // WithRunMaxToolCalls sets a per-run cap on total tool executions.
 func WithRunMaxToolCalls(n int) RunOption {
 	return func(in *RunInput) {

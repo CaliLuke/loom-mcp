@@ -404,6 +404,7 @@ func TestExecuteWorkflowRunFinalizesAfterInitialModelRecoveryCap(t *testing.T) {
 		Policy:             RunPolicy{MaxRecoveryTurns: 1},
 	}
 
+	rt.agents[reg.ID] = reg
 	out, status, err := rt.executeWorkflowRun(
 		wfCtx,
 		reg,

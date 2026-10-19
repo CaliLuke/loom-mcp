@@ -107,7 +107,7 @@ var _ = Service("features", func() {
 			})
 		})
 		RunPolicy(func() {
-			DefaultCaps(MaxToolCalls(4), MaxRecoveryTurns(1))
+			DefaultCaps(MaxToolCalls(4), MaxRecoveryTurns(1), MaxModelCalls(3))
 			TimeBudget("10s")
 			InterruptsAllowed(true)
 		})

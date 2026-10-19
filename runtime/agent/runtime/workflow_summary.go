@@ -41,7 +41,7 @@ func (r *Runtime) prepareWorkflowSummary(wf engine.WorkflowContext, base *workfl
 		return err
 	}
 	original := base.view()
-	in := &SummarizeContextInput{AgentID: input.AgentID, RunID: input.RunID, Scope: input.RunContext.RootRunID, SessionID: input.RunContext.SessionID, TurnID: input.RunContext.TurnID, Labels: input.RunContext.Labels, Step: input.Step, ViewRef: original, From: max(original.TailFrom, 1), To: input.View.TailFrom, Budget: input.View.Budget, Rate: compaction.SummaryRate(base.compactionState), ContextSettings: base.contextSettings, ContextFingerprint: base.contextFingerprint, ContextModel: base.contextSettings.Summary.Model, PromptID: prompt.Ident(string(input.AgentID) + ".context.summary"), Settings: base.contextSettings.Summary.Settings}
+	in := &SummarizeContextInput{MaxModelCalls: input.MaxModelCalls, AgentID: input.AgentID, RunID: input.RunID, Scope: input.RunContext.RootRunID, SessionID: input.RunContext.SessionID, TurnID: input.RunContext.TurnID, Labels: input.RunContext.Labels, Step: input.Step, ViewRef: original, From: max(original.TailFrom, 1), To: input.View.TailFrom, Budget: input.View.Budget, Rate: compaction.SummaryRate(base.compactionState), ContextSettings: base.contextSettings, ContextFingerprint: base.contextFingerprint, ContextModel: base.contextSettings.Summary.Model, PromptID: prompt.Ident(string(input.AgentID) + ".context.summary"), Settings: base.contextSettings.Summary.Settings}
 	out, err := wf.ExecuteSummarizeContextActivity(wf.Context(), engine.SummarizeContextActivityCall{Name: SummarizeContextActivityName(input.AgentID), Input: in, Options: options})
 	if err != nil {
 		return fmt.Errorf("summarize context: %w", err)
@@ -54,6 +54,14 @@ func (r *Runtime) prepareWorkflowSummary(wf engine.WorkflowContext, base *workfl
 func (r *Runtime) adoptWorkflowSummary(wf engine.WorkflowContext, base *workflowPlanInput, input *PlanActivityInput, in *SummarizeContextInput, out *SummarizeContextOutput) error {
 	if out == nil {
 		return fmt.Errorf("summarize context: missing activity output")
+	}
+	if out.ModelCallLimit != nil {
+		if err := out.ModelCallLimit.Validate(); err != nil {
+			return err
+		}
+		if out.ModelCallLimit.Call.RunID != in.RunID || out.ModelCallLimit.Limit != in.MaxModelCalls || out.Kind != "model_call_cap" || out.Checkpoint != nil {
+			return fmt.Errorf("summary model call limit does not match input")
+		}
 	}
 	if err := validateCompactionFacts(&PlanActivityOutput{CallKeys: out.CallKeys, Facts: out.Facts}); err != nil {
 		return err
@@ -78,6 +86,9 @@ func (r *Runtime) adoptWorkflowSummary(wf engine.WorkflowContext, base *workflow
 	base.compactionState.Summary = next
 	base.compactionDecision.State.Summary = next
 	base.applySummaryView(input, out, kind, view)
+	if out.ModelCallLimit != nil {
+		return modelCallLimitError(out.ModelCallLimit)
+	}
 	return nil
 }
 
@@ -110,6 +121,7 @@ func summaryAdoptionEvent(wf engine.WorkflowContext, base *workflowPlanInput, in
 	event.ContextSettings = &settings
 	stampCompactionEvent(base, event)
 	event.Latency = out.Latency
+	event.ModelCallLimit = out.ModelCallLimit
 	if kind == "" {
 		event.Units, event.Calls = compactionCounts(base.Entries, in.From, in.To)
 		event.Checkpoint = view.Checkpoint

@@ -5,6 +5,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/compaction"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextmeasure"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/prompt"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
@@ -13,6 +14,8 @@ import (
 type (
 	// SummarizeContextInput binds one synchronous summary to an immutable cut.
 	SummarizeContextInput struct {
+		// MaxModelCalls is the immutable recorded run admission cap.
+		MaxModelCalls                   int `json:"max_model_calls,omitzero"`
 		ContextSettings                 compaction.Settings
 		ContextFingerprint              string
 		AgentID                         agent.Ident
@@ -30,6 +33,8 @@ type (
 	// SummarizeContextOutput exposes only durable addresses and bounded metadata.
 	// CallKeys includes every started call, independently of checkpoint Calls.
 	SummarizeContextOutput struct {
+		// ModelCallLimit records an unsent logical invocation refused by the run cap.
+		ModelCallLimit *policy.ModelCallLimit `json:"model_call_limit,omitzero"`
 		// Latency measures the whole summary activity attempt in nanoseconds.
 		Latency                              int64
 		From, To                             index.MessageID

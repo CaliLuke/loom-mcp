@@ -25,8 +25,8 @@ import (
 	"go.temporal.io/sdk/client"
 )
 
-const workflowDefaultHistoryFile = "testdata/workflow_protocol_v19_default.json"
-const workflowNonTextResidentHistoryFile = "testdata/workflow_protocol_v19_nontext_resident.json"
+const workflowDefaultHistoryFile = "testdata/workflow_protocol_v20_default.json"
+const workflowNonTextResidentHistoryFile = "testdata/workflow_protocol_v20_nontext_resident.json"
 
 type defaultHistoryPlanner struct{}
 type defaultHistoryClient struct{ modelClientFunc }
@@ -128,7 +128,7 @@ func TestGeneratedDefaultContextAcceptance(t *testing.T) {
 	}
 }
 func TestDefaultWorkflowProtocolBoundary(t *testing.T) {
-	assert.Equal(t, 19, api.WorkflowProtocolVersion)
+	assert.Equal(t, 20, api.WorkflowProtocolVersion)
 	assert.Equal(t, 5, index.TemplateProtocolVersion)
 }
 

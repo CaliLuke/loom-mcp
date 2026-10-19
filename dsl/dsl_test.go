@@ -87,6 +87,8 @@ func TestRunPolicyRejectsNonPositiveCapsAndBudgets(t *testing.T) {
 		err  string
 	}{
 		{
+			name: "negative max model calls", dsl: func() { DefaultCaps(MaxModelCalls(-1)) }, err: "MaxModelCalls requires n > 0",
+		}, {name: "zero max model calls", dsl: func() { DefaultCaps(MaxModelCalls(0)) }, err: "MaxModelCalls requires n > 0"}, {
 			name: "negative max tool calls",
 			dsl: func() {
 				DefaultCaps(MaxToolCalls(-5))

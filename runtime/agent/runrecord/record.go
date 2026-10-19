@@ -5,6 +5,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/callrecord"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/compaction"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runlog"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
@@ -28,6 +29,8 @@ type (
 	}
 	// Run holds one run's transcript and evidence in canonical order.
 	Run struct {
+		// ModelCallLimit records an unsent logical invocation refused by the run cap.
+		ModelCallLimit *policy.ModelCallLimit `json:"model_call_limit,omitzero"`
 		// NonTextResident reconstructs sticky original-attachment preservation.
 		NonTextResident bool `json:"nontext_resident,omitzero"`
 		// ToolResultParts is the support intersection rebuilt from adopted call facts.

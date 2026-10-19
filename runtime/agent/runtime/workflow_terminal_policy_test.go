@@ -910,6 +910,7 @@ func registerPausedTestTool(t *testing.T, rt *Runtime, spec tools.ToolSpec) {
 
 func terminalPolicyRunInputs(t *testing.T, rt *Runtime) (*testWorkflowContext, *workflowPlanInput, *RunInput) {
 	t.Helper()
+	rt.agents["agent-1"] = AgentRegistration{ID: "agent-1"}
 	ctx := context.Background()
 	_, err := rt.CreateSession(ctx, "sess-1")
 	require.NoError(t, err)

@@ -32,15 +32,11 @@ func (r *Runtime) RecordContentActivity(ctx context.Context, input *api.RecordCo
 	if r.RunStore == nil {
 		return nil, fmt.Errorf("record content: run store is required")
 	}
+	if input.ModelCallPolicy != nil {
+		return r.recordModelCallPolicy(ctx, input)
+	}
 	if input.Compatibility != nil {
-		if input.Compatibility.Scope != input.RootRunID {
-			return nil, fmt.Errorf("compatibility root scope mismatch")
-		}
-		result, err := contextcompat.Check(ctx, r.RunStore, *input.Compatibility)
-		if err != nil {
-			return nil, err
-		}
-		return &api.RecordContentOutput{Compatibility: &result}, nil
+		return r.recordContentCompatibility(ctx, input)
 	}
 	if input.Continue != nil {
 		return r.recordContinuationStart(ctx, input)
@@ -92,14 +88,14 @@ func recordWorkflowContent(ctx context.Context, items [][]byte) ([]runstore.Hash
 }
 
 func seedWorkflowIndex(wf engine.WorkflowContext, input *RunInput) (*api.RecordContentOutput, error) {
-	if len(input.Messages) == 0 && (input.ContextCompaction == nil && !input.ContextSettings.Default || input.ParentRunID != "" || input.SessionID == "") {
-		return &api.RecordContentOutput{}, nil
-	}
 	items, err := encodeContentMessages(input.Messages)
 	if err != nil {
 		return nil, err
 	}
-	record := &api.RecordContentInput{RootRunID: input.RootRunID, Items: items, SeedMessages: true}
+	record := &api.RecordContentInput{RootRunID: input.RootRunID, Items: items, SeedMessages: true, ModelCallPolicy: &api.ModelCallPolicyInput{AgentID: input.AgentID}}
+	if input.Policy != nil {
+		record.ModelCallPolicy.MaxModelCalls = input.Policy.MaxModelCalls
+	}
 	if (input.ContextCompaction != nil || input.ContextSettings.Default) && input.ParentRunID == "" && input.SessionID != "" {
 		record.Continue = &api.ContinuationStartInput{ContextFingerprint: input.ContextFingerprint, SessionID: input.SessionID, RunID: input.RunID, AgentID: input.AgentID, Settings: input.ContextSettings, Timestamp: wf.Now()}
 	}
@@ -177,4 +173,15 @@ func (r *Runtime) recordWorkflowToolResult(ctx context.Context, result *planner.
 		result.Refs.ServerData = refs[1]
 	}
 	return nil
+}
+
+func (r *Runtime) recordContentCompatibility(ctx context.Context, input *api.RecordContentInput) (*api.RecordContentOutput, error) {
+	if input.Compatibility.Scope != input.RootRunID {
+		return nil, fmt.Errorf("compatibility root scope mismatch")
+	}
+	result, err := contextcompat.Check(ctx, r.RunStore, *input.Compatibility)
+	if err != nil {
+		return nil, err
+	}
+	return &api.RecordContentOutput{Compatibility: &result}, nil
 }

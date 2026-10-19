@@ -179,6 +179,9 @@ func (r *Runtime) validateAgentRegistration(reg AgentRegistration) error {
 	if reg.Planner == nil {
 		return fmt.Errorf("%w: missing planner", ErrInvalidConfig)
 	}
+	if reg.Policy.MaxModelCalls < 0 {
+		return fmt.Errorf("%w: MaxModelCalls must not be negative", ErrInvalidConfig)
+	}
 	if reg.Policy.MaxRecoveryTurns < 0 {
 		return fmt.Errorf("%w: agent %q MaxRecoveryTurns must not be negative", ErrInvalidConfig, reg.ID)
 	}

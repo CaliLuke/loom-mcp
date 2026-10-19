@@ -64,6 +64,7 @@ func RegisterSpecialistAgent(ctx context.Context, rt *agentsruntime.Runtime, cfg
 		},
 		Specs: specs.Specs,
 		Policy: agentsruntime.RunPolicy{
+			MaxModelCalls:     3,
 			MaxToolCalls:      4,
 			MaxRecoveryTurns:  1,
 			TimeBudget:        time.Duration(10000000000),

@@ -1129,6 +1129,51 @@ Custom engines attach their one-based attempt with `engine.WithActivityAttempt`.
 the planner path. `model.WithCallInfo` can attach metadata explicitly. Call
 identity alone does not record model requests or responses.
 
+### Model-call admission budgets
+
+Declare `DefaultCaps(MaxModelCalls(20))` inside `RunPolicy` to bound model work
+within one agent run. `runtime.RunPolicy.MaxModelCalls` supplies the same worker
+default; zero leaves calls unlimited. A caller can replace it with
+`runtime.WithRunMaxModelCalls(5)`. The DSL and explicit per-run override require a
+positive value. `api.PolicyOverrides.MaxModelCalls` is a pointer: nil inherits,
+while explicit zero and negative values are rejected.
+
+The owning worker resolves the effective cap once through the initial recorded
+content activity. This works for local clients, remote routes, and child runs.
+Replay uses that recorded value; a later registration override affects new runs.
+This requires workflow protocol 20: initial policy recording changes the command
+sequence, including runs with no initial messages. Drain older running workflows
+before upgrading, and use matching protocol-20 workers and replayers. Existing
+histories from older protocols are rejected rather than replayed as protocol 20.
+
+Each outer `Complete` or `Stream` reserves one sequence before model middleware.
+Only reservations 1 through N enter the inner client chain. Failed calls,
+preflight rejections, summary folds, summary retries, and finalizers consume
+reservations. Stream reads and finalization do not consume another reservation.
+An adapter's internal HTTP retries or continuation hops belong to its one outer
+invocation. A fresh invocation made by a retried activity consumes another slot;
+workflow replay does not allocate slots.
+
+Reservations are never refunded. A crash or lost allocation reply can consume a
+slot without provider I/O or a call record. Use a shared durable run store across
+workers and restarts. Each child has its own RunID counter and worker policy;
+the parent's cap does not bound the whole run tree. Direct `Runtime.ModelClient`
+calls remain outside this decorated run boundary.
+
+An excess invocation returns `policy.ErrModelCallLimit` with structured
+`policy.ModelCallLimit` details. Catching that error inside a planner cannot
+produce a successful activity result. The workflow records `model_call_cap` and
+fails with non-retryable application error type `loom_mcp.model_call_cap`, without
+another model finalizer or terminal-tool plan. A finalizer requested by another
+limit must still obtain its own model reservation. A run that finishes on its
+Nth reservation succeeds.
+
+`PlannerStepEvent` or the summary's `ContextCompactionSkipped` event records the
+refusal. `runrecord.Run.ModelCallLimit` retains it through read and export. The
+rejected identity is a reservation, so it is absent from canonical `CallKeys`,
+request facts and usage. Earlier real calls remain recorded and adopted; no
+partial summary checkpoint or successful planner presentation is committed.
+
 ### Model-call records
 
 Planner model calls are recorded in `Runtime.RunStore`, inside model
@@ -4138,6 +4183,7 @@ Callers can override policy for specific runs:
 ```go
 client.Run(ctx, "session-1", msgs,
     runtime.WithRunMaxToolCalls(5),
+    runtime.WithRunMaxModelCalls(10),
     runtime.WithRunTimeBudget(2*time.Minute),
     runtime.WithRestrictToTool(tools.Ident("helpers.search")),
     runtime.WithAllowedTags([]string{"safe", "read-only"}),

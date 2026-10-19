@@ -86,6 +86,9 @@ func Register{{ .StructName }}(ctx context.Context, rt *agentsruntime.Runtime, c
         Specs: nil,
         {{- end }}
         Policy: agentsruntime.RunPolicy{
+{{- if gt .RunPolicy.Caps.MaxModelCalls 0 }}
+            MaxModelCalls: {{ .RunPolicy.Caps.MaxModelCalls }},
+{{- end }}
 {{- if gt .RunPolicy.Caps.MaxToolCalls 0 }}
             MaxToolCalls: {{ .RunPolicy.Caps.MaxToolCalls }},
 {{- end }}

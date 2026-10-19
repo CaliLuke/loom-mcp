@@ -121,6 +121,9 @@ func TestGeneratedFeatureRealTemporalContracts(t *testing.T) {
 		t.Run("confirmed pause", func(t *testing.T) {
 			recordPauseWorkflowHistory(t, server.Client())
 		})
+		t.Run("model call budget", func(t *testing.T) {
+			recordModelCallWorkflowHistory(t, server.Client())
+		})
 		t.Run("budget adoption", func(t *testing.T) {
 			recordBudgetWorkflowHistory(t, server.Client())
 		})

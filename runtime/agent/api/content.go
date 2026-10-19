@@ -13,6 +13,8 @@ import (
 
 // RecordContentInput carries ordered content to store before workflow adoption.
 type RecordContentInput struct {
+	// ModelCallPolicy resolves the owning worker default alongside initial content.
+	ModelCallPolicy *ModelCallPolicyInput `json:"model_call_policy,omitzero"`
 	// Compatibility requests an exact check of original attachments.
 	Compatibility *contextcompat.Request `json:"compatibility,omitzero"`
 	// Continue requests recorded session seeding for a compaction root.
@@ -61,6 +63,8 @@ type ProvidedContent struct {
 
 // RecordContentOutput is returned only after every input item has been stored.
 type RecordContentOutput struct {
+	// MaxModelCalls is present when the initial run policy was resolved.
+	MaxModelCalls *int `json:"max_model_calls,omitzero"`
 	// Compatibility addresses the verified original attachment fact.
 	Compatibility *contextcompat.Result `json:"compatibility,omitzero"`
 	// Continuation records start lineage and the selected view.
@@ -75,9 +79,6 @@ type RecordContentOutput struct {
 	Calls       []planner.ToolRequest
 	CallRefs    []runstore.Hash
 }
-
-// QueryRootRunID is the workflow query used by content-producing signal clients.
-const QueryRootRunID = "root_run_id"
 
 // PublishToolContent supplies references and metadata for a tool result hook.
 type PublishToolContent struct {
@@ -107,3 +108,12 @@ type ContextStartOutput struct {
 	Settings    compaction.Settings
 	Fingerprint string
 }
+
+// ModelCallPolicyInput snapshots a worker default and an optional per-run override.
+type ModelCallPolicyInput struct {
+	AgentID       agent.Ident
+	MaxModelCalls *int `json:"max_model_calls,omitzero"`
+}
+
+// QueryRootRunID is the workflow query used by content-producing signal clients.
+const QueryRootRunID = "root_run_id"

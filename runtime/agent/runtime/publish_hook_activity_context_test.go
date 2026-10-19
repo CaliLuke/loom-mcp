@@ -345,7 +345,10 @@ func (panicWorkflowContext) ExecuteRecordContentActivity(context.Context, engine
 	panic("unexpected record content activity")
 }
 
-func (*cancelOnPlannerWorkflowContext) ExecuteRecordContentActivity(context.Context, engine.RecordContentActivityCall) (*api.RecordContentOutput, error) {
+func (*cancelOnPlannerWorkflowContext) ExecuteRecordContentActivity(_ context.Context, call engine.RecordContentActivityCall) (*api.RecordContentOutput, error) {
+	if call.Input.ModelCallPolicy != nil && call.Input.SeedMessages && len(call.Input.Items) == 0 {
+		return &api.RecordContentOutput{MaxModelCalls: new(0)}, nil
+	}
 	panic("unexpected record content activity")
 }
 

@@ -55,7 +55,7 @@ func (r *Runtime) prepareSummaryExecution(ctx context.Context, in *SummarizeCont
 	for _, span := range plan.Unsummarised {
 		out.UnsummarisedBytes += span.End - span.Start
 	}
-	client := &callInfoClientWrapper{store: r.RunStore, info: model.CallInfo{AgentID: string(in.AgentID), RunID: in.RunID, RootRunID: in.Scope, SessionID: in.SessionID, TurnID: in.TurnID, ModelID: in.ContextModel.ID, Attempt: engine.ActivityAttemptFromContext(ctx)}, inner: &modelInterceptedClient{inner: &callRecordingClient{inner: registered, recording: recording}}}
+	client := &callInfoClientWrapper{store: r.RunStore, recording: recording, info: model.CallInfo{AgentID: string(in.AgentID), RunID: in.RunID, RootRunID: in.Scope, SessionID: in.SessionID, TurnID: in.TurnID, ModelID: in.ContextModel.ID, Attempt: engine.ActivityAttemptFromContext(ctx)}, inner: &modelInterceptedClient{inner: &callRecordingClient{inner: registered, recording: recording}}}
 	resolver, err := r.summaryResolver(ctx, in, prepared)
 	if err != nil {
 		return nil, err

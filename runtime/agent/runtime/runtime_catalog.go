@@ -145,6 +145,9 @@ func (r *Runtime) ToolSchema(name tools.Ident) (map[string]any, bool) {
 
 // OverridePolicy applies a best-effort in-process override of the registered agent policy.
 func (r *Runtime) OverridePolicy(agentID agent.Ident, delta RunPolicy) error {
+	if delta.MaxModelCalls < 0 {
+		return errors.New("MaxModelCalls must not be negative")
+	}
 	if delta.MaxRecoveryTurns < 0 {
 		return errors.New("max recovery turns cannot be negative")
 	}
@@ -153,6 +156,9 @@ func (r *Runtime) OverridePolicy(agentID agent.Ident, delta RunPolicy) error {
 	reg, ok := r.agents[agentID]
 	if !ok {
 		return ErrAgentNotFound
+	}
+	if delta.MaxModelCalls > 0 {
+		reg.Policy.MaxModelCalls = delta.MaxModelCalls
 	}
 	if delta.MaxToolCalls > 0 {
 		reg.Policy.MaxToolCalls = delta.MaxToolCalls

@@ -25,6 +25,7 @@ func TestGolden_RunPolicy(t *testing.T) {
 	require.Contains(t, cfg, "ContextModel *agentsruntime.ContextModel")
 	require.Contains(t, reg, "AfterSystem: true")
 	require.Contains(t, reg, "AfterTools: true")
+	require.Contains(t, reg, "MaxModelCalls: 7")
 	require.Contains(t, reg, "MaxToolCalls: 5")
 	require.Contains(t, reg, "MaxRecoveryTurns: 2")
 	require.Contains(t, reg, "TimeBudget: time.Duration(30000000000)")

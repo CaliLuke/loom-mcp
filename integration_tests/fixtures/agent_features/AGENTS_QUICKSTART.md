@@ -20,6 +20,7 @@ Here’s a map of what loom-mcp just built for you based on your `design/*.go` f
             * `features.evidence`
         * **Exports Toolsets:***none*
         * **Run Policy:**
+            * Max Model Calls (logical reservations, 0 = unlimited): `0`
             * Max Tool Calls: `0`
             * Max Recovery Turns: `3`
             * Time Budget: `0s`
@@ -35,6 +36,7 @@ Here’s a map of what loom-mcp just built for you based on your `design/*.go` f
             * `features.workflow`
         * **Exports Toolsets:***none*
         * **Run Policy:**
+            * Max Model Calls (logical reservations, 0 = unlimited): `0`
             * Max Tool Calls: `12`
             * Max Recovery Turns: `2`
             * Time Budget: `30s`
@@ -45,6 +47,7 @@ Here’s a map of what loom-mcp just built for you based on your `design/*.go` f
             * `features.registry_validation`
         * **Exports Toolsets:***none*
         * **Run Policy:**
+            * Max Model Calls (logical reservations, 0 = unlimited): `0`
             * Max Tool Calls: `0`
             * Max Recovery Turns: `3`
             * Time Budget: `0s`
@@ -55,6 +58,7 @@ Here’s a map of what loom-mcp just built for you based on your `design/*.go` f
         * **Exports Toolsets:**
             * `delegated`
         * **Run Policy:**
+            * Max Model Calls (logical reservations, 0 = unlimited): `3`
             * Max Tool Calls: `4`
             * Max Recovery Turns: `1`
             * Time Budget: `10s`

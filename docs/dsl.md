@@ -461,6 +461,7 @@ registered after the agent do not change its keep set.
 | ---------------------------------- | ------------------------- | ---------------------------------------------------------------------------- |
 | `RunPolicy(dsl)`                   | Inside `Agent`            | Configures runtime execution constraints                                     |
 | `DefaultCaps(opts...)`             | Inside `RunPolicy`        | Sets resource limits using option functions                                  |
+| `MaxModelCalls(n)`                 | Argument to `DefaultCaps` | Maximum logical model invocation reservations per run; positive only          |
 | `MaxToolCalls(n)`                  | Argument to `DefaultCaps` | Maximum total tool invocations                                               |
 | `MaxRecoveryTurns(n)` | Argument to `DefaultCaps` | Maximum replacement planner activities after rejected output                 |
 | `TimeBudget(duration)`             | Inside `RunPolicy`        | Maximum active execution time; clarification, confirmation, typed-input, and external-tool waits pause the budget |
@@ -1505,8 +1506,18 @@ RunPolicy(func() {
 
 | Option                             | Purpose                                |
 | ---------------------------------- | -------------------------------------- |
+| `MaxModelCalls(n)`                 | Maximum logical model invocation reservations per run; positive only |
 | `MaxToolCalls(n)`                  | Maximum total tool invocations per run |
 | `MaxRecoveryTurns(n)` | Stop after N rejected-output replacement activities |
+
+`MaxModelCalls` is unlimited when omitted. It counts each outer `Complete` or
+`Stream` invocation before middleware, including summary and finalizer calls.
+Retries reserve new slots; failed or uncertain reservations are not refunded.
+Provider HTTP retries inside one invocation use the same slot. Child runs use
+their own registered cap. A refused invocation terminates with `model_call_cap`
+and does not create a provider call record. Use `WithRunMaxModelCalls(n)` for a
+positive per-run override; nil overrides inherit and explicit zero is invalid.
+See [model-call admission budgets](runtime.md#model-call-admission-budgets).
 
 ### OnMissingFields Values
 

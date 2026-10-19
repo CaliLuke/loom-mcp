@@ -96,16 +96,17 @@ func TestRunRecordFinalizationResultsRemainOutsideTranscript(t *testing.T) {
 			}
 			eng.mu.Lock()
 			defer eng.mu.Unlock()
-			contentCalls := 2
+			contentCalls := 3
 			if !fail {
 				// Successful inline finalization already stores its body before K8.
 				contentCalls++
 			}
 			require.Len(t, eng.records, contentCalls, "sealing must add no RecordContent activity")
-			assert.Nil(t, eng.records[0].FinalizeCalls)
-			assert.NotNil(t, eng.records[1].FinalizeCalls)
+			assert.NotNil(t, eng.records[0].ModelCallPolicy, "initial cap resolution is recorded even without seed messages")
+			assert.Nil(t, eng.records[1].FinalizeCalls)
+			assert.NotNil(t, eng.records[2].FinalizeCalls)
 			if !fail {
-				assert.Equal(t, [][]byte{[]byte(`"limit recorded"`)}, eng.records[2].Items, "terminal publication stores only its body, without index metadata")
+				assert.Equal(t, [][]byte{[]byte(`"limit recorded"`)}, eng.records[3].Items, "terminal publication stores only its body, without index metadata")
 			}
 		})
 	}

@@ -69,6 +69,9 @@ func validatePlanActivityOutput(out *PlanActivityOutput, input PlanActivityInput
 	if out == nil {
 		return fmt.Errorf("runPlanActivity received nil PlanActivityOutput")
 	}
+	if out.ModelCallLimit != nil {
+		return validatePlanModelCallLimit(out, input)
+	}
 	if out.Result == nil && out.Recovery == nil && out.ContextOverflow == nil {
 		return fmt.Errorf("runPlanActivity received nil PlanResult")
 	}
@@ -208,7 +211,7 @@ func validatePlannerRecoveryCatalog(result *planner.PlanResult, input PlanActivi
 // recovery and usage aggregation. The caller still reports aggregation errors.
 func followingPlanPublication(usage model.TokenUsage, following []planActivityPublication) planActivityPublication {
 	return func(out *PlanActivityOutput) (hooks.Event, error) {
-		if len(following) == 0 || out.Recovery != nil || out.ContextOverflow != nil {
+		if len(following) == 0 || !planActivityAccepted(out) {
 			return nil, nil
 		}
 		if !planPublicationUsageFits(usage, out.Usage) {
@@ -254,6 +257,7 @@ func (r *Runtime) preparePlanActivity(wfCtx engine.WorkflowContext, base *workfl
 	}
 	// Preparation can publish summary adoption before the planner is scheduled.
 	// Reserve the identity now, even if preparation later consumes the budget.
+	input.MaxModelCalls = base.maxModelCalls
 	base.step++
 	input.Step = base.step
 	if err := r.prepareNonTextCompatibility(wfCtx, base, input, options); err != nil {
@@ -341,7 +345,7 @@ func (r *Runtime) runPlanActivityRecovering(
 		}
 		if out.Recovery == nil {
 			out.Usage = recoveryUsage
-			return out, nil
+			return out, planOutputModelCallLimit(out)
 		}
 		if !consumeRecoveryTurn(caps) {
 			out.Usage = recoveryUsage
@@ -403,7 +407,7 @@ func (r *Runtime) commitPlanActivityOutput(wfCtx engine.WorkflowContext, base *w
 		return err
 	}
 	base.adoptHead(out.IndexHead)
-	if out.Recovery == nil {
+	if out.Recovery == nil && out.ModelCallLimit == nil {
 		base.compactionView = view
 		if out.View != nil {
 			base.checkpointBytes = out.View.CheckpointBytes
@@ -445,7 +449,7 @@ func plannerAdoptionEvent(wfCtx engine.WorkflowContext, base *workflowPlanInput,
 		view = *out.CallView
 	}
 	view.IndexHead, view.Pending = out.IndexHead, nil
-	if out.Recovery == nil && out.View != nil {
+	if out.Recovery == nil && out.ModelCallLimit == nil && out.View != nil {
 		view.Checkpoint = new(out.View.Checkpoint)
 		view.Pinned = append([]index.MessageID(nil), out.View.Pinned...)
 	}
@@ -455,13 +459,14 @@ func plannerAdoptionEvent(wfCtx engine.WorkflowContext, base *workflowPlanInput,
 	event.ContextSettings = &settingsSnapshot
 	event.ContextOverrides = base.compactionState.ValidateBudgets
 	event.ContextFingerprint = base.contextFingerprint
+	event.ModelCallLimit = out.ModelCallLimit
 	event.Recovery, event.Recovering = out.Recovery != nil, input.Recovery != nil
 	if base.compaction != nil {
 		settings := pureCompactionSettings(base.compaction)
 		event.CompactionSettings = &settings
 		event.KeepResultTools = cloneToolIdents(base.compaction.KeepResultTools)
 	}
-	if out.Recovery == nil && out.View != nil {
+	if out.Recovery == nil && out.ModelCallLimit == nil && out.View != nil {
 		event.CheckpointBytes = out.View.CheckpointBytes
 	}
 	return view, event

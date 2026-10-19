@@ -35,6 +35,7 @@ Here’s a map of what loom-mcp just built for you based on your `design/*.go` f
             {{- else }}*none*
             {{- end }}
         * **Run Policy:**
+            * Max Model Calls (logical reservations, 0 = unlimited): `{{ .RunPolicy.Caps.MaxModelCalls }}`
             * Max Tool Calls: `{{ .RunPolicy.Caps.MaxToolCalls }}`
             * Max Recovery Turns: `{{ .RunPolicy.Caps.MaxRecoveryTurns }}`
             * Time Budget: `{{ .RunPolicy.TimeBudget }}`

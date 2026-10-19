@@ -49,7 +49,10 @@ func TestRecordContentRegistrationAndEmptyRun(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, "content.queue", eng.queue)
 			if !messages {
-				assert.Zero(t, eng.activityCalls)
+				assert.Equal(t, 1, eng.activityCalls)
+				require.NotNil(t, eng.output.MaxModelCalls)
+				assert.Zero(t, *eng.output.MaxModelCalls)
+				assert.Empty(t, eng.output.Refs)
 				return
 			}
 			assert.Equal(t, 1, eng.activityCalls)

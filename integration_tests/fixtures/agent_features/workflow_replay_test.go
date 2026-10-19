@@ -42,7 +42,7 @@ import (
 type historyReplayPlanner struct{}
 
 const (
-	workflowHistoryFile        = "testdata/workflow_protocol_v19.json"
+	workflowHistoryFile        = "testdata/workflow_protocol_v20.json"
 	workflowHistoryIdentity    = "loom-mcp-history-recorder"
 	workflowHistoryStickyQueue = "loom-mcp-history-recorder-sticky"
 	workflowHistoryQuestion    = "Which topic should the draft use?"
@@ -77,6 +77,7 @@ func TestGeneratedFeatureWorkflowReplay(t *testing.T) {
 		{name: "protocol 16 rejected before effects", previous: 16},
 		{name: "protocol 17 rejected before effects", previous: 17},
 		{name: "protocol 18 rejected before effects", previous: 18},
+		{name: "protocol 19 rejected before effects", previous: 19},
 		{name: "future", rewrite: true},
 		{name: "missing", rewrite: true, missing: true},
 	} {
@@ -189,6 +190,12 @@ func recordWorkflowHistory(t *testing.T, temporalClient client.Client) {
 // recordCompletedWorkflowHistory captures, scrubs and replays a real completed run.
 func recordCompletedWorkflowHistory(t *testing.T, ctx context.Context, temporalClient client.Client, eng *temporalengine.Engine, runID, filename string) *historypb.History {
 	t.Helper()
+	return recordTerminalWorkflowHistory(t, ctx, temporalClient, eng, runID, filename, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED)
+}
+
+// recordTerminalWorkflowHistory captures only the requested real terminal outcome.
+func recordTerminalWorkflowHistory(t *testing.T, ctx context.Context, temporalClient client.Client, eng *temporalengine.Engine, runID, filename string, terminal enumspb.EventType) *historypb.History {
+	t.Helper()
 	history := &historypb.History{}
 	events := temporalClient.GetWorkflowHistory(ctx, runID, "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 	for events.HasNext() {
@@ -197,7 +204,7 @@ func recordCompletedWorkflowHistory(t *testing.T, ctx context.Context, temporalC
 		history.Events = append(history.Events, event)
 	}
 	require.NotEmpty(t, history.Events)
-	require.Equal(t, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, history.Events[len(history.Events)-1].EventType)
+	require.Equal(t, terminal, history.Events[len(history.Events)-1].EventType)
 	require.NoError(t, scrubWorkflowHistory(history))
 	require.NoError(t, eng.ReplayWorkflowHistory(silentTemporalLogger{}, history))
 	data, err := (protojson.MarshalOptions{Indent: "  "}).Marshal(history)

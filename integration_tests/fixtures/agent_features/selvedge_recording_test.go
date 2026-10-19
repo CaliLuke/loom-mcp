@@ -38,6 +38,7 @@ func TestSelvedgeRecordWorkflowHistory(t *testing.T) {
 	t.Run("summary", recordSelvedgeSummaryWorkflowHistory)
 	t.Run("pause", recordSelvedgePauseWorkflowHistory)
 	t.Run("budget", recordSelvedgeBudgetWorkflowHistory)
+	t.Run("model call budget", recordSelvedgeModelCallWorkflowHistory)
 }
 
 func recordSelvedgeWorkflowHistory(t *testing.T) {
@@ -200,13 +201,19 @@ func newSelvedgeRecordingEngine(t *testing.T) (*selvedgeengine.Engine, *selvedge
 // live are checked separately; the exported format does not contain activity inputs.
 func recordCompletedSelvedgeHistory(t *testing.T, ctx context.Context, eng *selvedgeengine.Engine, observations *selvedgeObservations, id, temporalFilename string) {
 	t.Helper()
+	recordTerminalSelvedgeHistory(t, ctx, eng, observations, id, temporalFilename, sv.StatusCompleted)
+}
+
+// recordTerminalSelvedgeHistory preserves the terminal state of a real execution.
+func recordTerminalSelvedgeHistory(t *testing.T, ctx context.Context, eng *selvedgeengine.Engine, observations *selvedgeObservations, id, temporalFilename string, terminal sv.WorkflowStatus) {
+	t.Helper()
 	observations.mu.Lock()
 	failures := append([]error(nil), observations.failures...)
 	observations.mu.Unlock()
 	require.Empty(t, failures)
 	history, err := eng.ExportHistory(ctx, id)
 	require.NoError(t, err)
-	require.Equal(t, sv.StatusCompleted, history.Instance.Status)
+	require.Equal(t, terminal, history.Instance.Status)
 	require.Equal(t, "selvedge.history/v1", history.Format)
 	require.NotEmpty(t, history.Events)
 	data, err := json.MarshalIndent(history, "", "  ")
@@ -214,7 +221,11 @@ func recordCompletedSelvedgeHistory(t *testing.T, ctx context.Context, eng *selv
 	parsed, err := sv.ParseHistory(data)
 	require.NoError(t, err)
 	filename := filepath.Join("testdata", "selvedge", filepath.Base(temporalFilename))
-	assertSelvedgeObservedHistory(t, filepath.Base(filename), parsed, observations.snapshot(id))
+	if temporalFilename == workflowModelCallHistoryFile {
+		assertSelvedgeModelCallObservations(t, observations.snapshot(id))
+	} else {
+		assertSelvedgeObservedHistory(t, filepath.Base(filename), parsed, observations.snapshot(id))
+	}
 	if t.Failed() {
 		return
 	}

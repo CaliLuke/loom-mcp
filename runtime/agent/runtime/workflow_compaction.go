@@ -67,7 +67,7 @@ func prepareCompaction(base *workflowPlanInput, input *PlanActivityInput) {
 }
 
 func compactionRecord(wf engine.WorkflowContext, base *workflowPlanInput, input PlanActivityInput, out *PlanActivityOutput, view index.ViewRef) hooks.Event {
-	if base.summaryApplied || !compaction.On(base.compactionState, base.Entries, base.contextSettings) || out.Recovery != nil {
+	if base.summaryApplied || !compaction.On(base.compactionState, base.Entries, base.contextSettings) || out.Recovery != nil || out.ModelCallLimit != nil {
 		return nil
 	}
 	d := base.compactionDecision
@@ -85,7 +85,7 @@ func compactionRecord(wf engine.WorkflowContext, base *workflowPlanInput, input 
 }
 
 func (r *Runtime) adoptCompaction(wf engine.WorkflowContext, base *workflowPlanInput, input PlanActivityInput, out *PlanActivityOutput, view index.ViewRef) error {
-	if out.Recovery == nil {
+	if out.Recovery == nil && out.ModelCallLimit == nil {
 		if input.Recovery == nil {
 			base.compactionSuppressed = base.compactionDecision.Skipped == compaction.NoProgress
 		}

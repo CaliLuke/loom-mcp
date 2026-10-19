@@ -142,8 +142,10 @@ type (
 	}
 
 	// PolicyOverrides configures per-run policy constraints. All fields are optional
-	// zero values mean no override.
+	// Scalar zero values and nil pointers mean no override.
 	PolicyOverrides struct {
+		// MaxModelCalls overrides logical model invocation reservations; nil inherits.
+		MaxModelCalls *int `json:"max_model_calls,omitzero"`
 		// Context overrides registered context settings for this run only.
 		Context *ContextOverrides `json:"context,omitzero"`
 		// PerTurnMaxToolCalls limits the number of tool calls the planner may issue per turn.
@@ -207,6 +209,7 @@ type (
 	}
 
 	policyOverridesWire struct {
+		MaxModelCalls       *int              `json:"max_model_calls,omitzero"`
 		Context             *ContextOverrides `json:"context,omitzero"`
 		PerTurnMaxToolCalls int
 		RestrictToTool      tools.Ident
@@ -404,6 +407,8 @@ type (
 
 	// PlanActivityInput carries the planner input for PlanStart and PlanResume activities.
 	PlanActivityInput struct {
+		// MaxModelCalls is the immutable worker-resolved run admission cap.
+		MaxModelCalls int `json:"max_model_calls,omitzero"`
 		// ChainPos and ContinuedFrom carry recorded continuation identity.
 		ChainPos      int                  `json:"chain_pos,omitzero"`
 		ContinuedFrom *index.RunCheckpoint `json:"continued_from,omitzero"`
@@ -527,6 +532,8 @@ type (
 	}
 	// PlanActivityOutput wraps the planner result produced by a plan/resume activity.
 	PlanActivityOutput struct {
+		// ModelCallLimit records an unsent reservation refused by the run cap.
+		ModelCallLimit *policy.ModelCallLimit `json:"model_call_limit,omitzero"`
 		// ContextOverflow replaces a result when any call marks the attempt.
 		ContextOverflow *contextmeasure.ContextOverflow `json:"context_overflow,omitzero"`
 		// Facts parallels CallKeys and comes from durable Completion.Facts.
@@ -970,6 +977,7 @@ func (o *PolicyOverrides) UnmarshalJSON(data []byte) error {
 
 func policyOverridesToWire(o PolicyOverrides) policyOverridesWire {
 	return policyOverridesWire{
+		MaxModelCalls:       o.MaxModelCalls,
 		Context:             o.Context,
 		PerTurnMaxToolCalls: o.PerTurnMaxToolCalls,
 		RestrictToTool:      o.RestrictToTool,
@@ -990,6 +998,7 @@ func policyOverridesToWire(o PolicyOverrides) policyOverridesWire {
 
 func policyOverridesFromWire(wire policyOverridesWire) PolicyOverrides {
 	return PolicyOverrides{
+		MaxModelCalls:       wire.MaxModelCalls,
 		Context:             wire.Context,
 		PerTurnMaxToolCalls: wire.PerTurnMaxToolCalls,
 		RestrictToTool:      wire.RestrictToTool,

@@ -443,6 +443,8 @@ type (
 	// These values are evaluated during workflow execution to enforce limits and prevent
 	// runaway tool loops or budget overruns.
 	RunPolicy struct {
+		// MaxModelCalls caps logical model invocation reservations; zero is unlimited.
+		MaxModelCalls int
 		// ContextDefault configures qualified compaction defaults.
 		ContextDefault *ContextDefault
 		// MaxToolCalls caps the total number of tool invocations per run (0 = unlimited).

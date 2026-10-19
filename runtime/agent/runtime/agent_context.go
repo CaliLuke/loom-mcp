@@ -119,14 +119,7 @@ func (c *simplePlannerContext) ModelClient(id string) (model.Client, bool) {
 		ConversationID:       firstNonEmpty(c.sessionID, c.runID),
 		CaptureGenAIMessages: c.rt.captureGenAIMessages,
 	})
-	cli = &callInfoClientWrapper{
-		inner: cli,
-		store: c.rt.RunStore,
-		info: model.CallInfo{
-			AgentID: string(c.agent), RunID: c.runID, RootRunID: c.rootRunID,
-			SessionID: c.sessionID, TurnID: c.turnID, ModelID: id, Attempt: c.attempt,
-		},
-	}
+	cli = c.withModelCallAdmission(cli, id)
 	return cli, true
 }
 

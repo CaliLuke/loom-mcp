@@ -59,6 +59,7 @@ func newRunPolicyData(expr *agentsExpr.RunPolicyExpr) RunPolicyData {
 		}
 	}
 	if expr.DefaultCaps != nil {
+		rp.Caps.MaxModelCalls = expr.DefaultCaps.MaxModelCalls
 		rp.Caps.MaxToolCalls = expr.DefaultCaps.MaxToolCalls
 		if expr.DefaultCaps.MaxRecoveryTurns > 0 {
 			rp.Caps.MaxRecoveryTurns = expr.DefaultCaps.MaxRecoveryTurns

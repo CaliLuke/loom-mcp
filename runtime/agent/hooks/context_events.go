@@ -8,6 +8,7 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/compaction"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/contextcompat"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/model"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/prompt"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/transcript/index"
@@ -16,6 +17,8 @@ import (
 type (
 	// ContextCompactionEvent records a committed compaction or a suppressed attempt.
 	ContextCompactionEvent struct {
+		// ModelCallLimit records an unsent logical invocation refused by the run cap.
+		ModelCallLimit *policy.ModelCallLimit `json:"model_call_limit,omitzero"`
 		// Compatibility binds an attachment check to this decision boundary.
 		Compatibility   *contextcompat.Result `json:"compatibility,omitzero"`
 		Fingerprint     string                `json:"fingerprint,omitzero"`

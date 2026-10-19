@@ -20,6 +20,7 @@ Here’s a map of what loom-mcp just built for you based on your `design/*.go` f
             * `longrun.dispatch_planner`
         * **Exports Toolsets:***none*
         * **Run Policy:**
+            * Max Model Calls (logical reservations, 0 = unlimited): `0`
             * Max Tool Calls: `300`
             * Max Recovery Turns: `10`
             * Time Budget: `0s`
@@ -30,6 +31,7 @@ Here’s a map of what loom-mcp just built for you based on your `design/*.go` f
             * `longrun.dispatch_planner`
         * **Exports Toolsets:***none*
         * **Run Policy:**
+            * Max Model Calls (logical reservations, 0 = unlimited): `0`
             * Max Tool Calls: `300`
             * Max Recovery Turns: `10`
             * Time Budget: `0s`
@@ -40,6 +42,7 @@ Here’s a map of what loom-mcp just built for you based on your `design/*.go` f
             * `longrun.dispatch_planner`
         * **Exports Toolsets:***none*
         * **Run Policy:**
+            * Max Model Calls (logical reservations, 0 = unlimited): `0`
             * Max Tool Calls: `300`
             * Max Recovery Turns: `10`
             * Time Budget: `0s`
@@ -50,6 +53,7 @@ Here’s a map of what loom-mcp just built for you based on your `design/*.go` f
             * `longrun.ledger_clerk`
         * **Exports Toolsets:***none*
         * **Run Policy:**
+            * Max Model Calls (logical reservations, 0 = unlimited): `0`
             * Max Tool Calls: `300`
             * Max Recovery Turns: `10`
             * Time Budget: `0s`
@@ -60,6 +64,7 @@ Here’s a map of what loom-mcp just built for you based on your `design/*.go` f
             * `longrun.ledger_clerk`
         * **Exports Toolsets:***none*
         * **Run Policy:**
+            * Max Model Calls (logical reservations, 0 = unlimited): `0`
             * Max Tool Calls: `300`
             * Max Recovery Turns: `10`
             * Time Budget: `0s`
@@ -70,6 +75,7 @@ Here’s a map of what loom-mcp just built for you based on your `design/*.go` f
             * `longrun.ledger_clerk`
         * **Exports Toolsets:***none*
         * **Run Policy:**
+            * Max Model Calls (logical reservations, 0 = unlimited): `0`
             * Max Tool Calls: `300`
             * Max Recovery Turns: `10`
             * Time Budget: `0s`
@@ -80,6 +86,7 @@ Here’s a map of what loom-mcp just built for you based on your `design/*.go` f
             * `longrun.ops_deployer`
         * **Exports Toolsets:***none*
         * **Run Policy:**
+            * Max Model Calls (logical reservations, 0 = unlimited): `0`
             * Max Tool Calls: `300`
             * Max Recovery Turns: `10`
             * Time Budget: `0s`
@@ -90,6 +97,7 @@ Here’s a map of what loom-mcp just built for you based on your `design/*.go` f
             * `longrun.ops_deployer`
         * **Exports Toolsets:***none*
         * **Run Policy:**
+            * Max Model Calls (logical reservations, 0 = unlimited): `0`
             * Max Tool Calls: `300`
             * Max Recovery Turns: `10`
             * Time Budget: `0s`
@@ -100,6 +108,7 @@ Here’s a map of what loom-mcp just built for you based on your `design/*.go` f
             * `longrun.ops_deployer`
         * **Exports Toolsets:***none*
         * **Run Policy:**
+            * Max Model Calls (logical reservations, 0 = unlimited): `0`
             * Max Tool Calls: `300`
             * Max Recovery Turns: `10`
             * Time Budget: `0s`

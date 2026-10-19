@@ -7,6 +7,7 @@ import (
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/compaction"
+	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/policy"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/run"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/runstore"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
@@ -17,6 +18,8 @@ type (
 	// PlannerStepEvent adopts every started call returned by one planner activity.
 	// ViewRef names the committed view used by that activity before history policy.
 	PlannerStepEvent struct {
+		// ModelCallLimit records an unsent logical invocation refused by the run cap.
+		ModelCallLimit *policy.ModelCallLimit `json:"model_call_limit,omitzero"`
 		// ContextOverrides records explicit per-run settings for budget validation.
 		ContextOverrides bool `json:"context_overrides,omitzero"`
 		// ContextFingerprint identifies the stored canonical effective settings.

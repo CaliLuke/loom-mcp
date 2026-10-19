@@ -41,6 +41,7 @@ type (
 	}
 
 	planActivityInputWire struct {
+		MaxModelCalls int `json:"max_model_calls,omitzero"`
 		// Models uses the protocol 7 API spelling and preserves sorted calibrations.
 		Models []api.ModelContext `json:"models,omitzero"`
 		// NOTE: Existing fields intentionally do not use JSON tags.
@@ -235,6 +236,7 @@ func decodePlanActivityInput(p *commonpb.Payload, valuePtr any) error {
 	}
 
 	dst.AgentID = w.AgentID
+	dst.MaxModelCalls = w.MaxModelCalls
 	dst.Models = w.Models
 	dst.RunID = w.RunID
 	dst.View = w.View
@@ -290,14 +292,15 @@ func encodePlanActivityInputWire(in *api.PlanActivityInput) (*planActivityInputW
 		return nil, fmt.Errorf("temporal: plan activity input is nil")
 	}
 	return &planActivityInputWire{
-		AgentID:    in.AgentID,
-		Models:     in.Models,
-		Step:       in.Step,
-		RunID:      in.RunID,
-		View:       in.View,
-		RunContext: in.RunContext,
-		Finalize:   in.Finalize,
-		Recovery:   in.Recovery,
+		MaxModelCalls: in.MaxModelCalls,
+		AgentID:       in.AgentID,
+		Models:        in.Models,
+		Step:          in.Step,
+		RunID:         in.RunID,
+		View:          in.View,
+		RunContext:    in.RunContext,
+		Finalize:      in.Finalize,
+		Recovery:      in.Recovery,
 
 		ToolPolicyActive:     in.ToolPolicyActive,
 		AllowedTools:         in.AllowedTools,

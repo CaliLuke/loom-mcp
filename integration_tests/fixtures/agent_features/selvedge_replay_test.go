@@ -25,7 +25,7 @@ func TestSelvedgeWorkflowReplay(t *testing.T) {
 	})
 	for _, suffix := range []string{"", "_child", "_child_run", "_continued", "_multimodal", "_summary", "_confirmed_pause", "_budget", "_default", "_nontext_resident"} {
 		t.Run("current"+suffix, func(t *testing.T) {
-			filename := "workflow_protocol_v19" + suffix + ".json"
+			filename := "workflow_protocol_v20" + suffix + ".json"
 			data, err := root.ReadFile(filename)
 			require.NoError(t, err)
 			history, err := sv.ParseHistory(data)
@@ -100,7 +100,7 @@ func TestSelvedgeWorkflowReplay(t *testing.T) {
 				assertSelvedgeContinuation(t, history)
 			}
 			plannerCount, summaryCount := len(observed.planners), len(observed.summaries)
-			for _, version := range []int{0, 18, api.WorkflowProtocolVersion + 1} {
+			for _, version := range []int{0, 19, api.WorkflowProtocolVersion + 1} {
 				altered, err := sv.ParseHistory(data)
 				require.NoError(t, err)
 				var input map[string]json.RawMessage
@@ -124,6 +124,18 @@ func TestSelvedgeWorkflowReplay(t *testing.T) {
 	}
 	t.Run("protocol18 actual history rejected", func(t *testing.T) {
 		data, err := root.ReadFile("workflow_protocol_v18.json")
+		require.NoError(t, err)
+		history, err := sv.ParseHistory(data)
+		require.NoError(t, err)
+		eng, live := newSelvedgeRecordingEngine(t)
+		fx := newFeatureRuntime(t, agentsruntime.WithEngine(eng), historyConfirmation())
+		registerHistoryReplayAgent(t, fx)
+		require.ErrorIs(t, eng.ReplayHistory(t.Context(), history), api.ErrWorkflowProtocolMismatch)
+		assert.Zero(t, live.hookCalls())
+	})
+
+	t.Run("protocol19 actual history rejected", func(t *testing.T) {
+		data, err := root.ReadFile("workflow_protocol_v19.json")
 		require.NoError(t, err)
 		history, err := sv.ParseHistory(data)
 		require.NoError(t, err)
@@ -164,7 +176,7 @@ func assertSelvedgeChildStart(t *testing.T, history *sv.RecordedHistory, parent 
 	var prepared *api.ContextStartOutput
 	var preparationSeq int64
 	children := 0
-	data, err := os.ReadFile("testdata/selvedge/workflow_protocol_v19_child_run.json")
+	data, err := os.ReadFile("testdata/selvedge/workflow_protocol_v20_child_run.json")
 	require.NoError(t, err)
 	childHistory, err := sv.ParseHistory(data)
 	require.NoError(t, err)

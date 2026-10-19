@@ -677,6 +677,29 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   allocation order is not completion order. Allocation failure fails unsent.
   Workers must share the store. The identity wrapper itself does not write records;
   the innermost planner client recorder does.
+- `DefaultCaps(MaxModelCalls(n))` and `RunPolicy.MaxModelCalls` configure a
+  per-run logical invocation cap. Unset defaults to unlimited. The DSL requires
+  n > 0; `PolicyOverrides.MaxModelCalls *int` uses nil to inherit and rejects
+  explicit zero/negative overrides. `WithRunMaxModelCalls` snapshots a value.
+- Initial `RecordContentInput.ModelCallPolicy` resolves the owning worker's cap
+  alongside seed/continuation content. Its recorded result is immutable across
+  replay, registration changes, activity retries, summary and finalizer calls.
+  Remote routes and direct workflow entry use the same worker authority.
+- The existing NextSeq ordinal reserves admission before every outer Complete
+  or Stream: only 1..N reach model middleware. Failed/preflight/unknown-outcome
+  reservations are not refunded. Each new retry invocation reserves again;
+  replay and stream Recv/Finalize/Close do not. Summary folds and transient
+  retries count; finalizers receive no exemption. HTTP hops inside one adapter
+  invocation count once. Children own separate counters/defaults within the
+  root storage scope. Durable engines require shared durable run stores.
+- A refused reservation is sticky for the activity. `policy.ModelCallLimit`
+  carries its positive Limit and original CallKey; `model_call_cap` is the
+  stable reason. PlannerStep or summary ContextCompactionSkipped records it
+  beside actual started keys, without putting the refused key into CallKeys,
+  Facts, usage, growth or ProducingCall. RunRecord read/export retains it.
+  After canonical adoption, `loom_mcp.model_call_cap` is a nonretryable terminal
+  failure; it bypasses recovery, overflow handling and automatic finalization,
+  including a time budget noticed afterward. Successful Nth calls can finish.
 - `Attempt` comes from `engine.ActivityAttemptFromContext`, not run resume
   metadata: Temporal reports its current attempt and in-memory execution uses
   1. Custom adapters set `engine.WithActivityAttempt`; absence reads as zero.
