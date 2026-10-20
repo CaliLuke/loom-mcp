@@ -10,6 +10,7 @@ import (
 
 type sourceSnapshot struct {
 	services         []*expr.ServiceExpr
+	rootsByService   map[string]*expr.RootExpr
 	projectedMethods map[string]map[string]struct{}
 }
 
@@ -18,6 +19,7 @@ type sourceSnapshot struct {
 // and reentrant without taking ownership of application transports.
 func collectSourceSnapshot(roots []eval.Root) *sourceSnapshot {
 	serviceByName := make(map[string]*expr.ServiceExpr)
+	rootsByService := make(map[string]*expr.RootExpr)
 	projectedMethods := make(map[string]map[string]struct{})
 
 	for _, root := range roots {
@@ -25,6 +27,7 @@ func collectSourceSnapshot(roots []eval.Root) *sourceSnapshot {
 		case *expr.RootExpr:
 			for _, svc := range r.Services {
 				serviceByName[svc.Name] = svc
+				rootsByService[svc.Name] = r
 			}
 		case *agentsexpr.RootExpr:
 			collectProjectedMethods(projectedMethods, r)
@@ -45,6 +48,7 @@ func collectSourceSnapshot(roots []eval.Root) *sourceSnapshot {
 
 	return &sourceSnapshot{
 		services:         services,
+		rootsByService:   rootsByService,
 		projectedMethods: projectedMethods,
 	}
 }

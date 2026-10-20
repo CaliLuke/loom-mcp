@@ -1505,20 +1505,8 @@ func emitToolCase(g *jen.Group, tool *ToolAdapter) {
 		return
 	}
 	if tool.HasPayload {
-		g.Var().Id("payload").Add(rawExpr(tool.PayloadType))
-		if len(tool.DefaultFields) > 0 || len(tool.RequiredFields) > 0 || len(tool.EnumFields) > 0 {
-			g.List(jen.Id("rawFields"), jen.Id("err")).Op(":=").Id("decodeMCPPayloadFields").Call(jen.Id("arguments"))
-			g.If(jen.Id("err").Op("!=").Nil()).Block(
-				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("mcpruntime").Dot("NewToolInputError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("err"), jen.Id("arguments"))))),
-			)
-		}
-		g.If(jen.Id("err").Op(":=").Id("decodeMCPPayloadStrict").Call(jen.Id("arguments"), jen.Op("&").Id("payload")), jen.Id("err").Op("!=").Nil()).Block(
-			jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("mcpruntime").Dot("NewToolInputError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("err"), jen.Id("arguments"))))),
-		)
-		emitToolDefaultAssignments(g, tool)
-		emitToolRequiredChecks(g, tool)
-		emitToolEnumChecks(g, tool)
-		g.If(jen.Id("err").Op(":=").Id("sdkbridge").Dot("ValidateToolArguments").Call(jen.Id("arguments"), jen.Lit(tool.InputSchema)), jen.Id("err").Op("!=").Nil()).Block(
+		g.List(jen.Id("payload"), jen.Id("err")).Op(":=").Id(tool.PayloadCodec.Name).Call(jen.Id("arguments"))
+		g.If(jen.Id("err").Op("!=").Nil()).Block(
 			jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("mcpruntime").Dot("NewToolInputError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("err"), jen.Id("arguments"))))),
 		)
 	}
@@ -1591,50 +1579,6 @@ func emitToolCase(g *jen.Group, tool *ToolAdapter) {
 			}),
 		),
 	})))
-}
-
-func emitToolDefaultAssignments(g *jen.Group, tool *ToolAdapter) {
-	if len(tool.DefaultFields) == 0 {
-		return
-	}
-	g.BlockFunc(func(block *jen.Group) {
-		for _, field := range tool.DefaultFields {
-			block.If(jen.List(jen.Id("_"), jen.Id("ok")).Op(":=").Id("rawFields").Index(jen.Lit(field.Name)), jen.Op("!").Id("ok")).Block(
-				jen.Id("payload").Dot(field.GoName).Op("=").Add(rawExpr(field.Literal)),
-			)
-		}
-	})
-}
-
-func emitToolRequiredChecks(g *jen.Group, tool *ToolAdapter) {
-	if len(tool.RequiredFields) == 0 {
-		return
-	}
-	g.BlockFunc(func(block *jen.Group) {
-		for _, field := range tool.RequiredFields {
-			block.If(jen.Id("err").Op(":=").Id("validateMCPPayloadRequired").Call(jen.Id("rawFields"), jen.Lit(field.Name), jen.Lit(field.AllowsNull)), jen.Id("err").Op("!=").Nil()).Block(
-				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("mcpruntime").Dot("NewToolInputError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("err"), jen.Id("arguments"))))),
-			)
-		}
-	})
-}
-
-func emitToolEnumChecks(g *jen.Group, tool *ToolAdapter) {
-	if len(tool.EnumFields) == 0 {
-		return
-	}
-	g.BlockFunc(func(block *jen.Group) {
-		for _, field := range tool.EnumFields {
-			args := make([]jen.Code, 0, 3+len(field.Values))
-			args = append(args, jen.Id("rawFields"), jen.Lit(field.Name), jen.Lit(field.Pointer))
-			for _, val := range field.Values {
-				args = append(args, jen.Lit(val))
-			}
-			block.If(jen.Id("err").Op(":=").Id("validateMCPPayloadEnum").Call(args...), jen.Id("err").Op("!=").Nil()).Block(
-				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("mcpruntime").Dot("NewToolInputError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("err"), jen.Id("arguments"))))),
-			)
-		}
-	})
 }
 
 func serviceMethodCall(tool *ToolAdapter, receiver *jen.Statement, ctx jen.Code, hasPayload bool, payload jen.Code, withStream bool, stream jen.Code) jen.Code {

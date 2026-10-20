@@ -3,6 +3,7 @@ package upstreampaths
 import (
 	"encoding/json/v2"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -22,6 +23,7 @@ var (
 func TestLoomVersionReferencesStayAligned(t *testing.T) {
 	repoRoot := loomMCPRepoRoot(t)
 	want := remoteLoomVersion(t, repoRoot)
+	generatedVersion := selectedLoomVersion(t, repoRoot, want)
 
 	for _, name := range []string{
 		"go.mod",
@@ -47,12 +49,27 @@ func TestLoomVersionReferencesStayAligned(t *testing.T) {
 			Version string `json:"loom_version"`
 		}
 		require.NoError(t, json.Unmarshal(readRepoFile(t, repoRoot, name), &marker), name)
-		require.Equal(t, want, marker.Version, "%s generated version", name)
+		require.Equal(t, generatedVersion, marker.Version, "%s generated version", name)
 	}
 
 	for _, root := range []string{"README.md", "quickstart/README.md", "docs", ".agents/skills/loom-mcp"} {
 		assertAdviceVersions(t, repoRoot, root, want)
 	}
+}
+
+// selectedLoomVersion follows the module selected by the same go command used
+// for generation. Local Loom builds identify themselves as (devel); module pins
+// and installation advice must still name the canonical release in either mode.
+func selectedLoomVersion(t *testing.T, repoRoot, pinned string) string {
+	t.Helper()
+	format := "{{if .Replace}}{{if .Replace.Version}}{{.Replace.Version}}{{else}}(devel){{end}}{{else}}{{.Version}}{{end}}"
+	command := exec.CommandContext(t.Context(), "go", "list", "-m", "-f", format, LoomCoreModule)
+	command.Dir = repoRoot
+	output, err := command.Output()
+	require.NoError(t, err)
+	selected := strings.TrimSpace(string(output))
+	require.Contains(t, []string{pinned, "(devel)"}, selected, "unexpected Loom module selection")
+	return selected
 }
 
 func assertAdviceVersions(t *testing.T, repoRoot, name, want string) {

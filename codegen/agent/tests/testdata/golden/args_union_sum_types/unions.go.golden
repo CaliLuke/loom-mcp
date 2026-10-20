@@ -11,6 +11,7 @@ import (
 	json "encoding/json/v2"
 	"fmt"
 	loom "github.com/CaliLuke/loom/pkg"
+	"unicode/utf8"
 )
 
 // Value is a sum-type union.
@@ -99,7 +100,7 @@ func (u Value) Validate() error {
 	}
 }
 
-// MarshalJSON marshals the union into its canonical discriminated JSON shape.
+// MarshalJSON marshals the union into the canonical {type,value} JSON shape.
 func (u Value) MarshalJSON() ([]byte, error) {
 	if err := u.Validate(); err != nil {
 		return nil, err
@@ -121,10 +122,10 @@ func (u Value) MarshalJSON() ([]byte, error) {
 	}{
 		Type:  string(u.kind),
 		Value: value,
-	})
+	}, loom.JSONOptions(), json.Deterministic(true))
 }
 
-// UnmarshalJSON unmarshals the union from its canonical discriminated JSON shape.
+// UnmarshalJSON unmarshals the union from the canonical {type,value} JSON shape.
 func (u *Value) UnmarshalJSON(data []byte) error {
 	var raw struct {
 		Type  string         `json:"type"`
@@ -136,20 +137,29 @@ func (u *Value) UnmarshalJSON(data []byte) error {
 	switch raw.Type {
 	case string(ValueKindNumber):
 		var v ValueNumber
-		if err := json.Unmarshal(raw.Value, &v); err != nil {
+		if len(raw.Value) == 0 || string(raw.Value) == "null" {
+			return loom.MissingFieldError("value", "body")
+		}
+		if err := json.Unmarshal(raw.Value, &v, loom.JSONOptions()); err != nil {
 			return err
 		}
 		u.kind = ValueKindNumber
 		u.Number = v
 	case string(ValueKindText):
 		var v ValueText
-		if err := json.Unmarshal(raw.Value, &v); err != nil {
+		if len(raw.Value) == 0 || string(raw.Value) == "null" {
+			return loom.MissingFieldError("value", "body")
+		}
+		if err := json.Unmarshal(raw.Value, &v, loom.JSONOptions()); err != nil {
 			return err
 		}
 		u.kind = ValueKindText
 		u.Text = v
 	default:
-		return fmt.Errorf("unexpected Value type %q", raw.Type)
+		return loom.InvalidEnumValueError("type", raw.Type, []any{
+			string(ValueKindNumber),
+			string(ValueKindText),
+		})
 	}
 	return nil
 }

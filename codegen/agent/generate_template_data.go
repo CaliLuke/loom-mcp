@@ -15,10 +15,6 @@ type (
 		Types []*typeData
 	}
 
-	toolUnionTypesFileData struct {
-		Unions []*toolUnionTypeData
-	}
-
 	toolTransportTypesFileData struct {
 		Types []*typeData
 	}

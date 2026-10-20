@@ -51,7 +51,7 @@ func TestCollectTopLevelValidations(t *testing.T) {
 		},
 	}
 
-	required, enums, defaults := collectTopLevelValidations(attr)
+	required, enums := collectTopLevelValidations(attr)
 
 	assert.Equal(t, []RequiredField{
 		{Name: "status"},
@@ -61,14 +61,6 @@ func TestCollectTopLevelValidations(t *testing.T) {
 	if assert.Len(t, enums, 2) {
 		assert.Equal(t, EnumField{Name: "status", Values: []string{"open", "closed"}, Pointer: false}, enums[0])
 		assert.Equal(t, EnumField{Name: "workflow_id", Values: []string{"prd-generation", "technical-design"}, Pointer: false}, enums[1])
-	}
-	if assert.Len(t, defaults, 1) {
-		assert.Equal(t, DefaultField{
-			Name:    "workflow_id",
-			GoName:  "WorkflowID",
-			Literal: `"prd-generation"`,
-			Kind:    "string",
-		}, defaults[0])
 	}
 }
 
@@ -82,7 +74,7 @@ func TestCollectTopLevelValidationsPreservesEnumDeclarationOrder(t *testing.T) {
 		},
 	}
 
-	_, enums, _ := collectTopLevelValidations(attr)
+	_, enums := collectTopLevelValidations(attr)
 
 	assert.Equal(t, []EnumField{
 		{Name: "second", Values: []string{"b"}, Pointer: true},

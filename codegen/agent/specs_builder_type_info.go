@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/CaliLuke/loom-mcp/v2/codegen/internal/jsontransport"
+
 	"github.com/santhosh-tekuri/jsonschema/v6"
 
 	"github.com/CaliLuke/loom-mcp/v2/boundedresult"
@@ -148,8 +150,11 @@ func (b *toolSpecBuilder) buildTypeInfo(tool *ToolData, att *goaexpr.AttributeEx
 	// Internal transport type used only by codecs for JSON decode+validation.
 	// This is the actual JSON contract (schema property names + missing detection).
 	transportTypeName := typeName + "Transport"
-	transportAttr := cloneWithJSONTags(tt)
-	transportAttr = b.ensureNestedLocalTransportTypes(scope, transportAttr)
+	transportAttr := jsontransport.CloneWithJSONTags(tt)
+	transportAttr, err := b.ensureNestedLocalTransportTypes(scope, transportAttr)
+	if err != nil {
+		return nil, err
+	}
 	// Collect union sum types as they appear in the transport graph (after
 	// localization). These are emitted into the toolset-local http package.
 	b.collectTransportUnionSumTypes(scope, transportAttr)
@@ -157,7 +162,6 @@ func (b *toolSpecBuilder) buildTypeInfo(tool *ToolData, att *goaexpr.AttributeEx
 	// JSON schema from transport attribute
 	schemaAttr := transportAttr
 	advertisedAttr := schemaAttr
-	var err error
 	if usage == usagePayload && len(tool.InjectedFields) > 0 {
 		advertisedAttr, err = AdvertisedPayloadAttribute(schemaAttr, tool.InjectedFields)
 		if err != nil {

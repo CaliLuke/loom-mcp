@@ -12,8 +12,8 @@ github.com/Azure/go-ansiterm v0.0.0-20261006220739-8c912ac31dd4 h1:m2xcjRABtG288
 github.com/Azure/go-ansiterm v0.0.0-20261006220739-8c912ac31dd4/go.mod h1:MTUE7ZuZO89FAtAwozGg6AWD83pcdefnEq5gF82MB8s=
 github.com/CaliLuke/go-sse v0.11.1-0.20261008010800-b29b33ae1a1e h1:8ikgsAY/zoRUd/7kLCrBjEVTKxNc99TA647E+Jcke8k=
 github.com/CaliLuke/go-sse v0.11.1-0.20261008010800-b29b33ae1a1e/go.mod h1:lXdhhI7K/QSTmuy5OiNyu32AQ/bUZ8aE8wj8taCn3QE=
-github.com/CaliLuke/loom v1.10.0-alpha.13 h1:W5qxRvejXVUHGI2RQyuW6jqA4kwIDuBQcRh8eDz830w=
-github.com/CaliLuke/loom v1.10.0-alpha.13/go.mod h1:BBJip0af503vxXbCkf79o/HFK+TdEGW2pnXTdj5YAKw=
+github.com/CaliLuke/loom v1.10.0-alpha.14 h1:3DURHyWQMZ4Nbg9X1Ruvjme3oW6lUOkj3YQfLZ2pPzA=
+github.com/CaliLuke/loom v1.10.0-alpha.14/go.mod h1:BBJip0af503vxXbCkf79o/HFK+TdEGW2pnXTdj5YAKw=
 github.com/CaliLuke/selvedge v0.0.0-20261012194623-a33adedea054 h1:Y9qhs9/xb+XsxWTMseBzhGWPjC2oPzBVCNTv3CcgNZg=
 github.com/CaliLuke/selvedge v0.0.0-20261012194623-a33adedea054/go.mod h1:eOFDmrA5pjpBv04aR+bj8Qr1Ngu2rTYyDwjUfIDFR2c=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=

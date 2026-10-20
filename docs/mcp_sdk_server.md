@@ -247,6 +247,16 @@ minimum/maximum and exclusive bounds without rounding 64-bit integer values.
 Invalid arguments return a tool error with `invalid_params` and a recovery hint;
 the service is not called. No application validation interceptor is required.
 
+Regenerated adapters decode into private transport types that retain field
+presence, validate the original arguments, and use Loom's generated conversion
+into service payloads. Defaults apply recursively to supplied nested objects,
+array elements, map values, and selected union branches, including floats and
+named or custom Go representations. An omitted optional object stays absent;
+its child defaults do not create that object. Required fields must still be
+supplied, even when they declare defaults. Tagged and untagged union matching
+uses Loom's shared codec generator. A non-nullable branch value cannot be
+missing or `null`; discriminator errors retain Loom's structured error details.
+
 An omitted field still receives its DSL default. Explicit zero remains zero and
 must satisfy the schema. Explicit `null` is accepted only when the field is
 nullable, independently of whether the field is optional. For a limit with
@@ -674,7 +684,7 @@ response headers.
 
 ## Module Dependency
 
-`loom-mcp` pins `github.com/CaliLuke/loom v1.10.0-alpha.13`. Regenerate service and client code when upgrading. MCP authorization remains application-owned.
+`loom-mcp` pins `github.com/CaliLuke/loom v1.10.0-alpha.14`. Regenerate service and client code when upgrading. MCP authorization remains application-owned.
 
 Defaults must satisfy their effective constraints, including inherited bounds and enums. Alpha.3 rejects invalid defaults instead of allowing recovery-example generation to replace them.
 

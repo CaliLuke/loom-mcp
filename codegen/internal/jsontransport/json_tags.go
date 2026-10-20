@@ -1,12 +1,12 @@
-package codegen
+package jsontransport
 
 import (
 	"strings"
 
-	goaexpr "github.com/CaliLuke/loom/expr"
+	"github.com/CaliLuke/loom/expr"
 )
 
-// cloneWithJSONTags returns a deep copy of the provided attribute where:
+// CloneWithJSONTags returns a deep copy of the provided attribute where:
 //   - all object fields (including nested objects) carry json struct tags whose
 //     names match the DSL field names, and
 //   - any `struct:pkg:*` locator metadata is removed so synthesized transport
@@ -18,14 +18,14 @@ import (
 //
 // Existing struct:tag:json metadata is preserved so DSL authors can override
 // tags explicitly using Meta or design-specific helpers.
-func cloneWithJSONTags(att *goaexpr.AttributeExpr) *goaexpr.AttributeExpr {
-	if att == nil || att.Type == nil || att.Type == goaexpr.Empty {
+func CloneWithJSONTags(att *expr.AttributeExpr) *expr.AttributeExpr {
+	if att == nil || att.Type == nil || att.Type == expr.Empty {
 		return att
 	}
 
-	// Work on a deep copy so that we never mutate the shared Goa design
+	// Work on a deep copy so that we never mutate the shared Loom design
 	// expressions used by other generators.
-	cloned := goaexpr.DupAtt(att)
+	cloned := expr.DupAtt(att)
 
 	normalizeTransportAttrRecursive(cloned)
 
@@ -36,15 +36,15 @@ func cloneWithJSONTags(att *goaexpr.AttributeExpr) *goaexpr.AttributeExpr {
 //   - removes struct:pkg:* locators so nested user types can be materialized
 //     locally, and
 //   - ensures object fields carry json:name tags matching the DSL field names.
-func normalizeTransportAttrRecursive(att *goaexpr.AttributeExpr) {
-	normalizeTransportAttrRecursiveSeen(att, make(map[*goaexpr.AttributeExpr]struct{}))
+func normalizeTransportAttrRecursive(att *expr.AttributeExpr) {
+	normalizeTransportAttrRecursiveSeen(att, make(map[*expr.AttributeExpr]struct{}))
 }
 
 // normalizeTransportAttrRecursiveSeen preserves one normalization pass per
 // attribute node so recursive user types terminate while shared nested fields
 // still receive their edge-level JSON tags from the parent object walk.
-func normalizeTransportAttrRecursiveSeen(att *goaexpr.AttributeExpr, seen map[*goaexpr.AttributeExpr]struct{}) {
-	if att == nil || att.Type == nil || att.Type == goaexpr.Empty {
+func normalizeTransportAttrRecursiveSeen(att *expr.AttributeExpr, seen map[*expr.AttributeExpr]struct{}) {
+	if att == nil || att.Type == nil || att.Type == expr.Empty {
 		return
 	}
 	if _, ok := seen[att]; ok {
@@ -63,17 +63,17 @@ func normalizeTransportAttrRecursiveSeen(att *goaexpr.AttributeExpr, seen map[*g
 		}
 	}
 
-	obj := goaexpr.AsObject(att.Type)
+	obj := expr.AsObject(att.Type)
 	if obj == nil {
 		switch dt := att.Type.(type) {
-		case goaexpr.UserType:
+		case expr.UserType:
 			normalizeTransportAttrRecursiveSeen(dt.Attribute(), seen)
-		case *goaexpr.Array:
+		case *expr.Array:
 			normalizeTransportAttrRecursiveSeen(dt.ElemType, seen)
-		case *goaexpr.Map:
+		case *expr.Map:
 			normalizeTransportAttrRecursiveSeen(dt.KeyType, seen)
 			normalizeTransportAttrRecursiveSeen(dt.ElemType, seen)
-		case *goaexpr.Union:
+		case *expr.Union:
 			for _, nat := range dt.Values {
 				if nat == nil {
 					continue
@@ -89,12 +89,12 @@ func normalizeTransportAttrRecursiveSeen(att *goaexpr.AttributeExpr, seen map[*g
 			continue
 		}
 		if nat.Attribute.Meta == nil {
-			nat.Attribute.Meta = make(goaexpr.MetaExpr)
+			nat.Attribute.Meta = make(expr.MetaExpr)
 		}
 		// Only set the json name when no explicit json tag metadata was provided
 		// in the DSL.
 		//
-		// Use "struct:tag:json:name" (not "struct:tag:json") so Goa can append
+		// Use "struct:tag:json:name" (not "struct:tag:json") so Loom can append
 		// ",omitempty" automatically for fields that are not required by their
 		// parent object.
 		if _, ok := nat.Attribute.Meta["struct:tag:json"]; !ok {

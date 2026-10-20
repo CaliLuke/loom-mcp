@@ -58,7 +58,8 @@ func Generate(genpkg string, roots []eval.Root, files []*codegen.File) ([]*codeg
 
 		// Build mapping and adapter data early so we can customize generated clients
 		mapping := exprBuilder.BuildServiceMapping()
-		adapterGen := newAdapterGenerator(genpkg, svc, mcp, mapping, projected)
+		serviceData := service.NewServicesData(source.rootsByService[svc.Name]).Get(svc.Name)
+		adapterGen := newAdapterGenerator(genpkg, svc, mcp, mapping, projected, serviceData.Scope)
 		adapterData, err := adapterGen.buildAdapterData()
 		if err != nil {
 			return nil, fmt.Errorf("build adapter data for %s: %w", svc.Name, err)
@@ -177,6 +178,9 @@ func generateMCPTransport(genpkg string, svc *expr.ServiceExpr, data *AdapterDat
 
 	pkgName := data.MCPPackage
 	files = append(files, buildMCPAdapterFile(genpkg, svc, data, svcName))
+	if payloads := toolPayloadFile(genpkg, svc, data); payloads != nil {
+		files = append(files, payloads)
+	}
 	if discovery := oauthDiscoveryFile(data); discovery != nil {
 		files = append(files, discovery)
 	}
@@ -218,6 +222,7 @@ func adapterImports(genpkg string, svc *expr.ServiceExpr, svcName string, data *
 		{Path: "strconv"},
 		{Path: "strings"},
 		{Path: "time"},
+		{Path: "unicode/utf8"},
 		{Path: "go.opentelemetry.io/otel"},
 		{Path: "go.opentelemetry.io/otel/attribute"},
 		{Path: "go.opentelemetry.io/otel/codes"},

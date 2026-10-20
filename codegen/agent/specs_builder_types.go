@@ -1,6 +1,7 @@
 package codegen
 
 import (
+	"github.com/CaliLuke/loom-mcp/v2/codegen/internal/jsontransport"
 	"github.com/CaliLuke/loom/codegen"
 	"github.com/CaliLuke/loom/codegen/service"
 	goaexpr "github.com/CaliLuke/loom/expr"
@@ -24,12 +25,12 @@ type (
 		tools []*toolEntry
 		// Unions contains the sum-type unions required by any generated tool types
 		// in this specs package.
-		Unions []*toolUnionTypeData
+		Unions []*jsontransport.UnionType
 		// TransportUnions contains the sum-type unions required by any generated
 		// transport types in the toolset-local http package. These must be derived
 		// from the transport attribute graph (after localization) so they do not
 		// leak service `gen/types` references into tool JSON.
-		TransportUnions []*toolUnionTypeData
+		TransportUnions []*jsontransport.UnionType
 		// CodecTransformHelpers contains helper functions produced by Goa's
 		// GoTransform when generating codec-local conversions (transport <-> public).
 		// These are emitted once per package to support recursive types without
@@ -244,10 +245,10 @@ type (
 		helperScope *codegen.NameScope
 		// unions accumulates all union sum types referenced by generated tool
 		// payload/result/sidecar types in this specs package, indexed by union hash.
-		unions map[string]*toolUnionTypeData
+		unions map[string]*jsontransport.UnionType
 		// transportUnions accumulates all union sum types referenced by transport
 		// helper graphs emitted into the toolset-local http package.
-		transportUnions map[string]*toolUnionTypeData
+		transportUnions map[string]*jsontransport.UnionType
 		// codecTransformHelpers accumulates unique GoTransform helper functions
 		// required by codec-local conversions (transport <-> public).
 		codecTransformHelpers    []*codegen.TransformFunctionData

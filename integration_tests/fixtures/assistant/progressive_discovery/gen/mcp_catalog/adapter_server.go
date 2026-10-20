@@ -1416,20 +1416,8 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 	}
 	switch p.Name {
 	case "lookup":
-		var payload *catalog.LookupPayload
-		rawFields, err := decodeMCPPayloadFields(arguments)
+		payload, err := decodeLookupPayload(arguments)
 		if err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, mcpruntime.NewToolInputError(err, "invalid_params", lookupInputRecovery(err, arguments)))
-		}
-		if err := decodeMCPPayloadStrict(arguments, &payload); err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, mcpruntime.NewToolInputError(err, "invalid_params", lookupInputRecovery(err, arguments)))
-		}
-		{
-			if err := validateMCPPayloadRequired(rawFields, "query", false); err != nil {
-				return true, a.sendToolError(ctx, stream, p.Name, mcpruntime.NewToolInputError(err, "invalid_params", lookupInputRecovery(err, arguments)))
-			}
-		}
-		if err := sdkbridge.ValidateToolArguments(arguments, "{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Lookup query\"}},\"additionalProperties\":false}"); err != nil {
 			return true, a.sendToolError(ctx, stream, p.Name, mcpruntime.NewToolInputError(err, "invalid_params", lookupInputRecovery(err, arguments)))
 		}
 		if err := agentruntime.RecordToolPayload(ctx, payload); err != nil {

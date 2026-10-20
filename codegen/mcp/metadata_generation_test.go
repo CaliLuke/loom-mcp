@@ -78,6 +78,10 @@ func TestGenerateUnionRecoveryKeepsCallerSelectedVariant(t *testing.T) {
 		{Name: "list", Attribute: &expr.AttributeExpr{Type: &expr.Object{{Name: "limit", Attribute: &expr.AttributeExpr{Type: expr.Int, DefaultValue: 50}}}}},
 		{Name: "history", Attribute: &expr.AttributeExpr{Type: &expr.Object{{Name: "limit", Attribute: &expr.AttributeExpr{Type: expr.Int, DefaultValue: 10}}}}},
 	}}
+	// Match DSL appendUnionBranch: inline object branches are named before codegen.
+	for _, branch := range union.Values {
+		branch.Attribute.Type = expr.Root.NewUnionBranch("Action"+gcodegen.Goify(branch.Name, true), expr.DupAtt(branch.Attribute))
+	}
 	methods["lookup"].Payload = &expr.AttributeExpr{Type: &expr.UserTypeExpr{TypeName: "LookupPayload", AttributeExpr: &expr.AttributeExpr{Type: &expr.Object{{Name: "request", Attribute: &expr.AttributeExpr{Type: union}}}, Validation: &expr.ValidationExpr{Required: []string{"request"}}}}}
 	mcpexpr.Root.RegisterMCP(svc, &mcpexpr.MCPExpr{Name: "recovery", Version: "1.0.0", Tools: []*mcpexpr.ToolExpr{{Name: "lookup", Method: methods["lookup"]}}})
 	root := testRootExpr([]*expr.ServiceExpr{svc}, nil)

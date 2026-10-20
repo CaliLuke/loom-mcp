@@ -10,7 +10,7 @@ Verified on 2026-10-08:
 | Dependency | Version |
 | --- | --- |
 | Go | 1.27.2 |
-| Loom | v1.10.0-alpha.13 (verified 2026-10-20) |
+| Loom | v1.10.0-alpha.14 (verified 2026-10-20) |
 | MongoDB server / Go driver | 9.0.4 / v2.9.2 |
 | Redis server / Go client | 8.10.2 / CaliLuke/go-redis v9.23.1-0.20261014134601-1073297e76ea (client verified 2026-10-14) |
 | OpenAI Go SDK | v3.74.0 |
@@ -26,13 +26,13 @@ maintained `go.yaml.in/yaml/v3` package.
 
 Regenerate code when adopting Loom alpha.10. Protobuf scalar presence is
 represented by pointer fields; handwritten protobuf request construction must
-set those fields explicitly (for example with `proto.String`). The tool union
-renderer owns its private metadata types and does not depend on Loom's service
-renderer metadata representation.
+set those fields explicitly (for example with `proto.String`). Tool union codecs
+use Loom's shared union generator and JSON branch analysis. Loom-MCP supplies
+transport-local types and validators to that shared implementation.
 
 Explicit exceptions:
 
-- Loom uses the published alpha.13 release.
+- Loom uses the published alpha.14 release.
 - The MCP Go SDK pins `v1.8.1-0.20261016161459-3e9d812b1814`, verified on
   2026-10-17 against upstream commit `3e9d812b1814`. Stable v1.8.0 still predates
   the request-summary API required by the SDK bridge. This pin includes the
@@ -108,3 +108,12 @@ Regenerate service, client, and server code together. This release fixes HTTP
 response validator discovery for untagged unions. Status-derived custom error
 names require explicit `ErrorNameFromStatus()` in the HTTP error response DSL;
 existing designs retain their authored error identity and required-header rules.
+
+## Loom alpha.14 shared payload codecs
+
+Regenerate MCP adapters and agent tool codecs together. MCP arguments now use
+Loom transport types and conversion plans, so nested defaults apply only to
+absent values. Supplied zero, false, empty collections and allowed nulls retain
+their meaning. Required fields remain required even when they declare defaults.
+Tagged and untagged tool unions use Loom’s shared JSON codecs and branch
+validation; ambiguous or unmatched untagged values are rejected.

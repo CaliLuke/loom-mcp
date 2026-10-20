@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/CaliLuke/loom-mcp/v2/codegen/internal/jsontransport"
 	"github.com/CaliLuke/loom-mcp/v2/codegen/shared"
 	"github.com/CaliLuke/loom/codegen"
 	"github.com/CaliLuke/loom/codegen/service"
@@ -196,7 +197,7 @@ func newToolSpecBuilder(genpkg string, svc *service.Data) *toolSpecBuilder {
 		svcImports:               svcImports,
 		types:                    make(map[string]*typeData),
 		helperScope:              scope,
-		unions:                   make(map[string]*toolUnionTypeData),
+		unions:                   make(map[string]*jsontransport.UnionType),
 		codecTransformHelperKeys: make(map[string]struct{}),
 	}
 }
@@ -315,81 +316,12 @@ func (b *toolSpecBuilder) ensureNestedLocalTypes(scope *codegen.NameScope, att *
 // Transport types are internal: they exist only to decode/validate JSON using
 // HTTP server-body conventions (pointer primitives + explicit json field names)
 // before converting to the public tool types used throughout the codebase.
-func (b *toolSpecBuilder) ensureNestedLocalTransportTypes(scope *codegen.NameScope, att *goaexpr.AttributeExpr) *goaexpr.AttributeExpr {
-	if att == nil || att.Type == nil || att.Type == goaexpr.Empty {
-		return att
+func (b *toolSpecBuilder) ensureNestedLocalTransportTypes(scope *codegen.NameScope, att *goaexpr.AttributeExpr) (*goaexpr.AttributeExpr, error) {
+	cloned, locals, err := jsontransport.LocalizeNestedTypes(att)
+	if err != nil {
+		return nil, err
 	}
-	cloned := goaexpr.DupAtt(att)
-	localByID := make(map[string]goaexpr.UserType)
-	localsByName := make(map[string]*goaexpr.UserTypeExpr)
-	_ = codegen.Walk(cloned, func(a *goaexpr.AttributeExpr) error {
-		if a == nil || a.Type == nil || a.Type == goaexpr.Empty {
-			return nil
-		}
-		// Do not rewrite the root type itself; only localize nested user types.
-		if a == cloned {
-			return nil
-		}
-		ut, ok := a.Type.(goaexpr.UserType)
-		if !ok || ut == nil {
-			return nil
-		}
-
-		// Determine the type name for the nested user type.
-		var name string
-		switch u := ut.(type) {
-		case *goaexpr.UserTypeExpr:
-			name = codegen.Goify(u.TypeName, true)
-		case *goaexpr.ResultTypeExpr:
-			name = codegen.Goify(u.TypeName, true)
-		default:
-			return nil
-		}
-		if name == "" {
-			name = codegen.Goify(ut.Name(), true)
-		}
-		if name == "" {
-			return nil
-		}
-
-		// IMPORTANT (Goa-style): do not pre-reserve a helper name using the *source*
-		// user type as the scope key. Goa's NameScope keys user types by (hashed) name.
-		// Reserving "FooTransport" under the hash for "Foo" causes later references to
-		// the helper user type (hash "FooTransport") to become "FooTransport2" while the
-		// emitted definition stays "FooTransport".
-		//
-		// Instead, insert a helper user type whose *own name* is the intended base
-		// ("FooTransport") and let NameScope consistently derive the final symbol for
-		// both references and emitted definitions.
-		uniqueName := name + "Transport"
-		id := ut.ID()
-		if id != "" {
-			if cached, ok := localByID[id]; ok && cached != nil {
-				a.Type = cached
-				return nil
-			}
-		}
-		base := stripStructPkgMeta(goaexpr.DupAtt(ut.Attribute()))
-		normalizeTransportAttrRecursive(base)
-		local := &goaexpr.UserTypeExpr{
-			AttributeExpr: base,
-			TypeName:      uniqueName,
-		}
-		if id != "" {
-			localByID[id] = local
-		}
-		localsByName[uniqueName] = local
-		a.Type = local
-		return nil
-	})
-
-	localNames := make([]string, 0, len(localsByName))
-	for name := range localsByName {
-		localNames = append(localNames, name)
-	}
-	sort.Strings(localNames)
-	for _, localName := range localNames {
-		ut := localsByName[localName]
+	for _, ut := range locals {
 		name := scope.GoTypeName(&goaexpr.AttributeExpr{Type: ut})
 		key := "transport:" + name
 		if _, exists := b.types[key]; exists {
@@ -425,5 +357,5 @@ func (b *toolSpecBuilder) ensureNestedLocalTransportTypes(scope *codegen.NameSco
 		}
 	}
 
-	return cloned
+	return cloned, nil
 }

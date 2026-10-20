@@ -36,7 +36,10 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
 
 ## Type References
 
-- Always derive type names and refs through `NameScope` helpers.
+- Always derive type names and refs through `NameScope` helpers. MCP adapters
+  use the original service analysis scope for service references and transforms.
+  Private transport registries retain source type identity and authored names
+  until their own `NameScope` assigns Go identifiers; do not pre-Goify cache keys.
 - Prefer `GoTypeRef` and `GoFullTypeRef` over string concatenation.
 - Preserve original attributes so locator metadata remains intact.
 - Let the shared type system own pointer and value semantics. Do not force pointer mode outside transport-validation cases.
@@ -92,6 +95,17 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   tests.
 
 ## MCP Generator Rules
+
+- Ordinary method-backed MCP tool inputs use private transport graphs and
+  `codegen.GoTransform` into the service payload after raw schema admission.
+  Do not add manual default switches or mutate raw JSON to fill defaults.
+  Preserve supplied zero, empty and nullable-null values. Required absence
+  remains invalid, even with a default; absent optional objects stay absent.
+- `codegen/internal/jsontransport` owns shared agent/MCP transport localization.
+  It delegates union methods and untagged matching to Loom's public
+  `codegen/uniongen` and `codegen/unionjson`; keep validation contexts aligned
+  with physical transport or public storage. Normalize test union branches
+  through DSL evaluation or `expr.Root.NewUnionBranch`, as production does.
 
 - Treat MCP as a transport layered on service designs.
 - Compose on the existing codegen pipeline rather than forking transport stacks.

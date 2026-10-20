@@ -13,7 +13,7 @@ var _ = API("assistant", func() {
 		Host("dev", func() {
 			URI("http://localhost:8080")
 		})
-		Services("assistant")
+		Services("assistant", "payload_defaults")
 	})
 })
 

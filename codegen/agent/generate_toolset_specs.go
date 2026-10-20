@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/CaliLuke/loom-mcp/v2/codegen/internal/jsontransport"
+
 	"github.com/CaliLuke/loom-mcp/v2/codegen/shared"
 	"github.com/CaliLuke/loom-mcp/v2/internal/upstreampaths"
 	"github.com/CaliLuke/loom/codegen"
@@ -147,6 +149,7 @@ func toolsetSpecsFiles(data *GeneratorData, specsCache *toolSpecsDataCache) ([]*
 				codegen.NewImport("json", "encoding/json/v2"),
 				codegen.NewImport("jsontext", "encoding/json/jsontext"),
 				codegen.SimpleImport("fmt"),
+				codegen.SimpleImport("unicode/utf8"),
 				codegen.LoomImport(""),
 			}
 			validateImports = append(validateImports, timports...)
@@ -164,12 +167,13 @@ func toolsetSpecsFiles(data *GeneratorData, specsCache *toolSpecsDataCache) ([]*
 					codegen.NewImport("json", "encoding/json/v2"),
 					codegen.NewImport("jsontext", "encoding/json/jsontext"),
 					codegen.SimpleImport("fmt"),
+					codegen.SimpleImport("unicode/utf8"),
 					codegen.LoomImport(""),
 				)
 				unionImports = append(unionImports, timports...)
 				unionSections := []codegen.Section{
 					codegen.Header(ts.Name+" tool transport union types", transportPkgName, unionImports),
-					toolUnionTypesSection(toolUnionTypesFileData{Unions: specsData.TransportUnions}),
+					jsontransport.UnionsSection(specsData.TransportUnions),
 				}
 				out = append(out, &codegen.File{Path: filepath.Join(ts.SpecsDir, transportDirName, "unions.go"), Sections: unionSections})
 			}
@@ -190,12 +194,13 @@ func toolsetSpecsFiles(data *GeneratorData, specsCache *toolSpecsDataCache) ([]*
 				codegen.NewImport("json", "encoding/json/v2"),
 				codegen.NewImport("jsontext", "encoding/json/jsontext"),
 				codegen.SimpleImport("fmt"),
+				codegen.SimpleImport("unicode/utf8"),
 				codegen.LoomImport(""),
 			)
 			unionImports = append(unionImports, typeImports...)
 			unionSections := []codegen.Section{
 				codegen.Header(ts.Name+" tool union types", ts.SpecsPackageName, unionImports),
-				toolUnionTypesSection(toolUnionTypesFileData{Unions: specsData.Unions}),
+				jsontransport.UnionsSection(specsData.Unions),
 			}
 			out = append(out, &codegen.File{Path: filepath.Join(ts.SpecsDir, "unions.go"), Sections: unionSections})
 		}
@@ -284,6 +289,7 @@ func toolsetProviderFile(genpkg string, ts *ToolsetData) *codegen.File {
 		codegen.NewImport("jsontext", "encoding/json/jsontext"),
 		codegen.SimpleImport("errors"),
 		codegen.SimpleImport("fmt"),
+		codegen.SimpleImport("unicode/utf8"),
 		&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/planner"},
 		&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/runtime"},
 		&codegen.ImportSpec{Path: "github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"},

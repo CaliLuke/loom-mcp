@@ -118,8 +118,17 @@ func TestGeneratedAgentDesignsCompile(t *testing.T) {
 			generate: compileAgentScenario(testscenarios.ArgsUnionSumTypes()),
 		},
 		{
-			name:     "custom union envelope",
-			generate: generateCustomUnionAgentDesign,
+			name: "custom union envelope",
+			generate: func(t *testing.T) []*gcodegen.File {
+				return generateUnionAgentDesign(t, false)
+			},
+		},
+		{
+			name: "untagged union",
+			generate: func(t *testing.T) []*gcodegen.File {
+				return generateUnionAgentDesign(t, true)
+			},
+			moduleTest: untaggedUnionRuntimeTest,
 		},
 		{
 			name:     "server data projection",
@@ -192,7 +201,7 @@ func compileAgentScenario(design func()) func(*testing.T) []*gcodegen.File {
 	}
 }
 
-func generateCustomUnionAgentDesign(t *testing.T) []*gcodegen.File {
+func generateUnionAgentDesign(t *testing.T, untagged bool) []*gcodegen.File {
 	t.Helper()
 	return generateCompileDesign(t, func() {
 		API("assistant", func() {})
@@ -206,6 +215,9 @@ func generateCustomUnionAgentDesign(t *testing.T) []*gcodegen.File {
 		})
 		request := Type("CustomRequest", func() {
 			OneOf("request", "Custom action envelope", func() {
+				if untagged {
+					Untagged()
+				}
 				Meta("oneof:type:field", "action")
 				Meta("oneof:value:field", "payload")
 				Attribute("lookup_branch", lookup, func() {

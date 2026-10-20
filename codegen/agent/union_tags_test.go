@@ -73,7 +73,7 @@ func TestGeneratedAgentUnionUsesExplicitVariantTags(t *testing.T) {
 	require.Contains(t, unions, `case string(`)
 	require.Contains(t, unions, "get_active")
 	require.Contains(t, unions, "InvalidEnumValueError(\"action\"")
-	require.Contains(t, unions, "Type string `json:\"action\"`")
-	require.Contains(t, unions, "Value any `json:\"payload\"`")
-	require.Contains(t, unions, "Value jsontext.Value `json:\"payload\"`")
+	require.Regexp(t, "Type\\s+string\\s+`json:\"action\"`", unions)
+	require.Regexp(t, "Value\\s+any\\s+`json:\"payload\"`", unions)
+	require.Regexp(t, "Value\\s+jsontext[.]Value\\s+`json:\"payload\"`", unions)
 }

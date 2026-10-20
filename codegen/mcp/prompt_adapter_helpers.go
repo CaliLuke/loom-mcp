@@ -113,7 +113,7 @@ func promptArgsFromPayload(attr *expr.AttributeExpr) []PromptArg {
 			required[n] = struct{}{}
 		}
 	}
-	_, enumFields, _ := collectTopLevelValidations(attr)
+	_, enumFields := collectTopLevelValidations(attr)
 	enums := make(map[string][]string, len(enumFields))
 	for _, field := range enumFields {
 		enums[field.Name] = field.Values

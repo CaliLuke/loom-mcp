@@ -139,7 +139,7 @@ type (
 		// Simple validations (top-level only)
 		RequiredFields []RequiredField
 		EnumFields     []EnumField
-		DefaultFields  []DefaultField
+		PayloadCodec   *toolPayloadCodec
 		// ExampleArguments contains a minimal valid JSON for tool arguments
 		ExampleArguments string
 		// CanonicalExampleJSON is a deterministic, always-valid JSON example of
@@ -187,14 +187,6 @@ type (
 	RequiredField struct {
 		Name       string
 		AllowsNull bool
-	}
-
-	// DefaultField describes a top-level payload field default assignment.
-	DefaultField struct {
-		Name    string
-		GoName  string
-		Literal string
-		Kind    string
 	}
 
 	// EnumField describes a top-level payload enum validation in declaration order.
@@ -306,6 +298,7 @@ type (
 		mapping         *ServiceMethodMapping
 		projected       []*ProjectedToolAdapter
 		scope           *codegen.NameScope
+		payloadScope    *codegen.NameScope
 	}
 )
 
@@ -333,6 +326,7 @@ func newAdapterGenerator(
 	mcp *mcpexpr.MCPExpr,
 	mapping *ServiceMethodMapping,
 	projected []*ProjectedToolAdapter,
+	scope *codegen.NameScope,
 ) *adapterGenerator {
 	return &adapterGenerator{
 		genpkg:          genpkg,
@@ -340,7 +334,8 @@ func newAdapterGenerator(
 		mcp:             mcp,
 		mapping:         mapping,
 		projected:       projected,
-		scope:           codegen.NewNameScope(),
+		scope:           scope,
+		payloadScope:    codegen.NewNameScope(),
 	}
 }
 
@@ -593,10 +588,13 @@ func (g *adapterGenerator) populateToolPayloadData(adapter *ToolAdapter, tool *m
 		return fmt.Errorf("build schema for tool %q: %w", tool.Name, err)
 	}
 	adapter.InputSchema = schema
-	req, enums, defaults := collectTopLevelValidations(payload)
+	req, enums := collectTopLevelValidations(payload)
 	adapter.RequiredFields = req
 	adapter.EnumFields = enums
-	adapter.DefaultFields = defaults
+	adapter.PayloadCodec, err = g.buildToolPayloadCodec(payload, tool.Method.Name)
+	if err != nil {
+		return err
+	}
 	adapter.ExampleArguments = synthesizeCanonicalExample(payload)
 	adapter.CanonicalExampleJSON = adapter.ExampleArguments
 	adapter.UnionEnvelopes = collectUnionEnvelopes(payload)
