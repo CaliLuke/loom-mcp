@@ -79,6 +79,8 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 
 ## Current Product Rules
 
+- Gemini and Vertex keep SDK automatic continuation disabled. The adapter owns each generation hop, request budgets, partial-output rejection, and usage accounting.
+
 - When continuation strips reasoning, omit message containers left without parts. Preserve canonical entry provenance and source evidence; never invent placeholder content.
 - Compacted runtime views validate canonical roles, checkpoint boundaries and tool handshakes with `GrammarCanonical`. Do not apply Bedrock role alternation to every provider; retain adjacent provider message boundaries.
 - Transcript projection must never fabricate signed or encrypted reasoning. Unsigned thinking is presentation-only; replay genuine provider bytes unchanged.
