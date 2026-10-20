@@ -154,6 +154,13 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   The official SDK exclusively owns request envelopes and bodies. The bridge
   and generated code never read, buffer, replace, or parse request bodies and
   never parse or rewrite SDK response bodies.
+- Public names, service-error traits, and recovery hints derive from
+  `loom.ResolveErrorResponse`. Read traits directly from its selected owner;
+  never search independent joined branches. Generated adapters call the shared
+  `mcpruntime.FormatToolError`, `SafeError`, and `NewToolInputError` helpers.
+  Keep application `ErrorMapper` orchestration in the adapter. HTTP status-only
+  errors do not declare MCP names; use explicit names/remedies or handler defaults.
+  Public messages remain owned by `loom.ErrorSafeMessage`.
 - Generated SDK and adapter files contain service descriptors, typed closures,
   codecs, and result conversion. The bridge owns registration loops, tool
   interceptor composition, prompt and resource dispatch, resource policy, skill

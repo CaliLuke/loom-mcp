@@ -295,7 +295,7 @@ func (a *MCPAdapter) sendToolError(ctx context.Context, stream toolCallStream, t
 	}
 	isError := true
 	result := &ToolsCallResult{
-		Content: []*ContentItem{buildContentItem(a, formatToolErrorText(mapped))},
+		Content: []*ContentItem{buildContentItem(a, mcpruntime.FormatToolError(mapped))},
 		IsError: &isError,
 	}
 	a.log(ctx, "response", map[string]any{
@@ -305,110 +305,11 @@ func (a *MCPAdapter) sendToolError(ctx context.Context, stream toolCallStream, t
 	})
 	return stream.SendAndClose(ctx, result)
 }
-func formatToolErrorText(err error) string {
-	if err == nil {
-		return "[internal_error] Tool execution failed."
-	}
-	code := strings.TrimSpace(loom.ErrorRemedyCode(err))
-	if code == "" {
-		var namer loom.LoomErrorNamer
-		if errors.As(err, &namer) {
-			code = strings.TrimSpace(namer.LoomErrorName())
-		}
-	}
-	if code == "" {
-		if status, ok := loom.ErrorStatusCode(err); ok {
-			switch status {
-			case http.StatusBadRequest:
-				code = "invalid_params"
-			case http.StatusNotFound:
-				code = "not_found"
-			default:
-				code = "internal_error"
-			}
-		}
-	}
-	if code == "" {
-		code = "internal_error"
-	}
-	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
-	if message == "" {
-		message = "Tool execution failed."
-	}
-	recovery := strings.TrimSpace(loom.ErrorRetryHint(err))
-	if recovery == "" {
-		return fmt.Sprintf("[%s] %s", code, message)
-	}
-	return fmt.Sprintf("[%s] %s\nRecovery: %s", code, message, recovery)
-}
 func (a *MCPAdapter) safeMCPError(err error, defaultCode string, fallbackMessage string) error {
 	if mcpruntime.IsInputRequired(err) || mcpruntime.IsInvalidClientInput(err) {
 		return err
 	}
-	if err == nil {
-		return loom.WithErrorRemedy(loom.PermanentError(defaultCode, "%s", fallbackMessage), &loom.ErrorRemedy{
-			Code:        defaultCode,
-			SafeMessage: fallbackMessage,
-		})
-	}
-	mapped := a.mapError(err)
-	if mapped == nil {
-		mapped = err
-	}
-	code := strings.TrimSpace(loom.ErrorRemedyCode(mapped))
-	if code == "" {
-		var namer loom.LoomErrorNamer
-		if errors.As(mapped, &namer) {
-			code = strings.TrimSpace(namer.LoomErrorName())
-		}
-	}
-	if code == "" {
-		if status, ok := loom.ErrorStatusCode(mapped); ok {
-			switch status {
-			case http.StatusBadRequest:
-				code = "invalid_params"
-			case http.StatusNotFound:
-				code = defaultCode
-			default:
-				code = "internal_error"
-			}
-		}
-	}
-	if code == "" {
-		code = defaultCode
-	}
-	message := strings.TrimSpace(fallbackMessage)
-	if remedy := loom.ExtractErrorRemedy(mapped); remedy != nil {
-		if safe := strings.TrimSpace(remedy.SafeMessage); safe != "" {
-			message = safe
-		}
-	}
-	return loom.WithErrorRemedy(loom.PermanentError(code, "%s", message), &loom.ErrorRemedy{
-		Code:        code,
-		SafeMessage: message,
-	})
-}
-func toolCallError(err error, defaultCode string, defaultRecovery string) error {
-	if err == nil {
-		err = loom.PermanentError(defaultCode, "Tool execution failed.")
-	}
-	code := strings.TrimSpace(loom.ErrorRemedyCode(err))
-	if code == "" {
-		code = defaultCode
-	}
-	message := strings.TrimSpace(loom.ErrorSafeMessage(err))
-	if message == "" {
-		message = "Tool execution failed."
-	}
-	recovery := strings.TrimSpace(loom.ErrorRetryHint(err))
-	if recovery == "" {
-		recovery = defaultRecovery
-	}
-	return loom.WithErrorRemedy(loom.PermanentError(code, "%s", message), &loom.ErrorRemedy{
-		Code:        code,
-		RetryHint:   recovery,
-		SafeMessage: message,
-	})
+	return mcpruntime.SafeError(a.mapError(err), defaultCode, fallbackMessage)
 }
 func missingFieldFromMessage(message string) string {
 	const prefix = "Missing required field: "
@@ -470,7 +371,7 @@ func (c *toolCallResultCollector) result() *ToolsCallResult {
 		}
 		isError := true
 		return &ToolsCallResult{
-			Content: []*ContentItem{buildContentItem(c.adapter, formatToolErrorText(mapped))},
+			Content: []*ContentItem{buildContentItem(c.adapter, mcpruntime.FormatToolError(mapped))},
 			IsError: &isError,
 		}
 	}
@@ -1252,18 +1153,18 @@ func (a *MCPAdapter) handleSearchTools(ctx context.Context, p *ToolsCallPayload,
 		arguments = jsontext.Value([]byte("{}"))
 	}
 	if err := decodeMCPPayloadStrict(arguments, &payload); err != nil {
-		return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", "Provide {\"query\":\"...\"} or {\"pattern\":\"...\"} to search tools."))
+		return true, a.sendToolError(ctx, stream, p.Name, mcpruntime.NewToolInputError(err, "invalid_params", "Provide {\"query\":\"...\"} or {\"pattern\":\"...\"} to search tools."))
 	}
 	query := strings.TrimSpace(payload.Query)
 	pattern := strings.TrimSpace(payload.Pattern)
 	if query != "" && pattern != "" {
-		return true, a.sendToolError(ctx, stream, p.Name, toolCallError(loom.PermanentError("invalid_params", "provide query or pattern, not both"), "invalid_params", "Provide either {\"query\":\"...\"} or {\"pattern\":\"...\"}."))
+		return true, a.sendToolError(ctx, stream, p.Name, mcpruntime.NewToolInputError(loom.PermanentError("invalid_params", "provide query or pattern, not both"), "invalid_params", "Provide either {\"query\":\"...\"} or {\"pattern\":\"...\"}."))
 	}
 	var re *regexp.Regexp
 	if pattern != "" {
 		compiled, err := regexp.Compile("(?i)" + pattern)
 		if err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", "Provide a valid regular expression pattern."))
+			return true, a.sendToolError(ctx, stream, p.Name, mcpruntime.NewToolInputError(err, "invalid_params", "Provide a valid regular expression pattern."))
 		}
 		re = compiled
 	}
@@ -1358,17 +1259,17 @@ func (a *MCPAdapter) handleCallToolProxy(ctx context.Context, p *ToolsCallPayloa
 	}
 	var payload toolCallProxyPayload
 	if err := decodeMCPPayloadStrict(rawArguments, &payload); err != nil {
-		return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", "Provide {\"name\":\"tool_name\",\"arguments\":{...}} to call a discovered tool."))
+		return true, a.sendToolError(ctx, stream, p.Name, mcpruntime.NewToolInputError(err, "invalid_params", "Provide {\"name\":\"tool_name\",\"arguments\":{...}} to call a discovered tool."))
 	}
 	payload.Name = strings.TrimSpace(payload.Name)
 	if payload.Name == "" {
-		return true, a.sendToolError(ctx, stream, p.Name, toolCallError(loom.PermanentError("invalid_params", "Missing required field: name"), "invalid_params", "Provide {\"name\":\"tool_name\",\"arguments\":{...}} to call a discovered tool."))
+		return true, a.sendToolError(ctx, stream, p.Name, mcpruntime.NewToolInputError(loom.PermanentError("invalid_params", "Missing required field: name"), "invalid_params", "Provide {\"name\":\"tool_name\",\"arguments\":{...}} to call a discovered tool."))
 	}
 	if a.isToolSearchName(payload.Name) || a.isToolCallProxyName(payload.Name) {
-		return true, a.sendToolError(ctx, stream, p.Name, toolCallError(loom.PermanentError("invalid_params", "call_tool cannot call synthetic tool %q", payload.Name), "invalid_params", "Call one of the real tools returned by search_tools."))
+		return true, a.sendToolError(ctx, stream, p.Name, mcpruntime.NewToolInputError(loom.PermanentError("invalid_params", "call_tool cannot call synthetic tool %q", payload.Name), "invalid_params", "Call one of the real tools returned by search_tools."))
 	}
 	if !isGeneratedToolName(payload.Name) {
-		return true, a.sendToolError(ctx, stream, p.Name, toolCallError(loom.PermanentError("invalid_params", "unknown target tool %q", payload.Name), "invalid_params", "Call one of the real tools returned by search_tools."))
+		return true, a.sendToolError(ctx, stream, p.Name, mcpruntime.NewToolInputError(loom.PermanentError("invalid_params", "unknown target tool %q", payload.Name), "invalid_params", "Call one of the real tools returned by search_tools."))
 	}
 	arguments := payload.Arguments
 	if len(bytes.TrimSpace(arguments)) == 0 {
@@ -1518,18 +1419,18 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		var payload *catalog.LookupPayload
 		rawFields, err := decodeMCPPayloadFields(arguments)
 		if err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", lookupInputRecovery(err, arguments)))
+			return true, a.sendToolError(ctx, stream, p.Name, mcpruntime.NewToolInputError(err, "invalid_params", lookupInputRecovery(err, arguments)))
 		}
 		if err := decodeMCPPayloadStrict(arguments, &payload); err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", lookupInputRecovery(err, arguments)))
+			return true, a.sendToolError(ctx, stream, p.Name, mcpruntime.NewToolInputError(err, "invalid_params", lookupInputRecovery(err, arguments)))
 		}
 		{
 			if err := validateMCPPayloadRequired(rawFields, "query", false); err != nil {
-				return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", lookupInputRecovery(err, arguments)))
+				return true, a.sendToolError(ctx, stream, p.Name, mcpruntime.NewToolInputError(err, "invalid_params", lookupInputRecovery(err, arguments)))
 			}
 		}
 		if err := sdkbridge.ValidateToolArguments(arguments, "{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Lookup query\"}},\"additionalProperties\":false}"); err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", lookupInputRecovery(err, arguments)))
+			return true, a.sendToolError(ctx, stream, p.Name, mcpruntime.NewToolInputError(err, "invalid_params", lookupInputRecovery(err, arguments)))
 		}
 		if err := agentruntime.RecordToolPayload(ctx, payload); err != nil {
 			return false, err
@@ -1592,7 +1493,7 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 			args = jsontext.Value("{}")
 		}
 		if err := sdkbridge.ValidateToolArguments(args, string(projected.SpecProjectedLookup.Payload.Schema)); err != nil {
-			return true, a.sendToolError(ctx, stream, p.Name, toolCallError(err, "invalid_params", projectedLookupInputRecovery(err, args)))
+			return true, a.sendToolError(ctx, stream, p.Name, mcpruntime.NewToolInputError(err, "invalid_params", projectedLookupInputRecovery(err, args)))
 		}
 		meta := &agentruntime.ToolCallMeta{}
 		toolResult, err := projected.DispatchProjectedLookupMethod(ctx, meta, args, nil, projected.ProjectedLookupDispatchOptions{Call: func(ctx context.Context, args any) (any, error) {

@@ -120,6 +120,11 @@ func TestGenerateSDKServerDelegatesCommonBehaviorToTypedBridge(t *testing.T) {
 func TestGenerateAdapterDelegatesOrchestrationToTypedRuntimeDescriptors(t *testing.T) {
 	files := generateTransportConformanceFixture(t)
 	adapter := renderGeneratedFile(t, findGeneratedFile(t, files, "gen/mcp_assistant/adapter_server.go"))
+	require.Contains(t, adapter, "mcpruntime.FormatToolError(")
+	require.Contains(t, adapter, "mcpruntime.SafeError(")
+	require.Contains(t, adapter, "mcpruntime.NewToolInputError(")
+	require.NotContains(t, adapter, "loom.ExtractErrorRemedy(")
+	require.NotContains(t, adapter, "loom.ErrorStatusCode(")
 
 	require.Contains(t, adapter, "sdkbridge.TypedHandler[*ToolsCallPayload, *ToolsCallResult]")
 	require.Contains(t, adapter, "sdkbridge.TypedInterceptor[*ToolsCallPayload, *ToolsCallResult]")

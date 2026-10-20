@@ -40,15 +40,8 @@ func NormalizeJSONRPCError(method string, err error) error {
 		}
 	}
 
-	name := strings.TrimSpace(loom.ErrorRemedyCode(err))
-	if name == "" {
-		var namer loom.LoomErrorNamer
-		if errors.As(err, &namer) {
-			name = strings.TrimSpace(namer.LoomErrorName())
-		}
-	}
-
-	switch name {
+	response := loom.ResolveErrorResponse(err)
+	switch errorResponseCode(response, "") {
 	case "invalid_params", "not_found", "prompt_not_found", "resource_not_found":
 		return &jsonrpc.Error{
 			Code:    jsonrpc.CodeInvalidParams,
@@ -57,7 +50,7 @@ func NormalizeJSONRPCError(method string, err error) error {
 	case "internal_error":
 		return &jsonrpc.Error{
 			Code:    jsonrpc.CodeInternalError,
-			Message: jsonRPCInternalMessage(err),
+			Message: jsonRPCInternalMessage(response.Remedy),
 		}
 	default:
 		return &jsonrpc.Error{
@@ -75,8 +68,7 @@ func jsonRPCSafeMessage(err error, fallback string) string {
 	return message
 }
 
-func jsonRPCInternalMessage(err error) string {
-	remedy := loom.ExtractErrorRemedy(err)
+func jsonRPCInternalMessage(remedy *loom.ErrorRemedy) string {
 	if remedy == nil {
 		return jsonRPCInternalErrorMessage
 	}

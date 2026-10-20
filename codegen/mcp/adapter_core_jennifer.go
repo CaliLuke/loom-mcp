@@ -20,9 +20,7 @@ func adapterCoreSection(data *AdapterData) codegen.Section {
 		emitTelemetryHelpers(stmt, data)
 		emitStringPtrAndBuildContentItem(stmt)
 		emitSendToolError(stmt)
-		emitFormatToolErrorText(stmt)
 		emitSafeMCPError(stmt)
-		emitToolCallError(stmt)
 		emitMissingFieldFromMessage(stmt)
 	})
 }
@@ -482,7 +480,7 @@ func emitSendToolError(stmt *jen.Statement) {
 			jen.Id("isError").Op(":=").True(),
 			jen.Id("result").Op(":=").Op("&").Id("ToolsCallResult").Values(jen.Dict{
 				jen.Id("Content"): jen.Index().Op("*").Id("ContentItem").Values(
-					jen.Id("buildContentItem").Call(jen.Id("a"), jen.Id("formatToolErrorText").Call(jen.Id("mapped"))),
+					jen.Id("buildContentItem").Call(jen.Id("a"), jen.Id("mcpruntime").Dot("FormatToolError").Call(jen.Id("mapped"))),
 				),
 				jen.Id("IsError"): jen.Op("&").Id("isError"),
 			}),
@@ -496,136 +494,15 @@ func emitSendToolError(stmt *jen.Statement) {
 	stmt.Line()
 }
 
-// emitFormatToolErrorText generates the formatToolErrorText function.
-func emitFormatToolErrorText(stmt *jen.Statement) {
-	stmt.Func().Id("formatToolErrorText").Params(jen.Id("err").Error()).String().
-		Block(
-			jen.If(jen.Id("err").Op("==").Nil()).Block(
-				jen.Return(jen.Lit("[internal_error] Tool execution failed.")),
-			),
-			jen.Id("code").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("loom").Dot("ErrorRemedyCode").Call(jen.Id("err"))),
-			jen.If(jen.Id("code").Op("==").Lit("")).Block(
-				jen.Var().Id("namer").Id("loom").Dot("LoomErrorNamer"),
-				jen.If(jen.Qual("errors", "As").Call(jen.Id("err"), jen.Op("&").Id("namer"))).Block(
-					jen.Id("code").Op("=").Qual("strings", "TrimSpace").Call(jen.Id("namer").Dot("LoomErrorName").Call()),
-				),
-			),
-			jen.If(jen.Id("code").Op("==").Lit("")).Block(
-				mcpStatusCodeFallback(jen.Id("err"), jen.Lit("not_found")),
-			),
-			jen.If(jen.Id("code").Op("==").Lit("")).Block(
-				jen.Id("code").Op("=").Lit("internal_error"),
-			),
-			jen.Id("message").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("loom").Dot("ErrorSafeMessage").Call(jen.Id("err"))),
-			jen.If(jen.Id("message").Op("==").Lit("")).Block(
-				jen.Id("message").Op("=").Lit("Tool execution failed."),
-			),
-			jen.Id("recovery").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("loom").Dot("ErrorRetryHint").Call(jen.Id("err"))),
-			jen.If(jen.Id("recovery").Op("==").Lit("")).Block(
-				jen.Return(jen.Qual("fmt", "Sprintf").Call(jen.Lit("[%s] %s"), jen.Id("code"), jen.Id("message"))),
-			),
-			jen.Return(jen.Qual("fmt", "Sprintf").Call(jen.Lit("[%s] %s\nRecovery: %s"), jen.Id("code"), jen.Id("message"), jen.Id("recovery"))),
-		)
-	stmt.Line()
-}
-
-// emitSafeMCPError generates safeMCPError.
+// emitSafeMCPError preserves application error mapping before shared formatting.
 func emitSafeMCPError(stmt *jen.Statement) {
 	stmt.Func().Params(jen.Id("a").Op("*").Id("MCPAdapter")).
 		Id("safeMCPError").Params(jen.Id("err").Error(), jen.Id("defaultCode").String(), jen.Id("fallbackMessage").String()).Error().
 		Block(
-			jen.If(
-				jen.Id("mcpruntime").Dot("IsInputRequired").Call(jen.Id("err")).Op("||").
-					Id("mcpruntime").Dot("IsInvalidClientInput").Call(jen.Id("err")),
-			).Block(
+			jen.If(jen.Id("mcpruntime").Dot("IsInputRequired").Call(jen.Id("err")).Op("||").Id("mcpruntime").Dot("IsInvalidClientInput").Call(jen.Id("err"))).Block(
 				jen.Return(jen.Id("err")),
 			),
-			jen.If(jen.Id("err").Op("==").Nil()).Block(
-				jen.Return(jen.Id("loom").Dot("WithErrorRemedy").Call(
-					jen.Id("loom").Dot("PermanentError").Call(jen.Id("defaultCode"), jen.Lit("%s"), jen.Id("fallbackMessage")),
-					jen.Op("&").Id("loom").Dot("ErrorRemedy").Values(jen.Dict{
-						jen.Id("Code"):        jen.Id("defaultCode"),
-						jen.Id("SafeMessage"): jen.Id("fallbackMessage"),
-					}),
-				)),
-			),
-			jen.Id("mapped").Op(":=").Id("a").Dot("mapError").Call(jen.Id("err")),
-			jen.If(jen.Id("mapped").Op("==").Nil()).Block(
-				jen.Id("mapped").Op("=").Id("err"),
-			),
-			jen.Id("code").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("loom").Dot("ErrorRemedyCode").Call(jen.Id("mapped"))),
-			jen.If(jen.Id("code").Op("==").Lit("")).Block(
-				jen.Var().Id("namer").Id("loom").Dot("LoomErrorNamer"),
-				jen.If(jen.Qual("errors", "As").Call(jen.Id("mapped"), jen.Op("&").Id("namer"))).Block(
-					jen.Id("code").Op("=").Qual("strings", "TrimSpace").Call(jen.Id("namer").Dot("LoomErrorName").Call()),
-				),
-			),
-			jen.If(jen.Id("code").Op("==").Lit("")).Block(
-				mcpStatusCodeFallback(jen.Id("mapped"), jen.Id("defaultCode")),
-			),
-			jen.If(jen.Id("code").Op("==").Lit("")).Block(
-				jen.Id("code").Op("=").Id("defaultCode"),
-			),
-			jen.Id("message").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("fallbackMessage")),
-			jen.If(jen.Id("remedy").Op(":=").Id("loom").Dot("ExtractErrorRemedy").Call(jen.Id("mapped")), jen.Id("remedy").Op("!=").Nil()).Block(
-				jen.If(jen.Id("safe").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("remedy").Dot("SafeMessage")), jen.Id("safe").Op("!=").Lit("")).Block(
-					jen.Id("message").Op("=").Id("safe"),
-				),
-			),
-			jen.Return(jen.Id("loom").Dot("WithErrorRemedy").Call(
-				jen.Id("loom").Dot("PermanentError").Call(jen.Id("code"), jen.Lit("%s"), jen.Id("message")),
-				jen.Op("&").Id("loom").Dot("ErrorRemedy").Values(jen.Dict{
-					jen.Id("Code"):        jen.Id("code"),
-					jen.Id("SafeMessage"): jen.Id("message"),
-				}),
-			)),
-		)
-	stmt.Line()
-}
-
-func mcpStatusCodeFallback(err jen.Code, notFoundCode jen.Code) jen.Code {
-	return jen.If(jen.List(jen.Id("status"), jen.Id("ok")).Op(":=").Id("loom").Dot("ErrorStatusCode").Call(err), jen.Id("ok")).Block(
-		jen.Switch(jen.Id("status")).Block(
-			jen.Case(jen.Qual("net/http", "StatusBadRequest")).Block(
-				jen.Id("code").Op("=").Lit("invalid_params"),
-			),
-			jen.Case(jen.Qual("net/http", "StatusNotFound")).Block(
-				jen.Id("code").Op("=").Add(notFoundCode),
-			),
-			jen.Default().Block(
-				jen.Id("code").Op("=").Lit("internal_error"),
-			),
-		),
-	)
-}
-
-// emitToolCallError generates the toolCallError function.
-func emitToolCallError(stmt *jen.Statement) {
-	stmt.Func().Id("toolCallError").Params(jen.Id("err").Error(), jen.Id("defaultCode").String(), jen.Id("defaultRecovery").String()).Error().
-		Block(
-			jen.If(jen.Id("err").Op("==").Nil()).Block(
-				jen.Id("err").Op("=").Id("loom").Dot("PermanentError").Call(jen.Id("defaultCode"), jen.Lit("Tool execution failed.")),
-			),
-			jen.Id("code").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("loom").Dot("ErrorRemedyCode").Call(jen.Id("err"))),
-			jen.If(jen.Id("code").Op("==").Lit("")).Block(
-				jen.Id("code").Op("=").Id("defaultCode"),
-			),
-			jen.Id("message").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("loom").Dot("ErrorSafeMessage").Call(jen.Id("err"))),
-			jen.If(jen.Id("message").Op("==").Lit("")).Block(
-				jen.Id("message").Op("=").Lit("Tool execution failed."),
-			),
-			jen.Id("recovery").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("loom").Dot("ErrorRetryHint").Call(jen.Id("err"))),
-			jen.If(jen.Id("recovery").Op("==").Lit("")).Block(
-				jen.Id("recovery").Op("=").Id("defaultRecovery"),
-			),
-			jen.Return(jen.Id("loom").Dot("WithErrorRemedy").Call(
-				jen.Id("loom").Dot("PermanentError").Call(jen.Id("code"), jen.Lit("%s"), jen.Id("message")),
-				jen.Op("&").Id("loom").Dot("ErrorRemedy").Values(jen.Dict{
-					jen.Id("Code"):        jen.Id("code"),
-					jen.Id("SafeMessage"): jen.Id("message"),
-					jen.Id("RetryHint"):   jen.Id("recovery"),
-				}),
-			)),
+			jen.Return(jen.Id("mcpruntime").Dot("SafeError").Call(jen.Id("a").Dot("mapError").Call(jen.Id("err")), jen.Id("defaultCode"), jen.Id("fallbackMessage"))),
 		)
 	stmt.Line()
 }

@@ -166,6 +166,21 @@ unknown handler failures return `-32603`. The middleware hides private details
 unless the service declares an explicit safe message. Errors that use official
 SDK types pass through unchanged.
 
+Public error codes, service-error flags, and recovery hints use Loom's
+`ResolveErrorResponse` ownership rules. Ordinary wrappers and single-cause joins
+retain the underlying response. Independent joined failures cannot borrow one
+branch's name or remedy; an explicit outer named error or remedy can describe the
+complete failure. An outer named error also prevents nested service-error flags
+from leaking into its metadata. Public message selection continues to use Loom's
+`ErrorSafeMessage` contract.
+
+Regenerate adapters to adopt the shared runtime error formatting helpers. HTTP
+status interfaces alone no longer infer MCP names such as `invalid_params` or
+`not_found`; declare a Loom error name or remedy code instead. Unnamed tool
+failures use `internal_error`, and resource/prompt handlers use their declared
+fallback codes. Explicit SDK protocol and input-required control flow retain
+their own contracts.
+
 
 The official MCP Go SDK performs its pre-initialization method gate before
 server receiving middleware. In SDK v1.8.0, that upstream-owned path

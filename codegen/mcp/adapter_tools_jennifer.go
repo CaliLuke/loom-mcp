@@ -99,7 +99,7 @@ func emitToolCallResultCollector(stmt *jen.Statement) {
 			jen.Id("isError").Op(":=").True(),
 			jen.Return(jen.Op("&").Id("ToolsCallResult").Values(jen.Dict{
 				jen.Id("Content"): jen.Index().Op("*").Id("ContentItem").Values(
-					jen.Id("buildContentItem").Call(jen.Id("c").Dot("adapter"), jen.Id("formatToolErrorText").Call(jen.Id("mapped"))),
+					jen.Id("buildContentItem").Call(jen.Id("c").Dot("adapter"), jen.Id("mcpruntime").Dot("FormatToolError").Call(jen.Id("mapped"))),
 				),
 				jen.Id("IsError"): jen.Op("&").Id("isError"),
 			})),
@@ -291,7 +291,7 @@ func emitValidateMCPPayloadRequired(stmt *jen.Statement) {
 // field is missing. The error carries Code + SafeMessage only; the per-tool
 // recovery function attaches the DSL-derived retry hint (including a canonical
 // example), so omitting RetryHint here is intentional — it would otherwise
-// pre-empt the richer per-tool hint inside toolCallError.
+// pre-empt the richer per-tool hint inside mcpruntime.NewToolInputError.
 func requiredFieldErrorExpr(field jen.Code) jen.Code {
 	return jen.Id("loom").Dot("WithErrorRemedy").Call(
 		jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Missing required field: %s"), field),
@@ -1169,18 +1169,18 @@ func emitHandleSearchTools(stmt *jen.Statement) {
 				jen.Id("arguments").Op("=").Id("jsontext").Dot("Value").Call(jen.Index().Byte().Call(jen.Lit(`{}`))),
 			)
 			g.If(jen.Id("err").Op(":=").Id("decodeMCPPayloadStrict").Call(jen.Id("arguments"), jen.Op("&").Id("payload")), jen.Id("err").Op("!=").Nil()).Block(
-				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Lit(`Provide {"query":"..."} or {"pattern":"..."} to search tools.`)))),
+				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("mcpruntime").Dot("NewToolInputError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Lit(`Provide {"query":"..."} or {"pattern":"..."} to search tools.`)))),
 			)
 			g.Id("query").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("payload").Dot("Query"))
 			g.Id("pattern").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("payload").Dot("Pattern"))
 			g.If(jen.Id("query").Op("!=").Lit("").Op("&&").Id("pattern").Op("!=").Lit("")).Block(
-				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("provide query or pattern, not both")), jen.Lit("invalid_params"), jen.Lit(`Provide either {"query":"..."} or {"pattern":"..."}.`)))),
+				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("mcpruntime").Dot("NewToolInputError").Call(jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("provide query or pattern, not both")), jen.Lit("invalid_params"), jen.Lit(`Provide either {"query":"..."} or {"pattern":"..."}.`)))),
 			)
 			g.Var().Id("re").Op("*").Qual("regexp", "Regexp")
 			g.If(jen.Id("pattern").Op("!=").Lit("")).Block(
 				jen.List(jen.Id("compiled"), jen.Id("err")).Op(":=").Qual("regexp", "Compile").Call(jen.Lit("(?i)").Op("+").Id("pattern")),
 				jen.If(jen.Id("err").Op("!=").Nil()).Block(
-					jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Lit("Provide a valid regular expression pattern.")))),
+					jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("mcpruntime").Dot("NewToolInputError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Lit("Provide a valid regular expression pattern.")))),
 				),
 				jen.Id("re").Op("=").Id("compiled"),
 			)
@@ -1281,17 +1281,17 @@ func emitHandleCallToolProxy(stmt *jen.Statement) {
 			g.If(jen.Id("err").Op("!=").Nil()).Block(jen.Return(jen.False(), jen.Id("err")))
 			g.Var().Id("payload").Id("toolCallProxyPayload")
 			g.If(jen.Id("err").Op(":=").Id("decodeMCPPayloadStrict").Call(jen.Id("rawArguments"), jen.Op("&").Id("payload")), jen.Id("err").Op("!=").Nil()).Block(
-				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Lit(`Provide {"name":"tool_name","arguments":{...}} to call a discovered tool.`)))),
+				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("mcpruntime").Dot("NewToolInputError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Lit(`Provide {"name":"tool_name","arguments":{...}} to call a discovered tool.`)))),
 			)
 			g.Id("payload").Dot("Name").Op("=").Qual("strings", "TrimSpace").Call(jen.Id("payload").Dot("Name"))
 			g.If(jen.Id("payload").Dot("Name").Op("==").Lit("")).Block(
-				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Missing required field: name")), jen.Lit("invalid_params"), jen.Lit(`Provide {"name":"tool_name","arguments":{...}} to call a discovered tool.`)))),
+				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("mcpruntime").Dot("NewToolInputError").Call(jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("Missing required field: name")), jen.Lit("invalid_params"), jen.Lit(`Provide {"name":"tool_name","arguments":{...}} to call a discovered tool.`)))),
 			)
 			g.If(jen.Id("a").Dot("isToolSearchName").Call(jen.Id("payload").Dot("Name")).Op("||").Id("a").Dot("isToolCallProxyName").Call(jen.Id("payload").Dot("Name"))).Block(
-				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("call_tool cannot call synthetic tool %q"), jen.Id("payload").Dot("Name")), jen.Lit("invalid_params"), jen.Lit("Call one of the real tools returned by search_tools.")))),
+				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("mcpruntime").Dot("NewToolInputError").Call(jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("call_tool cannot call synthetic tool %q"), jen.Id("payload").Dot("Name")), jen.Lit("invalid_params"), jen.Lit("Call one of the real tools returned by search_tools.")))),
 			)
 			g.If(jen.Op("!").Id("isGeneratedToolName").Call(jen.Id("payload").Dot("Name"))).Block(
-				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("unknown target tool %q"), jen.Id("payload").Dot("Name")), jen.Lit("invalid_params"), jen.Lit("Call one of the real tools returned by search_tools.")))),
+				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("mcpruntime").Dot("NewToolInputError").Call(jen.Id("loom").Dot("PermanentError").Call(jen.Lit("invalid_params"), jen.Lit("unknown target tool %q"), jen.Id("payload").Dot("Name")), jen.Lit("invalid_params"), jen.Lit("Call one of the real tools returned by search_tools.")))),
 			)
 			g.Id("arguments").Op(":=").Id("payload").Dot("Arguments")
 			g.If(jen.Len(jen.Qual("bytes", "TrimSpace").Call(jen.Id("arguments"))).Op("==").Lit(0)).Block(
@@ -1509,17 +1509,17 @@ func emitToolCase(g *jen.Group, tool *ToolAdapter) {
 		if len(tool.DefaultFields) > 0 || len(tool.RequiredFields) > 0 || len(tool.EnumFields) > 0 {
 			g.List(jen.Id("rawFields"), jen.Id("err")).Op(":=").Id("decodeMCPPayloadFields").Call(jen.Id("arguments"))
 			g.If(jen.Id("err").Op("!=").Nil()).Block(
-				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("err"), jen.Id("arguments"))))),
+				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("mcpruntime").Dot("NewToolInputError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("err"), jen.Id("arguments"))))),
 			)
 		}
 		g.If(jen.Id("err").Op(":=").Id("decodeMCPPayloadStrict").Call(jen.Id("arguments"), jen.Op("&").Id("payload")), jen.Id("err").Op("!=").Nil()).Block(
-			jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("err"), jen.Id("arguments"))))),
+			jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("mcpruntime").Dot("NewToolInputError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("err"), jen.Id("arguments"))))),
 		)
 		emitToolDefaultAssignments(g, tool)
 		emitToolRequiredChecks(g, tool)
 		emitToolEnumChecks(g, tool)
 		g.If(jen.Id("err").Op(":=").Id("sdkbridge").Dot("ValidateToolArguments").Call(jen.Id("arguments"), jen.Lit(tool.InputSchema)), jen.Id("err").Op("!=").Nil()).Block(
-			jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("err"), jen.Id("arguments"))))),
+			jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("mcpruntime").Dot("NewToolInputError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("err"), jen.Id("arguments"))))),
 		)
 	}
 
@@ -1613,7 +1613,7 @@ func emitToolRequiredChecks(g *jen.Group, tool *ToolAdapter) {
 	g.BlockFunc(func(block *jen.Group) {
 		for _, field := range tool.RequiredFields {
 			block.If(jen.Id("err").Op(":=").Id("validateMCPPayloadRequired").Call(jen.Id("rawFields"), jen.Lit(field.Name), jen.Lit(field.AllowsNull)), jen.Id("err").Op("!=").Nil()).Block(
-				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("err"), jen.Id("arguments"))))),
+				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("mcpruntime").Dot("NewToolInputError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("err"), jen.Id("arguments"))))),
 			)
 		}
 	})
@@ -1631,7 +1631,7 @@ func emitToolEnumChecks(g *jen.Group, tool *ToolAdapter) {
 				args = append(args, jen.Lit(val))
 			}
 			block.If(jen.Id("err").Op(":=").Id("validateMCPPayloadEnum").Call(args...), jen.Id("err").Op("!=").Nil()).Block(
-				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("err"), jen.Id("arguments"))))),
+				jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("mcpruntime").Dot("NewToolInputError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("err"), jen.Id("arguments"))))),
 			)
 		}
 	})
@@ -1666,7 +1666,7 @@ func emitProjectedToolCase(g *jen.Group, tool *ToolAdapter) {
 	g.If(jen.Id("err").Op(":=").Id("sdkbridge").Dot("ValidateToolArguments").Call(
 		jen.Id("args"), jen.String().Call(jen.Id(projected.SpecsPackageName).Dot(projected.SpecName).Dot("Payload").Dot("Schema")),
 	), jen.Id("err").Op("!=").Nil()).Block(
-		jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("toolCallError").Call(jen.Id("err"), jen.Lit("invalid_params"), recovery))),
+		jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("mcpruntime").Dot("NewToolInputError").Call(jen.Id("err"), jen.Lit("invalid_params"), recovery))),
 	)
 	g.Id("meta").Op(":=").Op("&").Id("agentruntime").Dot("ToolCallMeta").Values()
 	if len(projected.InjectedFields) > 0 {

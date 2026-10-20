@@ -1,10 +1,6 @@
 package mcp
 
-import (
-	"errors"
-
-	loom "github.com/CaliLuke/loom/pkg"
-)
+import loom "github.com/CaliLuke/loom/pkg"
 
 type (
 	// ErrorData is the client-safe metadata included with MCP JSON-RPC errors.
@@ -24,18 +20,14 @@ func NewErrorData(err error) any {
 		return nil
 	}
 
-	data := &ErrorData{Remedy: loom.ExtractErrorRemedy(err)}
-	var (
-		serviceError *loom.ServiceError
-		namer        loom.LoomErrorNamer
-	)
-	if errors.As(err, &serviceError) {
-		data.Name = serviceError.Name
+	response := loom.ResolveErrorResponse(err)
+	data := &ErrorData{Name: response.Name, Remedy: response.Remedy}
+	// The selected owner supplies its own traits, never those of a nested cause.
+	//nolint:errorlint // ResolveErrorResponse already selected the concrete owner.
+	if serviceError, ok := response.Owner.(*loom.ServiceError); ok {
 		data.Temporary = serviceError.Temporary
 		data.Timeout = serviceError.Timeout
 		data.Fault = serviceError.Fault
-	} else if errors.As(err, &namer) {
-		data.Name = namer.LoomErrorName()
 	}
 
 	if data.Name == "" && !data.Temporary && !data.Timeout && !data.Fault && data.Remedy == nil {
