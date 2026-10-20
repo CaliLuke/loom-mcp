@@ -323,7 +323,9 @@ func (c *Client) resolveModelID(req *model.Request) string {
 }
 
 func (c *Client) buildGenerateContentConfig(systemInstruction *genai.Content, req *model.Request) (*genai.GenerateContentConfig, error) {
-	config := &genai.GenerateContentConfig{}
+	// The adapter owns continuation admission, output validation and per-hop usage.
+	// SDK-side continuation would hide requests beneath MaxGenerationRequests.
+	config := &genai.GenerateContentConfig{AutomaticContinuation: genai.Ptr(false)}
 	if systemInstruction != nil {
 		config.SystemInstruction = systemInstruction
 	}

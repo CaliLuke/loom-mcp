@@ -51,6 +51,29 @@ func TestClientBoundedContinuationThroughSDK(t *testing.T) {
 	}
 }
 
+// The real SDK must not consume extra hops beneath the adapter's request budget.
+func TestClientContinuationBudgetOwnsSDKHops(t *testing.T) {
+	for _, backend := range []genai.Backend{genai.BackendGeminiAPI, genai.BackendVertexAI} {
+		for _, limit := range []int{0, 1, 3} {
+			t.Run(fmt.Sprintf("backend_%d/limit_%d", backend, limit), func(t *testing.T) {
+				hops := make([]continuationHTTPHop, 4)
+				for i := range hops {
+					hops[i] = continuationHop(genai.FinishReasonContinuation, fmt.Sprintf("token-%d", i), "private-partial")
+				}
+				client, script := newContinuationClient(t, limit, backend, hops, nil)
+				response, err := client.Complete(t.Context(), continuationRequest())
+				assert.Nil(t, response)
+				require.ErrorIs(t, err, geminimodel.ErrContinuationUnsupported)
+				assert.Len(t, script.captured(), max(1, limit))
+				var rejection *model.OutputValidationError
+				require.ErrorAs(t, err, &rejection)
+				require.NotNil(t, rejection.Usage())
+				assert.Equal(t, 13*max(1, limit), rejection.Usage().TotalTokens)
+			})
+		}
+	}
+}
+
 func TestClientContinuationRejectsUnsafeChains(t *testing.T) {
 	paused := func(token string) continuationHTTPHop {
 		return continuationHop(genai.FinishReasonContinuation, token, "private-partial")
