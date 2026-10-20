@@ -101,6 +101,20 @@ func TestSelvedgePortableAcceptance(t *testing.T) {
 		require.NoError(t, coordinator.RegisterCoordinatorAgent(ctx, fx.rt, coordinator.CoordinatorAgentConfig{}))
 		_, err := fx.rt.CreateSession(ctx, "sess-selvedge-cancel")
 		require.NoError(t, err)
+		awaited := make(chan struct{})
+		var awaitOnce sync.Once
+		sub, err := fx.rt.Bus.Register(hooks.SubscriberFunc(func(_ context.Context, event hooks.Event) error {
+			if event.Type() == hooks.AwaitTypedInput && event.RunID() == "run-selvedge-cancel" {
+				awaitOnce.Do(func() {
+					close(awaited)
+				})
+			}
+			return nil
+		}))
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			require.NoError(t, sub.Close())
+		})
 		handle, err := coordinator.NewClient(fx.rt).Start(
 			ctx,
 			"sess-selvedge-cancel",
@@ -108,9 +122,13 @@ func TestSelvedgePortableAcceptance(t *testing.T) {
 			agentsruntime.WithRunID("run-selvedge-cancel"),
 		)
 		require.NoError(t, err)
-		require.Eventually(t, func() bool {
-			return fx.recorder.count(hooks.AwaitTypedInput) > 0
-		}, 5*time.Second, 20*time.Millisecond)
+		// Cancellation requires the await barrier, not a startup latency bound.
+		// Persisted workflow steps share the scenario's deadline.
+		select {
+		case <-awaited:
+		case <-ctx.Done():
+			t.Fatalf("typed-input await was not published: %v", ctx.Err())
+		}
 		require.NoError(t, fx.rt.CancelRun(ctx, "run-selvedge-cancel"))
 		_, err = handle.Wait(ctx)
 		require.Error(t, err)
