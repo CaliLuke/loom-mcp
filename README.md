@@ -41,7 +41,7 @@ This repo currently targets:
 
 - `github.com/CaliLuke/loom v1.10.0-alpha.14`
 - `github.com/modelcontextprotocol/go-sdk v1.8.1-0.20261016161459-3e9d812b1814`
-- Go `1.27.2` or later
+- Go `1.27.3` or later
 
 The dependency baseline uses current stable releases, including MongoDB `9.0.4`,
 Redis `8.10.2`, the MongoDB Go driver `v2.9.2`, Redis Go client `v9.23.0`,

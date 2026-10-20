@@ -59,8 +59,8 @@ github.com/CaliLuke/libopenapi v0.41.7-0.20261014145029-7886f0170cc4 h1:KG8QSbAt
 github.com/CaliLuke/libopenapi v0.41.7-0.20261014145029-7886f0170cc4/go.mod h1:gEQ2ydf5xr92Ql+uRl54gig6N/DAc/zuIrfZNqtFqPA=
 github.com/CaliLuke/loom v1.10.0-alpha.14 h1:3DURHyWQMZ4Nbg9X1Ruvjme3oW6lUOkj3YQfLZ2pPzA=
 github.com/CaliLuke/loom v1.10.0-alpha.14/go.mod h1:BBJip0af503vxXbCkf79o/HFK+TdEGW2pnXTdj5YAKw=
-github.com/CaliLuke/selvedge v0.0.0-20261012194623-a33adedea054 h1:Y9qhs9/xb+XsxWTMseBzhGWPjC2oPzBVCNTv3CcgNZg=
-github.com/CaliLuke/selvedge v0.0.0-20261012194623-a33adedea054/go.mod h1:eOFDmrA5pjpBv04aR+bj8Qr1Ngu2rTYyDwjUfIDFR2c=
+github.com/CaliLuke/selvedge v0.7.0 h1:9scL+JWLODAOie5C6vHKkkSvknyLWglUQT5c2Ij6YM8=
+github.com/CaliLuke/selvedge v0.7.0/go.mod h1:WMOxrwKeto/YPgLNhH9mxvduVEiWlVKDGLkm2uAUZw8=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
 github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=
 github.com/alecthomas/kong v1.16.1 h1:ixhCt93XkJ98kGposQ54+bl0IK6XwqB40AsMynU7Z8E=

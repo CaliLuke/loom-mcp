@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-Go 1.27.2 or later.
+Go 1.27.3 or later.
 
 ```bash
 go version

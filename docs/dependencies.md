@@ -9,7 +9,8 @@ Verified on 2026-10-08:
 
 | Dependency | Version |
 | --- | --- |
-| Go | 1.27.2 |
+| Go | 1.27.3 (verified 2026-10-20) |
+| Selvedge | v0.7.0 (verified 2026-10-20) |
 | Loom | v1.10.0-alpha.14 (verified 2026-10-20) |
 | MongoDB server / Go driver | 9.0.4 / v2.9.2 |
 | Redis server / Go client | 8.10.2 / CaliLuke/go-redis v9.23.1-0.20261014134601-1073297e76ea (client verified 2026-10-14) |
@@ -117,3 +118,11 @@ absent values. Supplied zero, false, empty collections and allowed nulls retain
 their meaning. Required fields remain required even when they declare defaults.
 Tagged and untagged tool unions use Loom’s shared JSON codecs and branch
 validation; ambiguous or unmatched untagged values are rejected.
+
+## Selvedge v0.7.0 adoption
+
+Selvedge now uses the published v0.7.0 release instead of a development commit.
+It requires Go 1.27.3 and a fresh database; earlier development schemas have no
+automatic migration. Finish existing runs before switching databases. See the
+[Selvedge runtime notes](runtime.md) for tracing and
+history compatibility details.

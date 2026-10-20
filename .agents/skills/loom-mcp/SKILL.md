@@ -385,6 +385,11 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   raw payload and decode error, remain pending by default, and may be acked only
   after an application-owned dead-letter commit.
 - Available engine adapters are `inmem`, `temporal`, and `selvedge`.
+  Selvedge v0.7.0 requires Go 1.27.3 and a fresh database; earlier development
+  schemas have no automatic migration. Complete old runs before switching
+  databases. Lifecycle tracing emits completed callback spans, correlated by
+  workflow/command IDs. Old histories lack verifiable cancellation targets when
+  that metadata was not recorded.
   Selvedge workers own an unstarted App and activate during runtime sealing;
   an optional started client App stays caller-owned across worker replacement.
   Root-run/tool-await queries and `ProvideToolResults` require worker mode.

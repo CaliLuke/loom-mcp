@@ -5456,8 +5456,17 @@ There are no Selvedge histories below protocol 18.
 
 For local backend development, use `make selvedge-local` with optional
 `SELVEDGE_DIR`. Return to `make selvedge-remote` before committing; it restores the
-pinned public pseudo-version in both root and agent_features modules.
+pinned release in both root and agent_features modules.
 `make selvedge-status` fails unless both select that remote version.
+
+The pinned Selvedge v0.7.0 release requires Go 1.27.3 or later and a fresh
+database. Automatic migration from earlier development schemas is not supported;
+finish existing runs on the previous deployment before switching to a new
+database. Retain the old database for any required historical inspection.
+Selvedge's OpenTelemetry hooks emit completed spans for each lifecycle callback;
+correlate them by workflow and command IDs across suspension and worker handoff.
+Older exported histories remain readable, but cancellation targets absent from
+those histories cannot be verified retroactively.
 
 
 **Temporal worker** — Production-grade durable execution:

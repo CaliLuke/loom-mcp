@@ -4,7 +4,7 @@ Minimal, copy‑paste runnable example to go from zero → talking agent. Keep y
 
 ## Prerequisites
 
-- Go 1.27.2 or later
+- Go 1.27.3 or later
 - Loom CLI (`go install github.com/CaliLuke/loom/cmd/loom@v1.10.0-alpha.14`)
 - Temporal is optional. The generated example uses the in-memory engine; a
   Temporal server is needed only when you opt into durable execution in step 5.

@@ -1,11 +1,11 @@
 module example.com/agentfeatures
 
-go 1.27.2
+go 1.27.3
 
 require (
 	github.com/CaliLuke/loom v1.10.0-alpha.14
 	github.com/CaliLuke/loom-mcp/v2 v2.0.1
-	github.com/CaliLuke/selvedge v0.0.0-20261012194623-a33adedea054
+	github.com/CaliLuke/selvedge v0.7.0
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go v0.44.0
 	go.mongodb.org/mongo-driver/v2 v2.9.2
