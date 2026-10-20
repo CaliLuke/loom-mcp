@@ -39,7 +39,7 @@ the same endpoint must share that key. There is no v1 compatibility shim.
 
 This repo currently targets:
 
-- `github.com/CaliLuke/loom v1.10.0-alpha.12`
+- `github.com/CaliLuke/loom v1.10.0-alpha.13`
 - `github.com/modelcontextprotocol/go-sdk v1.8.1-0.20261016161459-3e9d812b1814`
 - Go `1.27.2` or later
 
@@ -56,7 +56,7 @@ request-summary API awaits a tagged SDK release.
 The standard CLI for generation is:
 
 ```bash
-go install github.com/CaliLuke/loom/cmd/loom@v1.10.0-alpha.12
+go install github.com/CaliLuke/loom/cmd/loom@v1.10.0-alpha.13
 ```
 
 ## Working in this repo

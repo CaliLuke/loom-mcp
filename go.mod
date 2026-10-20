@@ -5,7 +5,7 @@ go 1.27.2
 require (
 	cloud.google.com/go/auth v0.24.1
 	github.com/CaliLuke/go-redis/v9 v9.23.1-0.20261014134601-1073297e76ea
-	github.com/CaliLuke/loom v1.10.0-alpha.12
+	github.com/CaliLuke/loom v1.10.0-alpha.13
 	github.com/CaliLuke/selvedge v0.0.0-20261012194623-a33adedea054
 	github.com/anthropics/anthropic-sdk-go v1.79.1
 	github.com/aws/aws-sdk-go-v2 v1.47.2

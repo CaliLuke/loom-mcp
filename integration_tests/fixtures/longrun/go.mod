@@ -3,7 +3,7 @@ module example.com/longrun
 go 1.27.2
 
 require (
-	github.com/CaliLuke/loom v1.10.0-alpha.12
+	github.com/CaliLuke/loom v1.10.0-alpha.13
 	github.com/CaliLuke/loom-mcp/v2 v2.0.1
 	github.com/aws/aws-sdk-go-v2 v1.47.2
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.63.3
