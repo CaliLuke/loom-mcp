@@ -64,9 +64,11 @@ func TestHTTPUserAgentAcrossTransports(t *testing.T) {
 				t.Cleanup(func() {
 					require.NoError(t, caller.Close())
 				})
+				// Notifications have no response acknowledgment. Wait for the server's
+				// initialization handler before closing the session and canceling queued work.
+				assert.Equal(t, &sdkmcp.Implementation{Name: "host-application", Version: "42"}, requireReceive(t, identity))
 				assertMultiContentResponse(t, caller, t.Context())
 				require.NoError(t, caller.Close())
-				assert.Equal(t, &sdkmcp.Implementation{Name: "host-application", Version: "42"}, requireReceive(t, identity))
 				if transport != nil {
 					assert.Zero(t, transport.closed.Load(), "closing the MCP session does not close host-owned idle connections")
 				}
