@@ -67,7 +67,9 @@ func TestTemporalStorageActivityValidation(t *testing.T) {
 				return nil
 			}
 			require.ErrorContains(t, tc.register(eng, "", engine.ActivityOptions{}, callback), "activity name cannot be empty")
-			require.ErrorContains(t, tc.register(&Engine{}, "activity", engine.ActivityOptions{}, callback), "client mode cannot")
+			client, err := NewClient(Options{Client: newLazyTestClient(t)})
+			require.NoError(t, err)
+			require.ErrorContains(t, tc.register(client, "activity", engine.ActivityOptions{}, callback), "client mode cannot")
 			wf := &temporalWorkflowContext{baseCtx: t.Context()}
 			out, err := tc.execute(wf, "", engine.ActivityOptions{}, false)
 			assert.Nil(t, out)

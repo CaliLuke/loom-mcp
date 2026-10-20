@@ -9,11 +9,6 @@ import (
 	sv "github.com/CaliLuke/selvedge"
 )
 
-type activityFuture[T any] struct {
-	ctx    *sv.WorkflowContext
-	future *sv.Future[T]
-}
-
 type timerFuture struct {
 	ctx   *sv.WorkflowContext
 	timer *sv.Timer
@@ -26,15 +21,6 @@ type readyTimer struct {
 type childHandle struct {
 	ctx   *sv.WorkflowContext
 	child *sv.Child[*api.RunOutput]
-}
-
-func (f *activityFuture[T]) Get(context.Context) (T, error) {
-	out, err := f.future.Get(f.ctx)
-	return out, normalizeError(err)
-}
-
-func (f *activityFuture[T]) IsReady() bool {
-	return f.future.IsReady()
 }
 
 func (f *timerFuture) Get(context.Context) (time.Time, error) {

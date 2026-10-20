@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/internal/cancellation"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/telemetry"
@@ -170,6 +169,7 @@ type InstrumentationOptions struct {
 //   - Call Close() to gracefully stop workers and release the Temporal client when
 //     owned here.
 type Engine struct {
+	engine.AgentActivityRegistrations
 	client              client.Client
 	closeClient         bool
 	replayDataConverter converter.DataConverter
@@ -245,6 +245,7 @@ func newEngine(opts Options, workerMode bool) (*Engine, error) {
 		activityOptions:         make(map[string]engine.ActivityOptions),
 		pendingActivities:       make(map[string]struct{}),
 	}
+	e.AgentActivityRegistrations.ActivityRegistrar = e
 	if opts.ClientOptions != nil {
 		e.replayDataConverter = opts.ClientOptions.DataConverter
 		if e.replayDataConverter == nil {
@@ -332,115 +333,6 @@ func (e *Engine) RegisterWorkflow(_ context.Context, def engine.WorkflowDefiniti
 	e.finishWorkflowRegistration(def)
 	registered = true
 	return nil
-}
-
-// RegisterHookActivity registers a typed hook activity with the Temporal engine.
-// Hook activities publish workflow-emitted hook events outside of deterministic
-// workflow code. The activity accepts *api.HookActivityInput and returns an error.
-func (e *Engine) RegisterHookActivity(_ context.Context, name string, opts engine.ActivityOptions, fn func(context.Context, *api.HookActivityInput) error) error {
-	if err := e.requireWorkerMode("register hook activities"); err != nil {
-		return err
-	}
-	opts = e.applyActivityClassDefaults(activityKindHook, opts)
-	wrapped := func(ctx context.Context, in *api.HookActivityInput) error {
-		return classifyTemporalCancellation(fn(e.injectWorkflowContextIntoActivity(ctx), in))
-	}
-	return e.registerActivityWithCtx(name, opts, wrapped)
-}
-
-// RegisterPlannerActivity registers a typed planner activity
-// (PlanStart/PlanResume) with the Temporal engine. It binds a Go function that
-// accepts *api.PlanActivityInput and returns *api.PlanActivityOutput to a
-// logical activity name for use in agent workflows.  The activity is registered
-// on the specified task queue (opts.Queue), falling back to the engine's
-// default queue if unspecified. Registered activities can be invoked from
-// workflows via ExecuteActivity using the provided name.
-//
-// Returns an error if the activity name is empty or if registration fails due to
-// worker configuration.
-//
-// Thread-safe: Safe to call concurrently with other Register* methods.
-func (e *Engine) RegisterPlannerActivity(_ context.Context, name string, opts engine.ActivityOptions, fn func(context.Context, *api.PlanActivityInput) (*api.PlanActivityOutput, error)) error {
-	if err := e.requireWorkerMode("register planner activities"); err != nil {
-		return err
-	}
-	opts = e.applyActivityClassDefaults(activityKindPlanner, opts)
-	// Wrap to inject originating WorkflowContext into activity context so runtime code
-	// can start child workflows (agent-as-tool) with engine-owned context.
-	wrapped := func(ctx context.Context, in *api.PlanActivityInput) (*api.PlanActivityOutput, error) {
-		out, err := fn(e.injectWorkflowContextIntoActivity(ctx), in)
-		return out, classifyTemporalCancellation(err)
-	}
-	return e.registerActivityWithCtx(name, opts, wrapped)
-}
-
-// RegisterFinishRunActivity registers terminal event storage on the agent queue.
-func (e *Engine) RegisterFinishRunActivity(_ context.Context, name string, opts engine.ActivityOptions, fn func(context.Context, *api.FinishRunInput) (*api.FinishRunOutput, error)) error {
-	if err := e.requireWorkerMode("register finish activities"); err != nil {
-		return err
-	}
-	opts = e.applyActivityClassDefaults(activityKindHook, opts)
-	// Wrap to inject originating WorkflowContext into activity context so runtime code
-	// can start child workflows (agent-as-tool) with engine-owned context.
-	wrapped := func(ctx context.Context, in *api.FinishRunInput) (*api.FinishRunOutput, error) {
-		out, err := fn(e.injectWorkflowContextIntoActivity(ctx), in)
-		return out, classifyTemporalCancellation(err)
-	}
-	return e.registerActivityWithCtx(name, opts, wrapped)
-}
-
-// RegisterRecordContentActivity registers content storage on the agent queue.
-func (e *Engine) RegisterRecordContentActivity(_ context.Context, name string, opts engine.ActivityOptions, fn func(context.Context, *api.RecordContentInput) (*api.RecordContentOutput, error)) error {
-	if err := e.requireWorkerMode("register content activities"); err != nil {
-		return err
-	}
-	opts = e.applyActivityClassDefaults(activityKindHook, opts)
-	// Wrap to inject originating WorkflowContext into activity context so runtime code
-	// can start child workflows (agent-as-tool) with engine-owned context.
-	wrapped := func(ctx context.Context, in *api.RecordContentInput) (*api.RecordContentOutput, error) {
-		out, err := fn(e.injectWorkflowContextIntoActivity(ctx), in)
-		return out, classifyTemporalCancellation(err)
-	}
-	return e.registerActivityWithCtx(name, opts, wrapped)
-}
-
-// RegisterChildDispatchActivity registers child validation on the agent queue.
-func (e *Engine) RegisterChildDispatchActivity(_ context.Context, name string, opts engine.ActivityOptions, fn func(context.Context, *api.ChildDispatchInput) (*api.ChildDispatchOutput, error)) error {
-	if err := e.requireWorkerMode("register child dispatch activities"); err != nil {
-		return err
-	}
-	opts = e.applyActivityClassDefaults(activityKindHook, opts)
-	// Wrap to inject originating WorkflowContext into activity context so runtime code
-	// can start child workflows (agent-as-tool) with engine-owned context.
-	wrapped := func(ctx context.Context, in *api.ChildDispatchInput) (*api.ChildDispatchOutput, error) {
-		out, err := fn(e.injectWorkflowContextIntoActivity(ctx), in)
-		return out, classifyTemporalCancellation(err)
-	}
-	return e.registerActivityWithCtx(name, opts, wrapped)
-}
-
-// RegisterExecuteToolActivity registers a typed execute_tool activity with the
-// Temporal engine.  This method binds a Go function that accepts *api.ToolInput
-// and returns *api.ToolOutput to a logical activity name for use within agent
-// workflows. The activity is registered on the specified task queue
-// (opts.Queue), or falls back to the engine's default queue if unspecified.
-// Registered activities are accessible from workflows via ExecuteActivity using
-// the provided name.  Returns an error if the activity name is empty or
-// registration fails due to worker configuration.
-//
-// Thread-safe: Safe to call concurrently with other Register* methods.
-func (e *Engine) RegisterExecuteToolActivity(_ context.Context, name string, opts engine.ActivityOptions, fn func(context.Context, *api.ToolInput) (*api.ToolOutput, error)) error {
-	if err := e.requireWorkerMode("register execute_tool activities"); err != nil {
-		return err
-	}
-	opts = e.applyActivityClassDefaults(activityKindTool, opts)
-	// Wrap to inject originating WorkflowContext into activity context so runtime code
-	// can start child workflows (agent-as-tool) with engine-owned context.
-	wrapped := func(ctx context.Context, in *api.ToolInput) (*api.ToolOutput, error) {
-		out, err := fn(e.injectWorkflowContextIntoActivity(ctx), in)
-		return out, classifyTemporalCancellation(err)
-	}
-	return e.registerActivityWithCtx(name, opts, wrapped)
 }
 
 // StartWorkflow launches a new workflow execution on Temporal using the specified
@@ -809,19 +701,4 @@ func (e *Engine) releaseWorkflowContext(runID string, wf engine.WorkflowContext)
 		return
 	}
 	e.workflowContexts.CompareAndDelete(runID, wf)
-}
-
-// RegisterRecallActivity registers bounded transcript lookup.
-func (e *Engine) RegisterRecallActivity(_ context.Context, name string, opts engine.ActivityOptions, fn func(context.Context, *api.RecallActivityInput) (*api.RecallActivityOutput, error)) error {
-	if err := e.requireWorkerMode("register recall activities"); err != nil {
-		return err
-	}
-	opts = e.applyActivityClassDefaults(activityKindHook, opts)
-	// Wrap to inject originating WorkflowContext into activity context so runtime code
-	// can start child workflows (agent-as-tool) with engine-owned context.
-	wrapped := func(ctx context.Context, in *api.RecallActivityInput) (*api.RecallActivityOutput, error) {
-		out, err := fn(e.injectWorkflowContextIntoActivity(ctx), in)
-		return out, classifyTemporalCancellation(err)
-	}
-	return e.registerActivityWithCtx(name, opts, wrapped)
 }

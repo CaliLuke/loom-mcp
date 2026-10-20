@@ -77,6 +77,8 @@ func RunConformance(t *testing.T, factory Factory) {
 	require.NotNil(t, factory.New)
 	cases := make([]scenario, 0, 49)
 	cases = append(cases, []scenario{
+		{name: "generic_activity_registration", run: testGenericActivityRegistration},
+		{name: "generic_activity_nil_result", run: testGenericActivityNilResult},
 		{name: "lifecycle", run: testLifecycle},
 		{name: "id_conflict", run: testIDConflict},
 		{name: "tools_parallel", run: testParallelTools},

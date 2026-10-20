@@ -14,7 +14,7 @@ import (
 
 func activities() []activityCase {
 	return []activityCase{
-		hookCase(), plannerCase(), toolCase(), finishCase(), contentCase(), dispatchCase(), sealCase(), recallCase(), summaryCase(),
+		genericActivityCase(false), genericActivityCase(true), hookCase(), plannerCase(), toolCase(), finishCase(), contentCase(), dispatchCase(), sealCase(), recallCase(), summaryCase(),
 	}
 }
 

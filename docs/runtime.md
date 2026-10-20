@@ -5297,6 +5297,7 @@ specs := rt.ToolSpecsForAgent(agent.Ident("service.chat"))
 
 ```go
 type Engine interface {
+    ActivityRegistrar
     RegisterWorkflow(ctx, def WorkflowDefinition) error
     RegisterHookActivity(ctx, name, opts, fn) error
     RegisterPlannerActivity(ctx, name, opts, fn) error
@@ -5311,12 +5312,46 @@ type Engine interface {
 
 `StartWorkflow` requires unique workflow IDs; an already-running ID returns `engine.ErrWorkflowAlreadyStarted`, which does not match `engine.ErrWorkflowStartRejected`.
 
+### Typed activities
+
+Use `engine.Activity[I, O]` for application-owned activities. Registration and
+invocation share a name and concrete input/output types:
+
+```go
+metadata := engine.Activity[MetadataInput, MetadataOutput]{Name: "assets.metadata"}
+err := metadata.Register(ctx, eng, engine.ActivityOptions{
+    StartToCloseTimeout: time.Minute,
+}, readMetadata) // func(context.Context, MetadataInput) (MetadataOutput, error)
+// Inside a registered workflow:
+result, err := metadata.Execute(wf.Context(), wf, input, engine.ActivityOptions{})
+```
+
+`ExecuteAsync` returns `Future[O]`. Activity names are unique within an engine,
+including names used by agent activities. Register handlers before sealing worker
+registration. Inputs must be non-nil. Inputs and outputs must be supported by the backend's serializer;
+the adapter preserves the concrete Temporal signature and Selvedge JSON payload.
+
+Adapters implement `ActivityRegistrar` and `ActivityExecutor` once. The shared
+`AgentActivityRegistrations` and `AgentWorkflowActivities` helpers supply the
+runtime's typed planner, tool, recall, and storage operations above that boundary.
+Bind the registration helper to the engine and the workflow helper to each scope's
+executor, including canceled and detached scopes. Custom adapters must implement
+the new generic methods; existing runtime calls keep their agent-specific helpers.
+`ActivityDefinition` is the adapter-facing registration form and accepts a handler
+with an input and either `(output, error)` or an error-only result. Its optional
+`Class` selects the existing `hook`, `planner`, or `tool` timeout defaults; the
+typed application API uses explicit registration options.
+
+This is an activity boundary within loom-mcp. Workflow inputs, signals, and agent
+lifecycle remain the current agent contracts. No new Loom DSL is required.
+
 ### WorkflowContext
 
 Workflow handlers receive a context for deterministic operations:
 
 ```go
 type WorkflowContext interface {
+    ActivityExecutor
     Context() context.Context
     WorkflowID() string
     RunID() string

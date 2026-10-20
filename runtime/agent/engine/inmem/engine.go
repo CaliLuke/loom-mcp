@@ -25,19 +25,11 @@ import (
 type (
 	// eng implements engine.Engine with an in-process goroutine runner.
 	eng struct {
-		mu sync.RWMutex
+		engine.AgentActivityRegistrations
+		activities map[string]activityDef
+		mu         sync.RWMutex
 
 		workflows map[string]engine.WorkflowDefinition
-
-		hookActivities          map[string]hookActivityDef
-		plannerActivities       map[string]plannerActivityDef
-		finishActivities        map[string]finishActivityDef
-		sealActivities          map[string]sealActivityDef
-		contentActivities       map[string]contentActivityDef
-		childDispatchActivities map[string]childDispatchActivityDef
-		recallActivities        map[string]recallActivityDef
-		summaryActivities       map[string]summaryActivityDef
-		toolActivities          map[string]toolActivityDef
 
 		// statuses tracks workflow status by run ID (inmem uses workflow ID as run ID).
 		statuses map[string]engine.RunStatus
@@ -50,6 +42,7 @@ type (
 
 	// wfCtx adapts context.Context plus in-memory signal channels into engine.WorkflowContext.
 	wfCtx struct {
+		engine.AgentWorkflowActivities
 		ctx     context.Context
 		id      string
 		runID   string
@@ -79,38 +72,6 @@ type (
 		h engine.WorkflowHandle
 	}
 
-	hookActivityDef struct {
-		handler func(context.Context, *api.HookActivityInput) error
-		opts    engine.ActivityOptions
-	}
-
-	plannerActivityDef struct {
-		handler func(context.Context, *api.PlanActivityInput) (*api.PlanActivityOutput, error)
-		opts    engine.ActivityOptions
-	}
-	contentActivityDef struct {
-		handler func(context.Context, *api.RecordContentInput) (*api.RecordContentOutput, error)
-		opts    engine.ActivityOptions
-	}
-	recallActivityDef struct {
-		handler func(context.Context, *api.RecallActivityInput) (*api.RecallActivityOutput, error)
-		opts    engine.ActivityOptions
-	}
-	childDispatchActivityDef struct {
-		handler func(context.Context, *api.ChildDispatchInput) (*api.ChildDispatchOutput, error)
-		opts    engine.ActivityOptions
-	}
-
-	finishActivityDef struct {
-		handler func(context.Context, *api.FinishRunInput) (*api.FinishRunOutput, error)
-		opts    engine.ActivityOptions
-	}
-
-	toolActivityDef struct {
-		handler func(context.Context, *api.ToolInput) (*api.ToolOutput, error)
-		opts    engine.ActivityOptions
-	}
-
 	// future is a simple typed Future implementation backed by a channel.
 	future[T any] struct {
 		ready  chan struct{}
@@ -136,9 +97,11 @@ var (
 // This engine is intended for tests and local development only. It does not
 // provide durability, determinism, or replay safety.
 func New() engine.Engine {
-	return &eng{
+	e := &eng{
 		statuses: make(map[string]engine.RunStatus),
 	}
+	e.AgentActivityRegistrations.ActivityRegistrar = e
+	return e
 }
 
 func (e *eng) RegisterWorkflow(_ context.Context, def engine.WorkflowDefinition) error {
@@ -154,145 +117,6 @@ func (e *eng) RegisterWorkflow(_ context.Context, def engine.WorkflowDefinition)
 		return errors.New("invalid workflow definition")
 	}
 	e.workflows[def.Name] = def
-	return nil
-}
-
-// RegisterHookActivity registers a typed hook activity that publishes workflow-emitted
-// hook events outside of deterministic workflow code.
-func (e *eng) RegisterHookActivity(_ context.Context, name string, opts engine.ActivityOptions, fn func(context.Context, *api.HookActivityInput) error) error {
-	if name == "" {
-		return errors.New("hook activity name is required")
-	}
-	if fn == nil {
-		return errors.New("hook activity handler is required")
-	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if e.hookActivities == nil {
-		e.hookActivities = make(map[string]hookActivityDef)
-	}
-	if _, dup := e.hookActivities[name]; dup {
-		return fmt.Errorf("hook activity %q already registered", name)
-	}
-	e.hookActivities[name] = hookActivityDef{
-		handler: fn,
-		opts:    opts,
-	}
-	return nil
-}
-
-// RegisterPlannerActivity registers a typed planner activity (PlanStart/PlanResume).
-func (e *eng) RegisterPlannerActivity(_ context.Context, name string, opts engine.ActivityOptions, fn func(context.Context, *api.PlanActivityInput) (*api.PlanActivityOutput, error)) error {
-	if name == "" {
-		return errors.New("planner activity name is required")
-	}
-	if fn == nil {
-		return errors.New("planner activity handler is required")
-	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if e.plannerActivities == nil {
-		e.plannerActivities = make(map[string]plannerActivityDef)
-	}
-	if _, dup := e.plannerActivities[name]; dup {
-		return fmt.Errorf("planner activity %q already registered", name)
-	}
-	e.plannerActivities[name] = plannerActivityDef{
-		handler: fn,
-		opts:    opts,
-	}
-	return nil
-}
-
-// RegisterFinishRunActivity registers a typed terminal activity.
-func (e *eng) RegisterFinishRunActivity(_ context.Context, name string, opts engine.ActivityOptions, fn func(context.Context, *api.FinishRunInput) (*api.FinishRunOutput, error)) error {
-	if name == "" {
-		return errors.New("finish activity name is required")
-	}
-	if fn == nil {
-		return errors.New("finish activity handler is required")
-	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if e.finishActivities == nil {
-		e.finishActivities = make(map[string]finishActivityDef)
-	}
-	if _, dup := e.finishActivities[name]; dup {
-		return fmt.Errorf("finish activity %q already registered", name)
-	}
-	e.finishActivities[name] = finishActivityDef{
-		handler: fn,
-		opts:    opts,
-	}
-	return nil
-}
-
-// RegisterRecordContentActivity registers ordered content storage.
-func (e *eng) RegisterRecordContentActivity(_ context.Context, name string, opts engine.ActivityOptions, fn func(context.Context, *api.RecordContentInput) (*api.RecordContentOutput, error)) error {
-	if name == "" {
-		return errors.New("record content activity name is required")
-	}
-	if fn == nil {
-		return errors.New("record content activity handler is required")
-	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if e.contentActivities == nil {
-		e.contentActivities = make(map[string]contentActivityDef)
-	}
-	if _, dup := e.contentActivities[name]; dup {
-		return fmt.Errorf("record content activity %q already registered", name)
-	}
-	e.contentActivities[name] = contentActivityDef{
-		handler: fn,
-		opts:    opts,
-	}
-	return nil
-}
-
-// RegisterChildDispatchActivity registers ordered child validation.
-func (e *eng) RegisterChildDispatchActivity(_ context.Context, name string, opts engine.ActivityOptions, fn func(context.Context, *api.ChildDispatchInput) (*api.ChildDispatchOutput, error)) error {
-	if name == "" {
-		return errors.New("child dispatch activity name is required")
-	}
-	if fn == nil {
-		return errors.New("child dispatch activity handler is required")
-	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if e.childDispatchActivities == nil {
-		e.childDispatchActivities = make(map[string]childDispatchActivityDef)
-	}
-	if _, dup := e.childDispatchActivities[name]; dup {
-		return fmt.Errorf("child dispatch activity %q already registered", name)
-	}
-	e.childDispatchActivities[name] = childDispatchActivityDef{
-		handler: fn,
-		opts:    opts,
-	}
-	return nil
-}
-
-// RegisterExecuteToolActivity registers a typed execute_tool activity.
-func (e *eng) RegisterExecuteToolActivity(_ context.Context, name string, opts engine.ActivityOptions, fn func(context.Context, *api.ToolInput) (*api.ToolOutput, error)) error {
-	if name == "" {
-		return errors.New("tool activity name is required")
-	}
-	if fn == nil {
-		return errors.New("tool activity handler is required")
-	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if e.toolActivities == nil {
-		e.toolActivities = make(map[string]toolActivityDef)
-	}
-	if _, dup := e.toolActivities[name]; dup {
-		return fmt.Errorf("tool activity %q already registered", name)
-	}
-	e.toolActivities[name] = toolActivityDef{
-		handler: fn,
-		opts:    opts,
-	}
 	return nil
 }
 
@@ -374,7 +198,7 @@ func validateWorkflowStartRequest(req engine.WorkflowStartRequest) error {
 }
 
 func (e *eng) newWorkflowContext(ctx context.Context, id string) *wfCtx {
-	return &wfCtx{
+	w := &wfCtx{
 		ctx:           ctx,
 		id:            id,
 		runID:         id,
@@ -386,6 +210,8 @@ func (e *eng) newWorkflowContext(ctx context.Context, id string) *wfCtx {
 		confirmCh:     make(chan *api.ConfirmationDecision, 1),
 		typedInputCh:  make(chan *api.TypedInputAnswer, 1),
 	}
+	w.AgentWorkflowActivities.ActivityExecutor = w
+	return w
 }
 
 func (e *eng) reserveWorkflowRun(acceptanceCtx context.Context, id string, h *handle) error {
@@ -598,6 +424,7 @@ func (w *wfCtx) Detached() engine.WorkflowContext {
 	cctx := context.WithoutCancel(w.ctx)
 	sub := *w
 	sub.ctx = cctx
+	sub.AgentWorkflowActivities.ActivityExecutor = &sub
 	return &sub
 }
 
@@ -605,6 +432,7 @@ func (w *wfCtx) WithCancel() (engine.WorkflowContext, func()) {
 	cctx, cancel := context.WithCancel(w.ctx)
 	sub := *w
 	sub.ctx = cctx
+	sub.AgentWorkflowActivities.ActivityExecutor = &sub
 	return &sub, cancel
 }
 
@@ -649,135 +477,6 @@ func (w *wfCtx) Await(ctx context.Context, condition func() bool) error {
 		case <-ticker.C:
 		}
 	}
-}
-
-func (w *wfCtx) PublishHook(ctx context.Context, call engine.HookActivityCall) error {
-	if call.Name == "" {
-		return errors.New("hook activity name is required")
-	}
-	if call.Input == nil {
-		return errors.New("hook activity input is required")
-	}
-	w.eng.mu.RLock()
-	def, ok := w.eng.hookActivities[call.Name]
-	w.eng.mu.RUnlock()
-	if !ok {
-		return fmt.Errorf("hook activity %q not registered", call.Name)
-	}
-	actCtx, cancel := w.activityContext(ctx, call.Name, def.opts, call.Options)
-	defer cancel()
-	return normalizeError(def.handler(actCtx, call.Input))
-}
-
-func (w *wfCtx) ExecutePlannerActivity(ctx context.Context, call engine.PlannerActivityCall) (*api.PlanActivityOutput, error) {
-	if call.Name == "" {
-		return nil, errors.New("planner activity name is required")
-	}
-	if call.Input == nil {
-		return nil, errors.New("planner activity input is required")
-	}
-	w.eng.mu.RLock()
-	def, ok := w.eng.plannerActivities[call.Name]
-	w.eng.mu.RUnlock()
-	if !ok {
-		return nil, fmt.Errorf("planner activity %q not registered", call.Name)
-	}
-	actCtx, cancel := w.activityContext(ctx, call.Name, def.opts, call.Options)
-	defer cancel()
-	out, err := def.handler(actCtx, call.Input)
-	return out, normalizeError(err)
-}
-
-func (w *wfCtx) ExecuteFinishRunActivity(ctx context.Context, call engine.FinishRunActivityCall) (*api.FinishRunOutput, error) {
-	if call.Name == "" {
-		return nil, errors.New("finish activity name is required")
-	}
-	if call.Input == nil {
-		return nil, errors.New("finish activity input is required")
-	}
-	w.eng.mu.RLock()
-	def, ok := w.eng.finishActivities[call.Name]
-	w.eng.mu.RUnlock()
-	if !ok {
-		return nil, fmt.Errorf("finish activity %q not registered", call.Name)
-	}
-	actCtx, cancel := w.activityContext(ctx, call.Name, def.opts, call.Options)
-	defer cancel()
-	out, err := def.handler(actCtx, call.Input)
-	return out, normalizeError(err)
-}
-
-// ExecuteRecordContentActivity stores content through the registered handler.
-func (w *wfCtx) ExecuteRecordContentActivity(ctx context.Context, call engine.RecordContentActivityCall) (*api.RecordContentOutput, error) {
-	if call.Name == "" {
-		return nil, errors.New("record content activity name is required")
-	}
-	if call.Input == nil {
-		return nil, errors.New("record content activity input is required")
-	}
-	w.eng.mu.RLock()
-	def, ok := w.eng.contentActivities[call.Name]
-	w.eng.mu.RUnlock()
-	if !ok {
-		return nil, fmt.Errorf("record content activity %q not registered", call.Name)
-	}
-	actCtx, cancel := w.activityContext(ctx, call.Name, def.opts, call.Options)
-	defer cancel()
-	out, err := def.handler(actCtx, call.Input)
-	return out, normalizeError(err)
-}
-
-// ExecuteChildDispatchActivity validates child dispatch through the registered handler.
-func (w *wfCtx) ExecuteChildDispatchActivity(ctx context.Context, call engine.ChildDispatchActivityCall) (*api.ChildDispatchOutput, error) {
-	if call.Name == "" {
-		return nil, errors.New("child dispatch activity name is required")
-	}
-	if call.Input == nil {
-		return nil, errors.New("child dispatch activity input is required")
-	}
-	w.eng.mu.RLock()
-	def, ok := w.eng.childDispatchActivities[call.Name]
-	w.eng.mu.RUnlock()
-	if !ok {
-		return nil, fmt.Errorf("child dispatch activity %q not registered", call.Name)
-	}
-	actCtx, cancel := w.activityContext(ctx, call.Name, def.opts, call.Options)
-	defer cancel()
-	out, err := def.handler(actCtx, call.Input)
-	return out, normalizeError(err)
-}
-
-func (w *wfCtx) ExecuteToolActivity(ctx context.Context, call engine.ToolActivityCall) (*api.ToolOutput, error) {
-	fut, err := w.ExecuteToolActivityAsync(ctx, call)
-	if err != nil {
-		return nil, err
-	}
-	return fut.Get(ctx)
-}
-
-func (w *wfCtx) ExecuteToolActivityAsync(ctx context.Context, call engine.ToolActivityCall) (engine.Future[*api.ToolOutput], error) {
-	if call.Name == "" {
-		return nil, errors.New("tool activity name is required")
-	}
-	if call.Input == nil {
-		return nil, errors.New("tool activity input is required")
-	}
-	w.eng.mu.RLock()
-	def, ok := w.eng.toolActivities[call.Name]
-	w.eng.mu.RUnlock()
-	if !ok {
-		return nil, fmt.Errorf("tool activity %q not registered", call.Name)
-	}
-
-	actCtx, cancel := w.activityContext(ctx, call.Name, def.opts, call.Options)
-	fut := &future[*api.ToolOutput]{ready: make(chan struct{})}
-	go func() {
-		defer close(fut.ready)
-		defer cancel()
-		fut.result, fut.err = def.handler(actCtx, call.Input)
-		fut.err = normalizeError(fut.err)
-	}()
-	return fut, nil
 }
 
 func (w *wfCtx) PauseRequests() engine.Receiver[*api.PauseRequest] {
@@ -939,47 +638,4 @@ func (e *eng) SignalByID(ctx context.Context, workflowID, runID, name string, pa
 		return engine.ErrWorkflowNotFound
 	}
 	return h.Signal(ctx, name, payload)
-}
-
-// RegisterRecallActivity registers bounded transcript lookup.
-func (e *eng) RegisterRecallActivity(_ context.Context, name string, opts engine.ActivityOptions, fn func(context.Context, *api.RecallActivityInput) (*api.RecallActivityOutput, error)) error {
-	if name == "" {
-		return errors.New("recall activity name is required")
-	}
-	if fn == nil {
-		return errors.New("recall activity handler is required")
-	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if e.recallActivities == nil {
-		e.recallActivities = make(map[string]recallActivityDef)
-	}
-	if _, dup := e.recallActivities[name]; dup {
-		return fmt.Errorf("recall activity %q already registered", name)
-	}
-	e.recallActivities[name] = recallActivityDef{
-		handler: fn,
-		opts:    opts,
-	}
-	return nil
-}
-
-// ExecuteRecallActivity schedules a recorded bounded lookup.
-func (w *wfCtx) ExecuteRecallActivity(ctx context.Context, call engine.RecallActivityCall) (*api.RecallActivityOutput, error) {
-	if call.Name == "" {
-		return nil, errors.New("recall activity name is required")
-	}
-	if call.Input == nil {
-		return nil, errors.New("recall activity input is required")
-	}
-	w.eng.mu.RLock()
-	def, ok := w.eng.recallActivities[call.Name]
-	w.eng.mu.RUnlock()
-	if !ok {
-		return nil, fmt.Errorf("recall activity %q not registered", call.Name)
-	}
-	actCtx, cancel := w.activityContext(ctx, call.Name, def.opts, call.Options)
-	defer cancel()
-	out, err := def.handler(actCtx, call.Input)
-	return out, normalizeError(err)
 }

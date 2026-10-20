@@ -384,6 +384,12 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   `Delivery.Ack` only after the commit. Malformed manual deliveries expose the
   raw payload and decode error, remain pending by default, and may be acked only
   after an application-owned dead-letter commit.
+- Add activities through `engine.Activity[I, O]` and the generic
+  `ActivityRegistrar`/`ActivityExecutor` boundary. Do not add per-feature adapter
+  registration/execution methods. Existing agent helpers live in shared
+  `AgentActivityRegistrations`/`AgentWorkflowActivities`; each workflow scope must
+  bind its own executor. Preserve concrete Temporal signatures and Selvedge JSON
+  payloads, names, and scheduling options so saved histories continue to replay.
 - Available engine adapters are `inmem`, `temporal`, and `selvedge`.
   Selvedge v0.7.0 requires Go 1.27.3 and a fresh database; earlier development
   schemas have no automatic migration. Complete old runs before switching

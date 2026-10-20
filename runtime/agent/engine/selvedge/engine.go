@@ -25,6 +25,7 @@ type Options struct {
 // Engine implements durable workflows using Selvedge. Register before sealing;
 // Close releases only the worker App, never a separately supplied Client.
 type Engine struct {
+	engine.AgentActivityRegistrations
 	app, client                        *sv.App
 	mu                                 sync.Mutex
 	registrationClosed, active, closed bool
@@ -53,7 +54,9 @@ func NewWorker(opts Options) (*Engine, error) {
 	if opts.Client == nil {
 		opts.Client = opts.App
 	}
-	return &Engine{app: opts.App, client: opts.Client, workflows: make(map[string]struct{}), activities: newActivityRegistry(), activityDefaults: opts.ActivityDefaults, startWorkflow: sv.StartWorkflowByName}, nil
+	e := &Engine{app: opts.App, client: opts.Client, workflows: make(map[string]struct{}), activities: make(activityRegistry), activityDefaults: opts.ActivityDefaults, startWorkflow: sv.StartWorkflowByName}
+	e.AgentActivityRegistrations.ActivityRegistrar = e
+	return e, nil
 }
 
 // NewClient constructs an engine using a started, caller-owned Client.
@@ -61,7 +64,9 @@ func NewClient(opts Options) (*Engine, error) {
 	if opts.Client == nil || opts.App != nil {
 		return nil, errors.New("selvedge: client mode requires Client and no App")
 	}
-	return &Engine{client: opts.Client, startWorkflow: sv.StartWorkflowByName}, nil
+	e := &Engine{client: opts.Client, startWorkflow: sv.StartWorkflowByName}
+	e.AgentActivityRegistrations.ActivityRegistrar = e
+	return e, nil
 }
 
 // Close stops the owned worker, waiting for pending startup and cleanup.
@@ -142,7 +147,7 @@ func (e *Engine) RegisterWorkflow(_ context.Context, def engine.WorkflowDefiniti
 		return fmt.Errorf("selvedge: workflow %q already registered", def.Name)
 	}
 	workflow := sv.DefineWorkflow(def.Name, func(ctx *sv.WorkflowContext, input *api.RunInput) (*api.RunOutput, error) {
-		output, err := def.Handler(&workflowContext{engine: e, ctx: ctx}, input)
+		output, err := def.Handler(newWorkflowContext(e, ctx), input)
 		return output, workflowError(err)
 	})
 	sv.RegisterWorkflow(e.app, workflow)

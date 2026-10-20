@@ -3,35 +3,17 @@ package selvedge
 import (
 	"context"
 	"errors"
-	"fmt"
 	"reflect"
 	"time"
 
-	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/api"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	sv "github.com/CaliLuke/selvedge"
 )
 
 type workflowContext struct {
+	engine.AgentWorkflowActivities
 	engine *Engine
 	ctx    *sv.WorkflowContext
-}
-
-func executeActivity[I, O any](w *workflowContext, registry map[string]*sv.Activity[*I, O], name string, input *I, options engine.ActivityOptions) (*sv.Future[O], error) {
-	if name == "" {
-		return nil, errors.New("activity name is required")
-	}
-	if input == nil {
-		return nil, errors.New("activity input is required")
-	}
-	w.engine.mu.Lock()
-	definition := registry[name]
-	w.engine.mu.Unlock()
-	if definition == nil {
-		return nil, fmt.Errorf("selvedge: activity %q is not registered", name)
-	}
-	future, err := definition.ExecuteAsync(w.ctx, input, sv.WithActivityOptions(invocationActivityOptions(options)))
-	return future, normalizeError(err)
 }
 
 func (w *workflowContext) Context() context.Context {
@@ -90,98 +72,15 @@ func (w *workflowContext) Await(ctx context.Context, condition func() bool) erro
 
 func (w *workflowContext) WithCancel() (engine.WorkflowContext, func()) {
 	scoped, cancel := sv.WithCancel(w.ctx)
-	return &workflowContext{engine: w.engine, ctx: scoped}, cancel
+	return newWorkflowContext(w.engine, scoped), cancel
 }
 
 func (w *workflowContext) Detached() engine.WorkflowContext {
-	return &workflowContext{engine: w.engine, ctx: sv.Detached(w.ctx)}
+	return newWorkflowContext(w.engine, sv.Detached(w.ctx))
 }
 
-func (w *workflowContext) PublishHook(_ context.Context, call engine.HookActivityCall) error {
-	future, err := executeActivity(w, w.engine.activities.hook, call.Name, call.Input, call.Options)
-	if err != nil {
-		return err
-	}
-	_, err = future.Get(w.ctx)
-	return normalizeError(err)
-}
-
-func (w *workflowContext) ExecutePlannerActivity(_ context.Context, call engine.PlannerActivityCall) (*api.PlanActivityOutput, error) {
-	future, err := executeActivity(w, w.engine.activities.planner, call.Name, call.Input, call.Options)
-	if err != nil {
-		return nil, err
-	}
-	out, err := future.Get(w.ctx)
-	return out, normalizeError(err)
-}
-
-func (w *workflowContext) ExecuteToolActivity(_ context.Context, call engine.ToolActivityCall) (*api.ToolOutput, error) {
-	future, err := executeActivity(w, w.engine.activities.tool, call.Name, call.Input, call.Options)
-	if err != nil {
-		return nil, err
-	}
-	out, err := future.Get(w.ctx)
-	return out, normalizeError(err)
-}
-
-func (w *workflowContext) ExecuteSealRecordActivity(_ context.Context, call engine.SealRecordActivityCall) (*api.SealRecordOutput, error) {
-	future, err := executeActivity(w, w.engine.activities.sealRecord, call.Name, call.Input, call.Options)
-	if err != nil {
-		return nil, err
-	}
-	out, err := future.Get(w.ctx)
-	return out, normalizeError(err)
-}
-
-func (w *workflowContext) ExecuteFinishRunActivity(_ context.Context, call engine.FinishRunActivityCall) (*api.FinishRunOutput, error) {
-	future, err := executeActivity(w, w.engine.activities.finishRun, call.Name, call.Input, call.Options)
-	if err != nil {
-		return nil, err
-	}
-	out, err := future.Get(w.ctx)
-	return out, normalizeError(err)
-}
-
-func (w *workflowContext) ExecuteRecordContentActivity(_ context.Context, call engine.RecordContentActivityCall) (*api.RecordContentOutput, error) {
-	future, err := executeActivity(w, w.engine.activities.recordContent, call.Name, call.Input, call.Options)
-	if err != nil {
-		return nil, err
-	}
-	out, err := future.Get(w.ctx)
-	return out, normalizeError(err)
-}
-
-func (w *workflowContext) ExecuteSummarizeContextActivity(_ context.Context, call engine.SummarizeContextActivityCall) (*api.SummarizeContextOutput, error) {
-	future, err := executeActivity(w, w.engine.activities.summarizeContext, call.Name, call.Input, call.Options)
-	if err != nil {
-		return nil, err
-	}
-	out, err := future.Get(w.ctx)
-	return out, normalizeError(err)
-}
-
-func (w *workflowContext) ExecuteRecallActivity(_ context.Context, call engine.RecallActivityCall) (*api.RecallActivityOutput, error) {
-	future, err := executeActivity(w, w.engine.activities.recall, call.Name, call.Input, call.Options)
-	if err != nil {
-		return nil, err
-	}
-	out, err := future.Get(w.ctx)
-	return out, normalizeError(err)
-}
-
-func (w *workflowContext) ExecuteChildDispatchActivity(_ context.Context, call engine.ChildDispatchActivityCall) (*api.ChildDispatchOutput, error) {
-	future, err := executeActivity(w, w.engine.activities.childDispatch, call.Name, call.Input, call.Options)
-	if err != nil {
-		return nil, err
-	}
-	out, err := future.Get(w.ctx)
-	return out, normalizeError(err)
-}
-
-func (w *workflowContext) ExecuteToolActivityAsync(_ context.Context, call engine.ToolActivityCall) (engine.Future[*api.ToolOutput], error) {
-	future, err := executeActivity(w, w.engine.activities.tool, call.Name, call.Input, call.Options)
-	if err != nil {
-		return nil, err
-	}
-	return &activityFuture[*api.ToolOutput]{ctx: w.ctx, future: future}, nil
+func newWorkflowContext(e *Engine, ctx *sv.WorkflowContext) *workflowContext {
+	w := &workflowContext{engine: e, ctx: ctx}
+	w.AgentWorkflowActivities.ActivityExecutor = w
+	return w
 }

@@ -28,6 +28,7 @@ import (
 
 type (
 	temporalWorkflowContext struct {
+		engine.AgentWorkflowActivities
 		engine     *Engine
 		ctx        workflow.Context
 		workflowID string
@@ -45,11 +46,6 @@ type (
 		ctx    workflow.Context
 		runID  string
 		cancel workflow.CancelFunc
-	}
-
-	temporalFuture[T any] struct {
-		future workflow.Future
-		ctx    workflow.Context
 	}
 
 	temporalTimerFuture struct {
@@ -111,6 +107,7 @@ func newTemporalWorkflowContext(e *Engine, ctx workflow.Context) *temporalWorkfl
 		// on Temporal interceptors/propagators for trace context.
 		baseCtx: context.Background(),
 	}
+	wfCtx.AgentWorkflowActivities.ActivityExecutor = wfCtx
 	e.trackWorkflowContext(wfCtx.runID, wfCtx)
 	return wfCtx
 }
@@ -164,111 +161,6 @@ func (w *temporalWorkflowContext) WorkflowID() string {
 
 func (w *temporalWorkflowContext) RunID() string {
 	return w.runID
-}
-
-func (w *temporalWorkflowContext) PublishHook(ctx context.Context, call engine.HookActivityCall) error {
-	if call.Name == "" {
-		return errors.New("hook activity name is required")
-	}
-	if call.Input == nil {
-		return errors.New("hook activity input is required")
-	}
-
-	actx := workflow.WithActivityOptions(w.ctx, w.activityOptionsFor(call.Name, call.Options))
-	fut := workflow.ExecuteActivity(actx, call.Name, call.Input)
-	var ignored struct{}
-	return normalizeTemporalError(fut.Get(actx, &ignored))
-}
-
-func (w *temporalWorkflowContext) ExecutePlannerActivity(ctx context.Context, call engine.PlannerActivityCall) (*api.PlanActivityOutput, error) {
-	if call.Name == "" {
-		return nil, errors.New("planner activity name is required")
-	}
-	if call.Input == nil {
-		return nil, errors.New("planner activity input is required")
-	}
-
-	actx := workflow.WithActivityOptions(w.ctx, w.activityOptionsFor(call.Name, call.Options))
-	fut := workflow.ExecuteActivity(actx, call.Name, call.Input)
-	var out *api.PlanActivityOutput
-	if err := fut.Get(actx, &out); err != nil {
-		return nil, normalizeTemporalError(err)
-	}
-	return out, nil
-}
-
-func (w *temporalWorkflowContext) ExecuteFinishRunActivity(ctx context.Context, call engine.FinishRunActivityCall) (*api.FinishRunOutput, error) {
-	if call.Name == "" {
-		return nil, errors.New("finish activity name is required")
-	}
-	if call.Input == nil {
-		return nil, errors.New("finish activity input is required")
-	}
-
-	actx := workflow.WithActivityOptions(w.ctx, w.activityOptionsFor(call.Name, call.Options))
-	fut := workflow.ExecuteActivity(actx, call.Name, call.Input)
-	var out *api.FinishRunOutput
-	if err := fut.Get(actx, &out); err != nil {
-		return nil, normalizeTemporalError(err)
-	}
-	return out, nil
-}
-
-// ExecuteRecordContentActivity schedules content storage with recorded results.
-func (w *temporalWorkflowContext) ExecuteRecordContentActivity(ctx context.Context, call engine.RecordContentActivityCall) (*api.RecordContentOutput, error) {
-	if call.Name == "" {
-		return nil, errors.New("record content activity name is required")
-	}
-	if call.Input == nil {
-		return nil, errors.New("record content activity input is required")
-	}
-
-	actx := workflow.WithActivityOptions(w.ctx, w.activityOptionsFor(call.Name, call.Options))
-	fut := workflow.ExecuteActivity(actx, call.Name, call.Input)
-	var out *api.RecordContentOutput
-	if err := fut.Get(actx, &out); err != nil {
-		return nil, normalizeTemporalError(err)
-	}
-	return out, nil
-}
-
-// ExecuteChildDispatchActivity schedules child validation with recorded results.
-func (w *temporalWorkflowContext) ExecuteChildDispatchActivity(ctx context.Context, call engine.ChildDispatchActivityCall) (*api.ChildDispatchOutput, error) {
-	if call.Name == "" {
-		return nil, errors.New("child dispatch activity name is required")
-	}
-	if call.Input == nil {
-		return nil, errors.New("child dispatch activity input is required")
-	}
-
-	actx := workflow.WithActivityOptions(w.ctx, w.activityOptionsFor(call.Name, call.Options))
-	fut := workflow.ExecuteActivity(actx, call.Name, call.Input)
-	var out *api.ChildDispatchOutput
-	if err := fut.Get(actx, &out); err != nil {
-		return nil, normalizeTemporalError(err)
-	}
-	return out, nil
-}
-
-func (w *temporalWorkflowContext) ExecuteToolActivity(ctx context.Context, call engine.ToolActivityCall) (*api.ToolOutput, error) {
-	fut, err := w.ExecuteToolActivityAsync(ctx, call)
-	if err != nil {
-		return nil, err
-	}
-	return fut.Get(ctx)
-}
-
-func (w *temporalWorkflowContext) ExecuteToolActivityAsync(ctx context.Context, call engine.ToolActivityCall) (engine.Future[*api.ToolOutput], error) {
-	if call.Name == "" {
-		return nil, errors.New("tool activity name is required")
-	}
-	if call.Input == nil {
-		return nil, errors.New("tool activity input is required")
-	}
-
-	actx := workflow.WithActivityOptions(w.ctx, w.activityOptionsFor(call.Name, call.Options))
-	fut := workflow.ExecuteActivity(actx, call.Name, call.Input)
-	return &temporalFuture[*api.ToolOutput]{future: fut, ctx: actx}, nil
 }
 
 func (w *temporalWorkflowContext) PauseRequests() engine.Receiver[*api.PauseRequest] {
@@ -364,7 +256,7 @@ func (w *temporalWorkflowContext) Await(ctx context.Context, condition func() bo
 
 func (w *temporalWorkflowContext) WithCancel() (engine.WorkflowContext, func()) {
 	cctx, cancel := workflow.WithCancel(w.ctx)
-	return &temporalWorkflowContext{
+	sub := &temporalWorkflowContext{
 		engine:     w.engine,
 		ctx:        cctx,
 		workflowID: w.workflowID,
@@ -373,7 +265,9 @@ func (w *temporalWorkflowContext) WithCancel() (engine.WorkflowContext, func()) 
 		metrics:    w.metrics,
 		tracer:     w.tracer,
 		baseCtx:    w.baseCtx,
-	}, func() {
+	}
+	sub.AgentWorkflowActivities.ActivityExecutor = sub
+	return sub, func() {
 		cancel()
 	}
 }
@@ -444,7 +338,7 @@ func (w *temporalWorkflowContext) StartChildWorkflow(ctx context.Context, req en
 
 func (w *temporalWorkflowContext) Detached() engine.WorkflowContext {
 	dctx, _ := workflow.NewDisconnectedContext(w.ctx)
-	return &temporalWorkflowContext{
+	sub := &temporalWorkflowContext{
 		engine:     w.engine,
 		ctx:        dctx,
 		workflowID: w.workflowID,
@@ -454,6 +348,8 @@ func (w *temporalWorkflowContext) Detached() engine.WorkflowContext {
 		tracer:     w.tracer,
 		baseCtx:    w.baseCtx,
 	}
+	sub.AgentWorkflowActivities.ActivityExecutor = sub
+	return sub
 }
 
 func (h *temporalChildHandle) Get(_ context.Context) (*api.RunOutput, error) {
@@ -483,18 +379,6 @@ func (h *temporalChildHandle) RunID() string {
 	}
 	h.runID = execution.RunID
 	return h.runID
-}
-
-func (f *temporalFuture[T]) Get(_ context.Context) (T, error) {
-	var out T
-	if err := f.future.Get(f.ctx, &out); err != nil {
-		return out, normalizeTemporalError(err)
-	}
-	return out, nil
-}
-
-func (f *temporalFuture[T]) IsReady() bool {
-	return f.future.IsReady()
 }
 
 func (f *temporalTimerFuture) Get(_ context.Context) (time.Time, error) {
@@ -629,22 +513,4 @@ func (e *Engine) activityDefaultsFor(name string) engine.ActivityOptions {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.activityOptions[name]
-}
-
-// ExecuteRecallActivity schedules a recorded bounded lookup.
-func (w *temporalWorkflowContext) ExecuteRecallActivity(ctx context.Context, call engine.RecallActivityCall) (*api.RecallActivityOutput, error) {
-	if call.Name == "" {
-		return nil, errors.New("recall activity name is required")
-	}
-	if call.Input == nil {
-		return nil, errors.New("recall activity input is required")
-	}
-
-	actx := workflow.WithActivityOptions(w.ctx, w.activityOptionsFor(call.Name, call.Options))
-	fut := workflow.ExecuteActivity(actx, call.Name, call.Input)
-	var out *api.RecallActivityOutput
-	if err := fut.Get(actx, &out); err != nil {
-		return nil, normalizeTemporalError(err)
-	}
-	return out, nil
 }

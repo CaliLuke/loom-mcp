@@ -18,7 +18,7 @@
 //
 //   - Future[T]: Represents a pending activity result. Enables parallel execution
 //     by allowing workflows to launch multiple activities and collect results later,
-//     without reflection-based assignment.
+//     with typed inputs and outputs.
 //
 //   - Receiver[T]: Delivers typed signals to workflows in a deterministic way.
 //     Used for pause/resume, clarification answers, and external tool results.
@@ -108,6 +108,7 @@ type (
 	// in-memory, or custom) can be swapped without touching generated code.
 	// Implementations translate these generic types into backend-specific primitives.
 	Engine interface {
+		ActivityRegistrar
 		// RegisterWorkflow registers a workflow definition with the engine.
 		RegisterWorkflow(ctx context.Context, def WorkflowDefinition) error
 
@@ -238,6 +239,7 @@ type (
 	// until the workflow completes or fails. Do not cache WorkflowContext outside
 	// the workflow function scope.
 	WorkflowContext interface {
+		ActivityExecutor
 		// Context returns the Go context for the workflow. In deterministic engines
 		// (like Temporal), this is a special replay-aware context. Use this for activity
 		// execution and cancellation propagation.
