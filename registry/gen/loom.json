@@ -1,5 +1,5 @@
 {
-  "loom_version": "v1.10.0-alpha.10",
+  "loom_version": "v1.10.0-alpha.12",
   "design_package": "github.com/CaliLuke/loom-mcp/v2/registry/design",
   "design_digest": "9c1cd8c71c02a10e3ee619de8fc0afd9c60e9664f49547e8b93d943c45f6043d"
 }

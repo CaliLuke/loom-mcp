@@ -10,7 +10,7 @@ Verified on 2026-10-08:
 | Dependency | Version |
 | --- | --- |
 | Go | 1.27.2 |
-| Loom | v1.10.0-alpha.10 (verified 2026-10-14) |
+| Loom | v1.10.0-alpha.12 (verified 2026-10-20) |
 | MongoDB server / Go driver | 9.0.4 / v2.9.2 |
 | Redis server / Go client | 8.10.2 / CaliLuke/go-redis v9.23.1-0.20261014134601-1073297e76ea (client verified 2026-10-14) |
 | OpenAI Go SDK | v3.74.0 |
@@ -32,7 +32,7 @@ renderer metadata representation.
 
 Explicit exceptions:
 
-- Loom uses the published alpha.10 release for this upgrade.
+- Loom uses the published alpha.12 release.
 - The MCP Go SDK pins `v1.8.1-0.20261016161459-3e9d812b1814`, verified on
   2026-10-17 against upstream commit `3e9d812b1814`. Stable v1.8.0 still predates
   the request-summary API required by the SDK bridge. This pin includes the
@@ -86,3 +86,18 @@ Authored MCP SDK retry-validation errors explicitly own their public repair mess
 Loom's error contract. Custom invalid-input errors need `LoomErrorName` or a safe
 error remedy to expose repair text; the marker alone does not publish diagnostics.
 Wrapped serialization failures retain private diagnostics only in the original error.
+
+## Loom alpha.12 Pulse membership migration
+
+Pulse sink membership version 2 records consumer keepalive state atomically with
+membership. It rejects persisted version 1 membership records because they
+cannot safely bind freshness to cleanup. Restarting with alpha.12 does not
+migrate those records.
+
+Before upgrading any process that reads or writes affected Pulse streams, stop
+all older processes. To preserve stream entries, copy them to a fresh stream and
+create new sink groups there. Consumer groups, cursors, and pending-entry
+ownership are not copied, so new groups may redeliver copied entries; preserve
+required progress with application checkpoints or idempotent processing. For an
+intentional destructive reset, use `Stream.Destroy` before recreating the stream.
+Do not mix old and new binaries. See the [alpha.12 Pulse migration guidance](https://github.com/CaliLuke/loom/blob/v1.10.0-alpha.12/docs/pulse.md#streams-readers-and-sinks).
