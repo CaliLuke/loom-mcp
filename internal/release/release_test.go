@@ -3,8 +3,22 @@ package release
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestReleaseNotesIdentifyModule(t *testing.T) {
+	for _, version := range []string{"v2.1.0-alpha.44", "v2.1.0"} {
+		t.Run(version, func(t *testing.T) {
+			f := &fakePublication{}
+			p := publisher{config: Config{Alpha: "v2.1.0-alpha.44"}, run: f.run}
+			notes, err := p.notes(t.Context(), version, "source", nil)
+			require.NoError(t, err)
+			assert.Contains(t, notes, "`github.com/CaliLuke/loom-mcp/v2@"+version+"`")
+			assert.Contains(t, notes, "loom gen <module-import-path>/design")
+		})
+	}
+}
 
 func TestChooseAlpha(t *testing.T) {
 	for _, tc := range []struct {

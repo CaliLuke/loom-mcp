@@ -128,7 +128,7 @@ func (p publisher) notes(ctx context.Context, version, source string, tags []tag
 	if stable {
 		status = "This stable release promotes " + p.config.Alpha + " without changing its source."
 	}
-	notes := fmt.Sprintf("## Highlights\n\n%s\n\n%s\n\n## Upgrade\n\nUse Loom module version `%s` in your Go module, then regenerate services with `loom gen <module-import-path>/design`.\n", status, changes, version)
+	notes := fmt.Sprintf("## Highlights\n\n%s\n\n%s\n\n## Upgrade\n\nUse `github.com/CaliLuke/loom-mcp/v2@%s` in your Go module, then regenerate services with `loom gen <module-import-path>/design`.\n", status, changes, version)
 	if base != "" {
 		notes += fmt.Sprintf("\n[Full changelog](https://github.com/%s/compare/%s...%s)\n", repository, base, version)
 	}
