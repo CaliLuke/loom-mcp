@@ -34,7 +34,7 @@ func fallbackable(err error) bool {
 	return errors.As(err, &failure)
 }
 
-func normalizeHTTPError(status int, header http.Header, body []byte, cause error, credentials Credentials) error {
+func normalizeHTTPError(operation string, status int, header http.Header, body []byte, cause error, credentials Credentials) error {
 	kind := model.ProviderErrorKindUnknown
 	retryable := false
 	message := "provider request failed"
@@ -65,7 +65,7 @@ func normalizeHTTPError(status int, header http.Header, body []byte, cause error
 	if requestID == "" {
 		requestID = redactProviderValue(safeHeaderValue(header.Get("request-id")), credentials)
 	}
-	providerErr := model.NewProviderError(codexProvider, "responses", status, kind, code, message, requestID, retryable, cause)
+	providerErr := model.NewProviderError(codexProvider, operation, status, kind, code, message, requestID, retryable, cause)
 	if status == http.StatusTooManyRequests && !contextOverflow {
 		return errors.Join(model.ErrRateLimited, providerErr)
 	}
@@ -100,7 +100,7 @@ func normalizeStreamProviderError(value wireError, cause error, credentials Cred
 	if err != nil {
 		return fmt.Errorf("codex: encode stream error: %w", err)
 	}
-	return normalizeHTTPError(status, header, body, cause, credentials)
+	return normalizeHTTPError("responses", status, header, body, cause, credentials)
 }
 
 func normalizeTransportError(operation string, err error) error {

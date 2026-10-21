@@ -53,7 +53,7 @@ func (c *Client) startSSE(ctx context.Context, built *builtRequest, credentials 
 		if len(errorBody) > maxHTTPErrorBodyBytes {
 			errorBody = errorBody[:maxHTTPErrorBodyBytes]
 		}
-		return nil, normalizeHTTPError(response.StatusCode, response.Header, errorBody, errors.Join(readErr, closeErr), credentials)
+		return nil, normalizeHTTPError("responses.sse.request", response.StatusCode, response.Header, errorBody, errors.Join(readErr, closeErr), credentials)
 	}
 	scanner := newSSEScanner(response.Body)
 	return &sseSource{ctx: ctx, body: response.Body, scanner: scanner, idle: c.idleTimeout}, nil

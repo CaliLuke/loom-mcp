@@ -4842,6 +4842,10 @@ base URL. An injected HTTP client or WebSocket dialer can apply desktop network
 policy. The injection does not change the endpoint identity. The provider sends
 access tokens only in request headers. Errors do not include tokens, account
 IDs, headers, or response bodies.
+For HTTP failures, `model.ProviderError.Operation()` identifies
+`responses.websocket.upgrade` or `responses.sse.request`, including automatic
+transport selection. A 401 or 403 remains a non-retryable authentication or
+authorization error and does not trigger transport fallback.
 
 Codex rejects structured output, temperature, numeric output limits, cache
 options, cache checkpoints, and numeric thinking budgets before network access.

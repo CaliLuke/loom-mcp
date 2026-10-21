@@ -130,6 +130,7 @@ func TestProviderErrorMetadataCannotExposeCredentials(t *testing.T) {
 	header := make(http.Header)
 	header.Set("x-request-id", "request-account-1")
 	err := normalizeHTTPError(
+		"responses",
 		http.StatusBadRequest,
 		header,
 		[]byte(`{"error":{"code":"failure-secret-token"}}`),

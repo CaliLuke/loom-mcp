@@ -508,6 +508,10 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
 
 ## Codex Subscription Provider
 
+- HTTP errors expose `responses.websocket.upgrade` or `responses.sse.request`
+  through ProviderError.Operation, including Auto selection. Auth errors remain
+  non-retryable and do not trigger fallback; never include raw bodies or headers.
+
 - Applications supply a context-aware credential source. The provider resolves
   it once for each logical request.
 - The provider does not find, refresh, or store credentials. It does not read

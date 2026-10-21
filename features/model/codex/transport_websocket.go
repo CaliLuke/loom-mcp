@@ -36,7 +36,7 @@ func (c *Client) startWebSocket(ctx context.Context, built *builtRequest, creden
 			if len(errorBody) > maxHTTPErrorBodyBytes {
 				errorBody = errorBody[:maxHTTPErrorBodyBytes]
 			}
-			return nil, normalizeHTTPError(response.StatusCode, response.Header, errorBody, errors.Join(err, readErr, closeErr), credentials)
+			return nil, normalizeHTTPError("responses.websocket.upgrade", response.StatusCode, response.Header, errorBody, errors.Join(err, readErr, closeErr), credentials)
 		}
 		if ctx.Err() != nil {
 			return nil, ctx.Err()

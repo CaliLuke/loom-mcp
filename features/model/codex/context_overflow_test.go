@@ -43,7 +43,7 @@ func testStreamContextOverflow(t *testing.T) {
 	t.Run("HTTP rejection", func(t *testing.T) {
 		stream, err := codexOverflowHTTPClient(t, codexOverflowBody).Stream(context.Background(), testRequest())
 		assert.Nil(t, stream)
-		assert.Equal(t, "responses", requireCodexOverflow(t, err).Operation())
+		assert.Equal(t, "responses.sse.request", requireCodexOverflow(t, err).Operation())
 	})
 	for _, body := range []string{
 		`{"type":"response.failed","sequence_number":3,"response":{"id":"resp_1","object":"response","status":"failed","error":{"code":"context_length_exceeded","message":"Your input exceeds the context window of this model. Please adjust your input and try again."},"usage":null}}`,
