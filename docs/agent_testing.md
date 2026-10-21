@@ -825,6 +825,10 @@ Poll `get_job`; use `cancel_job` to request cancellation.
 Only the host can commit a terminal status after execution and finalization.
 An uncertain lost execution becomes `interrupted`; it is not automatically replayed.
 Already committed terminal states remain unchanged.
+For a failed or interrupted job, inspect retained diagnostics before deciding
+whether another trial is appropriate. Submit a deliberate new trial with a new
+`request_key`; the original key continues to return the original job and evidence.
+Known queued or running jobs should be polled, not resubmitted as new trials.
 `compare_trials` returns existing execution statistics; probes have `not_comparable` quality and no quality counts.
 
 For repeated trials, pass `baseline_job_ids` and `candidate_job_ids` instead of

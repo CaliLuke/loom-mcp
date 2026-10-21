@@ -20,6 +20,7 @@ type Error struct {
 	Recovery string `json:"recovery"`
 	Field    string `json:"field,omitempty"`
 	cause    error
+	jobState JobState
 }
 
 const (
@@ -89,7 +90,7 @@ func NewError(code Code, _, _, field string) *Error {
 
 // Error serializes only approved public diagnostics, including for host-created errors.
 func (e *Error) Error() string {
-	safe := NewError(e.Code, "", "", e.Field)
+	safe := jobError(e, e.jobState)
 	data, err := json.Marshal(safe)
 	if err != nil {
 		return `{"code":"operation_failed","message":"Control operation failed.","recovery":"Ask the host to inspect diagnostics."}`
@@ -100,6 +101,21 @@ func (e *Error) Error() string {
 // Unwrap exposes the private diagnostic cause only to Go callers.
 func (e *Error) Unwrap() error {
 	return e.cause
+}
+
+// jobError derives approved recovery text from known execution state, never host text.
+func jobError(failure *Error, state JobState) *Error {
+	out := NewError(failure.Code, "", "", failure.Field)
+	out.jobState = state
+	switch state {
+	case Failed, Interrupted, Canceled:
+		out.Recovery = "Ask the host to inspect retained diagnostics. If a new trial is appropriate, submit with a new request key; preserve the original job and evidence."
+	case Queued, Running, CancelRequested:
+		out.Recovery = "Poll the original job until it reaches a terminal state."
+	case Succeeded:
+		return out
+	}
+	return out
 }
 
 func safeField(field string) string {

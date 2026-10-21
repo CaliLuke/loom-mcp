@@ -80,7 +80,7 @@ func terminal(state JobState) bool {
 func projectJob(r JobRecord) Job {
 	out := Job{ID: r.ID, State: r.State, EvidenceAvailable: r.Manifest != ""}
 	if r.Failure != nil {
-		out.Failure = NewError(r.Failure.Code, "", "", r.Failure.Field)
+		out.Failure = jobError(r.Failure, r.State)
 	}
 	return out
 }

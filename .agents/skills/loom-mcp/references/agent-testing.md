@@ -386,6 +386,9 @@ A scripted controller must consume actual service/tool results and retained help
 Use existing root eval prepared lifecycles from host execution, followed by `Writer.Finish` and authorized inspection publication.
 
 The disk-backed host fixture owns request-key acceptance, claims, cancellation and terminal persistence.
+Unknown submission outcomes reuse the original request key. Known failed/interrupted
+jobs retain their evidence and require a new key for a deliberate new trial after
+diagnostic review; active jobs are polled. Public recovery text follows job state.
 Use child-process checkpoints and channels for crash/race proof, not timing sleeps.
 Same scoped key/input must recover one job; unknown effects become interrupted without replay.
 Cancellation-first cannot commit success, and success-first remains success.
