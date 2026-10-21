@@ -4923,7 +4923,9 @@ Set `MaxGenerationRequests` on `runtime.GeminiConfig`, `runtime.VertexConfig`,
 `gemini.Options`, or `gemini.VertexOptions` to opt into bounded unary continuation.
 The positive value counts generation requests including the initial request;
 `1` permits no follow-up, `0` disables continuation, and negative values fail
-construction. SDK transport retries remain separate from this limit.
+construction. The adapter explicitly disables SDK automatic continuation so every
+SDK invocation remains one generation hop under this budget. SDK transport retries
+remain separate from this limit.
 
 A continued call reuses the original request and output cap, changing only the
 opaque continuation token. It requires one candidate with stable lineage,

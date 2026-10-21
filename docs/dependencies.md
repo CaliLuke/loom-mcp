@@ -14,9 +14,11 @@ Verified on 2026-10-08:
 | Loom | v1.10.0-alpha.14 (verified 2026-10-20) |
 | MongoDB server / Go driver | 9.0.4 / v2.9.2 |
 | Redis server / Go client | 8.10.2 / CaliLuke/go-redis v9.23.1-0.20261014134601-1073297e76ea (client verified 2026-10-14) |
-| OpenAI Go SDK | v3.74.0 |
-| Anthropic Go SDK | v1.79.1 |
-| Google GenAI | v1.73.0 |
+| OpenAI Go SDK | v3.83.0 (verified 2026-10-20) |
+| Anthropic Go SDK | v1.84.0 (verified 2026-10-20) |
+| Google GenAI | v1.75.0 (verified 2026-10-20) |
+| Bedrock Runtime / AWS core / Smithy | v1.63.5 / v1.47.3 / v1.28.5 (verified 2026-10-20) |
+| Google auth / OAuth2 | v0.24.1 / v0.37.0 (verified 2026-10-20; unchanged) |
 | OpenTelemetry | v1.47.0 |
 | golangci-lint | v2.14.0 |
 
@@ -126,3 +128,24 @@ It requires Go 1.27.3 and a fresh database; earlier development schemas have no
 automatic migration. Finish existing runs before switching databases. See the
 [Selvedge runtime notes](runtime.md) for tracing and
 history compatibility details.
+
+## Model-provider SDK update set
+
+The 2026-10-20 update covers every model-provider SDK imported by this module:
+OpenAI, Anthropic, Google GenAI (Gemini and Vertex), and Bedrock with its AWS core
+and Smithy dependencies. Root, fixture, longrun, and quickstart module pins move
+together. Codex, Ollama, and the model gateway use direct transports rather than
+separate provider SDKs; their contract tests remain part of the same provider run.
+Google auth and OAuth2 were checked and already use their latest releases.
+
+Release sources: [OpenAI v3.83.0](https://github.com/openai/openai-go/releases/tag/v3.83.0),
+[Anthropic v1.84.0](https://github.com/anthropics/anthropic-sdk-go/releases/tag/v1.84.0),
+[Google GenAI v1.75.0](https://github.com/googleapis/go-genai/releases/tag/v1.75.0),
+and [AWS releases](https://github.com/aws/aws-sdk-go-v2/releases).
+Individual AWS module versions are resolved from published Go module metadata.
+
+Google GenAI 1.75 enables automatic continuation by default. The adapter disables
+that SDK loop for both Gemini and Vertex so its existing request budget, output
+validation, and per-hop usage accounting remain authoritative. Transport-level
+regressions exercise limits zero, one, and three with the real SDK. This adopts
+the fix reviewed in [PR #370](https://github.com/CaliLuke/loom-mcp/pull/370).

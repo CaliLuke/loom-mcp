@@ -41,8 +41,9 @@ func geminiGenerationError(err error) error {
 }
 
 // completeGeneration treats one bounded token chain as a single logical call.
-// The pinned SDK performs one hop per GenerateContent call; its transport retry
-// policy is separate. Only the opaque token changes between requests.
+// Request configuration disables SDK automatic continuation, preserving one hop
+// per GenerateContent call. Only the opaque token changes between requests;
+// the SDK transport retry policy is separate.
 func (c *Client) completeGeneration(ctx context.Context, modelID string, class model.ModelClass, contents []*genai.Content, config *genai.GenerateContentConfig) (*model.Response, error) {
 	resp, err := c.models.GenerateContent(ctx, modelID, contents, config)
 	if err != nil {
