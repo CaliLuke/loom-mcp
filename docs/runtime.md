@@ -1141,10 +1141,10 @@ while explicit zero and negative values are rejected.
 The owning worker resolves the effective cap once through the initial recorded
 content activity. This works for local clients, remote routes, and child runs.
 Replay uses that recorded value; a later registration override affects new runs.
-This requires workflow protocol 20: initial policy recording changes the command
-sequence, including runs with no initial messages. Drain older running workflows
-before upgrading, and use matching protocol-20 workers and replayers. Existing
-histories from older protocols are rejected rather than replayed as protocol 20.
+Initial policy recording was introduced in workflow protocol 20, including runs
+with no initial messages. The current protocol is 21, which also records oversized
+startup-hook inputs. Drain older running workflows before upgrading and use
+matching protocol-21 workers and replayers. Older histories are rejected.
 
 Each outer `Complete` or `Stream` reserves one sequence before model middleware.
 Only reservations 1 through N enter the inner client chain. Failed calls,
@@ -3858,6 +3858,21 @@ format for `time.Duration`. Per-run policy budgets and timeouts therefore cross
 the workflow/activity boundary as integer nanoseconds, while JSON field tags and
 duration-valued map keys retain their normal encoding behavior.
 
+`RunStartedEvent.Input` contains the effective input after `BeforeRun` interception.
+If that startup payload would exceed 1,000,000 serialized bytes, the runtime stores
+the complete input in `RunStore` before publishing the hook, sets `Input` to nil,
+and sets `InputRef`. Read it with `RunStore.Get(ctx, event.RunContext.RootRunID,
+event.InputRef)` and decode `runtime.RunInput` using JSON v2 with
+`encoding/json.FormatDurationAsNano(true)`. Store failure stops the run before
+planning. Small inputs remain inline; `BeforeRun`, `AfterRun`, and planners retain
+their full input access. Subscribers and `BeforeEvent` interceptors must resolve
+`InputRef` when they need the input content.
+
+This removes the startup hook's incidental conversation-size limit. Workflow
+engine, content-store, and model context limits still apply. It does not change
+the payload contracts of other hook types. The recorded storage command requires
+workflow protocol 21; drain protocol-20 runs before deploying this change.
+
 **Event types:**
 
 | Event                                       | When                                                |
@@ -4191,8 +4206,8 @@ client.Run(ctx, "session-1", msgs,
 )
 ```
 
-These overrides are included in the `RunStarted` hook payload. Duration-bearing
-fields use integer nanoseconds on that durable boundary.
+These overrides are included in the `RunStarted` input, inline or through
+`InputRef`. Duration-bearing fields use integer nanoseconds on that durable boundary.
 
 ### Terminal run policies
 

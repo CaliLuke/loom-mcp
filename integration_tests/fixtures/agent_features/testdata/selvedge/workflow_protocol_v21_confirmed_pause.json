@@ -1,0 +1,927 @@
+{
+  "format": "selvedge.history/v1",
+  "instance": {
+    "instance_id": "run-pause-history",
+    "workflow_name": "features.coordinator.workflow",
+    "status": "completed",
+    "input": {
+      "context_settings": {
+        "default": true,
+        "nontext_resident": true,
+        "max_tier": "summary",
+        "guard_margin": {
+          "Tokens": 1,
+          "Bytes": 10
+        },
+        "prompt": {
+          "Ref": {
+            "ID": "features.coordinator.context.summary",
+            "Version": "sha256:c213a63837087dad5fb990d74a4fea84f0072c70f4455cce27e9a646268aef95"
+          },
+          "Template": "sha256:c213a63837087dad5fb990d74a4fea84f0072c70f4455cce27e9a646268aef95"
+        },
+        "framing_tokens": 200,
+        "max_pins": 32,
+        "max_pinned_parts": 2,
+        "max_summary_chunks": 8,
+        "recall_scan_bytes": 8000000,
+        "TriggerAt": {
+          "Tokens": 17,
+          "Bytes": 20
+        },
+        "RecallDiscoveryCalls": 20,
+        "RecallReadCalls": 20
+      },
+      "context_fingerprint": "sha256:dad60a2a0bce0d2545da071d43b4d0461c4b4106b6ff076af09be49d0849af76",
+      "context_default_agents": {
+        "features.coordinator": {
+          "Disabled": false,
+          "ContextModel": null
+        }
+      },
+      "context_recovery": {
+        "guard_margin": {
+          "Tokens": 1,
+          "Bytes": 10
+        },
+        "disable_recall": false
+      },
+      "WorkflowProtocolVersion": 21,
+      "AgentID": "features.coordinator",
+      "RunID": "run-pause-history",
+      "RootRunID": "run-pause-history",
+      "SessionID": "sess-pause-history",
+      "TurnID": "",
+      "ParentToolCallID": "",
+      "ParentRunID": "",
+      "ParentAgentID": "",
+      "Tool": "",
+      "ToolArgs": null,
+      "Messages": [
+        {
+          "Role": "user",
+          "Parts": [
+            {
+              "Kind": "text",
+              "Text": "draft then ask"
+            }
+          ],
+          "Meta": null
+        }
+      ],
+      "Labels": null,
+      "Metadata": null,
+      "WorkflowOptions": null,
+      "Policy": null
+    },
+    "output": {
+      "AgentID": "features.coordinator",
+      "RunID": "run-pause-history",
+      "Final": {
+        "Role": "assistant",
+        "Parts": [
+          {
+            "Kind": "text",
+            "Text": "pause replay complete"
+          }
+        ],
+        "Meta": null
+      },
+      "FinalRef": "sha256:c282e5a0af1ffef3e81901a42a928f7ad2fc17369f4b95144fa4ca64e5f84aba",
+      "FinalToolResult": null,
+      "ToolEventsRef": "sha256:9cb9b31ed30e279a40d5bb6c7f4886bb35f6b72778f27b1286db63fa945e2ecb",
+      "ToolEventCount": 1,
+      "ToolSummary": {
+        "FailedCount": 0,
+        "LastError": null,
+        "Telemetry": null
+      },
+      "Notes": [],
+      "Usage": {
+        "Model": "",
+        "ModelClass": "",
+        "InputTokens": 0,
+        "OutputTokens": 0,
+        "TotalTokens": 0,
+        "CacheReadTokens": 0,
+        "CacheWriteTokens": 0
+      }
+    },
+    "cancel_requested": false,
+    "cancel_reason": "",
+    "parent_instance_id": "",
+    "parent_key": ""
+  },
+  "events": [
+    {
+      "seq": 1,
+      "key": "#1",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 22
+    },
+    {
+      "seq": 2,
+      "key": "#2",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 22
+    },
+    {
+      "seq": 3,
+      "key": "#3",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:52.577901Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 3
+    },
+    {
+      "seq": 4,
+      "key": "#4",
+      "command": "activity:features.coordinator.record_content",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "max_model_calls": 0,
+        "continuation": {
+          "Prev": null,
+          "Pos": 1,
+          "ContinuedFrom": null,
+          "Outcome": "fresh",
+          "Reason": "no_head",
+          "View": {
+            "chain_pos": 1,
+            "context_fingerprint": "sha256:dad60a2a0bce0d2545da071d43b4d0461c4b4106b6ff076af09be49d0849af76"
+          },
+          "Limits": {
+            "ContextWindow": 0,
+            "MaxOutputTokens": 0,
+            "DefaultMaxTokens": 0,
+            "ImageTokens": 0
+          },
+          "Visible": [
+            "sha256:aef5b8f0c408a1e8970f86e4cfe6eb2574ebe246c5c83d18bb0380e40d19046d"
+          ]
+        },
+        "Refs": [
+          "sha256:1d07f4fd96dc704d18381a93b3a235a75d47dbf838eea693f0c7a6d8da840529"
+        ],
+        "IndexHead": "sha256:1eec5c29b5846690b1e7e21165b90088fb1d5c43bf34330cb89cb2d4eab5bd57",
+        "Entries": [
+          {
+            "id": 1,
+            "kind": "message",
+            "hash": "sha256:1d07f4fd96dc704d18381a93b3a235a75d47dbf838eea693f0c7a6d8da840529",
+            "role": "user",
+            "bytes": 14,
+            "chain": "sha256:5ac3f3166ed064c634c96b8ea14feb5e310952dc5da55fa80aeac98c63533789"
+          }
+        ],
+        "ToolResults": null,
+        "Calls": null,
+        "CallRefs": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 22
+    },
+    {
+      "seq": 5,
+      "key": "#5",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:52.581209Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 5
+    },
+    {
+      "seq": 6,
+      "key": "#6",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:52.581579Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 6
+    },
+    {
+      "seq": 7,
+      "key": "#7",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 22
+    },
+    {
+      "seq": 8,
+      "key": "#8",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:52.583642Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 8
+    },
+    {
+      "seq": 9,
+      "key": "#9",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:52.583968Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 9
+    },
+    {
+      "seq": 10,
+      "key": "#10",
+      "command": "activity:features.coordinator.plan",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "facts": [],
+        "Result": {
+          "ToolCalls": [
+            {
+              "Name": "workflow.draft",
+              "Payload": {
+                "topic": "pause history"
+              },
+              "Error": null,
+              "AgentID": "features.coordinator",
+              "RunID": "run-pause-history",
+              "RootRunID": "run-pause-history",
+              "SessionID": "sess-pause-history",
+              "Labels": null,
+              "TurnID": "",
+              "ToolCallID": "pause-draft",
+              "ParentToolCallID": ""
+            }
+          ],
+          "FinalResponse": null,
+          "FinalToolResult": null,
+          "Streamed": false,
+          "Await": null,
+          "RetryHint": null,
+          "ExpectedChildren": 0,
+          "Notes": null
+        },
+        "IndexHead": "sha256:1eec5c29b5846690b1e7e21165b90088fb1d5c43bf34330cb89cb2d4eab5bd57",
+        "View": null,
+        "call_view": {
+          "chain_pos": 1,
+          "context_fingerprint": "sha256:dad60a2a0bce0d2545da071d43b4d0461c4b4106b6ff076af09be49d0849af76",
+          "index_head": "sha256:1eec5c29b5846690b1e7e21165b90088fb1d5c43bf34330cb89cb2d4eab5bd57"
+        },
+        "TranscriptRef": "",
+        "TranscriptSize": {
+          "Bytes": 0,
+          "NonText": 0,
+          "Role": ""
+        },
+        "ToolCallRefs": [
+          "sha256:69950a02d0c37bef2a9bde9e23ca3df9e8f2882266329b8d43d9f4bd9e96d27d"
+        ],
+        "AwaitCallRefs": null,
+        "CallKeys": null,
+        "ProducingCall": null,
+        "RequestGrowth": null,
+        "Usage": {
+          "Model": "",
+          "ModelClass": "",
+          "InputTokens": 0,
+          "OutputTokens": 0,
+          "TotalTokens": 0,
+          "CacheReadTokens": 0,
+          "CacheWriteTokens": 0
+        },
+        "ToolPolicyActive": true,
+        "AllowedTools": [
+          "delegated.summarize",
+          "workflow.draft",
+          "workflow.finalize",
+          "workflow.method_echo",
+          "workflow.publish",
+          "workflow.retry",
+          "workflow.review",
+          "workflow.revise"
+        ],
+        "PolicyCaps": {
+          "MaxToolCalls": 12,
+          "RemainingToolCalls": 12,
+          "MaxRecoveryTurns": 2,
+          "RemainingRecoveryTurns": 2,
+          "ExpiresAt": "0001-01-01T00:00:00Z"
+        },
+        "Recovery": null,
+        "Attempt": 1
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 22
+    },
+    {
+      "seq": 11,
+      "key": "#11",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:52.585819Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 11
+    },
+    {
+      "seq": 12,
+      "key": "#12",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 22
+    },
+    {
+      "seq": 13,
+      "key": "#13",
+      "command": "receive_async:loom_mcp.runtime.pause",
+      "event_type": "SignalNone",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 14,
+      "key": "#14",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:52.591919Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 14
+    },
+    {
+      "seq": 15,
+      "key": "#15",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:52.592196Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 15
+    },
+    {
+      "seq": 16,
+      "key": "#16",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:52.596261Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 16
+    },
+    {
+      "seq": 17,
+      "key": "#17",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:52.596565Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 17
+    },
+    {
+      "seq": 18,
+      "key": "#18",
+      "command": "sleep",
+      "event_type": "Reserved",
+      "data_type": "json",
+      "binary": null,
+      "reservation": {
+        "expires_at": "2026-10-21T18:44:22.581626Z"
+      },
+      "delivered_seq": 0
+    },
+    {
+      "seq": 19,
+      "key": "#19",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 22
+    },
+    {
+      "seq": 20,
+      "key": "#20",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 22
+    },
+    {
+      "seq": 21,
+      "key": "#21",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:52.605253Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 21
+    },
+    {
+      "seq": 22,
+      "key": "#22",
+      "command": "receive:loom_mcp.runtime.provide.confirmation",
+      "event_type": "SignalReceived",
+      "data": {
+        "RunID": "run-pause-history",
+        "ID": "",
+        "Approved": true,
+        "RequestedBy": "history-recorder",
+        "Labels": null,
+        "Metadata": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 22
+    },
+    {
+      "seq": 23,
+      "key": "#23",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:52.667438Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 23
+    },
+    {
+      "seq": 24,
+      "key": "#24",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 32
+    },
+    {
+      "seq": 25,
+      "key": "#25",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:52.670102Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 25
+    },
+    {
+      "seq": 26,
+      "key": "#26",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:52.670362Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 26
+    },
+    {
+      "seq": 27,
+      "key": "#27",
+      "command": "sleep",
+      "event_type": "Reserved",
+      "data_type": "json",
+      "binary": null,
+      "reservation": {
+        "expires_at": "2026-10-21T18:44:22.64362Z"
+      },
+      "delivered_seq": 0
+    },
+    {
+      "seq": 28,
+      "key": "#28",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 32
+    },
+    {
+      "seq": 29,
+      "key": "#29",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:52.673062Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 29
+    },
+    {
+      "seq": 30,
+      "key": "#30",
+      "command": "activity:features.coordinator.executetool",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "Preview": "",
+        "ResultBytes": 27,
+        "Refs": {
+          "Result": "sha256:ce2d59223e6653b8e03f54a8e761d2d046f4f2d01d14bf7e6b2c7c37522ddfa0",
+          "ServerData": "",
+          "Payload": "sha256:1dd9423e59213688f7fd7e99aa51526f51781d17702233caa19b9f9daea9455b"
+        },
+        "Payload": null,
+        "ServerData": null,
+        "Bounds": null,
+        "Telemetry": null,
+        "Error": "",
+        "ErrorKind": "",
+        "RetryHint": null,
+        "Pause": {
+          "Clarification": {
+            "ID": "confirmed-pause",
+            "Question": "Which topic should the draft use?"
+          }
+        }
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 32
+    },
+    {
+      "seq": 31,
+      "key": "#31",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:52.673829Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 31
+    },
+    {
+      "seq": 32,
+      "key": "#32",
+      "command": "await",
+      "event_type": "AwaitCompleted",
+      "data": {
+        "history": 3,
+        "signals": 0
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 32
+    },
+    {
+      "seq": 33,
+      "key": "#33",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:52.686041Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 33
+    },
+    {
+      "seq": 34,
+      "key": "#34",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 38
+    },
+    {
+      "seq": 35,
+      "key": "#35",
+      "command": "activity:features.coordinator.record_content",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "Refs": [
+          "sha256:76ee2d312053804d4466c10e89c7e7dc20ff1ff9b19a0b89695dc4d681ebb102"
+        ],
+        "IndexHead": "",
+        "Entries": null,
+        "ToolResults": null,
+        "Calls": null,
+        "CallRefs": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 38
+    },
+    {
+      "seq": 36,
+      "key": "#36",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 38
+    },
+    {
+      "seq": 37,
+      "key": "#37",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:52.709404Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 37
+    },
+    {
+      "seq": 38,
+      "key": "#38",
+      "command": "receive:loom_mcp.runtime.provide.clarification",
+      "event_type": "SignalReceived",
+      "data": {
+        "RunID": "run-pause-history",
+        "ID": "confirmed-pause",
+        "Answer": "",
+        "AnswerRef": "sha256:2f1e6105b547c92f74da2c44fec1cce69403123bf6ec812708c13321fd03938e",
+        "AnswerBytes": 22,
+        "Labels": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 38
+    },
+    {
+      "seq": 39,
+      "key": "#39",
+      "command": "activity:features.coordinator.record_content",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "Refs": [
+          "sha256:e40ab5c1fd338d4e39e201c7fa62012e5f5a063253fecad9ad12a4169a45ea4f"
+        ],
+        "IndexHead": "",
+        "Entries": null,
+        "ToolResults": null,
+        "Calls": null,
+        "CallRefs": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 40,
+      "key": "#40",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:52.731054Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 40
+    },
+    {
+      "seq": 41,
+      "key": "#41",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 42,
+      "key": "#42",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:52.732844Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 42
+    },
+    {
+      "seq": 43,
+      "key": "#43",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:52.733072Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 43
+    },
+    {
+      "seq": 44,
+      "key": "#44",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:52.733307Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 44
+    },
+    {
+      "seq": 45,
+      "key": "#45",
+      "command": "activity:features.coordinator.resume",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "facts": [],
+        "Result": {
+          "ToolCalls": null,
+          "FinalResponse": {
+            "Message": {
+              "Role": "assistant",
+              "Parts": [
+                {
+                  "Kind": "text",
+                  "Text": "pause replay complete"
+                }
+              ],
+              "Meta": null
+            }
+          },
+          "FinalToolResult": null,
+          "Streamed": false,
+          "Await": null,
+          "RetryHint": null,
+          "ExpectedChildren": 0,
+          "Notes": null
+        },
+        "IndexHead": "sha256:32cf5d708d21fb04dfd2b8e54de9b15fd85e723dc502d6c7aa76e4617e80484d",
+        "View": null,
+        "call_view": {
+          "chain_pos": 1,
+          "context_fingerprint": "sha256:dad60a2a0bce0d2545da071d43b4d0461c4b4106b6ff076af09be49d0849af76",
+          "index_head": "sha256:32cf5d708d21fb04dfd2b8e54de9b15fd85e723dc502d6c7aa76e4617e80484d"
+        },
+        "TranscriptRef": "sha256:13af0920b84eddcc7d2cd7260c47b803320f76e31c31e0d901a59c6780c6b213",
+        "TranscriptSize": {
+          "Bytes": 21,
+          "NonText": 0,
+          "Role": "assistant"
+        },
+        "ToolCallRefs": null,
+        "AwaitCallRefs": null,
+        "CallKeys": null,
+        "ProducingCall": null,
+        "RequestGrowth": null,
+        "Usage": {
+          "Model": "",
+          "ModelClass": "",
+          "InputTokens": 0,
+          "OutputTokens": 0,
+          "TotalTokens": 0,
+          "CacheReadTokens": 0,
+          "CacheWriteTokens": 0
+        },
+        "ToolPolicyActive": true,
+        "AllowedTools": [
+          "delegated.summarize",
+          "workflow.draft",
+          "workflow.finalize",
+          "workflow.method_echo",
+          "workflow.publish",
+          "workflow.retry",
+          "workflow.review",
+          "workflow.revise"
+        ],
+        "PolicyCaps": {
+          "MaxToolCalls": 12,
+          "RemainingToolCalls": 11,
+          "MaxRecoveryTurns": 2,
+          "RemainingRecoveryTurns": 2,
+          "ExpiresAt": "0001-01-01T00:00:00Z"
+        },
+        "Recovery": null,
+        "Attempt": 2
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 46,
+      "key": "#46",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:52.736031Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 46
+    },
+    {
+      "seq": 47,
+      "key": "#47",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 48,
+      "key": "#48",
+      "command": "receive_async:loom_mcp.runtime.pause",
+      "event_type": "SignalNone",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 49,
+      "key": "#49",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 50,
+      "key": "#50",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 51,
+      "key": "#51",
+      "command": "activity:features.coordinator.finish",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "FinalRef": "sha256:c282e5a0af1ffef3e81901a42a928f7ad2fc17369f4b95144fa4ca64e5f84aba",
+        "ToolEventsRef": "sha256:9cb9b31ed30e279a40d5bb6c7f4886bb35f6b72778f27b1286db63fa945e2ecb",
+        "ToolEventCount": 1,
+        "ToolSummary": {
+          "FailedCount": 0,
+          "LastError": null,
+          "Telemetry": null
+        },
+        "FinalToolResult": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 52,
+      "key": "#52",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:52.757435Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 52
+    },
+    {
+      "seq": 53,
+      "key": "#53",
+      "command": "activity:features.coordinator.seal",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "IndexHead": "sha256:73e15e6b8ade2ffd5a7f5b73acc4c9f1dca1946db88f0f1da8966d0aa3290200"
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 54,
+      "key": "#54",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    }
+  ],
+  "signals": [
+    {
+      "id": 1,
+      "channel": "loom_mcp.runtime.provide.confirmation",
+      "delivered_seq": 22,
+      "consumed_seq": 22
+    },
+    {
+      "id": 2,
+      "channel": "loom_mcp.runtime.provide.clarification",
+      "delivered_seq": 38,
+      "consumed_seq": 38
+    }
+  ]
+}

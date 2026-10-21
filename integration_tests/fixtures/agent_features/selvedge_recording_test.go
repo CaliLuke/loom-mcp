@@ -31,6 +31,7 @@ func TestSelvedgeRecordWorkflowHistory(t *testing.T) {
 	t.Run("nontext resident", func(t *testing.T) {
 		recordSelvedgeDefaultHistory(t, true)
 	})
+	t.Run("startup", recordSelvedgeStartupHistory)
 	t.Run("main", recordSelvedgeWorkflowHistory)
 	t.Run("child", recordSelvedgeChildWorkflowHistory)
 	t.Run("continuation", recordSelvedgeContinuationWorkflowHistory)

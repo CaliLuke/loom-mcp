@@ -211,7 +211,9 @@ func decodeRunEvent(input *ActivityInput) (Event, bool, error) {
 		if err := decodeHookPayload(input, &p); err != nil {
 			return nil, false, err
 		}
-		return NewRunStartedEvent(input.RunID, input.AgentID, p.RunContext, p.Input), true, nil
+		event := NewRunStartedEvent(input.RunID, input.AgentID, p.RunContext, p.Input)
+		event.InputRef = p.InputRef
+		return event, true, nil
 	case RunPhaseChanged:
 		var p RunPhaseChangedEvent
 		if err := decodeHookPayload(input, &p); err != nil {

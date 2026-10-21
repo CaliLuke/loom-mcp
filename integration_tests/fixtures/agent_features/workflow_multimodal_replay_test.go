@@ -24,10 +24,10 @@ import (
 type multimodalHistoryPlanner struct{}
 type multimodalHistoryClient struct{ modelClientFunc }
 
-const workflowMultimodalHistoryFile = "testdata/workflow_protocol_v20_multimodal.json"
+const workflowMultimodalHistoryFile = "testdata/workflow_protocol_v21_multimodal.json"
 
 func TestGeneratedMultimodalWorkflowReplay(t *testing.T) {
-	assert.Equal(t, 20, api.WorkflowProtocolVersion)
+	assert.Equal(t, 21, api.WorkflowProtocolVersion)
 	data, err := os.ReadFile(workflowMultimodalHistoryFile)
 	require.NoError(t, err)
 	history, err := client.HistoryFromJSON(bytes.NewReader(data), client.HistoryJSONOptions{})

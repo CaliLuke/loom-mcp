@@ -1,0 +1,952 @@
+{
+  "format": "selvedge.history/v1",
+  "instance": {
+    "instance_id": "nontext-resident-run",
+    "workflow_name": "features.coordinator.workflow",
+    "status": "completed",
+    "input": {
+      "context_settings": {
+        "default": true,
+        "nontext_resident": true,
+        "max_tier": "summary",
+        "guard_margin": {
+          "Tokens": 1,
+          "Bytes": 10
+        },
+        "prompt": {
+          "Ref": {
+            "ID": "features.coordinator.context.summary",
+            "Version": "sha256:c213a63837087dad5fb990d74a4fea84f0072c70f4455cce27e9a646268aef95"
+          },
+          "Template": "sha256:c213a63837087dad5fb990d74a4fea84f0072c70f4455cce27e9a646268aef95"
+        },
+        "framing_tokens": 200,
+        "max_pins": 32,
+        "max_pinned_parts": 2,
+        "max_summary_chunks": 8,
+        "recall_scan_bytes": 8000000,
+        "TriggerAt": {
+          "Tokens": 17,
+          "Bytes": 20
+        },
+        "RecallDiscoveryCalls": 20,
+        "RecallReadCalls": 20
+      },
+      "context_fingerprint": "sha256:dad60a2a0bce0d2545da071d43b4d0461c4b4106b6ff076af09be49d0849af76",
+      "context_default_agents": {
+        "features.coordinator": {
+          "Disabled": false,
+          "ContextModel": null
+        }
+      },
+      "context_recovery": {
+        "guard_margin": {
+          "Tokens": 1,
+          "Bytes": 10
+        },
+        "disable_recall": false
+      },
+      "WorkflowProtocolVersion": 21,
+      "AgentID": "features.coordinator",
+      "RunID": "nontext-resident-run",
+      "RootRunID": "nontext-resident-run",
+      "SessionID": "default-session",
+      "TurnID": "",
+      "ParentToolCallID": "",
+      "ParentRunID": "",
+      "ParentAgentID": "",
+      "Tool": "",
+      "ToolArgs": null,
+      "Messages": [
+        {
+          "Role": "user",
+          "Parts": [
+            {
+              "Kind": "text",
+              "Text": "remember"
+            },
+            {
+              "Kind": "image",
+              "Format": "png",
+              "Bytes": "AQID"
+            }
+          ],
+          "Meta": null
+        },
+        {
+          "Role": "assistant",
+          "Parts": [
+            {
+              "Kind": "text",
+              "Text": "earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context earlier context "
+            }
+          ],
+          "Meta": null
+        },
+        {
+          "Role": "user",
+          "Parts": [
+            {
+              "Kind": "text",
+              "Text": "finish"
+            }
+          ],
+          "Meta": null
+        }
+      ],
+      "Labels": null,
+      "Metadata": null,
+      "WorkflowOptions": null,
+      "Policy": null
+    },
+    "output": {
+      "AgentID": "features.coordinator",
+      "RunID": "nontext-resident-run",
+      "Final": {
+        "Role": "assistant",
+        "Parts": [
+          {
+            "Kind": "text",
+            "Text": "qualified default complete"
+          }
+        ],
+        "Meta": null
+      },
+      "FinalRef": "sha256:ae4b4228e9f5b66efa6321642a98e58783f848b385a7f645324deaa592fc244b",
+      "FinalToolResult": null,
+      "ToolEventsRef": "sha256:b86196f2d64cacad0f05b1488a4923a68fcbee2791621eb4fe59b5c735e2d494",
+      "ToolEventCount": 1,
+      "ToolSummary": {
+        "FailedCount": 0,
+        "LastError": null,
+        "Telemetry": null
+      },
+      "Notes": [],
+      "Usage": {
+        "Model": "",
+        "ModelClass": "",
+        "InputTokens": 0,
+        "OutputTokens": 0,
+        "TotalTokens": 0,
+        "CacheReadTokens": 0,
+        "CacheWriteTokens": 0
+      }
+    },
+    "cancel_requested": false,
+    "cancel_reason": "",
+    "parent_instance_id": "",
+    "parent_key": ""
+  },
+  "events": [
+    {
+      "seq": 1,
+      "key": "#1",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 23
+    },
+    {
+      "seq": 2,
+      "key": "#2",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 23
+    },
+    {
+      "seq": 3,
+      "key": "#3",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:50.765335Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 3
+    },
+    {
+      "seq": 4,
+      "key": "#4",
+      "command": "activity:features.coordinator.record_content",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "max_model_calls": 0,
+        "continuation": {
+          "Prev": null,
+          "Pos": 1,
+          "ContinuedFrom": null,
+          "Outcome": "fresh",
+          "Reason": "no_head",
+          "View": {
+            "chain_pos": 1,
+            "context_fingerprint": "sha256:dad60a2a0bce0d2545da071d43b4d0461c4b4106b6ff076af09be49d0849af76"
+          },
+          "Limits": {
+            "ContextWindow": 0,
+            "MaxOutputTokens": 0,
+            "DefaultMaxTokens": 0,
+            "ImageTokens": 0
+          },
+          "Visible": [
+            "sha256:40cd7d1b95e37ee237d73434b3b110f1e0117a96d6b1baee2fd8d4f89997f1ff",
+            "sha256:9090e30315ff0f05663f7eb3c63579ba88eb22109af51ce8cb137df5b79c5dbf",
+            "sha256:0d2312acc6d89ad08ad63854029ab934db87be7097a6f8c4b49c902a3ce074e1"
+          ]
+        },
+        "Refs": [
+          "sha256:310092221477f703c54b283b8f1aaf648f083c1bde82b47e608c83027737a713",
+          "sha256:2b4077ca955166de06aafe394e128ddf6a3d07c5e66049e56a8eb952c3e0424a",
+          "sha256:bbb846097bdd2f2d2d5c4756c729f406ddcb64005cb2460d6fa5337d42b71740"
+        ],
+        "IndexHead": "sha256:787fcf4142d396f21ba1bbc62dcca8c93025ff5c7cbff5a1323007ea8f299af3",
+        "Entries": [
+          {
+            "id": 1,
+            "kind": "message",
+            "hash": "sha256:310092221477f703c54b283b8f1aaf648f083c1bde82b47e608c83027737a713",
+            "role": "user",
+            "bytes": 8,
+            "non_text": 1500,
+            "chain": "sha256:cbf518d3e312b21a0e96a7b7648f2cd99cf5625e4de2e1adf25b12ed2ca7a302"
+          },
+          {
+            "id": 2,
+            "kind": "message",
+            "hash": "sha256:2b4077ca955166de06aafe394e128ddf6a3d07c5e66049e56a8eb952c3e0424a",
+            "role": "assistant",
+            "bytes": 96000,
+            "chain": "sha256:2f26707beca1779cac876ee1fd1fc625d7a7498be66d3379be44b48e8be35335"
+          },
+          {
+            "id": 3,
+            "kind": "message",
+            "hash": "sha256:bbb846097bdd2f2d2d5c4756c729f406ddcb64005cb2460d6fa5337d42b71740",
+            "role": "user",
+            "bytes": 6,
+            "chain": "sha256:e8b5dd6f968c4a4302d380b3459fb8f2f96fdfbdfdba3b0d20d4762dee41e811"
+          }
+        ],
+        "ToolResults": null,
+        "Calls": null,
+        "CallRefs": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 23
+    },
+    {
+      "seq": 5,
+      "key": "#5",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:50.779122Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 5
+    },
+    {
+      "seq": 6,
+      "key": "#6",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:50.779798Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 6
+    },
+    {
+      "seq": 7,
+      "key": "#7",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 23
+    },
+    {
+      "seq": 8,
+      "key": "#8",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:50.782859Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 8
+    },
+    {
+      "seq": 9,
+      "key": "#9",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:50.783204Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 9
+    },
+    {
+      "seq": 10,
+      "key": "#10",
+      "command": "activity:features.coordinator.plan",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "facts": [
+          {
+            "provider_config": "fixture-qualified",
+            "qualified": "evict",
+            "tool_result_parts": {
+              "ImageFormats": [
+                "jpeg"
+              ],
+              "DocumentFormats": null,
+              "DocumentURISchemes": null,
+              "MaxImageBytes": 10000,
+              "MaxDocumentBytes": 0
+            },
+            "call": {
+              "RunID": "nontext-resident-run",
+              "Seq": 1,
+              "Attempt": 1
+            },
+            "model": "history",
+            "context_window": 12000,
+            "output_reserve": 0,
+            "view_bearing": true,
+            "view_text_bytes": 96014,
+            "view_non_text": 1500,
+            "input_tokens": 0,
+            "text_bytes": 96614,
+            "fixed_bytes": 600,
+            "non_text": 1500,
+            "count_latency": 0,
+            "outcome": "ok",
+            "recovery_tool_bytes": 2776
+          }
+        ],
+        "Result": {
+          "ToolCalls": [
+            {
+              "Name": "workflow.draft",
+              "Payload": {
+                "topic": "default"
+              },
+              "Error": null,
+              "AgentID": "features.coordinator",
+              "RunID": "nontext-resident-run",
+              "RootRunID": "nontext-resident-run",
+              "SessionID": "default-session",
+              "Labels": null,
+              "TurnID": "",
+              "ToolCallID": "draft",
+              "ParentToolCallID": ""
+            }
+          ],
+          "FinalResponse": null,
+          "FinalToolResult": null,
+          "Streamed": false,
+          "Await": null,
+          "RetryHint": null,
+          "ExpectedChildren": 0,
+          "Notes": null
+        },
+        "IndexHead": "sha256:787fcf4142d396f21ba1bbc62dcca8c93025ff5c7cbff5a1323007ea8f299af3",
+        "View": null,
+        "call_view": {
+          "chain_pos": 1,
+          "context_fingerprint": "sha256:dad60a2a0bce0d2545da071d43b4d0461c4b4106b6ff076af09be49d0849af76",
+          "index_head": "sha256:787fcf4142d396f21ba1bbc62dcca8c93025ff5c7cbff5a1323007ea8f299af3"
+        },
+        "TranscriptRef": "sha256:d397d8192ce1602bdaf90b56810786d6a410f5396826351a80415f12ab6a14b1",
+        "TranscriptSize": {
+          "Bytes": 8,
+          "NonText": 0,
+          "Role": "assistant"
+        },
+        "ToolCallRefs": [
+          "sha256:0865baab23bb07690c105bc2d18a2795c9728365fc05b27122c63a81d77146ae"
+        ],
+        "AwaitCallRefs": null,
+        "CallKeys": [
+          {
+            "RunID": "nontext-resident-run",
+            "Seq": 1,
+            "Attempt": 1
+          }
+        ],
+        "ProducingCall": {
+          "RunID": "nontext-resident-run",
+          "Seq": 1,
+          "Attempt": 1
+        },
+        "RequestGrowth": null,
+        "Usage": {
+          "Model": "",
+          "ModelClass": "",
+          "InputTokens": 0,
+          "OutputTokens": 0,
+          "TotalTokens": 0,
+          "CacheReadTokens": 0,
+          "CacheWriteTokens": 0
+        },
+        "ToolPolicyActive": true,
+        "AllowedTools": [
+          "delegated.summarize",
+          "workflow.draft",
+          "workflow.finalize",
+          "workflow.method_echo",
+          "workflow.publish",
+          "workflow.retry",
+          "workflow.review",
+          "workflow.revise"
+        ],
+        "PolicyCaps": {
+          "MaxToolCalls": 12,
+          "RemainingToolCalls": 12,
+          "MaxRecoveryTurns": 2,
+          "RemainingRecoveryTurns": 2,
+          "ExpiresAt": "0001-01-01T00:00:00Z"
+        },
+        "Recovery": null,
+        "Attempt": 1
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 23
+    },
+    {
+      "seq": 11,
+      "key": "#11",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:50.790416Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 11
+    },
+    {
+      "seq": 12,
+      "key": "#12",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 23
+    },
+    {
+      "seq": 13,
+      "key": "#13",
+      "command": "receive_async:loom_mcp.runtime.pause",
+      "event_type": "SignalNone",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 14,
+      "key": "#14",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:50.792844Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 14
+    },
+    {
+      "seq": 15,
+      "key": "#15",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:50.79342Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 15
+    },
+    {
+      "seq": 16,
+      "key": "#16",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:50.793809Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 16
+    },
+    {
+      "seq": 17,
+      "key": "#17",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:50.794388Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 17
+    },
+    {
+      "seq": 18,
+      "key": "#18",
+      "command": "sleep",
+      "event_type": "Reserved",
+      "data_type": "json",
+      "binary": null,
+      "reservation": {
+        "expires_at": "2026-10-21T18:44:20.779565Z"
+      },
+      "delivered_seq": 0
+    },
+    {
+      "seq": 19,
+      "key": "#19",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 23
+    },
+    {
+      "seq": 20,
+      "key": "#20",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:50.799031Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 20
+    },
+    {
+      "seq": 21,
+      "key": "#21",
+      "command": "activity:features.coordinator.executetool",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "Preview": "",
+        "ResultBytes": 27,
+        "Refs": {
+          "Result": "sha256:ce2d59223e6653b8e03f54a8e761d2d046f4f2d01d14bf7e6b2c7c37522ddfa0",
+          "ServerData": "",
+          "Payload": "sha256:5f09b9b9a094b0cf2fc9b37437ca9db92e8aaa329ba910e9a0cb14cdfd13d576"
+        },
+        "Payload": null,
+        "ServerData": null,
+        "Bounds": null,
+        "Telemetry": null,
+        "Error": "",
+        "ErrorKind": "",
+        "RetryHint": null,
+        "Pause": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 23
+    },
+    {
+      "seq": 22,
+      "key": "#22",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:50.800352Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 22
+    },
+    {
+      "seq": 23,
+      "key": "#23",
+      "command": "await",
+      "event_type": "AwaitCompleted",
+      "data": {
+        "history": 8,
+        "signals": 0
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 23
+    },
+    {
+      "seq": 24,
+      "key": "#24",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:50.826262Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 24
+    },
+    {
+      "seq": 25,
+      "key": "#25",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 26,
+      "key": "#26",
+      "command": "activity:features.coordinator.record_content",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "Refs": [
+          "sha256:ea02f77e4003248004c37d82b396625e0a45325006f52976b8b14d628205e1d3"
+        ],
+        "IndexHead": "",
+        "Entries": null,
+        "ToolResults": null,
+        "Calls": null,
+        "CallRefs": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 27,
+      "key": "#27",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:50.833356Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 27
+    },
+    {
+      "seq": 28,
+      "key": "#28",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:50.833711Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 28
+    },
+    {
+      "seq": 29,
+      "key": "#29",
+      "command": "activity:features.coordinator.record_content",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "compatibility": {
+          "Ref": "sha256:5b4f9bca6a13afadca68380f40ac8d35280b1d47e3bd4e197ddb804b5c075217",
+          "Evidence": {
+            "Coverage": "sha256:a01d74ab7b6aa32b8c875de77641ccb08cbc9528c692bdf88fcd777f9eb60e00",
+            "Support": "sha256:13cc2b91bf71c237ef1d98c0fa486bdeae9e1f055bfa90377514cf00fe6f066f",
+            "Checked": true,
+            "Compatible": false,
+            "Reason": "too_large",
+            "Model": "history"
+          }
+        },
+        "Refs": null,
+        "IndexHead": "",
+        "Entries": null,
+        "ToolResults": null,
+        "Calls": null,
+        "CallRefs": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 30,
+      "key": "#30",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:50.836985Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 30
+    },
+    {
+      "seq": 31,
+      "key": "#31",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 32,
+      "key": "#32",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:50.840464Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 32
+    },
+    {
+      "seq": 33,
+      "key": "#33",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 34,
+      "key": "#34",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:50.843607Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 34
+    },
+    {
+      "seq": 35,
+      "key": "#35",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 36,
+      "key": "#36",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:50.846449Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 36
+    },
+    {
+      "seq": 37,
+      "key": "#37",
+      "command": "activity:features.coordinator.resume",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "facts": [
+          {
+            "provider_config": "fixture-qualified",
+            "qualified": "evict",
+            "tool_result_parts": {
+              "ImageFormats": [
+                "jpeg"
+              ],
+              "DocumentFormats": null,
+              "DocumentURISchemes": null,
+              "MaxImageBytes": 10000,
+              "MaxDocumentBytes": 0
+            },
+            "call": {
+              "RunID": "nontext-resident-run",
+              "Seq": 2,
+              "Attempt": 1
+            },
+            "model": "history",
+            "context_window": 12000,
+            "output_reserve": 0,
+            "view_bearing": true,
+            "view_text_bytes": 96092,
+            "view_non_text": 1500,
+            "input_tokens": 0,
+            "text_bytes": 97087,
+            "fixed_bytes": 995,
+            "non_text": 1500,
+            "count_latency": 0,
+            "outcome": "ok",
+            "recovery_tool_bytes": 2776
+          }
+        ],
+        "Result": {
+          "ToolCalls": null,
+          "FinalResponse": {
+            "Message": {
+              "Role": "assistant",
+              "Parts": [
+                {
+                  "Kind": "text",
+                  "Text": "qualified default complete"
+                }
+              ],
+              "Meta": null
+            }
+          },
+          "FinalToolResult": null,
+          "Streamed": false,
+          "Await": null,
+          "RetryHint": null,
+          "ExpectedChildren": 0,
+          "Notes": null
+        },
+        "IndexHead": "sha256:065d72d4445c5f2627b173970c54b92be8822444239842294d78a8008d55cfdf",
+        "View": null,
+        "call_view": {
+          "chain_pos": 1,
+          "context_fingerprint": "sha256:dad60a2a0bce0d2545da071d43b4d0461c4b4106b6ff076af09be49d0849af76",
+          "index_head": "sha256:065d72d4445c5f2627b173970c54b92be8822444239842294d78a8008d55cfdf"
+        },
+        "TranscriptRef": "sha256:d80f8a6f4d661b23f0315851c8a14b4f873292e11f07ded0bc25e63de0261e13",
+        "TranscriptSize": {
+          "Bytes": 26,
+          "NonText": 0,
+          "Role": "assistant"
+        },
+        "ToolCallRefs": null,
+        "AwaitCallRefs": null,
+        "CallKeys": [
+          {
+            "RunID": "nontext-resident-run",
+            "Seq": 2,
+            "Attempt": 1
+          }
+        ],
+        "ProducingCall": {
+          "RunID": "nontext-resident-run",
+          "Seq": 2,
+          "Attempt": 1
+        },
+        "RequestGrowth": null,
+        "Usage": {
+          "Model": "",
+          "ModelClass": "",
+          "InputTokens": 0,
+          "OutputTokens": 0,
+          "TotalTokens": 0,
+          "CacheReadTokens": 0,
+          "CacheWriteTokens": 0
+        },
+        "ToolPolicyActive": true,
+        "AllowedTools": [
+          "delegated.summarize",
+          "workflow.draft",
+          "workflow.finalize",
+          "workflow.method_echo",
+          "workflow.publish",
+          "workflow.retry",
+          "workflow.review",
+          "workflow.revise"
+        ],
+        "PolicyCaps": {
+          "MaxToolCalls": 12,
+          "RemainingToolCalls": 11,
+          "MaxRecoveryTurns": 2,
+          "RemainingRecoveryTurns": 2,
+          "ExpiresAt": "0001-01-01T00:00:00Z"
+        },
+        "Recovery": null,
+        "Attempt": 2
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 38,
+      "key": "#38",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:50.858301Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 38
+    },
+    {
+      "seq": 39,
+      "key": "#39",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 40,
+      "key": "#40",
+      "command": "receive_async:loom_mcp.runtime.pause",
+      "event_type": "SignalNone",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 41,
+      "key": "#41",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 42,
+      "key": "#42",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 43,
+      "key": "#43",
+      "command": "activity:features.coordinator.finish",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "FinalRef": "sha256:ae4b4228e9f5b66efa6321642a98e58783f848b385a7f645324deaa592fc244b",
+        "ToolEventsRef": "sha256:b86196f2d64cacad0f05b1488a4923a68fcbee2791621eb4fe59b5c735e2d494",
+        "ToolEventCount": 1,
+        "ToolSummary": {
+          "FailedCount": 0,
+          "LastError": null,
+          "Telemetry": null
+        },
+        "FinalToolResult": null
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 44,
+      "key": "#44",
+      "command": "now",
+      "event_type": "NowRecorded",
+      "data": "2026-10-21T18:43:50.872099Z",
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 44
+    },
+    {
+      "seq": 45,
+      "key": "#45",
+      "command": "activity:features.coordinator.seal",
+      "event_type": "ActivityCompleted",
+      "data": {
+        "IndexHead": "sha256:b706a04125451842e70ed0c43c45cf01402b4f287a94f9c507263b66f94d8bd1"
+      },
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    },
+    {
+      "seq": 46,
+      "key": "#46",
+      "command": "activity:runtime.publish_hook",
+      "event_type": "ActivityCompleted",
+      "data": {},
+      "data_type": "json",
+      "binary": null,
+      "delivered_seq": 0
+    }
+  ],
+  "signals": []
+}

@@ -101,8 +101,12 @@ type (
 		// for this run invocation.
 		RunContext run.Context
 		// Input is the initial payload passed to the run, typically containing
-		// messages and caller-provided metadata.
+		// messages and caller-provided metadata. It is nil when InputRef is set.
 		Input any
+		// InputRef addresses the complete JSON input in RunStore under
+		// RunContext.RootRunID when the inline startup hook would exceed its limit.
+		// Decode runtime.RunInput with json.FormatDurationAsNano(true).
+		InputRef runstore.Hash `json:"input_ref,omitempty"`
 	}
 
 	// RunCompletedEvent fires after a run finishes, whether

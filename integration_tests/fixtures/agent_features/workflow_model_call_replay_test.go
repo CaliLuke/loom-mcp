@@ -22,7 +22,7 @@ import (
 	"go.temporal.io/sdk/client"
 )
 
-const workflowModelCallHistoryFile = "testdata/workflow_protocol_v20_model_call_budget.json"
+const workflowModelCallHistoryFile = "testdata/workflow_protocol_v21_model_call_budget.json"
 
 func TestGeneratedModelCallWorkflowReplay(t *testing.T) {
 	root, err := os.OpenRoot("testdata")

@@ -94,7 +94,7 @@ func (r *Runtime) ExecuteWorkflow(wfCtx engine.WorkflowContext, input *RunInput)
 	finalStatus := runStatusSuccess
 	var finalErr error
 	defer r.finishWorkflowExecution(wfCtx, input, planInput, runCtx, turnID, &out, &retErr, &finalStatus, &finalErr)
-	if err := r.publishInitialWorkflowEvents(wfCtx.Context(), input, runCtx, turnID); err != nil {
+	if err := r.publishInitialWorkflowEvents(wfCtx, input, runCtx, turnID); err != nil {
 		finalStatus, finalErr = workflowStatusForError(err), err
 		return nil, err
 	}
@@ -314,11 +314,15 @@ func (r *Runtime) logWorkflowStart(wfCtx engine.WorkflowContext, input *RunInput
 	}
 }
 
-func (r *Runtime) publishInitialWorkflowEvents(ctx context.Context, input *RunInput, runCtx run.Context, turnID string) error {
-	if err := r.publishHook(ctx, hooks.NewRunStartedEvent(input.RunID, input.AgentID, runCtx, *input), turnID); err != nil {
+func (r *Runtime) publishInitialWorkflowEvents(wf engine.WorkflowContext, input *RunInput, runCtx run.Context, turnID string) error {
+	event, err := prepareRunStartedHook(wf, input, runCtx, turnID)
+	if err != nil {
 		return err
 	}
-	return r.publishHook(ctx, hooks.NewRunPhaseChangedEvent(input.RunID, input.AgentID, input.SessionID, run.PhasePrompted), turnID)
+	if err := r.publishHook(wf.Context(), event, turnID); err != nil {
+		return err
+	}
+	return r.publishHook(wf.Context(), hooks.NewRunPhaseChangedEvent(input.RunID, input.AgentID, input.SessionID, run.PhasePrompted), turnID)
 }
 
 func (r *Runtime) publishWorkflowCompletion(

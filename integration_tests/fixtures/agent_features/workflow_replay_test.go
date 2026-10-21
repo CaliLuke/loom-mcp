@@ -42,7 +42,7 @@ import (
 type historyReplayPlanner struct{}
 
 const (
-	workflowHistoryFile        = "testdata/workflow_protocol_v20.json"
+	workflowHistoryFile        = "testdata/workflow_protocol_v21.json"
 	workflowHistoryIdentity    = "loom-mcp-history-recorder"
 	workflowHistoryStickyQueue = "loom-mcp-history-recorder-sticky"
 	workflowHistoryQuestion    = "Which topic should the draft use?"
@@ -78,6 +78,7 @@ func TestGeneratedFeatureWorkflowReplay(t *testing.T) {
 		{name: "protocol 17 rejected before effects", previous: 17},
 		{name: "protocol 18 rejected before effects", previous: 18},
 		{name: "protocol 19 rejected before effects", previous: 19},
+		{name: "protocol 20 rejected before effects", previous: 20},
 		{name: "future", rewrite: true},
 		{name: "missing", rewrite: true, missing: true},
 	} {

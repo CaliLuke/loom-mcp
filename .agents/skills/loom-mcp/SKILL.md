@@ -98,7 +98,13 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   runs before deployment. Preserve protocol 14 overflow source classification,
   retry definition accounting and the fixed-rate progress check.
 
-- Current workflow protocol is 19. Every agent observes adopted call facts,
+- Current workflow protocol is 21. Oversized `run_started` inputs are stored
+  before hook publication; `RunStartedEvent.InputRef` resolves the complete
+  effective input under `RunContext.RootRunID`, with nil inline Input. Small
+  inputs stay inline. Decode stored inputs with JSON duration nanosecond
+  compatibility. Interceptors and planners retain full input access; hook
+  observers resolve InputRef. Drain older workflows before upgrading.
+  Every agent observes adopted call facts,
   sends sorted Models and runs the advisory guard, bounded overflow recovery and
   recall advertising. Threshold compaction is explicit or qualified-default; the shipped qualification table is empty. The existing
   run.ContextRecovery adds GuardMargin (zero=10%) beside DisableRecall; RunInput
