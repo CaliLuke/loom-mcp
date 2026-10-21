@@ -246,6 +246,9 @@ func newEngine(opts Options, workerMode bool) (*Engine, error) {
 		pendingActivities:       make(map[string]struct{}),
 	}
 	e.AgentActivityRegistrations.ActivityRegistrar = e
+	e.AgentActivityRegistrations.Defaults = func(class string, options engine.ActivityOptions) engine.ActivityOptions {
+		return e.applyActivityClassDefaults(activityKind(class), options)
+	}
 	if opts.ClientOptions != nil {
 		e.replayDataConverter = opts.ClientOptions.DataConverter
 		if e.replayDataConverter == nil {

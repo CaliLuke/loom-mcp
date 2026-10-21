@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
-	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine/internal/activity"
+	activity "github.com/CaliLuke/loom/execution/adapter"
 	sv "github.com/CaliLuke/selvedge"
 )
 

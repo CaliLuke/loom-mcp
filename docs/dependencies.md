@@ -11,7 +11,7 @@ Verified on 2026-10-08:
 | --- | --- |
 | Go | 1.27.3 (verified 2026-10-20) |
 | Selvedge | v0.7.0 (verified 2026-10-20) |
-| Loom | v1.10.0-alpha.14 (verified 2026-10-20) |
+| Loom | v1.10.0-alpha.15 (verified 2026-10-21) |
 | MongoDB server / Go driver | 9.0.4 / v2.9.2 |
 | Redis server / Go client | 8.10.2 / CaliLuke/go-redis v9.23.1-0.20261014134601-1073297e76ea (client verified 2026-10-14) |
 | OpenAI Go SDK | v3.84.0 (verified 2026-10-21) |
@@ -35,7 +35,7 @@ transport-local types and validators to that shared implementation.
 
 Explicit exceptions:
 
-- Loom uses the published alpha.14 release.
+- Loom uses the published alpha.15 release.
 - The MCP Go SDK pins `v1.8.1-0.20261016161459-3e9d812b1814`, verified on
   2026-10-17 against upstream commit `3e9d812b1814`. Stable v1.8.0 still predates
   the request-summary API required by the SDK bridge. This pin includes the
@@ -120,6 +120,13 @@ absent values. Supplied zero, false, empty collections and allowed nulls retain
 their meaning. Required fields remain required even when they declare defaults.
 Tagged and untagged tool unions use Loom’s shared JSON codecs and branch
 validation; ambiguous or unmatched untagged values are rejected.
+
+## Loom alpha.15 typed activities
+
+The engine activity types now use Loom's shared `execution` contracts. Agent
+activity defaults remain in this module; workflow orchestration and backend
+lifecycles retain their existing owners. See the [runtime activity API](runtime.md)
+for typed registration and execution. The release also selects pgx v5.11.0.
 
 ## Selvedge v0.7.0 adoption
 

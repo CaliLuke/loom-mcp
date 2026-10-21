@@ -56,6 +56,7 @@ func NewWorker(opts Options) (*Engine, error) {
 	}
 	e := &Engine{app: opts.App, client: opts.Client, workflows: make(map[string]struct{}), activities: make(activityRegistry), activityDefaults: opts.ActivityDefaults, startWorkflow: sv.StartWorkflowByName}
 	e.AgentActivityRegistrations.ActivityRegistrar = e
+	e.AgentActivityRegistrations.Defaults = e.activityOptionsForClass
 	return e, nil
 }
 
@@ -66,6 +67,7 @@ func NewClient(opts Options) (*Engine, error) {
 	}
 	e := &Engine{client: opts.Client, startWorkflow: sv.StartWorkflowByName}
 	e.AgentActivityRegistrations.ActivityRegistrar = e
+	e.AgentActivityRegistrations.Defaults = e.activityOptionsForClass
 	return e, nil
 }
 

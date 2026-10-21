@@ -126,8 +126,9 @@ func TestEffectivePolicies(t *testing.T) {
 func TestContextGeneratedCompiles(t *testing.T) {
 	dir := t.TempDir()
 	root := testRepoRoot()
-	module := fmt.Sprintf("module example.com/contexttest\n\ngo 1.27.2\n\nrequire github.com/CaliLuke/loom-mcp/v2 v2.0.0\nreplace github.com/CaliLuke/loom-mcp/v2 => %s\n", root)
+	module := fmt.Sprintf("module example.com/contexttest\n\ngo 1.27.3\n\nrequire github.com/CaliLuke/loom-mcp/v2 v2.0.0\nreplace github.com/CaliLuke/loom-mcp/v2 => %s\n", root)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte(module), 0600))
+	require.NoError(t, rewriteFixtureGoMod(root, dir))
 	files := testhelpers.BuildAndGenerateWithPkg(t, "example.com/contexttest/gen", testscenarios.ContextPolicies())
 	for _, file := range files {
 		_, err := file.Render(dir)

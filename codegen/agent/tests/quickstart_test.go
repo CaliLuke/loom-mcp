@@ -56,7 +56,7 @@ func TestQuickstartGeneratesAndRuns(t *testing.T) {
 	// be generated and run from the repo tree. Once copied into a temp dir, that
 	// relative path no longer points at the repo root. Rewrite it to an absolute
 	// replace so `loom gen` and `go mod tidy` can resolve the local loom-mcp module.
-	if err := rewriteQuickstartGoMod(repoRoot, quickstartDir); err != nil {
+	if err := rewriteFixtureGoMod(repoRoot, quickstartDir); err != nil {
 		t.Fatalf("rewrite quickstart go.mod: %v", err)
 	}
 
@@ -171,8 +171,10 @@ func copyDir(src, dst string) error {
 	})
 }
 
-func rewriteQuickstartGoMod(repoRoot string, quickstartDir string) error {
-	modPath := filepath.Join(quickstartDir, "go.mod")
+// rewriteFixtureGoMod binds a temporary fixture to this checkout and mirrors
+// the root module's selected core replacements.
+func rewriteFixtureGoMod(repoRoot string, fixtureDir string) error {
+	modPath := filepath.Join(fixtureDir, "go.mod")
 	//nolint:gosec // Test helper reads a trusted fixture file.
 	raw, err := os.ReadFile(modPath)
 	if err != nil {

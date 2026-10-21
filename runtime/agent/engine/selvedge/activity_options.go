@@ -1,10 +1,11 @@
 package selvedge
 
 import (
+	"time"
+
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
 	sv "github.com/CaliLuke/selvedge"
 	"github.com/CaliLuke/selvedge/retry"
-	"time"
 )
 
 // ActivityDefaults provides optional timeouts for each activity class.
@@ -43,6 +44,19 @@ func invocationActivityOptions(options engine.ActivityOptions) sv.ActivityOption
 		result.RetryPolicy = &retry.Policy{MaxAttempts: p.MaxAttempts, InitialInterval: p.InitialInterval, MaxInterval: 100 * p.InitialInterval, Multiplier: p.BackoffCoefficient}
 	}
 	return result
+}
+
+func (e *Engine) activityOptionsForClass(class string, options engine.ActivityOptions) engine.ActivityOptions {
+	switch class {
+	case "hook":
+		return applyActivityDefaults(options, e.activityDefaults.Hook)
+	case "planner":
+		return applyActivityDefaults(options, e.activityDefaults.Planner)
+	case "tool":
+		return applyActivityDefaults(options, e.activityDefaults.Tool)
+	default:
+		return options
+	}
 }
 
 func applyActivityDefaults(options engine.ActivityOptions, defaults ActivityTimeoutDefaults) engine.ActivityOptions {

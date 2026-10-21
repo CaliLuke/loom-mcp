@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine"
-	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/engine/internal/activity"
+	activity "github.com/CaliLuke/loom/execution/adapter"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -22,7 +22,7 @@ func (e *Engine) RegisterActivity(_ context.Context, def engine.ActivityDefiniti
 	if err != nil {
 		return err
 	}
-	opts := e.applyActivityClassDefaults(activityKind(def.Class), def.Options)
+	opts := def.Options
 	wrapped := handler.Wrap(e.injectWorkflowContextIntoActivity, classifyTemporalCancellation)
 	return e.registerActivityWithCtx(def.Name, opts, wrapped)
 }

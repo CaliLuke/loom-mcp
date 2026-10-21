@@ -386,6 +386,9 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   `Delivery.Ack` only after the commit. Malformed manual deliveries expose the
   raw payload and decode error, remain pending by default, and may be acked only
   after an application-owned dead-letter commit.
+- The generic activity contracts and handler binding are owned by Loom
+  `execution`; engine aliases refer to that one contract. Agent registration
+  defaults, JSON encoding and error conversion remain in Loom-MCP.
 - Add activities through `engine.Activity[I, O]` and the generic
   `ActivityRegistrar`/`ActivityExecutor` boundary. Do not add per-feature adapter
   registration/execution methods. Existing agent helpers live in shared
@@ -947,7 +950,7 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
 ## Command Reminders
 
 ```bash
-go install github.com/CaliLuke/loom/cmd/loom@v1.10.0-alpha.14
+go install github.com/CaliLuke/loom/cmd/loom@v1.10.0-alpha.15
 loom version
 loom gen <module-import-path>/design
 loom example <module-import-path>/design

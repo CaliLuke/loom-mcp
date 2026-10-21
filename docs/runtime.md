@@ -5316,7 +5316,9 @@ type Engine interface {
 
 ### Typed activities
 
-Use `engine.Activity[I, O]` for application-owned activities. Registration and
+`engine.Activity[I, O]` and its options, future, registrar, and executor types
+refer to the shared `github.com/CaliLuke/loom/execution` contracts. Use these
+typed handles for application-owned activities. Registration and
 invocation share a name and concrete input/output types:
 
 ```go
@@ -5340,12 +5342,16 @@ Bind the registration helper to the engine and the workflow helper to each scope
 executor, including canceled and detached scopes. Custom adapters must implement
 the new generic methods; existing runtime calls keep their agent-specific helpers.
 `ActivityDefinition` is the adapter-facing registration form and accepts a handler
-with an input and either `(output, error)` or an error-only result. Its optional
-`Class` selects the existing `hook`, `planner`, or `tool` timeout defaults; the
-typed application API uses explicit registration options.
+with an input and either `(output, error)` or an error-only result.
+`AgentActivityRegistrations.Defaults` selects the existing `hook`, `planner`, or
+`tool` timeout defaults before generic registration; those agent categories do
+not belong to the shared activity contract. The typed application API uses
+explicit registration options.
 
-This is an activity boundary within loom-mcp. Workflow inputs, signals, and agent
-lifecycle remain the current agent contracts. No new Loom DSL is required.
+Loom owns the common activity boundary and concrete-handler binding. Loom-MCP
+owns its adapters, agent JSON encoding, error conversion, workflow inputs,
+signals, and agent lifecycle. Native application workflows can use Loom
+execution directly without importing Loom-MCP. No new Loom DSL is required.
 
 ### WorkflowContext
 

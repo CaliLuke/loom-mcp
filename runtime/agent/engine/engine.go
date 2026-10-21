@@ -360,28 +360,6 @@ type (
 		WithCancel() (WorkflowContext, func())
 	}
 
-	// Future represents a pending activity result that will become available after
-	// the activity completes. Futures enable parallel activity execution: workflows
-	// can launch multiple tool activities and collect results later using Get(),
-	// which blocks until the activity finishes.
-	//
-	// Thread-safety: Futures are bound to a single workflow execution and must not
-	// be shared across workflow executions. Calling Get() multiple times is safe
-	// and returns the same result/error on each call.
-	//
-	// Lifecycle: Valid from creation until the workflow completes. Get() must be
-	// called before the workflow exits; abandoned futures leak workflow resources
-	// in some engines. IsReady() enables polling without blocking.
-	Future[T any] interface {
-		// Get blocks until the activity completes and returns the typed result.
-		// Calling Get multiple times on the same Future returns the same value/error.
-		Get(ctx context.Context) (T, error)
-
-		// IsReady returns true if the activity has completed (success or failure) and Get()
-		// will not block. This allows workflows to poll or implement custom waiting strategies.
-		IsReady() bool
-	}
-
 	// Receiver exposes typed workflow signal delivery in an engine-agnostic way.
 	// Implementations wrap engine-specific channels (Temporal signal channels,
 	// in-process Go channels, etc.) and provide blocking and non-blocking receive
@@ -410,27 +388,6 @@ type (
 		// already delivered to the workflow in history order. It is safe to call
 		// inside an Await predicate.
 		Pending() int
-	}
-
-	// ActivityOptions configures retry and timeouts for an activity.
-	ActivityOptions struct {
-		// Queue overrides the default activity queue. If empty, the activity inherits
-		// the workflow's task queue.
-		Queue string
-		// RetryPolicy controls retry behavior for this activity. If zero-valued, the
-		// engine uses its default retry policy.
-		RetryPolicy RetryPolicy
-		// ScheduleToStartTimeout bounds how long the activity may wait in the task
-		// queue before a worker starts the attempt. Zero means leave queue-wait
-		// unspecified here and let the engine adapter apply its own defaults.
-		ScheduleToStartTimeout time.Duration
-		// StartToCloseTimeout bounds one activity attempt once a worker has started
-		// executing it. This is the primary "healthy attempt" budget for planner and
-		// tool work. Zero means use the engine default.
-		StartToCloseTimeout time.Duration
-		// HeartbeatTimeout bounds the maximum gap between heartbeats emitted by the
-		// running activity. Zero disables heartbeat-based liveness detection.
-		HeartbeatTimeout time.Duration
 	}
 
 	// HookActivityCall describes a single invocation of the runtime hook publishing
@@ -518,18 +475,6 @@ type (
 		// cancelled, and in-flight activities may be cancelled depending on the engine.
 		// Returns an error if cancellation fails.
 		Cancel(ctx context.Context) error
-	}
-
-	// RetryPolicy defines retry semantics shared by workflows and activities.
-	// Zero-valued fields mean the engine uses its defaults.
-	RetryPolicy struct {
-		// MaxAttempts caps the total number of retry attempts. Zero means unlimited retries.
-		MaxAttempts int
-		// InitialInterval is the delay before the first retry. Zero means use engine default.
-		InitialInterval time.Duration
-		// BackoffCoefficient multiplies the delay after each retry. Values < 1 are treated
-		// as 1 (constant backoff). A value of 2 provides exponential backoff.
-		BackoffCoefficient float64
 	}
 
 	// ChildWorkflowRequest describes a child workflow to start from within an

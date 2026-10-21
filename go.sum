@@ -63,8 +63,8 @@ github.com/CaliLuke/go-sse v0.11.1-0.20261008010800-b29b33ae1a1e h1:8ikgsAY/zoRU
 github.com/CaliLuke/go-sse v0.11.1-0.20261008010800-b29b33ae1a1e/go.mod h1:lXdhhI7K/QSTmuy5OiNyu32AQ/bUZ8aE8wj8taCn3QE=
 github.com/CaliLuke/libopenapi v0.41.7-0.20261014145029-7886f0170cc4 h1:KG8QSbAtOfHv2JatFv9XsqI673y6tNPMWmpc0VN59y4=
 github.com/CaliLuke/libopenapi v0.41.7-0.20261014145029-7886f0170cc4/go.mod h1:gEQ2ydf5xr92Ql+uRl54gig6N/DAc/zuIrfZNqtFqPA=
-github.com/CaliLuke/loom v1.10.0-alpha.14 h1:3DURHyWQMZ4Nbg9X1Ruvjme3oW6lUOkj3YQfLZ2pPzA=
-github.com/CaliLuke/loom v1.10.0-alpha.14/go.mod h1:BBJip0af503vxXbCkf79o/HFK+TdEGW2pnXTdj5YAKw=
+github.com/CaliLuke/loom v1.10.0-alpha.15 h1:axxSUdT5iGypVOXqfTyAxcvjxNLKp0sHxkgEKWyHE1A=
+github.com/CaliLuke/loom v1.10.0-alpha.15/go.mod h1:mX7STFvV/6tr8HpCNhnOruI/JprgtBieGr3Be8aAD6s=
 github.com/CaliLuke/selvedge v0.7.0 h1:9scL+JWLODAOie5C6vHKkkSvknyLWglUQT5c2Ij6YM8=
 github.com/CaliLuke/selvedge v0.7.0/go.mod h1:WMOxrwKeto/YPgLNhH9mxvduVEiWlVKDGLkm2uAUZw8=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
@@ -322,8 +322,8 @@ github.com/jackc/pgpassfile v1.0.0 h1:/6Hmqy13Ss2zCq62VdNG8tM1wchn8zjSGOBJ6icpsI
 github.com/jackc/pgpassfile v1.0.0/go.mod h1:CEx0iS5ambNFdcRtxPj5JhEz+xB6uRky5eyVu/W2HEg=
 github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 h1:iCEnooe7UlwOQYpKFhBabPMi4aNAfoODPEFNiAnClxo=
 github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761/go.mod h1:5TJZWKEWniPve33vlWYSoGYefn3gLQRzjfDlhSJ9ZKM=
-github.com/jackc/pgx/v5 v5.7.6 h1:rWQc5FwZSPX58r1OQmkuaNicxdmExaEz5A2DO2hUuTk=
-github.com/jackc/pgx/v5 v5.7.6/go.mod h1:aruU7o91Tc2q2cFp5h4uP3f6ztExVpyVv88Xl/8Vl8M=
+github.com/jackc/pgx/v5 v5.11.0 h1:IzBBtyK9AHqf98cctWFifYSci2hgQR/cd56wB4p+ogg=
+github.com/jackc/pgx/v5 v5.11.0/go.mod h1:mal1tBGAFfLHvZzaYh77YS/eC6IX9OWbRV1QIIM0Jn4=
 github.com/jackc/puddle/v2 v2.2.2 h1:PR8nw+E/1w0GLuRFSmiioY6UooMp6KJv0/61nB7icHo=
 github.com/jackc/puddle/v2 v2.2.2/go.mod h1:vriiEXHvEE654aYKXXjOvZM39qJ0q+azkZFrfEOc3H4=
 github.com/json-iterator/go v1.1.11/go.mod h1:KdQUCv79m/52Kvf8AW2vK1V8akMuk1QjK/uOdHXbAo4=

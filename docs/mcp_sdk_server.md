@@ -684,7 +684,7 @@ response headers.
 
 ## Module Dependency
 
-`loom-mcp` pins `github.com/CaliLuke/loom v1.10.0-alpha.14`. Regenerate service and client code when upgrading. MCP authorization remains application-owned.
+`loom-mcp` pins `github.com/CaliLuke/loom v1.10.0-alpha.15`. Regenerate service and client code when upgrading. MCP authorization remains application-owned.
 
 Defaults must satisfy their effective constraints, including inherited bounds and enums. Alpha.3 rejects invalid defaults instead of allowing recovery-example generation to replace them.
 
