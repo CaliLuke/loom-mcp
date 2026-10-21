@@ -82,7 +82,7 @@ require (
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/nexus-rpc/nexus-proto-annotations v0.1.0 // indirect
 	github.com/nexus-rpc/sdk-go v0.7.0 // indirect
-	github.com/openai/openai-go/v3 v3.83.0 // indirect
+	github.com/openai/openai-go/v3 v3.84.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/power-devops/perfstat v0.0.0-20260916203055-22a1a467d9f0 // indirect

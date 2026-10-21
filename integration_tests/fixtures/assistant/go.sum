@@ -125,8 +125,8 @@ github.com/nexus-rpc/nexus-proto-annotations v0.1.0 h1:2fELd+9sqUtNu6Fg//pw8YFsx
 github.com/nexus-rpc/nexus-proto-annotations v0.1.0/go.mod h1:n3UjF1bPCW8llR8tHvbxJ+27yPWrhpo8w/Yg1IOuY0Y=
 github.com/nexus-rpc/sdk-go v0.7.0 h1:38NrfY5rLnZAiMMs2ZfCKI/CSDzdfJG+27iAgfA8bUI=
 github.com/nexus-rpc/sdk-go v0.7.0/go.mod h1:FHdPfVQwRuJFZFTF0Y2GOAxCrbIBNrcPna9slkGKPYk=
-github.com/openai/openai-go/v3 v3.83.0 h1:CICDFZzWCw2iP16AzFEA4igKfUH2Fs1N5nUBlqyREAQ=
-github.com/openai/openai-go/v3 v3.83.0/go.mod h1:i+lM+NFmWP+Yd+fYKEaPxUINBx+vZtRmY5gaszSfsiQ=
+github.com/openai/openai-go/v3 v3.84.0 h1:rr29Tge+aOzUVfJcTsz5N70W9EWP35ZUqgv6Z73fumU=
+github.com/openai/openai-go/v3 v3.84.0/go.mod h1:i+lM+NFmWP+Yd+fYKEaPxUINBx+vZtRmY5gaszSfsiQ=
 github.com/pb33f/go-yaml v0.1.1 h1:yWGmhVdwzionRnSc/hEJwcfq6PaZL2QdYzyReXBbX7Q=
 github.com/pb33f/go-yaml v0.1.1/go.mod h1:QvWdkHP5VjFYAeHMQUkaPQqREaQnBNOXmWzAjNrnSdo=
 github.com/pb33f/ordered-map/v2 v2.3.2 h1:wDyaZ2Pv9QLh64X4utCeD5Zoi9nIv2aW3lwv172O5PQ=

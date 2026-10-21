@@ -44,7 +44,7 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/modelcontextprotocol/go-sdk v1.8.1-0.20261016161459-3e9d812b1814 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
-	github.com/openai/openai-go/v3 v3.83.0 // indirect
+	github.com/openai/openai-go/v3 v3.84.0 // indirect
 	github.com/pb33f/go-yaml v0.1.1 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.2 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect

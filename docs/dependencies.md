@@ -14,7 +14,7 @@ Verified on 2026-10-08:
 | Loom | v1.10.0-alpha.14 (verified 2026-10-20) |
 | MongoDB server / Go driver | 9.0.4 / v2.9.2 |
 | Redis server / Go client | 8.10.2 / CaliLuke/go-redis v9.23.1-0.20261014134601-1073297e76ea (client verified 2026-10-14) |
-| OpenAI Go SDK | v3.83.0 (verified 2026-10-20) |
+| OpenAI Go SDK | v3.84.0 (verified 2026-10-21) |
 | Anthropic Go SDK | v1.84.0 (verified 2026-10-20) |
 | Google GenAI | v1.75.0 (verified 2026-10-20) |
 | Bedrock Runtime / AWS core / Smithy | v1.63.5 / v1.47.3 / v1.28.5 (verified 2026-10-20) |
@@ -137,8 +137,10 @@ and Smithy dependencies. Root, fixture, longrun, and quickstart module pins move
 together. Codex, Ollama, and the model gateway use direct transports rather than
 separate provider SDKs; their contract tests remain part of the same provider run.
 Google auth and OAuth2 were checked and already use their latest releases.
+A final check on 2026-10-21 picked up OpenAI v3.84.0, published during verification;
+all other provider versions remained current.
 
-Release sources: [OpenAI v3.83.0](https://github.com/openai/openai-go/releases/tag/v3.83.0),
+Release sources: [OpenAI v3.84.0](https://github.com/openai/openai-go/releases/tag/v3.84.0),
 [Anthropic v1.84.0](https://github.com/anthropics/anthropic-sdk-go/releases/tag/v1.84.0),
 [Google GenAI v1.75.0](https://github.com/googleapis/go-genai/releases/tag/v1.75.0),
 and [AWS releases](https://github.com/aws/aws-sdk-go-v2/releases).
