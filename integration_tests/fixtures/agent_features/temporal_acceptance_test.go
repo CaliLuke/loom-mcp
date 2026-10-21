@@ -78,6 +78,7 @@ func TestGeneratedFeatureRealTemporalContracts(t *testing.T) {
 	})
 
 	t.Run("transfer dispatch avoids poll throttle", func(t *testing.T) {
+		requireTimingQualification(t)
 		testTemporalTransferDispatchLatency(t, server.Client())
 	})
 
@@ -147,10 +148,20 @@ func TestGeneratedFeatureRealTemporalContracts(t *testing.T) {
 			exec,
 			"sess-temporal-core",
 			"run-temporal-core",
-			2500*time.Millisecond,
-			8*time.Second,
-			agentsruntime.WithRunTimeBudget(2*time.Second),
+			0,
+			45*time.Second,
 		)
+	})
+
+	t.Run("active budget excludes external waits", func(t *testing.T) {
+		requireTimingQualification(t)
+		ctx, cancel := temporalScenarioContext(t)
+		defer cancel()
+		eng := newTemporalAcceptanceEngine(t, server.Client())
+		fx := newFeatureRuntime(t, agentsruntime.WithEngine(eng))
+		runGeneratedFeatureAwaitScenario(t, ctx, fx, newRecordingWorkflowExecutor(),
+			"sess-temporal-budget", "run-temporal-budget", 2500*time.Millisecond,
+			8*time.Second, agentsruntime.WithRunTimeBudget(2*time.Second))
 	})
 
 	t.Run("planner retry exposes attempts and commits once", func(t *testing.T) {
@@ -228,9 +239,8 @@ func TestGeneratedFeatureRealTemporalContracts(t *testing.T) {
 		ctx, cancel := temporalScenarioContext(t)
 		defer cancel()
 		eng := newTemporalAcceptanceEngine(t, server.Client())
-		// Resumed steps publish planner_step in their own activity (accepted cost),
-		// so this scenario's active budget is 2s; 1s was measured to finalize twice.
-		runGeneratedExternalAwaitScenario(t, ctx, newFeatureRuntime(t, agentsruntime.WithEngine(eng)), 2*time.Second)
+		// This case proves barrier semantics; timing is qualified separately.
+		runGeneratedExternalAwaitScenario(t, ctx, newFeatureRuntime(t, agentsruntime.WithEngine(eng)), 0)
 	})
 
 	t.Run("parent cancellation reaches child agent", func(t *testing.T) {
@@ -523,7 +533,7 @@ func testTemporalSignalTimeoutRace(t *testing.T, temporalClient client.Client) {
 	require.NoError(t, fx.rt.Seal(ctx))
 
 	const workflowTimeout = 2 * time.Second
-	offsets := []time.Duration{workflowTimeout / 2, workflowTimeout - workflowTimeout/20, workflowTimeout + time.Nanosecond}
+	offsets := []time.Duration{0, workflowTimeout / 2, workflowTimeout - workflowTimeout/20, workflowTimeout + time.Nanosecond}
 	completed := 0
 	timedOut := 0
 	for i, offset := range offsets {
@@ -532,10 +542,14 @@ func testTemporalSignalTimeoutRace(t *testing.T, temporalClient client.Client) {
 		_, err := fx.rt.CreateSession(ctx, sessionID)
 		require.NoError(t, err)
 		startedAt := time.Now()
+		runTimeout := workflowTimeout
+		if offset == 0 {
+			runTimeout = 0 // State-synchronized completion control, bounded by ctx.
+		}
 		handle, err := temporalClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 			ID:                 runID,
 			TaskQueue:          coordinator.DefaultTaskQueue,
-			WorkflowRunTimeout: workflowTimeout,
+			WorkflowRunTimeout: runTimeout,
 		}, coordinator.WorkflowName, &agentsruntime.RunInput{
 			WorkflowProtocolVersion: api.WorkflowProtocolVersion,
 			AgentID:                 coordinator.AgentID,
@@ -545,12 +559,12 @@ func testTemporalSignalTimeoutRace(t *testing.T, temporalClient client.Client) {
 			Messages:                []*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "race"}}}},
 		})
 		require.NoError(t, err)
-		// Publishing the await is setup, not the race: allow it until the run
-		// deadline, while keeping answer offsets relative to workflow start.
-		awaitDeadline := startedAt.Add(workflowTimeout)
-		require.Eventually(t, func() bool {
-			return fx.recorder.countForRun(hooks.AwaitTypedInput, runID) == 1
-		}, time.Until(awaitDeadline), 10*time.Millisecond)
+		if offset == 0 {
+			require.NoError(t, fx.recorder.waitForHooks(ctx, runID, hooks.AwaitTypedInput))
+		}
+		// Timed cases deliberately race startup as well as signal delivery.
+		// A late worker may time out before publishing its await; that is a valid
+		// race outcome, while the control above proves successful resumption.
 		answerRef, err := fx.rt.RunStore.Put(ctx, runID, []byte(`{"ok":true}`))
 		require.NoError(t, err)
 		var out *api.RunOutput

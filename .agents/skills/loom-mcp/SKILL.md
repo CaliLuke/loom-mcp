@@ -67,6 +67,10 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   and `make qualification` run exactly this test with race detection, `-count=1`,
   and a 30-minute timeout; routine `make ci-integration` excludes this workload.
   Keep its 1,000-step workload and recall call-count golden unchanged.
+- Temporal dispatch latency and active-time budget measurements run through
+  `make test-timing-qualification`, also included in scheduled qualification.
+  Run them without competing build workloads. Functional fixture acceptance
+  waits for recorded hook state with bounded, diagnostic waits.
 - Ordinary `go test` runs the seed corpora at dynamic JSON boundaries. Use
   `make test-fuzz` for bounded mutation of those corpora; change `FUZZ_TIME`
   only when a longer scheduled or focused run is intentional.

@@ -71,6 +71,12 @@ longrun and 1,000-step workloads. Do not also run the exhaustive `make itest` or
 `make verify-mcp-local`, which would duplicate that acceptance work. Routine CI
 success does not establish statistical or live-provider qualification.
 
+`make test-timing-qualification` separately checks Temporal dispatch latency
+and exclusion of external waits from the active-time budget. It runs in scheduled
+qualification; use a host without competing build workloads for these measurements.
+Routine fixture acceptance synchronizes on hook state with bounded waits and
+reports the observed events when a required state is not reached.
+
 All required checks must pass. If a failure is caused by Loom, fix it in Loom and
 repeat this section from regeneration. Do not add a `loom-mcp` workaround for
 an upstream regression. Record the failing command, package or scenario, and

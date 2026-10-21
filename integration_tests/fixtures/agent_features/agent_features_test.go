@@ -27,7 +27,6 @@ import (
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/session"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/stream"
 	"github.com/CaliLuke/loom-mcp/v2/runtime/agent/tools"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -152,14 +151,9 @@ func runGeneratedFeatureAwaitScenario(
 		runOpts...,
 	)
 	require.NoError(t, err)
-	if !assert.Eventually(t, func() bool {
-		return fx.recorder.count(hooks.AwaitTypedInput) == 1
-	}, awaitTimeout, 10*time.Millisecond) {
-		waitCtx, cancelWait := context.WithTimeout(ctx, 2*time.Second)
-		defer cancelWait()
-		out, waitErr := handle.Wait(waitCtx)
-		require.FailNowf(t, "typed-input await was not published", "run output: %#v; wait error: %v", out, waitErr)
-	}
+	awaitCtx, cancelAwait := context.WithTimeout(ctx, awaitTimeout)
+	require.NoError(t, fx.recorder.waitForHooks(awaitCtx, runID, hooks.AwaitTypedInput))
+	cancelAwait()
 	require.NoError(t, rt.PauseRun(ctx, &api.PauseRequest{
 		RunID:       runID,
 		Reason:      "fixture-review",
@@ -186,9 +180,9 @@ func runGeneratedFeatureAwaitScenario(
 		Payload: rawjson.Message([]byte(`{"content-type":"application/json"}`)),
 	})
 	require.NoError(t, err)
-	require.Eventually(t, func() bool {
-		return fx.recorder.count(hooks.AwaitConfirmation) == 1
-	}, awaitTimeout, 10*time.Millisecond)
+	confirmCtx, cancelConfirm := context.WithTimeout(ctx, awaitTimeout)
+	defer cancelConfirm()
+	require.NoError(t, fx.recorder.waitForHooks(confirmCtx, runID, hooks.AwaitConfirmation))
 	require.NoError(t, rt.ProvideConfirmation(ctx, &api.ConfirmationDecision{
 		RunID:       runID,
 		Approved:    true,

@@ -297,9 +297,14 @@ coverage-fast-check: coverage-merge-test
 # Exhaustive acceptance is explicit and scheduled, not a per-push release gate.
 # Keep the full workloads unchanged and visible as separate workflow steps.
 qualification: tools
+	$(MAKE) test-timing-qualification
 	$(MAKE) test-payload-growth
 	$(MAKE) test-recall-growth
 	$(MAKE) test-longrun
+
+.PHONY: test-timing-qualification
+test-timing-qualification:
+	LOOM_MCP_TIMING_QUALIFICATION=1 $(GO) test -C ./integration_tests/fixtures/agent_features -race -count=1 -timeout=5m -v -run '^TestGeneratedFeatureRealTemporalContracts/(transfer_dispatch_avoids_poll_throttle|active_budget_excludes_external_waits)$$' .
 
 test-recall-growth:
 	$(GO) test -race -count=1 -timeout=30m ./runtime/agent/transcript/recall/ -run '^TestRecallScript1000Steps$$'

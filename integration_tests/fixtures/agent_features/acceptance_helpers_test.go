@@ -380,13 +380,18 @@ func (a *auditInterceptor) beforeEventCount() int {
 }
 
 type hookRecorder struct {
-	mu     sync.Mutex
-	events []hooks.Event
+	mu      sync.Mutex
+	events  []hooks.Event
+	changed chan struct{}
 }
 
 func (r *hookRecorder) HandleEvent(ctx context.Context, event hooks.Event) error {
 	r.mu.Lock()
 	r.events = append(r.events, event)
+	if r.changed != nil {
+		close(r.changed)
+		r.changed = nil
+	}
 	r.mu.Unlock()
 	return nil
 }

@@ -2,6 +2,7 @@ package agentfeatures_test
 
 import (
 	"context"
+	"os"
 	"slices"
 	"testing"
 	"time"
@@ -61,4 +62,12 @@ func transferDispatchWorkflow(ctx workflow.Context) ([]time.Duration, error) {
 
 func transferDispatchActivity(context.Context) error {
 	return nil
+}
+
+// requireTimingQualification keeps latency contracts explicit on a dedicated host.
+func requireTimingQualification(t *testing.T) {
+	t.Helper()
+	if os.Getenv("LOOM_MCP_TIMING_QUALIFICATION") != "1" {
+		t.Skip("run make test-timing-qualification for latency contracts")
+	}
 }

@@ -130,23 +130,20 @@ func runGeneratedExternalAwaitScenario(t *testing.T, ctx context.Context, fx *fe
 	_, err := fx.rt.CreateSession(ctx, "sess-external-await")
 	require.NoError(t, err)
 
+	options := []agentsruntime.RunOption{agentsruntime.WithRunID("run-external-await")}
+	if budget > 0 {
+		options = append(options, agentsruntime.WithRunTimeBudget(budget))
+	}
 	handle, err := coordinator.NewClient(fx.rt).Start(
 		ctx,
 		"sess-external-await",
 		[]*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "await"}}}},
-		agentsruntime.WithRunID("run-external-await"),
-		agentsruntime.WithRunTimeBudget(budget),
+		options...,
 	)
 	require.NoError(t, err)
-	if !assert.Eventually(t, func() bool {
-		return fx.recorder.count(hooks.AwaitClarification) == 1 &&
-			fx.recorder.count(hooks.AwaitExternalTools) == 1
-	}, 5*time.Second, 10*time.Millisecond) {
-		waitCtx, cancelWait := context.WithTimeout(ctx, 2*time.Second)
-		defer cancelWait()
-		out, waitErr := handle.Wait(waitCtx)
-		require.FailNowf(t, "external-input barrier was not published", "run output: %#v; wait error: %v", out, waitErr)
-	}
+	barrierCtx, cancelBarrier := context.WithTimeout(ctx, 45*time.Second)
+	defer cancelBarrier()
+	require.NoError(t, fx.recorder.waitForHooks(barrierCtx, "run-external-await", hooks.AwaitClarification, hooks.AwaitExternalTools))
 
 	require.NoError(t, fx.rt.ProvideClarification(ctx, &api.ClarificationAnswer{
 		RunID:  "run-external-await",

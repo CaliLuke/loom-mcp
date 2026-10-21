@@ -45,6 +45,9 @@ jobs:
       - name: Install pinned developer tools
         run: make tools
 
+      - name: Dispatch latency and active-time budget qualification
+        run: make test-timing-qualification
+
       - name: Full payload and cache-growth acceptance
         run: make test-payload-growth
 
