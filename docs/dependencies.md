@@ -11,7 +11,7 @@ Verified on 2026-10-08:
 | --- | --- |
 | Go | 1.27.3 (verified 2026-10-20) |
 | Selvedge | v0.7.0 (verified 2026-10-20) |
-| Loom | v1.10.0-alpha.15 (verified 2026-10-21) |
+| Loom | v1.10.0-alpha.16 (verified 2026-10-22) |
 | MongoDB server / Go driver | 9.0.4 / v2.9.2 |
 | Redis server / Go client | 8.10.2 / CaliLuke/go-redis v9.23.1-0.20261014134601-1073297e76ea (client verified 2026-10-14) |
 | OpenAI Go SDK | v3.84.0 (verified 2026-10-21) |
@@ -35,7 +35,7 @@ transport-local types and validators to that shared implementation.
 
 Explicit exceptions:
 
-- Loom uses the published alpha.15 release.
+- Loom uses the published alpha.16 release.
 - The MCP Go SDK pins `v1.8.1-0.20261016161459-3e9d812b1814`, verified on
   2026-10-17 against upstream commit `3e9d812b1814`. Stable v1.8.0 still predates
   the request-summary API required by the SDK bridge. This pin includes the
@@ -127,6 +127,12 @@ The engine activity types now use Loom's shared `execution` contracts. Agent
 activity defaults remain in this module; workflow orchestration and backend
 lifecycles retain their existing owners. See the [runtime activity API](runtime.md)
 for typed registration and execution. The release also selects pgx v5.11.0.
+
+## Loom alpha.16 compiler improvements
+
+Regenerate service, client, and server code together. This release reuses
+immutable compiler analysis and bounds concurrent file rendering. Existing
+consumer APIs remain unchanged. See the [alpha.16 release notes](https://github.com/CaliLuke/loom/releases/tag/v1.10.0-alpha.16).
 
 ## Selvedge v0.7.0 adoption
 
