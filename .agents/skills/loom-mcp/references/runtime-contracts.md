@@ -899,7 +899,11 @@ Use this file for current loom-mcp runtime behavior in this repo. Prefer it over
   version-isolated Pulse key.
 - The Ollama adapter uses the local `/api/chat` endpoint for text, image,
   streaming, function-tool, native thinking, and structured-output requests. It
-  maps `model.Request.Thinking` to Ollama's top-level `think` flag and surfaces
+  maps `model.Request.Thinking` to Ollama's top-level `think` field, sending
+  `ThinkingOptions.Effort` as the unchanged `low`, `medium`, or `high` string
+  in both Complete and Stream, taking precedence over Enable. Other nonempty
+  efforts fail before HTTP I/O. Empty effort preserves boolean Enable; nil
+  Thinking omits think. Other adapters do not map Effort. The adapter surfaces
   `message.thinking` as typed `model.ThinkingPart` / `model.ThinkingChunk`, never
   as assistant text or structured-output content. Some Gemma 4 variants,
   including MLX builds, also require the model-level `<|think|>` control token at

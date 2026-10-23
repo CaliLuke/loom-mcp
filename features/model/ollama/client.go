@@ -65,7 +65,7 @@ type ollamaChatRequest struct {
 	Model    string          `json:"model"`
 	Messages []ollamaMessage `json:"messages"`
 	Stream   bool            `json:"stream"`
-	Think    *bool           `json:"think,omitempty"`
+	Think    any             `json:"think,omitempty"`
 	Tools    []ollamaTool    `json:"tools,omitempty"`
 	Options  map[string]any  `json:"options,omitempty"`
 	Format   any             `json:"format,omitempty"`
@@ -167,14 +167,11 @@ func newDefaultHTTPClient(timeout time.Duration) *http.Client {
 }
 
 func (c *Client) buildChatRequest(req *model.Request, stream bool) (ollamaChatRequest, error) {
-	if req != nil {
-		if err := model.ValidateToolResultParts(req, model.ToolResultPartSupport{}, "ollama", c.resolveModelID(req), ""); err != nil {
-			return ollamaChatRequest{}, err
-		}
-	}
-
 	if req == nil {
 		return ollamaChatRequest{}, errors.New("ollama: request is required")
+	}
+	if err := model.ValidateToolResultParts(req, model.ToolResultPartSupport{}, "ollama", c.resolveModelID(req), ""); err != nil {
+		return ollamaChatRequest{}, err
 	}
 	if len(req.Messages) == 0 {
 		return ollamaChatRequest{}, errors.New("ollama: messages are required")
@@ -201,11 +198,15 @@ func (c *Client) buildChatRequest(req *model.Request, stream bool) (ollamaChatRe
 	if err != nil {
 		return ollamaChatRequest{}, err
 	}
+	thinking, err := encodeThinking(req.Thinking)
+	if err != nil {
+		return ollamaChatRequest{}, err
+	}
 	return ollamaChatRequest{
 		Model:    modelID,
 		Messages: messages,
 		Stream:   stream,
-		Think:    encodeThinking(req.Thinking),
+		Think:    thinking,
 		Tools:    tools,
 		Options:  c.requestOptions(req),
 		Format:   format,
@@ -253,12 +254,19 @@ func (c *Client) requestOptions(req *model.Request) map[string]any {
 	return options
 }
 
-func encodeThinking(thinking *model.ThinkingOptions) *bool {
+// encodeThinking preserves omission and booleans unless a named effort is set.
+func encodeThinking(thinking *model.ThinkingOptions) (any, error) {
 	if thinking == nil {
-		return nil
+		return nil, nil
 	}
-	enabled := thinking.Enable
-	return &enabled
+	switch thinking.Effort {
+	case "":
+		return thinking.Enable, nil
+	case "low", "medium", "high":
+		return thinking.Effort, nil
+	default:
+		return nil, fmt.Errorf("ollama: unsupported thinking effort %q: want low, medium, or high", thinking.Effort)
+	}
 }
 
 func (c *Client) doJSON(ctx context.Context, chatReq ollamaChatRequest, out *ollamaChatResponse) error {

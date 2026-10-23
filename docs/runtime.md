@@ -4907,6 +4907,15 @@ client, err := rt.NewOllamaModelClient(runtime.OllamaConfig{
 })
 ```
 
+For GPT-OSS, set `Thinking: &model.ThinkingOptions{Effort: "low"}` on the
+request to select a [reasoning effort level](https://ollama.com/library/gpt-oss).
+Ollama `Complete` and `Stream` send `Effort` unchanged as the top-level `think`
+string. Accepted values are `low`, `medium`, and `high`; other nonempty values
+fail before HTTP I/O. A nonempty `Effort` takes precedence over `Enable`, even
+when `Enable` is false. With empty effort, `Thinking: nil` omits `think` and
+lets the model use its default; a non-nil `Thinking` sends `Enable` as a boolean.
+Other adapters do not map this field.
+
 Gemini is backed by Google's official `google.golang.org/genai` SDK. Use the
 Gemini API helper for API-key deployments:
 

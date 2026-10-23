@@ -542,6 +542,11 @@ type (
 		// Enable turns provider thinking features on when supported.
 		Enable bool
 
+		// Effort selects a named reasoning level when supported. Ollama accepts
+		// "low", "medium", or "high"; a nonempty value takes precedence over
+		// Enable. Empty preserves the provider's existing Enable behavior.
+		Effort string `json:"effort,omitempty"`
+
 		// Interleaved requests interleaved thinking and assistant content when
 		// supported.
 		Interleaved bool

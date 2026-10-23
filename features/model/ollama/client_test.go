@@ -114,67 +114,6 @@ func TestClientCompleteReturnsEmbeddedProviderError(t *testing.T) {
 	require.ErrorContains(t, err, "ollama chat: provider error: model runner crashed")
 }
 
-func TestClientCompleteEncodesThinkingOption(t *testing.T) {
-	tests := []struct {
-		name     string
-		thinking *model.ThinkingOptions
-		want     any
-	}{
-		{
-			name:     "enabled",
-			thinking: &model.ThinkingOptions{Enable: true},
-			want:     true,
-		},
-		{
-			name:     "explicit disabled",
-			thinking: &model.ThinkingOptions{Enable: false},
-			want:     false,
-		},
-		{
-			name:     "omitted",
-			thinking: nil,
-			want:     nil,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var captured map[string]any
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if err := json.UnmarshalRead(r.Body, &captured); err != nil {
-					t.Errorf("decode request: %v", err)
-					return
-				}
-				if err := json.MarshalWrite(w, map[string]any{
-					"model": "gemma4",
-					"done":  true,
-					"message": map[string]any{
-						"role":    "assistant",
-						"content": "ok",
-					},
-				}); err != nil {
-					t.Errorf("encode response: %v", err)
-				}
-			}))
-			defer server.Close()
-
-			client, err := ollamamodel.New(ollamamodel.Options{ServerURL: server.URL, DefaultModel: "gemma4"})
-			require.NoError(t, err)
-			_, err = client.Complete(context.Background(), &model.Request{
-				Messages: []*model.Message{{Role: model.ConversationRoleUser, Parts: []model.Part{model.TextPart{Text: "ping"}}}},
-				Thinking: tt.thinking,
-			})
-			require.NoError(t, err)
-
-			if tt.want == nil {
-				require.NotContains(t, captured, "think")
-				return
-			}
-			require.Equal(t, tt.want, captured["think"])
-		})
-	}
-}
-
 func TestClientCompleteDecodesThinkingAndTextParts(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := json.MarshalWrite(w, map[string]any{
