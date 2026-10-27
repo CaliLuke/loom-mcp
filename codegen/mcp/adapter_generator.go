@@ -583,7 +583,7 @@ func (g *adapterGenerator) populateToolPayloadData(adapter *ToolAdapter, tool *m
 	}
 	payload := tool.Method.Payload
 	adapter.PayloadType = g.getTypeReference(payload)
-	schema, err := shared.ToJSONSchema(payload)
+	schema, err := toolInputSchema(payload)
 	if err != nil {
 		return fmt.Errorf("build schema for tool %q: %w", tool.Name, err)
 	}

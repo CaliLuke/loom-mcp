@@ -106,6 +106,12 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   `codegen/uniongen` and `codegen/unionjson`; keep validation contexts aligned
   with physical transport or public storage. Normalize test union branches
   through DSL evaluation or `expr.Root.NewUnionBranch`, as production does.
+- Root MCP transport unions must retain their generated methods through a type
+  alias. For non-nullable untagged object branches, advertise a root object and
+  a typed property catalogue while retaining the original `oneOf` admission.
+  Property projection must preserve open-branch and additional-property rules
+  and exact numeric literals. Prove compilation, SDK registration, typed dispatch,
+  rejected arguments, and a successful retry of the emitted recovery example.
 
 - Treat MCP as a transport layered on service designs.
 - Compose on the existing codegen pipeline rather than forking transport stacks.
@@ -130,6 +136,7 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
 - Generated retry and repair examples must use the same canonical union-aware
   synthesizer as adapter recovery hints. Every emitted example must validate
   against the input schema it accompanies, including discriminator envelopes.
+  Untagged examples use the branch value without an envelope.
 - Recovery examples prefer schema-valid authored examples, then defaults.
   Numeric synthesis must respect enum, inclusive/exclusive bounds, and named
   type occurrence constraints. Validate JSON numbers without losing 64-bit

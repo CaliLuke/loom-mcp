@@ -233,7 +233,7 @@ func objectCanonical(attr *expr.AttributeExpr, obj *expr.Object, seen map[string
 	return out
 }
 
-func unionCanonical(u *expr.Union, seen map[string]bool) map[string]any {
+func unionCanonical(u *expr.Union, seen map[string]bool) any {
 	tags := unionTags(u)
 	if len(tags) == 0 || len(u.Values) == 0 {
 		return map[string]any{}
@@ -242,6 +242,9 @@ func unionCanonical(u *expr.Union, seen map[string]bool) map[string]any {
 	branch := canonicalValue(first.Attribute, seen)
 	if branch == nil {
 		branch = map[string]any{}
+	}
+	if u.Untagged {
+		return branch
 	}
 	return map[string]any{
 		u.GetTypeKey():  tags[0],

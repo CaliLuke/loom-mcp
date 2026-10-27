@@ -3,12 +3,11 @@ package codegen
 import (
 	"go/parser"
 	"go/token"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/CaliLuke/loom-mcp/v2/codegen/testhelpers"
 	mcpexpr "github.com/CaliLuke/loom-mcp/v2/expr/mcp"
 	gcodegen "github.com/CaliLuke/loom/codegen"
 	loomgenerator "github.com/CaliLuke/loom/codegen/generator"
@@ -108,33 +107,7 @@ func compileMetadataModule(t *testing.T, module string, root *expr.RootExpr, fil
 	t.Helper()
 	serviceFiles, err := loomgenerator.Service(module+"/gen", []eval.Root{root})
 	require.NoError(t, err)
-	dir := t.TempDir()
-	for _, file := range append(serviceFiles, files...) {
-		_, err := file.Render(dir)
-		require.NoError(t, err, file.Path)
-	}
 	repo, err := filepath.Abs("../..")
 	require.NoError(t, err)
-	source, err := os.OpenRoot(repo)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		require.NoError(t, source.Close())
-	})
-	outputRoot, err := os.OpenRoot(dir)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		require.NoError(t, outputRoot.Close())
-	})
-	mod, err := source.ReadFile("go.mod")
-	require.NoError(t, err)
-	modText := strings.Replace(string(mod), "module github.com/CaliLuke/loom-mcp/v2", "module "+module, 1) + "\nrequire github.com/CaliLuke/loom-mcp/v2 v2.0.0\nreplace github.com/CaliLuke/loom-mcp/v2 => " + repo + "\n"
-	require.NoError(t, outputRoot.WriteFile("go.mod", []byte(modText), 0600))
-	sum, err := source.ReadFile("go.sum")
-	require.NoError(t, err)
-	require.NoError(t, outputRoot.WriteFile("go.sum", sum, 0600))
-	command := exec.CommandContext(t.Context(), "go", "test", "./...")
-	command.Dir = dir
-	command.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=-mod=mod -p=2")
-	output, err := command.CombinedOutput()
-	require.NoError(t, err, "generated metadata module: %s", output)
+	testhelpers.RunGeneratedModule(t, module, repo, append(serviceFiles, files...), nil)
 }

@@ -41,6 +41,10 @@ func (g *adapterGenerator) buildToolPayloadCodec(payload *expr.AttributeExpr, me
 		Unions:      make(map[string]*jsontransport.UnionType),
 	}
 	codec.Definitions[scope.GoTypeName(input)] = scope.GoTypeDef(transport, true, false)
+	if expr.AsUnion(transport.Type) != nil {
+		// A newly defined type would lose the union's JSON and branch methods.
+		codec.Definitions[scope.GoTypeName(input)] = "= " + scope.GoTypeDef(transport, true, false)
+	}
 	for _, local := range locals {
 		name := scope.GoTypeName(&expr.AttributeExpr{Type: local})
 		codec.Definitions[name] = scope.GoTypeDef(local.Attribute(), true, false)

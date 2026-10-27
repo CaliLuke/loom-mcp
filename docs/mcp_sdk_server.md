@@ -257,6 +257,14 @@ supplied, even when they declare defaults. Tagged and untagged union matching
 uses Loom's shared codec generator. A non-nullable branch value cannot be
 missing or `null`; discriminator errors retain Loom's structured error details.
 
+A top-level `Payload(OneOf(ReadInput, WriteInput), Untagged)` can expose flat
+action objects. Each branch can declare its own action enum, required fields,
+and allowed properties. When every branch is a non-nullable object, discovery
+advertises `type: object` with typed top-level properties and retains the original
+`oneOf` branches for admission. The generated input aliases its transport union
+so decoding and conversion retain the branch methods. Recovery examples use the
+flat branch object and can be resubmitted without adding a union wrapper.
+
 An omitted field still receives its DSL default. Explicit zero remains zero and
 must satisfy the schema. Explicit `null` is accepted only when the field is
 nullable, independently of whether the field is optional. For a limit with
