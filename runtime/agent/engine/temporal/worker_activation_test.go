@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -93,28 +94,30 @@ func TestSealRegistrationTimesOutWhenActivationNeverSucceeds(t *testing.T) {
 func TestSealRegistrationCanRetryAfterActivationTimeout(t *testing.T) {
 	t.Parallel()
 
-	fake := &fakeWorker{startErrors: []error{errors.New("frontend not healthy"), nil}}
-	eng := newActivationTestEngine(t, fake)
-	eng.activationRetryInterval = 50 * time.Millisecond
-	err := eng.RegisterPlannerActivity(context.Background(), "planner.activity", engine.ActivityOptions{
-		Queue:               "queue.alpha",
-		StartToCloseTimeout: time.Minute,
-	}, func(ctx context.Context, input *api.PlanActivityInput) (*api.PlanActivityOutput, error) {
-		return &api.PlanActivityOutput{}, nil
+	synctest.Test(t, func(t *testing.T) {
+		fake := &fakeWorker{startErrors: []error{errors.New("frontend not healthy"), nil}}
+		eng := newActivationTestEngine(t, fake)
+		eng.activationRetryInterval = 50 * time.Millisecond
+		err := eng.RegisterPlannerActivity(context.Background(), "planner.activity", engine.ActivityOptions{
+			Queue:               "queue.alpha",
+			StartToCloseTimeout: time.Minute,
+		}, func(ctx context.Context, input *api.PlanActivityInput) (*api.PlanActivityOutput, error) {
+			return &api.PlanActivityOutput{}, nil
+		})
+		require.NoError(t, err)
+
+		firstCtx, firstCancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+		defer firstCancel()
+		err = eng.SealRegistration(firstCtx)
+		require.ErrorContains(t, err, `temporal worker "queue.alpha" activation did not complete`)
+		require.False(t, eng.workers["queue.alpha"].isStarted())
+
+		secondCtx, secondCancel := context.WithTimeout(context.Background(), time.Second)
+		defer secondCancel()
+		require.NoError(t, eng.SealRegistration(secondCtx))
+		require.True(t, eng.workers["queue.alpha"].isStarted())
+		assert.Equal(t, 2, fake.startCallCount())
 	})
-	require.NoError(t, err)
-
-	firstCtx, firstCancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-	defer firstCancel()
-	err = eng.SealRegistration(firstCtx)
-	require.ErrorContains(t, err, `temporal worker "queue.alpha" activation did not complete`)
-	require.False(t, eng.workers["queue.alpha"].isStarted())
-
-	secondCtx, secondCancel := context.WithTimeout(context.Background(), time.Second)
-	defer secondCancel()
-	require.NoError(t, eng.SealRegistration(secondCtx))
-	require.True(t, eng.workers["queue.alpha"].isStarted())
-	assert.Equal(t, 2, fake.startCallCount())
 }
 
 func TestRegisterWorkflowRejectsRegistrationAfterSeal(t *testing.T) {
