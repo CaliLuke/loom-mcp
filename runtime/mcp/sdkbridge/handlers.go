@@ -65,6 +65,9 @@ func ToolHandler(config HandlerContext, call ToolCall) mcpsdk.ToolHandler {
 		if requests, state, ok := sdkclient.InputRequired(err); ok {
 			return &mcpsdk.CallToolResult{InputRequests: requests, RequestState: state}, nil
 		}
+		if err == nil && req != nil {
+			return toolResultForProtocol(result, req.ProtocolVersion())
+		}
 		return result, err
 	}
 }

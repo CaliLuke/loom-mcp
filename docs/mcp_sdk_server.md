@@ -239,6 +239,13 @@ The generated SDK server discovers and registers skill resources when
 `NewSDKServer` runs. Add or remove skills before you construct a new server.
 An active server keeps its registration snapshot.
 
+## Tool results across protocol revisions
+
+Tool results retain their complete text content across protocol revisions.
+For clients before `2026-07-28`, the SDK bridge includes `structuredContent`
+only when it is a JSON object. Arrays and other JSON values remain available in
+text content. Modern clients retain the original structured JSON value.
+
 ## Optional tool arguments
 
 Regenerated service-backed tool adapters validate the original arguments against

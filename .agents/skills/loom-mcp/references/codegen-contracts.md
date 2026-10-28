@@ -160,6 +160,9 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
 - The official MCP Go SDK owns protocol versions and transport behavior. Do not
   require or synthesize MCP `JSONRPC` declarations. Keep explicit non-MCP
   `JSONRPC` transports unchanged.
+  Use the SDK request's negotiated version to project tool results: before
+  `2026-07-28`, omit non-object structuredContent while preserving complete text;
+  modern requests retain arbitrary JSON. Do not mutate retained handler results.
 - The shared `runtime/mcp/sdkbridge` selects the POST response type before the
   SDK. SSE is the default. `StreamableHTTP.JSONResponse` selects JSON. Return
   HTTP 406 when the request does not accept the selected type. If the request
