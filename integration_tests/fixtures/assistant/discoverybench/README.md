@@ -32,6 +32,11 @@ before generic client decoding. The cases file defines task-required schema
 pointers and alternative acceptable routes. Corpus hashes are asserted before
 measurement. Changes require a new contract, not a result-driven adjustment.
 
+The exact-export check accounts for the empty-payload schema correction in
+[#382](https://github.com/CaliLuke/loom-mcp/issues/382): `report_progress` now
+rejects additional properties. The measured catalog, hashes, and results remain
+frozen; every other exported catalog byte must still match.
+
 Each case runs at K=1/3/5, with 20 warmups and 100 sequential timing samples. Baseline
 uses the generated local registration's Execute callback, including validation,
 search and response serialization. SchemaRouter timing includes analysis,

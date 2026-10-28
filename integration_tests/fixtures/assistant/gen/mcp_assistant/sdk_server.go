@@ -238,7 +238,7 @@ func sdkToolBindings(adapter *MCPAdapter) ([]sdkbridge.ToolBinding, error) {
 		Handler: handler,
 		Tool: &mcpsdk.Tool{
 			Description:  "Report deterministic progress to the connected MCP client",
-			InputSchema:  sdkToolInputSchema(""),
+			InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}"),
 			Name:         "report_progress",
 			OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"completed\"],\"properties\":{\"completed\":{\"type\":\"boolean\",\"description\":\"Whether all progress updates were sent\"}},\"additionalProperties\":false}"),
 			Title:        "Report Progress",

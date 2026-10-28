@@ -246,6 +246,9 @@ their advertised input schema before invoking the service. This enforces numeric
 minimum/maximum and exclusive bounds without rounding 64-bit integer values.
 Invalid arguments return a tool error with `invalid_params` and a recovery hint;
 the service is not called. No application validation interceptor is required.
+No-argument tools, including `Payload(func() {})`, advertise a closed empty
+object schema and reject unexpected keys before dispatch. Omitted arguments
+and `{}` remain valid calls.
 
 Regenerated adapters decode into private transport types that retain field
 presence, validate the original arguments, and use Loom's generated conversion

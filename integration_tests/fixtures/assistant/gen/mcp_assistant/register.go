@@ -353,7 +353,7 @@ var AssistantAssistantMcpToolsetToolSpecs = []tools.ToolSpec{tools.ToolSpec{
 			},
 		},
 		Name:   "any",
-		Schema: []byte("{}"),
+		Schema: []byte("{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}"),
 	},
 	Result: tools.TypeSpec{
 		Codec: tools.JSONCodec[any]{
@@ -801,7 +801,7 @@ func AssistantAssistantMcpToolsetRetryHint(toolName tools.Ident, err error) *pla
 				schemaJSON = "{\"type\":\"object\",\"required\":[\"items\"],\"properties\":{\"blob\":{\"type\":\"string\",\"description\":\"Base64 blob\"},\"format\":{\"type\":\"string\",\"description\":\"Output format\",\"enum\":[\"json\",\"text\",\"blob\",\"uri\"]},\"items\":{\"type\":\"array\",\"description\":\"Items to process\",\"items\":{\"type\":\"string\"}},\"mimeType\":{\"type\":\"string\",\"description\":\"MIME type\"},\"uri\":{\"type\":\"string\",\"description\":\"Resource URI\"}},\"additionalProperties\":false}"
 				example = "{\"items\":[]}"
 			case "report_progress":
-				schemaJSON = "{}"
+				schemaJSON = "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}"
 				example = "{}"
 			case "multi_content":
 				schemaJSON = "{\"type\":\"object\",\"required\":[\"count\"],\"properties\":{\"count\":{\"type\":\"integer\",\"description\":\"Number of content items to return\",\"minimum\":-9223372036854775808,\"maximum\":9223372036854775807}},\"additionalProperties\":false}"

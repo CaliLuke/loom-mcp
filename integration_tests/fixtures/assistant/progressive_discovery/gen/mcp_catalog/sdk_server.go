@@ -161,7 +161,7 @@ func sdkToolBindings(adapter *MCPAdapter) ([]sdkbridge.ToolBinding, error) {
 		Handler: handler,
 		Tool: &mcpsdk.Tool{
 			Description:  "Return two chunks through a Loom streaming method",
-			InputSchema:  sdkToolInputSchema(""),
+			InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}"),
 			Name:         "stream_chunks",
 			OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"chunk\"],\"properties\":{\"chunk\":{\"type\":\"string\",\"description\":\"Streamed chunk\"}},\"additionalProperties\":false}"),
 			Title:        "Stream Chunks",
@@ -171,7 +171,7 @@ func sdkToolBindings(adapter *MCPAdapter) ([]sdkbridge.ToolBinding, error) {
 		Handler: handler,
 		Tool: &mcpsdk.Tool{
 			Description:  "Wait until the MCP client cancels the request",
-			InputSchema:  sdkToolInputSchema(""),
+			InputSchema:  sdkToolInputSchema("{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}"),
 			Name:         "wait_for_cancel",
 			OutputSchema: sdkToolInputSchema("{\"type\":\"object\",\"required\":[\"completed\"],\"properties\":{\"completed\":{\"type\":\"boolean\",\"description\":\"Whether the wait completed normally\"}},\"additionalProperties\":false}"),
 			Title:        "Wait For Cancel",

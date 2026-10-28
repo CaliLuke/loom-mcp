@@ -155,6 +155,8 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   Preserve exact numeric tokens, omission-based defaults, and explicit nullability.
   Invalid numeric bounds or disallowed null return `invalid_params` without a
   service call. Keep this check in the adapter so local-provider calls share it.
+  No-payload methods advertise a closed empty object and validate arguments
+  before dispatch; omitted arguments and `{}` remain valid.
 - The official MCP Go SDK owns protocol versions and transport behavior. Do not
   require or synthesize MCP `JSONRPC` declarations. Keep explicit non-MCP
   `JSONRPC` transports unchanged.

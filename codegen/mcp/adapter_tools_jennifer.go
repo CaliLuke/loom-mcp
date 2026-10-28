@@ -1509,6 +1509,10 @@ func emitToolCase(g *jen.Group, tool *ToolAdapter) {
 		g.If(jen.Id("err").Op("!=").Nil()).Block(
 			jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("mcpruntime").Dot("NewToolInputError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Id(toolRecoveryFuncName(tool)).Call(jen.Id("err"), jen.Id("arguments"))))),
 		)
+	} else {
+		g.If(jen.Id("err").Op(":=").Id("sdkbridge").Dot("ValidateToolArguments").Call(jen.Id("arguments"), jen.Lit(tool.InputSchema)), jen.Id("err").Op("!=").Nil()).Block(
+			jen.Return(jen.True(), jen.Id("a").Dot("sendToolError").Call(jen.Id("ctx"), jen.Id("stream"), jen.Id("p").Dot("Name"), jen.Id("mcpruntime").Dot("NewToolInputError").Call(jen.Id("err"), jen.Lit("invalid_params"), jen.Lit("Provide an empty JSON object. Example: {}")))),
+		)
 	}
 
 	payload := jen.Nil()

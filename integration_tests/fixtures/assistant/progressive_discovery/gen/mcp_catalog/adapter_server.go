@@ -1442,6 +1442,9 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		})
 		return false, stream.SendAndClose(ctx, final)
 	case "stream_chunks":
+		if err := sdkbridge.ValidateToolArguments(arguments, "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}"); err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, mcpruntime.NewToolInputError(err, "invalid_params", "Provide an empty JSON object. Example: {}"))
+		}
 		if err := agentruntime.RecordToolPayload(ctx, nil); err != nil {
 			return false, err
 		}
@@ -1454,6 +1457,9 @@ func (a *MCPAdapter) executeRealTool(ctx context.Context, p *ToolsCallPayload, s
 		}
 		return false, nil
 	case "wait_for_cancel":
+		if err := sdkbridge.ValidateToolArguments(arguments, "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}"); err != nil {
+			return true, a.sendToolError(ctx, stream, p.Name, mcpruntime.NewToolInputError(err, "invalid_params", "Provide an empty JSON object. Example: {}"))
+		}
 		if err := agentruntime.RecordToolPayload(ctx, nil); err != nil {
 			return false, err
 		}

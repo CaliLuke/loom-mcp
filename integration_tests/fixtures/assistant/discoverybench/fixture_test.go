@@ -8,6 +8,7 @@ import (
 	"encoding/json/v2"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	assistantapi "example.com/assistant"
@@ -48,9 +49,15 @@ func TestFrozenCorpus(t *testing.T) {
 func TestGeneratedCatalogExactExport(t *testing.T) {
 	want, err := os.ReadFile("testdata/catalog.json")
 	require.NoError(t, err)
+	// Keep the measured corpus frozen while accounting for the empty-payload
+	// schema correction in https://github.com/CaliLuke/loom-mcp/issues/382.
+	const original = `"inputSchema":{"type":"object"},"name":"report_progress"`
+	const corrected = `"inputSchema":{"type":"object","properties":{},"additionalProperties":false},"name":"report_progress"`
+	require.Equal(t, 1, strings.Count(string(want), original))
+	expected := strings.Replace(string(want), original, corrected, 1)
 	got, err := exportCatalog(t.Context())
 	require.NoError(t, err)
-	assert.Equal(t, string(want), string(got))
+	assert.Equal(t, expected, string(got))
 }
 
 func TestGeneratedHostBoundary(t *testing.T) {

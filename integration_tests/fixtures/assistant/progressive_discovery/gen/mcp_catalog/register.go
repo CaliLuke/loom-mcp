@@ -90,7 +90,7 @@ var CatalogCatalogMcpToolsetToolSpecs = []tools.ToolSpec{tools.ToolSpec{
 			},
 		},
 		Name:   "any",
-		Schema: []byte("{}"),
+		Schema: []byte("{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}"),
 	},
 	Result: tools.TypeSpec{
 		Codec: tools.JSONCodec[any]{
@@ -134,7 +134,7 @@ var CatalogCatalogMcpToolsetToolSpecs = []tools.ToolSpec{tools.ToolSpec{
 			},
 		},
 		Name:   "any",
-		Schema: []byte("{}"),
+		Schema: []byte("{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}"),
 	},
 	Result: tools.TypeSpec{
 		Codec: tools.JSONCodec[any]{
@@ -300,10 +300,10 @@ func CatalogCatalogMcpToolsetRetryHint(toolName tools.Ident, err error) *planner
 				schemaJSON = "{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Lookup query\"}},\"additionalProperties\":false}"
 				example = "{\"query\":\"example\"}"
 			case "stream_chunks":
-				schemaJSON = "{}"
+				schemaJSON = "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}"
 				example = "{}"
 			case "wait_for_cancel":
-				schemaJSON = "{}"
+				schemaJSON = "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}"
 				example = "{}"
 			case "projected_lookup":
 				schemaJSON = "{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Lookup query\"}},\"additionalProperties\":false}"

@@ -578,6 +578,7 @@ func (g *adapterGenerator) populateToolStreamingData(adapter *ToolAdapter, tool 
 
 func (g *adapterGenerator) populateToolPayloadData(adapter *ToolAdapter, tool *mcpexpr.ToolExpr) error {
 	if !adapter.HasPayload {
+		adapter.InputSchema = `{"type":"object","properties":{},"additionalProperties":false}`
 		adapter.ExampleArguments = "{}"
 		return nil
 	}
