@@ -21,15 +21,24 @@ func TestTopLevelUntaggedObjectInputThroughSDK(t *testing.T) {
 	setupParityRoots(t)
 	design := func() {
 		API("flat input", func() {})
+		configuration := Type("Configuration", func() {
+			Attribute("expression", String, func() {
+				MinLength(1)
+				MaxLength(4096)
+			})
+			Meta("openapi:additionalProperties", "false")
+		})
 		read := Type("ReadInput", func() {
 			Attribute("action", String, func() { Enum("read") })
 			Attribute("id", String)
+			Attribute("configuration", configuration)
 			Required("action", "id")
 			Meta("openapi:additionalProperties", "false")
 		})
 		write := Type("WriteInput", func() {
 			Attribute("action", String, func() { Enum("write") })
 			Attribute("id", String)
+			Attribute("configuration", configuration)
 			Attribute("name", String)
 			Required("action", "id", "name")
 			Meta("openapi:additionalProperties", "false")
@@ -134,6 +143,8 @@ func TestFlatInputContract(t *testing.T) {
  for _, tc := range []struct { name, input, result string }{
   {"read", "{\"action\":\"read\",\"id\":\"1\"}", "read:1"},
   {"write", "{\"action\":\"write\",\"id\":\"1\",\"name\":\"updated\"}", "write:1:updated"},
+  {"read with configuration", "{\"action\":\"read\",\"id\":\"1\",\"configuration\":{\"expression\":\"valid\"}}", "read:1"},
+  {"write with configuration", "{\"action\":\"write\",\"id\":\"1\",\"name\":\"updated\",\"configuration\":{\"expression\":\"valid\"}}", "write:1:updated"},
  } {
   t.Run(tc.name, func(t *testing.T) {
    before := service.calls
@@ -148,6 +159,8 @@ func TestFlatInputContract(t *testing.T) {
  }
  var recovery string
  for _, input := range []string{
+  "{\"action\":\"read\",\"id\":\"1\",\"configuration\":{\"expression\":\"\"}}",
+  "{\"action\":\"write\",\"id\":\"1\",\"name\":\"updated\",\"configuration\":{\"expression\":\"\"}}",
   "{\"action\":\"unknown\",\"id\":\"1\"}",
   "{\"id\":\"1\"}",
   "{\"action\":\"read\"}",

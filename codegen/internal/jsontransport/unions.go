@@ -106,11 +106,16 @@ func buildUnionTypeData(u *expr.Union, scope *codegen.NameScope, pointer bool) *
 				Validate: codegen.ValidationCode(u.Values[i].Attribute, nil, ctx, true, false, false, "v")}
 		}
 		result.JSON = unionjson.Analyze(name, u, branches, expr.AttributeName, false)
+		validators := make(map[string]struct{})
 		if err := codegen.Walk(att, func(a *expr.AttributeExpr) error {
 			if ut, ok := a.Type.(expr.UserType); ok {
 				localCtx := ctx.Dup()
 				localCtx.Pointer = pointer && !expr.IsPrimitive(ut)
 				validator := codegen.NamedValidationFunction(a, localCtx, "body")
+				if _, emitted := validators[validator.Name]; emitted {
+					return nil
+				}
+				validators[validator.Name] = struct{}{}
 				body := codegen.ValidationCode(ut.Attribute(), ut, validator.Context(localCtx), true, expr.IsAlias(ut), false, "body")
 				if body != "" {
 					result.Validators = append(result.Validators, validator.Definition(body))

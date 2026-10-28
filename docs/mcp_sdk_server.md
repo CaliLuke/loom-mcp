@@ -264,6 +264,8 @@ advertises `type: object` with typed top-level properties and retains the origin
 `oneOf` branches for admission. The generated input aliases its transport union
 so decoding and conversion retain the branch methods. Recovery examples use the
 flat branch object and can be resubmitted without adding a union wrapper.
+Branches can reuse a named nested object. Its transport validator is emitted
+once per union and applies to every occurrence of that object.
 
 An omitted field still receives its DSL default. Explicit zero remains zero and
 must satisfy the schema. Explicit `null` is accepted only when the field is

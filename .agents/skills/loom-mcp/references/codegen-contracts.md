@@ -112,6 +112,8 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   Property projection must preserve open-branch and additional-property rules
   and exact numeric literals. Prove compilation, SDK registration, typed dispatch,
   rejected arguments, and a successful retry of the emitted recovery example.
+  Emit each named transport validator once per union, keyed by its resolved
+  function name; shared nested objects retain validation on every branch.
 
 - Treat MCP as a transport layered on service designs.
 - Compose on the existing codegen pipeline rather than forking transport stacks.
