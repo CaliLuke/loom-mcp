@@ -283,6 +283,12 @@ nullable, independently of whether the field is optional. For a limit with
 `Default(50)`, `Minimum(1)`, and `Maximum(200)`, omission dispatches 50, values 1
 and 200 dispatch unchanged, and 0, -1, 201, and `null` are rejected.
 
+Recovery examples prefer valid authored examples and defaults. UUID fields can
+use a deterministic valid UUID. Every supplied example must pass the complete
+input schema, including string formats and patterns. If synthesis cannot satisfy
+those constraints, the recovery message omits the example. This also applies to
+examples selected for individual union branches.
+
 MCP clients may omit `tools/call.arguments` or send JSON `null`. Generated
 adapters normalize either form, as well as a whitespace-only value, to `{}`
 before decoding a real tool payload.

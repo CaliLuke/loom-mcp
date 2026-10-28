@@ -143,6 +143,10 @@ Use this file when editing DSL, generators, generated helpers, or MCP codegen be
   Numeric synthesis must respect enum, inclusive/exclusive bounds, and named
   type occurrence constraints. Validate JSON numbers without losing 64-bit
   precision. Prove changes with schema validation and a generated SDK retry.
+  UUID synthesis preserves enums and occurrence constraints. Validate complete
+  examples, including format and pattern, before advertising them. Omit an
+  unavailable example from recovery text; never substitute `{}` or a different
+  branch for an unsynthesizable caller-selected union branch.
 - Generated MCP `ToolInfo` surfaces must preserve MCP Tool fields across the
   service, adapter, local-provider, and SDK paths: `name`, `title`,
   `description`, `inputSchema`, `outputSchema`, `annotations`, `_meta`, and

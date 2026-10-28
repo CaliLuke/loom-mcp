@@ -110,6 +110,7 @@ func assertRecoverySchemaValid(t *testing.T, attr *expr.AttributeExpr, example s
 	document, err := jsonschema.UnmarshalJSON(strings.NewReader(string(schemaJSON)))
 	require.NoError(t, err)
 	compiler := jsonschema.NewCompiler()
+	compiler.AssertFormat()
 	require.NoError(t, compiler.AddResource("schema.json", document))
 	schema, err := compiler.Compile("schema.json")
 	require.NoError(t, err)

@@ -1562,6 +1562,9 @@ func dispatchActionInputRecovery(err error, raw jsontext.Value) string {
 		message = strings.TrimSpace(err.Error())
 	}
 	example := dispatchActionRecoveryExample(raw)
+	if example == "" {
+		return "Provide arguments that satisfy the tool input schema."
+	}
 	if strings.Contains(message, "invalid value for \"action\"") {
 		return "Field \"request\" must use one of \"list\", \"create\" for \"action\". Example: " + example
 	}
@@ -1609,6 +1612,9 @@ func dispatchCommandInputRecovery(err error, raw jsontext.Value) string {
 		message = strings.TrimSpace(err.Error())
 	}
 	example := dispatchCommandRecoveryExample(raw)
+	if example == "" {
+		return "Provide arguments that satisfy the tool input schema."
+	}
 	if strings.Contains(message, "invalid value for \"action\"") {
 		return "Field \"command\" must use one of \"foo\", \"bar\" for \"action\". Example: " + example
 	}

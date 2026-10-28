@@ -9,6 +9,31 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
+// uuidCanonicalValue preserves enum and named-type occurrence constraints when
+// proposing a deterministic UUID. The complete schema decides admissibility.
+func uuidCanonicalValue(attr *expr.AttributeExpr) (any, bool) {
+	var candidates []any
+	var uuid bool
+	for current := attr; current != nil; {
+		if validation := current.Validation; validation != nil {
+			candidates = append(candidates, validation.Values...)
+			for _, format := range validation.Formats() {
+				uuid = uuid || format == expr.FormatUUID
+			}
+		}
+		named, ok := current.Type.(expr.UserType)
+		if !ok {
+			break
+		}
+		current = named.Attribute()
+	}
+	if !uuid {
+		return nil, false
+	}
+	candidates = append(candidates, "00000000-0000-4000-8000-000000000001")
+	return firstValidCanonicalValue(attr, candidates)
+}
+
 // preferredCanonicalValue uses authored examples in override order, followed
 // by defaults. Validate against the occurrence schema, including named types.
 func preferredCanonicalValue(attr *expr.AttributeExpr) (any, bool) {

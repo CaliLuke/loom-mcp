@@ -17,8 +17,7 @@ const promptTemplate = `
 Operation: %s
 %sError: %s
 Redo the operation now with valid parameters.
-Use only valid schema fields and ensure required fields and types/enums are valid.
-Example params: %s`
+Use only valid schema fields and ensure required fields and types/enums are valid.%s`
 
 // RetryableError is returned by clients when the server reports invalid
 // parameters and a structured repair prompt is available.
@@ -46,11 +45,15 @@ func (e *RetryableError) Error() string {
 
 // BuildRepairPrompt constructs a deterministic, compact repair instruction.
 // schema is an optional compact JSON schema excerpt; exampleJSON is a minimal
-// valid example of the params payload.
+// valid example of the params payload, or empty when none is available.
 func BuildRepairPrompt(op string, errMsg string, exampleJSON string, schema string) string {
 	schemaPart := ""
 	if schema != "" {
 		schemaPart = "Schema: " + schema + "\n"
 	}
-	return fmt.Sprintf(promptTemplate, op, schemaPart, errMsg, exampleJSON)
+	examplePart := ""
+	if exampleJSON != "" {
+		examplePart = "\nExample params: " + exampleJSON
+	}
+	return fmt.Sprintf(promptTemplate, op, schemaPart, errMsg, examplePart)
 }

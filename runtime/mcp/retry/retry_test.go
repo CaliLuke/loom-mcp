@@ -28,3 +28,10 @@ Example params: {"query":"example"}`, withSchema)
 	assert.NotContains(t, withoutSchema, "Schema:")
 	assert.Contains(t, withoutSchema, "Error: invalid")
 }
+
+func TestBuildRepairPromptOmitsUnavailableExample(t *testing.T) {
+	prompt := BuildRepairPrompt("tools/call", "requestKey is required", "", `{"required":["requestKey"]}`)
+	assert.NotContains(t, prompt, "Example params:")
+	assert.Contains(t, prompt, `Schema: {"required":["requestKey"]}`)
+	assert.Contains(t, prompt, "Error: requestKey is required")
+}

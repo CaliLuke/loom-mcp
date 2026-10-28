@@ -141,9 +141,6 @@ func toolRecoveryFuncName(tool *ToolAdapter) string {
 // by the hint.
 func emitToolInputRecovery(stmt *jen.Statement, tool *ToolAdapter) {
 	canonical := tool.CanonicalExampleJSON
-	if canonical == "" {
-		canonical = "{}"
-	}
 	var dynamicEnv *UnionEnvelopeMeta
 	if len(tool.UnionEnvelopes) == 1 && len(tool.UnionEnvelopes[0].TagExamples) > 0 {
 		dynamicEnv = &tool.UnionEnvelopes[0]
@@ -155,12 +152,19 @@ func emitToolInputRecovery(stmt *jen.Statement, tool *ToolAdapter) {
 		Params(jen.Id("err").Error(), jen.Id("raw").Id("jsontext").Dot("Value")).
 		String().
 		BlockFunc(func(g *jen.Group) {
+			if canonical == "" && dynamicEnv == nil {
+				g.Return(jen.Lit("Provide arguments that satisfy the tool input schema."))
+				return
+			}
 			g.Id("message").Op(":=").Qual("strings", "TrimSpace").Call(jen.Id("loom").Dot("ErrorSafeMessage").Call(jen.Id("err")))
 			g.If(jen.Id("message").Op("==").Lit("")).Block(
 				jen.Id("message").Op("=").Qual("strings", "TrimSpace").Call(jen.Id("err").Dot("Error").Call()),
 			)
 			if dynamicEnv != nil {
 				g.Id("example").Op(":=").Id(toolExampleSelectorName(tool)).Call(jen.Id("raw"))
+				g.If(jen.Id("example").Op("==").Lit("")).Block(
+					jen.Return(jen.Lit("Provide arguments that satisfy the tool input schema.")),
+				)
 			} else {
 				g.Id("_").Op("=").Id("raw")
 				g.Id("example").Op(":=").Lit(canonical)

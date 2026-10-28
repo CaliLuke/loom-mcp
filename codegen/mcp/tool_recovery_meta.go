@@ -35,6 +35,7 @@ type UnionEnvelopeMeta struct {
 // synthesizeCanonicalExample produces a deterministic JSON example for the
 // given payload attribute. It prefers valid authored examples and defaults,
 // then the first declared union branch or enum and constraint-valid numbers.
+// An empty string means no schema-valid example could be synthesized.
 // The output is intended for
 // inclusion in tool recovery hints; callers expect it to round-trip through
 // the same decoder that produced the validation error.
@@ -44,11 +45,14 @@ func synthesizeCanonicalExample(attr *expr.AttributeExpr) string {
 	}
 	v := canonicalValue(attr, map[string]bool{})
 	if v == nil {
-		return "{}"
+		v = map[string]any{}
+	}
+	if _, valid := firstValidCanonicalValue(attr, []any{v}); !valid {
+		return ""
 	}
 	b, err := json.Marshal(v, json.Deterministic(true))
 	if err != nil {
-		return "{}"
+		return ""
 	}
 	return string(b)
 }
@@ -117,6 +121,10 @@ func tagExamples(payload *expr.AttributeExpr, fieldName string, u *expr.Union) m
 			u.GetTypeKey():  tag,
 			u.GetValueKey(): branch,
 		}
+		if _, valid := firstValidCanonicalValue(payload, []any{obj}); !valid {
+			out[tag] = ""
+			continue
+		}
 		b, err := json.Marshal(obj, json.Deterministic(true))
 		if err != nil {
 			continue
@@ -150,6 +158,9 @@ func canonicalValue(attr *expr.AttributeExpr, seen map[string]bool) any {
 	}
 	if primitive, ok := canonicalNumericType(attr.Type); ok {
 		return numericCanonical(attr, primitive)
+	}
+	if value, ok := uuidCanonicalValue(attr); ok {
+		return value
 	}
 	switch t := attr.Type.(type) {
 	case expr.Primitive:

@@ -140,11 +140,11 @@ type (
 		RequiredFields []RequiredField
 		EnumFields     []EnumField
 		PayloadCodec   *toolPayloadCodec
-		// ExampleArguments contains a minimal valid JSON for tool arguments
+		// ExampleArguments contains schema-valid JSON, or is empty when unavailable.
 		ExampleArguments string
 		// CanonicalExampleJSON is a deterministic, always-valid JSON example of
 		// the payload, synthesized from the IR. Used by the per-tool input
-		// recovery function emitted into the adapter.
+		// recovery function emitted into the adapter. Empty means unavailable.
 		CanonicalExampleJSON string
 		// UnionEnvelopes lists, for each top-level payload field whose type is
 		// a discriminated union, the metadata the recovery hint needs to
