@@ -61,7 +61,7 @@ PROTOC_INSTALL_DIR ?= $(GOPATH)
 
 all: build lint test
 
-.PHONY: release release-promote release-test release-model-test context-model-test
+.PHONY: release release-promote release-test release-model-test context-model-test a2a-model-test
 release:
 	$(GO) run ./internal/cmd/release --mode alpha --source "$$SOURCE" --version "$$VERSION"
 
@@ -78,6 +78,10 @@ release-model-test:
 # TLA+ model of the context-compaction design (docs/formal/ContextCompaction.md).
 context-model-test:
 	bash ./scripts/context_model_test.sh "$(TLA2TOOLS_JAR)"
+
+# Bounded A2A admission, cancellation and receipt safety (docs/formal/A2AConcurrency.md).
+a2a-model-test:
+	bash ./scripts/a2a_model_test.sh "$(TLA2TOOLS_JAR)"
 
 build: tools
 	$(GO) build ./...

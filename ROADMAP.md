@@ -1,6 +1,6 @@
 # Roadmap
 
-Updated 2026-09-02.
+Updated 2026-10-27.
 
 This is the single source of truth for planned work that is not complete.
 GitHub issues remain the source of truth for individual defects. Product and
@@ -183,14 +183,14 @@ If approved:
 
 ### A2A protocol interoperability
 
-Decision: accept A2A as a product goal or record it as a non-goal.
+Accepted as a product goal; the
+[A2A interoperability design](docs/wips/a2a_interoperability_design.md) records
+the reviewed V1 contract and checked formal models. Implementation has not started.
 
-If approved:
-
-- Expose a Loom agent through an agent card and HTTP handler.
-- Consume a remote A2A agent as a model-facing tool or agent-as-tool.
-- Preserve Loom run and session identities in metadata.
-- Keep A2A ownership separate from MCP codegen.
+The proposal exposes selected agents through Agent Cards and a separate A2A
+handler, and consumes remote agents through explicit task tools. Runtime
+correlation stays server-side by default. A2A ownership remains separate from
+MCP codegen.
 
 ### Durable long-term-memory backends
 
