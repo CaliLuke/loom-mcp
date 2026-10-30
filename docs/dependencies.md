@@ -11,7 +11,7 @@ Verified on 2026-10-08:
 | --- | --- |
 | Go | 1.27.3 (verified 2026-10-20) |
 | Selvedge | v0.7.0 (verified 2026-10-20) |
-| Loom | v1.10.0-alpha.21 (verified 2026-10-28) |
+| Loom | v1.10.0-alpha.22 (verified 2026-10-29) |
 | MongoDB server / Go driver | 9.0.4 / v2.9.2 |
 | Redis server / Go client | 8.10.2 / CaliLuke/go-redis v9.23.1-0.20261014134601-1073297e76ea (client verified 2026-10-14) |
 | OpenAI Go SDK | v3.84.0 (verified 2026-10-21) |
@@ -134,9 +134,16 @@ Regenerate service, client, and server code together. This release reuses
 immutable compiler analysis and bounds concurrent file rendering. Existing
 consumer APIs remain unchanged. See the [alpha.16 release notes](https://github.com/CaliLuke/loom/releases/tag/v1.10.0-alpha.16).
 
+## Loom alpha.22 adoption
+
+The published baseline is `v1.10.0-alpha.22` (commit `6a1229f9`). Regenerate
+service, client, and server code together. This release preserves distinct HTTP
+media contracts with typed variants and ordered OpenAPI schema examples. See the
+[release comparison](https://github.com/CaliLuke/loom/compare/v1.10.0-alpha.21...v1.10.0-alpha.22).
+
 ## Loom alpha.21 adoption
 
-The published baseline is `v1.10.0-alpha.21` (commit `73762ebc`). Regenerate
+The previous baseline was `v1.10.0-alpha.21` (commit `73762ebc`). Regenerate
 service, client, and server code together. Since alpha.16, Loom has corrected
 optional collection and nullable enum validation, expanded untagged union
 support, and preserved independent security scope contracts. The upgrade also
