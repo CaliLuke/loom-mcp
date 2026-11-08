@@ -329,8 +329,10 @@ func (s *Subscriber) reportTerminalError(errs chan error, err error) {
 	default:
 	}
 	select {
-	case <-errs:
-		s.dropped.Add(1)
+	case dropped := <-errs:
+		if dropped != nil {
+			s.dropped.Add(1)
+		}
 	default:
 	}
 	errs <- err

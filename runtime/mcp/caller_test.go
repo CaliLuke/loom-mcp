@@ -307,14 +307,7 @@ func TestConnectSessionClosesLateSessionAfterTimeout(t *testing.T) {
 	go func() {
 		waitDone <- session.Wait()
 	}()
-	require.Eventually(t, func() bool {
-		select {
-		case <-waitDone:
-			return true
-		default:
-			return false
-		}
-	}, time.Second, 10*time.Millisecond)
+	require.NoError(t, requireReceive(t, waitDone))
 }
 
 func TestNormalizeSDKToolResultConcatenatesTextAcrossAllContentItems(t *testing.T) {

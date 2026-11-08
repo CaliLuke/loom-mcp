@@ -272,8 +272,8 @@ func TestServe_RespondsToPingWhileToolCallInFlight(t *testing.T) {
 	select {
 	case <-time.After(2 * time.Second):
 		t.Fatal("Serve did not stop")
-	case <-errc:
-		// The server should stop on context cancellation.
+	case err := <-errc:
+		require.ErrorIs(t, err, context.Canceled)
 	}
 
 	// The provider should have published exactly one result.
@@ -1044,8 +1044,8 @@ func TestServe_RespondsToPingWhenQueueIsFull(t *testing.T) {
 	select {
 	case <-time.After(2 * time.Second):
 		t.Fatal("Serve did not stop")
-	case <-errc:
-		// The server should stop on context cancellation.
+	case err := <-errc:
+		require.ErrorIs(t, err, context.Canceled)
 	}
 }
 
@@ -1619,7 +1619,8 @@ func TestServe_DoesNotExitOnPongFailure(t *testing.T) {
 	select {
 	case <-time.After(2 * time.Second):
 		t.Fatal("Serve did not stop")
-	case <-errc:
+	case err := <-errc:
+		require.ErrorIs(t, err, context.Canceled)
 	}
 }
 
@@ -1796,7 +1797,8 @@ func TestServe_PublishesOutputDeltaToResultStream(t *testing.T) {
 	select {
 	case <-time.After(2 * time.Second):
 		t.Fatal("Serve did not stop")
-	case <-errc:
+	case err := <-errc:
+		require.ErrorIs(t, err, context.Canceled)
 	}
 }
 
@@ -1854,7 +1856,8 @@ func TestServeEnsureLoopRepairsConsumerGroup(t *testing.T) {
 	select {
 	case <-time.After(2 * time.Second):
 		t.Fatal("Serve did not stop")
-	case <-errc:
+	case err := <-errc:
+		require.ErrorIs(t, err, context.Canceled)
 	}
 }
 
@@ -1910,6 +1913,7 @@ func TestServeEnsureLoopFailuresDoNotStopProvider(t *testing.T) {
 	select {
 	case <-time.After(2 * time.Second):
 		t.Fatal("Serve did not stop")
-	case <-errc:
+	case err := <-errc:
+		require.ErrorIs(t, err, context.Canceled)
 	}
 }

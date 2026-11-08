@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -43,7 +44,10 @@ func (r *Runner) stopServer() {
 	_ = r.server.Process.Kill()
 	if r.exitCh != nil {
 		select {
-		case <-r.exitCh:
+		case err := <-r.exitCh:
+			if err != nil {
+				log.Printf("integration test server shutdown: %v", err)
+			}
 		case <-time.After(time.Second):
 		}
 	}
@@ -251,7 +255,10 @@ func (r *Runner) stopProcess(sig syscall.Signal, wait time.Duration) {
 	defer cancel()
 	_ = r.pollLifecycle(ctx, func() (bool, error) {
 		select {
-		case <-r.exitCh:
+		case err := <-r.exitCh:
+			if err != nil {
+				log.Printf("integration test server shutdown: %v", err)
+			}
 			return true, nil
 		default:
 			return false, nil
