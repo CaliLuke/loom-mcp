@@ -304,6 +304,9 @@ func decodeToolhttpAddressTransportToAddress(v *toolhttp.AddressTransport) *Addr
 	return res
 }
 func encodeProfileToToolhttpProfileTransport(v *Profile) *toolhttp.ProfileTransport {
+	if v == nil {
+		return nil
+	}
 	res := &toolhttp.ProfileTransport{
 		ID:   &v.ID,
 		Name: v.Name,
@@ -315,6 +318,9 @@ func encodeProfileToToolhttpProfileTransport(v *Profile) *toolhttp.ProfileTransp
 	return res
 }
 func encodeAddressToToolhttpAddressTransport(v *Address) *toolhttp.AddressTransport {
+	if v == nil {
+		return nil
+	}
 	res := &toolhttp.AddressTransport{
 		Street: &v.Street,
 		City:   &v.City,

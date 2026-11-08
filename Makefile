@@ -5,7 +5,7 @@ HTTP_PORT ?= 8888
 LOOM_CORE_MODULE ?= github.com/CaliLuke/loom
 LOOM_MCP_MODULE ?= $(LOOM_CORE_MODULE)
 LOOM_CLI_PACKAGE ?= $(LOOM_CORE_MODULE)/cmd/loom
-MCP_GO_SDK_VERSION ?= v1.8.1-0.20261016161459-3e9d812b1814
+MCP_GO_SDK_VERSION ?= v1.8.1-0.20261106153814-df0f29525bc6
 COVERAGE_MIN ?= 62.0
 FAST_COVERAGE_MIN ?= 90.1
 COVERAGE_PACKAGES ?= github.com/CaliLuke/loom-mcp/v2/...
@@ -40,14 +40,14 @@ export DOCKER_HOST
 TESTCONTAINERS_RYUK_DISABLED ?= true
 
 GOPATH ?= $(shell go env GOPATH)
-GOLANGCI_LINT_VERSION ?= v2.14.0
+GOLANGCI_LINT_VERSION ?= v2.15.0
 GOLANGCI_LINT := $(shell command -v golangci-lint 2>/dev/null)
 # Cached diagnostics retain source paths. Sharing them across worktrees can
 # bypass anchored path exclusions by reporting files from a sibling checkout.
 GOLANGCI_LINT_CACHE ?= $(CURDIR)/.cache/golangci-lint
 export GOLANGCI_LINT_CACHE
-STATICCHECK_VERSION ?= v0.8.1
-STATICCHECK_TOOLS_VERSION ?= v0.51.0
+STATICCHECK_VERSION ?= v0.8.2
+STATICCHECK_TOOLS_VERSION ?= v0.52.0
 STATICCHECK_CHECKS ?= all,-S*,-ST*,-QF*
 PROTOC := $(shell command -v protoc 2>/dev/null)
 PROTOC_VERSION ?= 36.2

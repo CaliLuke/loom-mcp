@@ -251,11 +251,27 @@ func (u SearchCountOptionOrSearchTextOption) MarshalFormValues(values url.Values
 	values.Set(loomhttp.FormChildKey(prefix, "type"), string(u.kind))
 	switch u.kind {
 	case SearchCountOptionOrSearchTextOptionKindSearchTextOption:
-		_, err := loomhttp.EncodeFormValue(values, prefix, u.SearchTextOption)
-		return err
+		if u.SearchTextOption == nil {
+			return nil
+		}
+		if _, parameterError := loomhttp.EncodeFormValue(values, loomhttp.FormChildKey(prefix, "text"), u.SearchTextOption.Text); parameterError != nil {
+			return parameterError
+		}
+		if _, parameterError := loomhttp.EncodeFormValue(values, loomhttp.FormChildKey(prefix, "weight"), u.SearchTextOption.Weight); parameterError != nil {
+			return parameterError
+		}
+		return nil
 	case SearchCountOptionOrSearchTextOptionKindSearchCountOption:
-		_, err := loomhttp.EncodeFormValue(values, prefix, u.SearchCountOption)
-		return err
+		if u.SearchCountOption == nil {
+			return nil
+		}
+		if _, parameterError := loomhttp.EncodeFormValue(values, loomhttp.FormChildKey(prefix, "count"), u.SearchCountOption.Count); parameterError != nil {
+			return parameterError
+		}
+		if _, parameterError := loomhttp.EncodeFormValue(values, loomhttp.FormChildKey(prefix, "weight"), u.SearchCountOption.Weight); parameterError != nil {
+			return parameterError
+		}
+		return nil
 	default:
 		return fmt.Errorf("unexpected SearchCountOptionOrSearchTextOption discriminant %q", u.kind)
 	}
@@ -274,7 +290,19 @@ func (u *SearchCountOptionOrSearchTextOption) UnmarshalFormValues(values url.Val
 	switch rawType {
 	case string(SearchCountOptionOrSearchTextOptionKindSearchTextOption):
 		var v *SearchTextOption
-		seen, err := loomhttp.DecodeFormValue(values, prefix, &v)
+		v = &SearchTextOption{}
+		seen := false
+		var err error
+		if present, fieldError := loomhttp.DecodeFormValue(values, loomhttp.FormChildKey(prefix, "text"), &v.Text); fieldError != nil {
+			return fieldError
+		} else {
+			seen = seen || present
+		}
+		if present, fieldError := loomhttp.DecodeFormValue(values, loomhttp.FormChildKey(prefix, "weight"), &v.Weight); fieldError != nil {
+			return fieldError
+		} else {
+			seen = seen || present
+		}
 		if err != nil {
 			return err
 		}
@@ -285,7 +313,19 @@ func (u *SearchCountOptionOrSearchTextOption) UnmarshalFormValues(values url.Val
 		u.SearchTextOption = v
 	case string(SearchCountOptionOrSearchTextOptionKindSearchCountOption):
 		var v *SearchCountOption
-		seen, err := loomhttp.DecodeFormValue(values, prefix, &v)
+		v = &SearchCountOption{}
+		seen := false
+		var err error
+		if present, fieldError := loomhttp.DecodeFormValue(values, loomhttp.FormChildKey(prefix, "count"), &v.Count); fieldError != nil {
+			return fieldError
+		} else {
+			seen = seen || present
+		}
+		if present, fieldError := loomhttp.DecodeFormValue(values, loomhttp.FormChildKey(prefix, "weight"), &v.Weight); fieldError != nil {
+			return fieldError
+		} else {
+			seen = seen || present
+		}
 		if err != nil {
 			return err
 		}

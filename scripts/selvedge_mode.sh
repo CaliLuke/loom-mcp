@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SELVEDGE_PATH="${SELVEDGE_DIR:-${ROOT_DIR}/../../selvedge}"
 MODULE="github.com/CaliLuke/selvedge"
-REMOTE_VERSION="v0.7.0"
+REMOTE_VERSION="v0.8.1"
 MODULE_DIRS=("${ROOT_DIR}" "${ROOT_DIR}/integration_tests/fixtures/agent_features")
 
 status() {

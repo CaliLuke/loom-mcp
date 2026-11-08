@@ -4,6 +4,7 @@ import (
 	"github.com/CaliLuke/loom/codegen"
 	"github.com/CaliLuke/loom/codegen/uniongen"
 	"github.com/CaliLuke/loom/codegen/unionjson"
+	"github.com/CaliLuke/loom/codegen/unionnames"
 	"github.com/CaliLuke/loom/expr"
 )
 
@@ -66,22 +67,24 @@ func buildUnionTypeData(u *expr.Union, scope *codegen.NameScope, pointer bool) *
 	name := scope.GoTypeName(att)
 	kindName := scope.Unique(name + "Kind")
 
+	members := unionnames.Resolve(u)
 	fields := make([]*uniongen.Field, 0, len(u.Values))
 	for _, nat := range u.Values {
 		if nat == nil || nat.Attribute == nil {
 			continue
 		}
-		fieldName := codegen.Goify(nat.Name, true)
+		member := members[nat.Name]
 		var pkg string
 		if tloc := codegen.UserTypeLocation(nat.Attribute.Type); tloc != nil {
 			pkg = tloc.PackageName()
 		}
 		fieldType := scope.GoFullTypeRef(nat.Attribute, pkg)
-		kindConst := kindName + codegen.Goify(nat.Name, true)
+		kindConst := kindName + member.Method
 		fields = append(fields, &uniongen.Field{
 			Name:       nat.Name,
 			KindConst:  kindConst,
-			FieldName:  fieldName,
+			FieldName:  member.Field,
+			MethodName: member.Method,
 			FieldType:  fieldType,
 			TypeTag:    expr.UnionVariantTag(nat),
 			AllowsNull: expr.AllowsNull(nat.Attribute),

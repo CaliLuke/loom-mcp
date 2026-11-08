@@ -5,22 +5,27 @@ and MongoDB and Redis server releases. Resolve versions from module metadata,
 upstream release tags, and the Docker official-images manifests. Pin concrete
 versions and verify upgrades with the full framework and Docker test suites.
 
-Verified on 2026-10-08:
+Verified on 2026-11-08:
 
 | Dependency | Version |
 | --- | --- |
 | Go | 1.27.3 (verified 2026-10-20) |
-| Selvedge | v0.7.0 (verified 2026-10-20) |
-| Loom | v1.10.0-alpha.22 (verified 2026-10-29) |
-| MongoDB server / Go driver | 9.0.4 / v2.9.2 |
-| Redis server / Go client | 8.10.2 / CaliLuke/go-redis v9.23.1-0.20261014134601-1073297e76ea (client verified 2026-10-14) |
-| OpenAI Go SDK | v3.84.0 (verified 2026-10-21) |
+| Selvedge | v0.8.1 (verified 2026-11-08) |
+| Loom | v1.10.0-alpha.28 (verified 2026-11-08) |
+| MongoDB server / Go driver | 9.0.4 / v2.10.0 |
+| Redis server / Go client | 8.10.3 / CaliLuke/go-redis v9.23.1-0.20261105165422-21c4e561f514 (client verified 2026-11-08) |
+| OpenAI Go SDK | v3.96.0 (verified 2026-11-08) |
 | Anthropic Go SDK | v1.84.0 (verified 2026-10-20) |
-| Google GenAI | v1.75.0 (verified 2026-10-20) |
-| Bedrock Runtime / AWS core / Smithy | v1.63.5 / v1.47.3 / v1.28.5 (verified 2026-10-20) |
-| Google auth / OAuth2 | v0.24.1 / v0.37.0 (verified 2026-10-20; unchanged) |
+| Google GenAI | v1.77.0 (verified 2026-11-08) |
+| Bedrock Runtime / AWS core / Smithy | v1.63.12 / v1.47.8 / v1.28.8 (verified 2026-11-08) |
+| Google auth / OAuth2 | v0.24.3 / v0.37.0 (verified 2026-11-08) |
 | OpenTelemetry | v1.47.0 |
-| golangci-lint | v2.14.0 |
+| golangci-lint | v2.15.0 |
+| Staticcheck / x/tools | v0.8.2 / v0.52.0 |
+| Temporal SDK / API | v1.50.0 / v1.64.1 |
+| SQLite | v1.62.0 |
+| Testcontainers | v0.45.0 |
+| PostgreSQL conformance image | 18.6-alpine |
 
 The OpenAI provider's `ResponseClient` interface now uses types from
 `github.com/openai/openai-go/v3`. Applications providing their own client must
@@ -35,23 +40,23 @@ transport-local types and validators to that shared implementation.
 
 Explicit exceptions:
 
-- Loom uses the published alpha.21 release.
-- The MCP Go SDK pins `v1.8.1-0.20261016161459-3e9d812b1814`, verified on
-  2026-10-17 against upstream commit `3e9d812b1814`. Stable v1.8.0 still predates
+- Loom uses the published alpha.28 release.
+- The MCP Go SDK pins `v1.8.1-0.20261106153814-df0f29525bc6`, verified on
+  2026-11-08 against upstream commit `df0f29525bc6`. Stable v1.8.0 still predates
   the request-summary API required by the SDK bridge. This pin includes the
   subsequent upstream fixes. Keep the root, fixtures, quickstart and workspace
   override aligned with `make update-mcp-go-sdk`.
   The runtime callers expose elicitation callbacks and stdio frame limits;
   generated servers support sequential elicitation with legacy clients. Requests
   before initialization now report JSON-RPC Invalid Request (`-32600`).
-- Loom requires `github.com/CaliLuke/go-sse` at immutable commit `b29b33ae1a1e`.
-  Preserve the version selected by the published Loom module.
+- SSE support now uses upstream `github.com/tmaxmax/go-sse v0.12.0`, as
+  selected by Loom; the former fork dependency is removed.
 - Some indirect modules, including Google's generated API definitions and
   platform support packages, publish only commit-based Go versions. Those are
   recorded in the module files; a pseudo-version alone does not identify an
   obsolete dependency.
 
-Container tests use `mongo:9.0.4` and `redis:8.10.2-alpine`, rather than old
+Container tests use `mongo:9.0.4` and `redis:8.10.3-alpine`, rather than old
 major-only image tags. The MongoDB tests still require a replica set for
 transactional behavior.
 
@@ -59,8 +64,8 @@ MongoDB server 9.0.4 was re-verified on 2026-10-19. It includes the upstream
 [Ubuntu kernel compatibility fix](https://jira.mongodb.org/browse/SERVER-131779)
 for the startup refusal observed with 9.0.2 on the hosted Docker runner.
 
-Staticcheck v0.8.1 is built with the stable `golang.org/x/tools v0.51.0` importer
-for Go 1.27.2 export-data support. `make tools` verifies both versions. Its check
+Staticcheck v0.8.2 is built with the stable `golang.org/x/tools v0.52.0` importer
+for Go 1.27.3 export-data support. `make tools` verifies both versions. Its check
 selection and existing documented `lint:ignore` directives remain unchanged.
 
 ## Loom alpha.10 migration
@@ -134,9 +139,36 @@ Regenerate service, client, and server code together. This release reuses
 immutable compiler analysis and bounds concurrent file rendering. Existing
 consumer APIs remain unchanged. See the [alpha.16 release notes](https://github.com/CaliLuke/loom/releases/tag/v1.10.0-alpha.16).
 
+## Loom alpha.28 adoption
+
+The published baseline is `v1.10.0-alpha.28` (commit `f6c17e1f`). Regenerate
+service, client, and server code together. This release adds status-selected
+HTTP responses and SSE handshake metadata, expands OpenAPI imports, and corrects
+response presence and integer storage conversions. Review generated client
+signatures when upgrading. Custom union renderer integrations must supply branch
+method and field names from `unionnames.Resolve`; the MCP adapter follows this
+contract. Tool `Args` and `Return` customization callbacks execute once and
+materialize occurrence-local `Required` fields on their private named type,
+without changing the shared type used by other tools or results. Its module
+graph also selects Selvedge v0.8.1,
+pgx v5.12.0, gRPC v1.85.0, SQLite v1.61.1, and upstream go-sse v0.12.0. See the
+[release notes](https://github.com/CaliLuke/loom/releases/tag/v1.10.0-alpha.28).
+
+The new Loom `execution/selvedge` producer and worker roles provide typed job
+submission and lookup, but do not expose signals, queries, cancellation, child
+workflows, or application transactions. The agent engine retains its native App
+integration because it requires those facilities. New HTTP response selectors,
+SSE handshake metadata, and OpenAPI import APIs are available through the pinned
+Loom release; they do not require new MCP protocol surfaces.
+
+The frozen discovery comparison under `integration_tests/fixtures/assistant/discoverybench`
+retains its original Python lockfile and competitor revision so recorded results
+remain reproducible. Go, Protobuf tools, and the current GitHub Actions major
+references were checked and already select current releases.
+
 ## Loom alpha.22 adoption
 
-The published baseline is `v1.10.0-alpha.22` (commit `6a1229f9`). Regenerate
+The previous baseline was `v1.10.0-alpha.22` (commit `6a1229f9`). Regenerate
 service, client, and server code together. This release preserves distinct HTTP
 media contracts with typed variants and ordered OpenAPI schema examples. See the
 [release comparison](https://github.com/CaliLuke/loom/compare/v1.10.0-alpha.21...v1.10.0-alpha.22).

@@ -788,21 +788,25 @@ func Bookkeeping() {
 
 // toolDSL mirrors Goa's method DSL helpers to define tool shapes.
 func toolDSL(m *agentsexpr.ToolExpr, suffix string, p any, args ...any) *goaexpr.AttributeExpr {
-	att, fn := toolAttributeAndFunc(m, suffix, p, args)
+	att, fn := toolAttributeAndFunc(p, args)
 	if att == nil {
 		return nil
 	}
+	copied, named := att.Type.(goaexpr.UserType)
 	applyToolDSLArgs(att, &fn, args)
 	finalizeToolAttribute(att, fn)
+	if named && fn != nil {
+		materializeToolType(att, copied, m.Name, suffix)
+	}
 	return att
 }
 
-func toolAttributeAndFunc(m *agentsexpr.ToolExpr, suffix string, p any, args []any) (*goaexpr.AttributeExpr, func()) {
+func toolAttributeAndFunc(p any, args []any) (*goaexpr.AttributeExpr, func()) {
 	switch actual := p.(type) {
 	case func():
 		return &goaexpr.AttributeExpr{Type: &goaexpr.Object{}}, actual
 	case goaexpr.UserType:
-		return toolUserTypeAttribute(m, suffix, actual, args), nil
+		return toolUserTypeAttribute(actual, args), nil
 	case goaexpr.DataType:
 		return &goaexpr.AttributeExpr{Type: actual}, nil
 	default:
@@ -811,30 +815,25 @@ func toolAttributeAndFunc(m *agentsexpr.ToolExpr, suffix string, p any, args []a
 	}
 }
 
-func toolUserTypeAttribute(m *agentsexpr.ToolExpr, suffix string, actual goaexpr.UserType, args []any) *goaexpr.AttributeExpr {
+func toolUserTypeAttribute(actual goaexpr.UserType, args []any) *goaexpr.AttributeExpr {
 	if len(args) == 0 {
 		return &goaexpr.AttributeExpr{Type: actual}
 	}
-	dupped := goaexpr.Dup(actual)
-	att := &goaexpr.AttributeExpr{Type: dupped}
-	if f, ok := lastToolDSLFuncArg(args); ok {
-		maybeRenameToolType(att, dupped, actual, m, suffix, f)
-	}
-	return att
+	return &goaexpr.AttributeExpr{Type: goaexpr.Dup(actual)}
 }
 
-func maybeRenameToolType(att *goaexpr.AttributeExpr, dupped any, actual goaexpr.UserType, m *agentsexpr.ToolExpr, suffix string, f func()) {
-	numreqs := 0
-	if att.Validation != nil {
-		numreqs = len(att.Validation.Required)
-	}
-	eval.Execute(f, att)
-	if att.Validation == nil || len(att.Validation.Required) == numreqs {
+// materializeToolType moves occurrence-local requirements onto the tool's copy
+// after customization, preserving the original named type for other uses.
+func materializeToolType(att *goaexpr.AttributeExpr, copied goaexpr.UserType, toolName, suffix string) {
+	if att.Type != copied || att.Validation == nil || len(att.Validation.Required) == 0 {
 		return
 	}
-	if renamer, ok := dupped.(interface{ Rename(string) }); ok {
-		renamer.Rename(actual.Name() + "_" + m.Name + "_" + suffix)
+	owner := copied.Attribute()
+	if owner.Validation == nil {
+		owner.Validation = &goaexpr.ValidationExpr{}
 	}
+	owner.Validation.AddRequired(att.Validation.Required...)
+	copied.Rename(copied.Name() + "_" + toolName + "_" + suffix)
 }
 
 func applyToolDSLArgs(att *goaexpr.AttributeExpr, fn *func(), args []any) {

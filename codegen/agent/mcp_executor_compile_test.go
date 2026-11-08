@@ -161,6 +161,11 @@ func TestGeneratedAgentDesignsCompile(t *testing.T) {
 			},
 		},
 		{
+			name:       "customized named tool payload",
+			generate:   compileAgentScenario(testscenarios.ArgsUserType()),
+			moduleTest: toolCustomizationRuntimeTest,
+		},
+		{
 			name:     "reused toolset",
 			generate: compileAgentScenario(testscenarios.ReUse()),
 		},

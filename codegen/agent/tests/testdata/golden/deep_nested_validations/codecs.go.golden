@@ -303,6 +303,9 @@ func decodeToolhttpLevel3TransportToLevel3(v *toolhttp.Level3Transport) *Level3 
 	return res
 }
 func encodeLevel2ToToolhttpLevel2Transport(v *Level2) *toolhttp.Level2Transport {
+	if v == nil {
+		return nil
+	}
 	res := &toolhttp.Level2Transport{
 		Mid: &v.Mid,
 	}
@@ -313,6 +316,9 @@ func encodeLevel2ToToolhttpLevel2Transport(v *Level2) *toolhttp.Level2Transport 
 	return res
 }
 func encodeLevel3ToToolhttpLevel3Transport(v *Level3) *toolhttp.Level3Transport {
+	if v == nil {
+		return nil
+	}
 	res := &toolhttp.Level3Transport{
 		Leaf: &v.Leaf,
 	}

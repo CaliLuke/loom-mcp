@@ -5530,8 +5530,9 @@ For local backend development, use `make selvedge-local` with optional
 pinned release in both root and agent_features modules.
 `make selvedge-status` fails unless both select that remote version.
 
-The pinned Selvedge v0.7.0 release requires Go 1.27.3 or later and a fresh
-database. Automatic migration from earlier development schemas is not supported;
+The pinned Selvedge v0.8.1 release requires Go 1.27.3 or later and uses the
+v0.7.0 database schema, so this upgrade needs no schema migration. Automatic
+migration from earlier development schemas is not supported;
 finish existing runs on the previous deployment before switching to a new
 database. Retain the old database for any required historical inspection.
 Selvedge's OpenTelemetry hooks emit completed spans for each lifecycle callback;

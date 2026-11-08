@@ -634,11 +634,21 @@ func (u BarCmdOrFooCmd) MarshalFormValues(values url.Values, prefix string) erro
 	values.Set(loomhttp.FormChildKey(prefix, "action"), string(u.kind))
 	switch u.kind {
 	case BarCmdOrFooCmdKindFooCmd:
-		_, err := loomhttp.EncodeFormValue(values, prefix, u.FooCmd)
-		return err
+		if u.FooCmd == nil {
+			return nil
+		}
+		if _, parameterError := loomhttp.EncodeFormValue(values, loomhttp.FormChildKey(prefix, "label"), u.FooCmd.Label); parameterError != nil {
+			return parameterError
+		}
+		return nil
 	case BarCmdOrFooCmdKindBarCmd:
-		_, err := loomhttp.EncodeFormValue(values, prefix, u.BarCmd)
-		return err
+		if u.BarCmd == nil {
+			return nil
+		}
+		if _, parameterError := loomhttp.EncodeFormValue(values, loomhttp.FormChildKey(prefix, "count"), u.BarCmd.Count); parameterError != nil {
+			return parameterError
+		}
+		return nil
 	default:
 		return fmt.Errorf("unexpected BarCmdOrFooCmd discriminant %q", u.kind)
 	}
@@ -657,7 +667,14 @@ func (u *BarCmdOrFooCmd) UnmarshalFormValues(values url.Values, prefix string) e
 	switch rawType {
 	case string(BarCmdOrFooCmdKindFooCmd):
 		var v *FooCmd
-		seen, err := loomhttp.DecodeFormValue(values, prefix, &v)
+		v = &FooCmd{}
+		seen := false
+		var err error
+		if present, fieldError := loomhttp.DecodeFormValue(values, loomhttp.FormChildKey(prefix, "label"), &v.Label); fieldError != nil {
+			return fieldError
+		} else {
+			seen = seen || present
+		}
 		if err != nil {
 			return err
 		}
@@ -668,7 +685,14 @@ func (u *BarCmdOrFooCmd) UnmarshalFormValues(values url.Values, prefix string) e
 		u.FooCmd = v
 	case string(BarCmdOrFooCmdKindBarCmd):
 		var v *BarCmd
-		seen, err := loomhttp.DecodeFormValue(values, prefix, &v)
+		v = &BarCmd{}
+		seen := false
+		var err error
+		if present, fieldError := loomhttp.DecodeFormValue(values, loomhttp.FormChildKey(prefix, "count"), &v.Count); fieldError != nil {
+			return fieldError
+		} else {
+			seen = seen || present
+		}
 		if err != nil {
 			return err
 		}
@@ -850,11 +874,21 @@ func (u CreateActionOrListAction) MarshalFormValues(values url.Values, prefix st
 	values.Set(loomhttp.FormChildKey(prefix, "action"), string(u.kind))
 	switch u.kind {
 	case CreateActionOrListActionKindListAction:
-		_, err := loomhttp.EncodeFormValue(values, prefix, u.ListAction)
-		return err
+		if u.ListAction == nil {
+			return nil
+		}
+		if _, parameterError := loomhttp.EncodeFormValue(values, loomhttp.FormChildKey(prefix, "limit"), u.ListAction.Limit); parameterError != nil {
+			return parameterError
+		}
+		return nil
 	case CreateActionOrListActionKindCreateAction:
-		_, err := loomhttp.EncodeFormValue(values, prefix, u.CreateAction)
-		return err
+		if u.CreateAction == nil {
+			return nil
+		}
+		if _, parameterError := loomhttp.EncodeFormValue(values, loomhttp.FormChildKey(prefix, "name"), u.CreateAction.Name); parameterError != nil {
+			return parameterError
+		}
+		return nil
 	default:
 		return fmt.Errorf("unexpected CreateActionOrListAction discriminant %q", u.kind)
 	}
@@ -873,7 +907,14 @@ func (u *CreateActionOrListAction) UnmarshalFormValues(values url.Values, prefix
 	switch rawType {
 	case string(CreateActionOrListActionKindListAction):
 		var v *ListAction
-		seen, err := loomhttp.DecodeFormValue(values, prefix, &v)
+		v = &ListAction{}
+		seen := false
+		var err error
+		if present, fieldError := loomhttp.DecodeFormValue(values, loomhttp.FormChildKey(prefix, "limit"), &v.Limit); fieldError != nil {
+			return fieldError
+		} else {
+			seen = seen || present
+		}
 		if err != nil {
 			return err
 		}
@@ -884,7 +925,14 @@ func (u *CreateActionOrListAction) UnmarshalFormValues(values url.Values, prefix
 		u.ListAction = v
 	case string(CreateActionOrListActionKindCreateAction):
 		var v *CreateAction
-		seen, err := loomhttp.DecodeFormValue(values, prefix, &v)
+		v = &CreateAction{}
+		seen := false
+		var err error
+		if present, fieldError := loomhttp.DecodeFormValue(values, loomhttp.FormChildKey(prefix, "name"), &v.Name); fieldError != nil {
+			return fieldError
+		} else {
+			seen = seen || present
+		}
 		if err != nil {
 			return err
 		}

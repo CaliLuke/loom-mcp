@@ -406,9 +406,9 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   bind its own executor. Preserve concrete Temporal signatures and Selvedge JSON
   payloads, names, and scheduling options so saved histories continue to replay.
 - Available engine adapters are `inmem`, `temporal`, and `selvedge`.
-  Selvedge v0.7.0 requires Go 1.27.3 and a fresh database; earlier development
-  schemas have no automatic migration. Complete old runs before switching
-  databases. Lifecycle tracing emits completed callback spans, correlated by
+  Selvedge v0.8.1 requires Go 1.27.3 and retains the v0.7.0 database schema;
+  earlier development schemas have no automatic migration. Complete old runs
+  before switching databases. Lifecycle tracing emits completed callback spans, correlated by
   workflow/command IDs. Old histories lack verifiable cancellation targets when
   that metadata was not recorded.
   Selvedge workers own an unstarted App and activate during runtime sealing;
@@ -957,10 +957,18 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   references/runtime-contracts.md and docs/runtime.md for correction and cache rules.
 - Config.Live uses agenttest.LiveModelEnabled; scripted clients leave it false.
 
+- Named tool customization callbacks execute once. Materialize their local
+  `Required` constraints on the copied declaration after customization, preserving
+  the original shared type and any callback-selected replacement type.
+
+- JSON transport union adapters must populate `uniongen.Field.MethodName`,
+  `FieldName`, and kind suffixes from `unionnames.Resolve`, matching Loom's
+  shared renderer and transforms.
+
 ## Command Reminders
 
 ```bash
-go install github.com/CaliLuke/loom/cmd/loom@v1.10.0-alpha.22
+go install github.com/CaliLuke/loom/cmd/loom@v1.10.0-alpha.28
 loom version
 loom gen <module-import-path>/design
 loom example <module-import-path>/design
