@@ -11,10 +11,10 @@ Verified on 2026-11-08:
 | --- | --- |
 | Go | 1.27.3 (verified 2026-10-20) |
 | Selvedge | v0.8.1 (verified 2026-11-08) |
-| Loom | v1.10.0-alpha.28 (verified 2026-11-08) |
+| Loom | v1.10.0-alpha.30 (verified 2026-11-08) |
 | MongoDB server / Go driver | 9.0.4 / v2.10.0 |
 | Redis server / Go client | 8.10.3 / CaliLuke/go-redis v9.23.1-0.20261105165422-21c4e561f514 (client verified 2026-11-08) |
-| OpenAI Go SDK | v3.96.0 (verified 2026-11-08) |
+| OpenAI Go SDK | v3.97.0 (verified 2026-11-08) |
 | Anthropic Go SDK | v1.84.0 (verified 2026-10-20) |
 | Google GenAI | v1.77.0 (verified 2026-11-08) |
 | Bedrock Runtime / AWS core / Smithy | v1.63.12 / v1.47.8 / v1.28.8 (verified 2026-11-08) |
@@ -40,7 +40,7 @@ transport-local types and validators to that shared implementation.
 
 Explicit exceptions:
 
-- Loom uses the published alpha.28 release.
+- Loom uses the published alpha.30 release.
 - The MCP Go SDK pins `v1.8.1-0.20261106153814-df0f29525bc6`, verified on
   2026-11-08 against upstream commit `df0f29525bc6`. Stable v1.8.0 still predates
   the request-summary API required by the SDK bridge. This pin includes the
@@ -139,9 +139,24 @@ Regenerate service, client, and server code together. This release reuses
 immutable compiler analysis and bounds concurrent file rendering. Existing
 consumer APIs remain unchanged. See the [alpha.16 release notes](https://github.com/CaliLuke/loom/releases/tag/v1.10.0-alpha.16).
 
+## Loom alpha.30 adoption
+
+The published baseline is `v1.10.0-alpha.30` (commit `453ea0b5`). Regenerate
+service, client, and server code together. Since alpha.28, Loom preserves inherited
+required fields in OpenAPI projections, completes result declarations before
+localization, retains object openness in result views, and validates declaration
+metadata and examples independently of their use. Applied OpenAPI view selections
+are consumed so they cannot trigger recursive projection. See the
+[release comparison](https://github.com/CaliLuke/loom/compare/v1.10.0-alpha.28...v1.10.0-alpha.30).
+
+The dependency refresh also adopts OpenAI Go v3.97.0 and its current JSON helper
+dependencies. Its new scheduling APIs do not change the existing Responses
+provider integration. Other active dependency and tool pins were rechecked
+against published module versions, upstream releases, and official image manifests.
+
 ## Loom alpha.28 adoption
 
-The published baseline is `v1.10.0-alpha.28` (commit `f6c17e1f`). Regenerate
+The previous baseline was `v1.10.0-alpha.28` (commit `f6c17e1f`). Regenerate
 service, client, and server code together. This release adds status-selected
 HTTP responses and SSE handshake metadata, expands OpenAPI imports, and corrects
 response presence and integer storage conversions. Review generated client

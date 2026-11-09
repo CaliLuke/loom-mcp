@@ -5,7 +5,7 @@ go 1.27.3
 require (
 	cloud.google.com/go/auth v0.24.3
 	github.com/CaliLuke/go-redis/v9 v9.23.1-0.20261105165422-21c4e561f514
-	github.com/CaliLuke/loom v1.10.0-alpha.28
+	github.com/CaliLuke/loom v1.10.0-alpha.30
 	github.com/CaliLuke/selvedge v0.8.1
 	github.com/anthropics/anthropic-sdk-go v1.84.0
 	github.com/aws/aws-sdk-go-v2 v1.47.8
@@ -18,7 +18,7 @@ require (
 	github.com/leanovate/gopter v0.2.11
 	github.com/modelcontextprotocol/go-sdk v1.8.1-0.20261106153814-df0f29525bc6
 	github.com/nexus-rpc/sdk-go v0.7.0
-	github.com/openai/openai-go/v3 v3.96.0
+	github.com/openai/openai-go/v3 v3.97.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go v0.45.0
@@ -116,10 +116,10 @@ require (
 	github.com/sirupsen/logrus v1.10.2 // indirect
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.1 // indirect
 	github.com/stretchr/objx v0.8.0 // indirect
-	github.com/tidwall/gjson v1.20.1 // indirect
+	github.com/tidwall/gjson v1.20.2 // indirect
 	github.com/tidwall/match v1.2.0 // indirect
-	github.com/tidwall/pretty v1.2.2 // indirect
-	github.com/tidwall/sjson v1.2.7 // indirect
+	github.com/tidwall/pretty v1.3.0 // indirect
+	github.com/tidwall/sjson v1.2.8 // indirect
 	github.com/tklauser/go-sysconf v0.4.0 // indirect
 	github.com/tklauser/numcpus v0.12.0 // indirect
 	github.com/tmaxmax/go-sse v0.12.0 // indirect

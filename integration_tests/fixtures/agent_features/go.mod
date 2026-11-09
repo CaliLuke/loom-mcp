@@ -3,7 +3,7 @@ module example.com/agentfeatures
 go 1.27.3
 
 require (
-	github.com/CaliLuke/loom v1.10.0-alpha.28
+	github.com/CaliLuke/loom v1.10.0-alpha.30
 	github.com/CaliLuke/loom-mcp/v2 v2.0.1
 	github.com/CaliLuke/selvedge v0.8.1
 	github.com/stretchr/testify v1.12.1
@@ -81,7 +81,7 @@ require (
 	github.com/ncruces/go-strftime v1.1.0 // indirect
 	github.com/nexus-rpc/nexus-proto-annotations v0.1.0 // indirect
 	github.com/nexus-rpc/sdk-go v0.7.0 // indirect
-	github.com/openai/openai-go/v3 v3.96.0 // indirect
+	github.com/openai/openai-go/v3 v3.97.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/power-devops/perfstat v0.0.0-20260916203055-22a1a467d9f0 // indirect
@@ -93,10 +93,10 @@ require (
 	github.com/shirou/gopsutil/v4 v4.26.10 // indirect
 	github.com/sirupsen/logrus v1.10.2 // indirect
 	github.com/stretchr/objx v0.8.0 // indirect
-	github.com/tidwall/gjson v1.20.1 // indirect
+	github.com/tidwall/gjson v1.20.2 // indirect
 	github.com/tidwall/match v1.2.0 // indirect
-	github.com/tidwall/pretty v1.2.2 // indirect
-	github.com/tidwall/sjson v1.2.7 // indirect
+	github.com/tidwall/pretty v1.3.0 // indirect
+	github.com/tidwall/sjson v1.2.8 // indirect
 	github.com/tklauser/go-sysconf v0.4.0 // indirect
 	github.com/tklauser/numcpus v0.12.0 // indirect
 	github.com/tmaxmax/go-sse v0.12.0 // indirect

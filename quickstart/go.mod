@@ -3,7 +3,7 @@ module example.com/quickstart
 go 1.27.3
 
 require (
-	github.com/CaliLuke/loom v1.10.0-alpha.28
+	github.com/CaliLuke/loom v1.10.0-alpha.30
 	github.com/CaliLuke/loom-mcp/v2 v2.0.1
 )
 
@@ -33,15 +33,15 @@ require (
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/manveru/faker v0.0.0-20171103152722-9fbc68a78c4d // indirect
 	github.com/modelcontextprotocol/go-sdk v1.8.1-0.20261106153814-df0f29525bc6 // indirect
-	github.com/openai/openai-go/v3 v3.96.0 // indirect
+	github.com/openai/openai-go/v3 v3.97.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3 // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/stretchr/testify v1.12.1 // indirect
-	github.com/tidwall/gjson v1.20.1 // indirect
+	github.com/tidwall/gjson v1.20.2 // indirect
 	github.com/tidwall/match v1.2.0 // indirect
-	github.com/tidwall/pretty v1.2.2 // indirect
-	github.com/tidwall/sjson v1.2.7 // indirect
+	github.com/tidwall/pretty v1.3.0 // indirect
+	github.com/tidwall/sjson v1.2.8 // indirect
 	github.com/tmaxmax/go-sse v0.12.0 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
