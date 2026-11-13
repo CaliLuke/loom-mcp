@@ -140,3 +140,5 @@ Start here:
 ## License
 
 MIT. See [`LICENSE`](LICENSE).
+
+For reusable vector generation clients, see [Embeddings](docs/embeddings.md).

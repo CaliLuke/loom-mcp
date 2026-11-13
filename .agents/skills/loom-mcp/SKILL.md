@@ -81,6 +81,14 @@ Use this skill for `loom-mcp` work in this repo. Keep `AGENTS.md` short and keep
   `integration_tests/fixtures/agent_features` as the generated acceptance
   fixture in addition to focused package tests.
 
+## Embedding clients
+
+`runtime/embeddings` is separate from chat model contracts. `Client.Embed` and
+`BatchClient.EmbedBatch` return validated vectors; `NewOllama` constructs the
+Ollama adapter. Applications own chunking, credentials, indexing and storage.
+Keep errors free of provider bodies and request data; preserve cancellation,
+including during response reads. See `docs/embeddings.md`.
+
 ## Current Product Rules
 
 - Gemini and Vertex keep SDK automatic continuation disabled. The adapter owns each generation hop, request budgets, partial-output rejection, and usage accounting.
