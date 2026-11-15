@@ -39,11 +39,11 @@ func (e *Engine) QueryRunStatus(ctx context.Context, workflowID string) (engine.
 	if workflowID == "" {
 		return "", fmt.Errorf("workflow id is required")
 	}
-	desc, err := e.client.DescribeWorkflowExecution(ctx, workflowID, "")
+	desc, err := e.client.DescribeWorkflow(ctx, workflowID, "")
 	if err != nil {
 		return "", mapDescribeWorkflowExecutionError(err)
 	}
-	return queryRunStatusFromInfo(desc.GetWorkflowExecutionInfo()), nil
+	return queryRunStatusFromInfo(desc.RawResponse.GetWorkflowExecutionInfo()), nil
 }
 
 // QueryRunCompletion returns the terminal output/error for a workflow by

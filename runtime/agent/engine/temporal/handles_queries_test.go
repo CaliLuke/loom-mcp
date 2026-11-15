@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
 	workflowservice "go.temporal.io/api/workflowservice/v1"
+	temporalclient "go.temporal.io/sdk/client"
 	temporalmocks "go.temporal.io/sdk/mocks"
 )
 
@@ -66,7 +67,7 @@ func TestEngineDirectWorkflowOperations(t *testing.T) {
 	client.On("SignalWorkflow", ctx, "workflow-1", "run-1", "resume", "payload").Return(nil).Once()
 	client.On("CancelWorkflow", ctx, "workflow-1", "").Return(serviceerror.NewNotFound("missing")).Once()
 	client.On("QueryWorkflow", ctx, "workflow-1", "", "state", "arg").Return(encoded, nil).Once()
-	client.On("DescribeWorkflowExecution", ctx, "workflow-1", "").Return(&workflowservice.DescribeWorkflowExecutionResponse{}, nil).Once()
+	client.On("DescribeWorkflow", ctx, "workflow-1", "").Return(&temporalclient.WorkflowExecutionDescription{RawResponse: &workflowservice.DescribeWorkflowExecutionResponse{}}, nil).Once()
 
 	require.NoError(t, eng.SignalByID(ctx, "workflow-1", "run-1", "resume", "payload"))
 	require.ErrorIs(t, eng.CancelByID(ctx, "workflow-1"), engine.ErrWorkflowNotFound)
