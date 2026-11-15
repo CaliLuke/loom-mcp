@@ -2,6 +2,10 @@
 
 - Implementation committed and pushed; required review, hooks and local checks passed.
 - Published Loom pin and required generated output/docs current.
+- Authored `docs/releases/vX.Y.Z.md` exists in the selected source and describes
+  user-facing changes since the previous stable, with upgrade requirements.
+- Editorial review confirms a concise narrative: no commit-subject dump,
+  promotion boilerplate, routine CI inventory, or unshipped feature claims.
 - Select exact remote-main source for alpha, or published eligible alpha for promotion.
 - Dispatch `make release SOURCE=<sha>` or
   `make release-promote ALPHA=v2.X.Y-alpha.N VERSION=v2.X.Y`.
@@ -10,7 +14,7 @@
   including Release eligibility. Do not bypass missing or failed evidence.
 - On interruption, retry the same source/alpha. Never move tags or create release commits.
 - Verify annotated remote tag source, non-draft Release, prerelease/latest policy,
-  substantive notes and matching `release-evidence.json`.
+  rendered authored notes and matching `release-evidence.json`.
 - Report the release URL; Go module proxy visibility can lag.
 
 For workflow changes, run `make release-test` and

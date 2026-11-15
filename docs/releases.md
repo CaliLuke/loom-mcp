@@ -4,6 +4,47 @@ loom-mcp uses the same release setup as Loom: a trusted GitHub workflow publishe
 CI-verified source snapshots. Local commands dispatch that workflow. Publication
 never edits source files, creates a version commit, or pushes `main`.
 
+## Write the release notes before selecting a source
+
+Each release train owns `docs/releases/vX.Y.Z.md`. Write and review that file
+before publishing its first alpha, and keep it current as the train develops.
+The publisher reads it from the **selected source commit**, including when
+promoting an alpha. A file in a newer checkout cannot supply notes for an older
+source. Missing notes or fewer than 20 words stop publication before a tag or
+Release is created; the word minimum preserves the existing metadata check and
+does not replace editorial review.
+
+Write for someone deciding whether and how to upgrade from the previous stable
+release. Read that release, the complete source comparison, and the current
+implementation and migration guides. Group the important changes into a few
+short sections explaining new capabilities, meaningful corrections, and upgrade
+actions. Use prose for the overview; use lists only when they make actual steps
+or choices easier to follow. Link to detailed guides instead of copying their
+full API inventories.
+
+Before accepting the notes, check:
+
+- The opening says what users gain, not how an alpha was promoted or CI ran.
+- The scope is the full change since the previous stable, not just the latest
+  alpha or dependency bump. Both alpha and stable notes use this cumulative view.
+- Every claimed capability is shipped in the selected source. Proposals,
+  experiments, internal plans, and unmeasured performance claims are excluded.
+- Breaking API changes, data migrations, workflow draining, and toolchain
+  requirements are explicit, with links to the relevant instructions.
+- Commit subjects, hashes, merge history, and routine test commands do not form
+  the release body. The generated full-changelog link is the place for history.
+
+Use `{{version}}` wherever installation commands or links need the actual
+published version. The publisher substitutes the allocated alpha or stable tag
+and appends a comparison with the previous stable. It preserves the authored
+prose and adds no promotion boilerplate or commit list. See
+[`v2.1.0.md`](releases/v2.1.0.md) for a substantive release narrative.
+
+Read the rendered GitHub body after publication. If an editorial correction is
+needed, update only the Release notes and retain the corrected prose in this
+directory. Do not move the tag or change evidence. Retrying an already completed
+release verifies its existing publication without overwriting editorial changes.
+
 ## Alpha releases
 
 Finish code review and local verification, commit, and push normally. Select the
@@ -23,7 +64,7 @@ the immutable `GITHUB_SHA` captured for that scheduled run. GitHub may delay or
 drop scheduled runs; this is a daily snapshot policy, not a timing guarantee.
 A failed source never falls back to an older green commit. After stable
 promotion closes a train, publication waits for a reviewed source commit that
-updates `train.json`.
+updates `train.json` and includes authored notes for the new train.
 
 ## Stable promotion
 
@@ -78,9 +119,9 @@ independent. `make itest` retains the combined integration and qualification sui
 The publisher creates an annotated tag, a draft GitHub Release, and a
 `release-evidence.json` asset recording the source and successful CI run and
 attempt. It then publishes and verifies the Release, evidence, and remote tag.
-Notes list commit subjects since the preceding release; stable notes cover the
-range since the previous stable and name the promoted alpha. Write meaningful
-commit subjects and update public migration guidance with implementation changes.
+Notes come from the reviewed release-train document in that source. Update the
+release narrative and public migration guidance with implementation changes;
+commit subjects are evidence for the author, not release notes.
 
 Keep normal review, hooks, remote Loom pins, generation, and local verification
 when changing code. Publishing an unchanged eligible commit reuses its CI; do

@@ -8,6 +8,29 @@ Use `internal/release` through `.github/workflows/release.yml`. Local commands
 dispatch trusted main; they do not create release commits, push main, or publish
 tags directly. Do not create release-only branches or PRs.
 
+## Author the notes
+
+- Before selecting a release source, write or update
+  `docs/releases/vX.Y.Z.md` for its train. The publisher requires this file in
+  the exact selected source, including the alpha source used for promotion.
+- Compare with the previous stable release. Read the full source changes and
+  shipped documentation, then select the changes that matter to an upgrading
+  user. Do not describe only the last alpha or most recent dependency update.
+- Lead with new capabilities and meaningful behavior changes. Use a few short
+  sections of prose; include concrete upgrade and migration requirements.
+  Link to detailed guides and leave commit history to the full-changelog link.
+- Never substitute Git commit subjects, a long bullet inventory, CI narration,
+  or alpha-promotion mechanics for authored release notes. Exclude unshipped
+  plans and unsupported benefit claims.
+- Use `{{version}}` in version-specific commands and links. Both alpha and stable
+  releases render the same source-owned narrative for their actual version.
+  There is no automatic commit-list fallback. Missing or insufficient notes
+  fail before tag or Release creation.
+- Review the exact rendered body before calling publication complete. Follow
+  the editorial checklist in `docs/releases.md`. Correct published prose with a
+  notes-only Release edit and retain the corrected document; never alter the
+  release tag or evidence to repair wording.
+
 ## Selection and dispatch
 
 - Complete implementation review, mandatory hooks and local checks, then commit
@@ -19,7 +42,8 @@ tags directly. Do not create release-only branches or PRs.
   captured `GITHUB_SHA`. Scheduling can be delayed or dropped. No new source means
   no new alpha; never fall back to an older green commit.
 - `internal/release/train.json` at the selected source owns the v2 release train.
-  After stable promotion, daily publication waits for a reviewed train update.
+  After stable promotion, daily publication waits for a reviewed train update
+  with an authored notes document for that train.
 - Promote explicitly with
   `make release-promote ALPHA=v2.X.Y-alpha.N VERSION=v2.X.Y`. Stable must use the
   alpha's exact source; preserve the alpha tag and release. Historical alphas
@@ -43,8 +67,8 @@ implementation/design changes require it; never edit generated output by hand.
 
 The publisher creates an immutable annotated tag, draft Release, deterministic
 `release-evidence.json`, and substantive notes, then publishes and verifies them.
-Alphas are prereleases and not latest; stable promotions are latest. Notes name
-source changes and migration guidance; do not add routine CI command lists.
+Alphas are prereleases and not latest; stable promotions are latest. Notes explain
+user-facing changes and migration guidance; do not add routine CI command lists.
 
 ## Recovery and completion
 

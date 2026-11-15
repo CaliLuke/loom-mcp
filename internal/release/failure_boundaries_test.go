@@ -15,7 +15,7 @@ import (
 
 func TestPublicationStopsAtFailedExternalOperation(t *testing.T) {
 	for _, operation := range []string{
-		"remote get-url --all", "remote get-url --push", "fetch origin", "for-each-ref", "merge-base", "git show", "releases?", "/workflows/", "/jobs?", "git log", "git ls-remote", "git tag", "release create", "/releases/tags/", "release download",
+		"remote get-url --all", "remote get-url --push", "fetch origin", "for-each-ref", "merge-base", "git show", "releases?", "/workflows/", "/jobs?", ":docs/releases/", "git ls-remote", "git tag", "release create", "/releases/tags/", "release download",
 	} {
 		t.Run(operation, func(t *testing.T) {
 			f := newBoundaryPublication()
@@ -40,12 +40,12 @@ func TestPublicationRejectsCorruptedAuthorityResponses(t *testing.T) {
 		{"fetch origin", "remote get-url --all", "https://example.test/other.git"},
 		{"tag object", "for-each-ref", "v2.1.0-alpha.1 tree object"},
 		{"incomplete annotated tag", "for-each-ref", "v2.1.0-alpha.1 tag object"},
-		{"train JSON", "git show", "{"},
-		{"train version", "git show", `{"version":"v1.0.0"}`},
+		{"train JSON", ":internal/release/train.json", "{"},
+		{"train version", ":internal/release/train.json", `{"version":"v1.0.0"}`},
 		{"release listing", "releases?", "{"},
 		{"CI listing", "/workflows/", "{"},
 		{"jobs listing", "/jobs?", "{"},
-		{"missing changes", "git log", ""},
+		{"missing authored notes", ":docs/releases/", ""},
 		{"conflicting remote tag", "git ls-remote", strings.Repeat("b", 40) + " refs/tags/v2.1.0-alpha.1^{}"},
 		{"published metadata", "/releases/tags/", "{"},
 		{"published identity", "/releases/tags/", `{"tag_name":"other","draft":false}`},

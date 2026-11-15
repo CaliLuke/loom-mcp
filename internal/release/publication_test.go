@@ -43,15 +43,18 @@ func (f *fakePublication) run(_ context.Context, name string, args ...string) ([
 		case "merge-base":
 			return nil, nil
 		case "show":
-			return []byte(`{"version":"v2.1.0"}`), nil
+			switch {
+			case strings.HasSuffix(args[1], ":internal/release/train.json"):
+				return []byte(`{"version":"v2.1.0"}`), nil
+			case strings.HasSuffix(args[1], ":docs/releases/v2.1.0.md"):
+				return []byte(authoredTestNotes), nil
+			}
 		case "for-each-ref":
 			var lines []string
 			for version, sha := range f.tags {
 				lines = append(lines, version+" tag object "+sha)
 			}
 			return []byte(strings.Join(lines, "\n")), nil
-		case "log":
-			return []byte("- fix: preserve request body errors (123abcd)"), nil
 		case "tag":
 			f.tags[args[2]] = args[3]
 			return nil, nil
@@ -143,12 +146,17 @@ func TestPublicationRetriesAndNoNewCommits(t *testing.T) {
 			require.Len(t, f.tags, 1)
 			require.Equal(t, f.sha, f.tags["v2.1.0-alpha.1"])
 			require.False(t, f.releases["v2.1.0-alpha.1"].Draft)
+			corrected := f.releases["v2.1.0-alpha.1"]
+			corrected.Body += "\nAn editorial correction made after publication."
+			f.releases["v2.1.0-alpha.1"] = corrected
 			f.commands = nil
 			require.NoError(t, p.publish(context.Background()))
+			require.Equal(t, corrected.Body, f.releases["v2.1.0-alpha.1"].Body)
 			require.Len(t, f.tags, 1)
 			for _, cmd := range f.commands {
 				require.NotContains(t, cmd, "git tag ")
 				require.NotContains(t, cmd, "release create")
+				require.NotContains(t, cmd, ":docs/releases/")
 				require.NotContains(t, cmd, "/workflows/")
 				require.NotContains(t, cmd, "make")
 			}

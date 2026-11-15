@@ -101,36 +101,3 @@ func (p publisher) tags(ctx context.Context) ([]tag, error) {
 	}
 	return tags, nil
 }
-
-func (p publisher) notes(ctx context.Context, version, source string, tags []tag) (string, error) {
-	stable := !strings.Contains(version, "-alpha.")
-	base := ""
-	for _, t := range tags {
-		if t.version == version || semver.Compare(t.version, version) >= 0 || (stable && strings.Contains(t.version, "-")) {
-			continue
-		}
-		if base == "" || semver.Compare(t.version, base) > 0 {
-			base = t.version
-		}
-	}
-	selection := source
-	if base != "" {
-		selection = base + ".." + source
-	}
-	changes, err := p.git(ctx, "log", "--first-parent", "--format=- %s (%h)", selection)
-	if err != nil {
-		return "", err
-	}
-	if changes == "" {
-		return "", errors.New("release has no source commits since previous version")
-	}
-	status := "This alpha is a development snapshot. Generated APIs may change."
-	if stable {
-		status = "This stable release promotes " + p.config.Alpha + " without changing its source."
-	}
-	notes := fmt.Sprintf("## Highlights\n\n%s\n\n%s\n\n## Upgrade\n\nUse `github.com/CaliLuke/loom-mcp/v2@%s` in your Go module, then regenerate services with `loom gen <module-import-path>/design`.\n", status, changes, version)
-	if base != "" {
-		notes += fmt.Sprintf("\n[Full changelog](https://github.com/%s/compare/%s...%s)\n", repository, base, version)
-	}
-	return notes, nil
-}
