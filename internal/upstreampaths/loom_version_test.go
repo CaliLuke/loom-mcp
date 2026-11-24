@@ -72,6 +72,10 @@ func selectedLoomVersion(t *testing.T, repoRoot, pinned string) string {
 	return selected
 }
 
+// assertAdviceVersions requires every Loom installation instruction under name
+// to use want. Release narratives in docs/releases are skipped: each one records
+// the Loom version of its own release train and must stay unchanged after the
+// pin moves.
 func assertAdviceVersions(t *testing.T, repoRoot, name, want string) {
 	t.Helper()
 	path := filepath.Join(repoRoot, name)
@@ -81,9 +85,13 @@ func assertAdviceVersions(t *testing.T, repoRoot, name, want string) {
 		assertAdviceFileVersions(t, path, want)
 		return
 	}
+	releaseNotes := filepath.Join(repoRoot, "docs", "releases")
 	require.NoError(t, filepath.WalkDir(path, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+		if entry.IsDir() && path == releaseNotes {
+			return filepath.SkipDir
 		}
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
 			return nil
