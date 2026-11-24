@@ -85,9 +85,10 @@ make loom-status
 
 Ensure the root module, assistant fixture, SDK bridge consumer fixture,
 quickstart, and agent-features fixture all require `vX.Y.Z`. Ensure that none
-retain a Loom `replace`. Update README, docs, and repo-local skills when the new
-dependency or behavior changes their contract. Then run the published-module
-parity gates:
+retain a Loom `replace`. Commit the `go.work.sum` checksums that
+`make loom-remote` records with the module changes. Update README, docs, and
+repo-local skills when the new dependency or behavior changes their contract.
+Then run the published-module parity gates:
 ```bash
 make ci
 ```

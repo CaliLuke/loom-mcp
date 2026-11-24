@@ -71,6 +71,7 @@ set_local() {
     GOWORK=off go mod tidy
   )
   sync_quickstart_generator_dependencies
+  bash "${ROOT_DIR}/scripts/record_go_work_sum.sh"
 }
 
 set_remote() {
@@ -107,6 +108,7 @@ set_remote() {
     GOWORK=off go mod tidy
   )
   sync_quickstart_generator_dependencies
+  bash "${ROOT_DIR}/scripts/record_go_work_sum.sh"
   verify_remote_modules
 }
 

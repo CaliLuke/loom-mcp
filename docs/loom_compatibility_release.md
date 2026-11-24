@@ -113,6 +113,11 @@ make loom-status
 make verify-generated
 ```
 
+`make loom-remote`, `make loom-local` and `make update-mcp-go-sdk` also record
+the workspace module checksums in `go.work.sum`. Commit `go.work.sum` with the
+`go.mod` and `go.sum` changes. `make verify-generated` fails when `go.work.sum`
+is incomplete.
+
 The root, assistant, SDK bridge consumer, quickstart, and agent-features modules
 must require the same Loom release. No Loom replacement can remain:
 

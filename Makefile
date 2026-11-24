@@ -393,6 +393,7 @@ update-mcp-go-sdk:
 	cd ./integration_tests/fixtures/sdkbridge_consumer && GOWORK=off $(GO) mod tidy
 	cd ./quickstart && GOWORK=off $(GO) mod tidy
 	cd ./quickstart && GOWORK=off $(GO) list -mod=mod -deps github.com/CaliLuke/loom/cmd/loom >/dev/null
+	GO="$(GO)" bash ./scripts/record_go_work_sum.sh
 
 verify-generated: tools
 	bash ./scripts/verify_generated.sh

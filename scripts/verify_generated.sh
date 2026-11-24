@@ -37,6 +37,7 @@ capture_state() {
 
 capture_state >"${before_state}"
 
+bash "${ROOT_DIR}/scripts/record_go_work_sum.sh"
 make -C "${ROOT_DIR}" gen-registry
 make -C "${ROOT_DIR}" regen-quickstart
 make -C "${ROOT_DIR}" regen-assistant-fixture
