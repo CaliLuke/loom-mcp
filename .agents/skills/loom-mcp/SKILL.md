@@ -976,7 +976,7 @@ including during response reads. See `docs/embeddings.md`.
 ## Command Reminders
 
 ```bash
-go install github.com/CaliLuke/loom/cmd/loom@v1.10.0
+go install github.com/CaliLuke/loom/cmd/loom@v1.12.0
 loom version
 loom gen <module-import-path>/design
 loom example <module-import-path>/design

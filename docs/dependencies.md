@@ -11,7 +11,7 @@ Dependency baseline for the 2026-11-15 refresh:
 | --- | --- |
 | Go | 1.27.4 |
 | Selvedge | v0.8.1 (verified 2026-11-08) |
-| Loom | v1.10.0 |
+| Loom | v1.12.0 |
 | MongoDB server / Go driver | 9.0.8-resolute / v2.10.0 |
 | Redis server / Go client | 8.10.3 / CaliLuke/go-redis v9.23.1-0.20261105165422-21c4e561f514 (client verified 2026-11-08) |
 | OpenAI Go SDK | v3.99.0 |
@@ -138,9 +138,27 @@ Regenerate service, client, and server code together. This release reuses
 immutable compiler analysis and bounds concurrent file rendering. Existing
 consumer APIs remain unchanged. See the [alpha.16 release notes](https://github.com/CaliLuke/loom/releases/tag/v1.10.0-alpha.16).
 
+## Loom v1.12.0 stable adoption
+
+The published baseline is `v1.12.0` (commit `bd761923c`). Generated loom-mcp
+code is unchanged apart from the recorded Loom version; regenerate to refresh
+`gen/loom.json`. Since v1.10.0, Loom adds the `slogbridge` OpenTelemetry handler
+and removes `logrusbridge` (v1.11.0), fixes `loom vet` HTTP error-contract false
+positives (v1.10.1), and adds `admission.KeyedRate`, custom `RateLimit`
+rejection responders, and OTLP gRPC and endpoint-URL options in
+`observability/otel.New` (v1.12.0). Loom-MCP itself uses none of these
+packages. Applications that import them directly must review the breaking
+changes: `logrusbridge` and the `server-error-fault` vet rule are removed, nil
+`Propagators` now means the global propagator rather than W3C TraceContext,
+`loomotel.New` always sets the global propagator and rejects endpoints with a
+scheme or path, and named HTTP client spans are renamed. See the
+[v1.10.1](https://github.com/CaliLuke/loom/releases/tag/v1.10.1),
+[v1.11.0](https://github.com/CaliLuke/loom/releases/tag/v1.11.0), and
+[v1.12.0](https://github.com/CaliLuke/loom/releases/tag/v1.12.0) release notes.
+
 ## Loom v1.10.0 stable adoption
 
-The published baseline is `v1.10.0` (commit `71810f706`). Regenerate services,
+The previous baseline was `v1.10.0` (commit `71810f706`). Regenerate services,
 clients, and servers together. Since alpha.30, Loom reduces generator memory
 costs and refreshes its dependencies, including pgx v5.13.0 and the corrected
 libopenapi header-example API. See the

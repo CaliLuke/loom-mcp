@@ -14,8 +14,8 @@ github.com/Azure/azure-sdk-for-go/sdk/internal v1.13.0 h1:Terj1CMW4+NY5CpWjSRkqL
 github.com/Azure/azure-sdk-for-go/sdk/internal v1.13.0/go.mod h1:7Ut2Qw9vcwpLW5Q4MBy43uSxXS7tK2yjs94OJ6j5thE=
 github.com/Azure/go-ansiterm v0.0.0-20261013165250-51075c6ea6bc h1:58s5YzGPNAP7+e1uemaL0ax/NPSeJOHdRpRIowd+JDk=
 github.com/Azure/go-ansiterm v0.0.0-20261013165250-51075c6ea6bc/go.mod h1:DMNF6Kxv+EcuUvVuNkvC3f+BjEEmc/Fn9aU+qiD8zpU=
-github.com/CaliLuke/loom v1.10.0 h1:4v75XAo/bf+PzUd+PYluWQcBEyKUkJqRsGWosklTxIw=
-github.com/CaliLuke/loom v1.10.0/go.mod h1:NPzY+Rh+iejtEnN/auuq6tuqeaMy0crT2shr0IJeeoQ=
+github.com/CaliLuke/loom v1.12.0 h1:80nuBobYn8Zv553maOu5m2Iuv3YCII5wpKyfaUtfQ5o=
+github.com/CaliLuke/loom v1.12.0/go.mod h1:pN5nzxYlvb7kf96xMF74jz5nvvii4HSZ9QkSwM+e6QE=
 github.com/CaliLuke/selvedge v0.8.1 h1:LNcpZUDNAhSIPuJMxJMvR1rRT6beE/dyK2IqxA80Cdg=
 github.com/CaliLuke/selvedge v0.8.1/go.mod h1:nO+OYh+BwaYJLDbaBYLQcuWmPi95rBAW2CuEvff6304=
 github.com/Microsoft/go-winio v0.6.4 h1:kJF2pamtYCWXf0xAT8sAkwKC0pMl2HYBrRPHAqyUc+g=

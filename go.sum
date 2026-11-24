@@ -59,8 +59,8 @@ github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03
 github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802/go.mod h1:IVnqGOEym/WlBOVXweHU+Q+/VP0lqqI8lqeDx9IjBqo=
 github.com/CaliLuke/go-redis/v9 v9.23.1-0.20261105165422-21c4e561f514 h1:7FzXC8Z1cNR4Eo3+0d2BEKQuWPC1Y792a9AAMe+Nluw=
 github.com/CaliLuke/go-redis/v9 v9.23.1-0.20261105165422-21c4e561f514/go.mod h1:ogPCGSIlz4iGKhuZR/JxH1dgSCegbEmnBk8iDS7u3iQ=
-github.com/CaliLuke/loom v1.10.0 h1:4v75XAo/bf+PzUd+PYluWQcBEyKUkJqRsGWosklTxIw=
-github.com/CaliLuke/loom v1.10.0/go.mod h1:NPzY+Rh+iejtEnN/auuq6tuqeaMy0crT2shr0IJeeoQ=
+github.com/CaliLuke/loom v1.12.0 h1:80nuBobYn8Zv553maOu5m2Iuv3YCII5wpKyfaUtfQ5o=
+github.com/CaliLuke/loom v1.12.0/go.mod h1:pN5nzxYlvb7kf96xMF74jz5nvvii4HSZ9QkSwM+e6QE=
 github.com/CaliLuke/selvedge v0.8.1 h1:LNcpZUDNAhSIPuJMxJMvR1rRT6beE/dyK2IqxA80Cdg=
 github.com/CaliLuke/selvedge v0.8.1/go.mod h1:nO+OYh+BwaYJLDbaBYLQcuWmPi95rBAW2CuEvff6304=
 github.com/Microsoft/go-winio v0.6.4 h1:kJF2pamtYCWXf0xAT8sAkwKC0pMl2HYBrRPHAqyUc+g=
