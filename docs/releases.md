@@ -55,8 +55,8 @@ make release SOURCE=<full-commit-sha>
 ```
 
 The publisher reads `internal/release/train.json` from that exact source. The
-current train is `v2.1.0`; tags advance as `v2.1.0-alpha.N`. An optional
-`VERSION=v2.1.0-alpha.N` asserts the allocated version; it cannot override it.
+current train is `v2.1.1`; tags advance as `v2.1.1-alpha.N`. An optional
+`VERSION=v2.1.1-alpha.N` asserts the allocated version; it cannot override it.
 The same source reuses its existing alpha. No new source means no new alpha.
 
 The workflow also requests a daily alpha at 23:47 America/Los_Angeles. It uses
@@ -71,7 +71,7 @@ updates `train.json` and includes authored notes for the new train.
 Promote a published alpha explicitly:
 
 ```bash
-make release-promote ALPHA=v2.1.0-alpha.N VERSION=v2.1.0
+make release-promote ALPHA=v2.1.1-alpha.N VERSION=v2.1.1
 ```
 
 The stable tag identifies exactly the alpha's source, even if `main` has
